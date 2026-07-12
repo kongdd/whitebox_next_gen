@@ -7,32 +7,66 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [features]
-default = []
+# Preserve the existing full build by default.
+default = ["all"]
+all = [
+    "hydrology",
+    "geomorphometry",
+    "raster",
+    "data_tools",
+    "gis",
+    "geostats",
+    "remote_sensing",
+    "lidar",
+    "pro_stream_tools",
+]
+
+hydrology = ["flow_algorithms", "stream_network_analysis"]
+flow_algorithms = ["dep:rand"]
+stream_network_analysis = ["flow_algorithms"]
+geomorphometry = ["dep:chrono", "dep:image", "dep:rand", "dep:wide"]
+raster = ["dep:evalexpr", "dep:kdtree", "dep:nalgebra", "dep:rand", "dep:rustfft"]
+data_tools = ["dep:kdtree", "dep:wbgeotiff"]
+gis = ["dep:chrono", "dep:evalexpr", "dep:kdtree", "dep:nalgebra", "dep:rand", "dep:ureq", "dep:wbspatialstats"]
+geostats = ["dep:wbspatialstats"]
+remote_sensing = [
+    "data_tools",
+    "geomorphometry",
+    "dep:bincode",
+    "dep:image",
+    "dep:kdtree",
+    "dep:nalgebra",
+    "dep:smartcore",
+    "dep:time",
+    "dep:ureq",
+]
+lidar = ["hydrology", "geomorphometry", "dep:evalexpr", "dep:kdtree", "dep:nalgebra", "dep:rand", "dep:wblidar", "dep:wide"]
+pro_stream_tools = ["stream_network_analysis", "geomorphometry", "gis", "remote_sensing"]
 
 [dependencies]
 wbcore = { path = "../wbcore" }
 serde.workspace = true
 serde_json.workspace = true
 wbraster = { path = "../wbraster" }
-wbgeotiff = { path = "../wbgeotiff" }
+wbgeotiff = { path = "../wbgeotiff", optional = true }
 wbvector = { path = "../wbvector" }
 wbprojection = { path = "../wbprojection" }
 wbtopology = { path = "../wbtopology" }
-wblidar = { path = "../wblidar" }
-wbspatialstats = { path = "../wbspatialstats" }
+wblidar = { path = "../wblidar", optional = true }
+wbspatialstats = { path = "../wbspatialstats", optional = true }
 rayon = "1"
-rand = "0.10.0"
-wide = "1.2.0"
-chrono = { version = "0.4", default-features = true }
-image = "0.25"
-kdtree = "0.8.0"
-evalexpr = "13.1.0"
-nalgebra = "0.34.1"
-smartcore = { version = "0.4.9", features = ["serde"] }
-bincode = { version = "2", features = ["serde"] }
-rustfft = "6.2"
-time = { version = "0.3", features = ["formatting", "parsing"] }
-ureq = { version = "2.12.1", features = ["json"] }
+rand = { version = "0.10.0", optional = true }
+wide = { version = "1.2.0", optional = true }
+chrono = { version = "0.4", default-features = true, optional = true }
+image = { version = "0.25", optional = true }
+kdtree = { version = "0.8.0", optional = true }
+evalexpr = { version = "13.1.0", optional = true }
+nalgebra = { version = "0.34.1", optional = true }
+smartcore = { version = "0.4.9", features = ["serde"], optional = true }
+bincode = { version = "2", features = ["serde"], optional = true }
+rustfft = { version = "6.2", optional = true }
+time = { version = "0.3", features = ["formatting", "parsing"], optional = true }
+ureq = { version = "2.12.1", features = ["json"], optional = true }
 
 [dev-dependencies]
 criterion = "0.5"

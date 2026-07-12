@@ -68,7 +68,10 @@ impl ToolRuntimeRegistry for ToolRegistry {
     }
 }
 
+#[allow(unused_variables)]
 pub fn register_default_tools(registry: &mut ToolRegistry) {
+    #[cfg(feature = "remote_sensing")]
+    {
     registry.register(Box::new(tools::BilateralFilterTool));
     registry.register(Box::new(tools::HighPassBilateralFilterTool));
     registry.register(Box::new(tools::BalanceContrastEnhancementTool));
@@ -225,6 +228,9 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::ObiaBatchOrchestratorProTool));
     registry.register(Box::new(tools::ObiaAuditReportProTool));
     registry.register(Box::new(tools::TophatTransformTool));
+    }
+    #[cfg(feature = "data_tools")]
+    {
     registry.register(Box::new(tools::ConvertNodataToZeroTool));
     registry.register(Box::new(tools::AddPointCoordinatesToTableTool));
     registry.register(Box::new(tools::CleanVectorTool));
@@ -255,6 +261,9 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::MergeVectorsTool));
     registry.register(Box::new(tools::MultipartToSinglepartTool));
     registry.register(Box::new(tools::SinglepartToMultipartTool));
+    }
+    #[cfg(feature = "raster")]
+    {
     registry.register(Box::new(tools::RasterAddTool));
     registry.register(Box::new(tools::RasterAtan2Tool));
     registry.register(Box::new(tools::RasterBoolAndTool));
@@ -347,6 +356,9 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::WilcoxonSignedRankTestTool));
     registry.register(Box::new(tools::ZScoresTool));
     registry.register(Box::new(tools::RescaleValueRangeTool));
+    }
+    #[cfg(feature = "gis")]
+    {
     registry.register(Box::new(tools::AverageOverlayTool));
     registry.register(Box::new(tools::BoundaryShapeComplexityTool));
     registry.register(Box::new(tools::BufferRasterTool));
@@ -420,6 +432,9 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::SimplifyFeaturesTool));
 
     // Geostatistics/Kriging Tools (legacy variogram tools)
+    }
+    #[cfg(feature = "geostats")]
+    {
     registry.register(Box::new(tools::EstimateVariogramTool));
     registry.register(Box::new(tools::FitVariogramTool));
     registry.register(Box::new(tools::DirectionalVariogramTool));
@@ -430,6 +445,9 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     // Note: kriging tools moved to Phase B (OrdinaryKriging, LocalOrdinaryKriging, SimpleKriging, UniversalKriging, SpaceTimeKriging)
     // and are registered with other spatial stats tools above
 
+    }
+    #[cfg(feature = "gis")]
+    {
     registry.register(Box::new(tools::ExtractRasterValuesAtPointsTool));
     registry.register(Box::new(tools::ExtractNodesTool));
     registry.register(Box::new(tools::FilterVectorFeaturesByAreaTool));
@@ -463,6 +481,9 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::ModifiedShepardInterpolationTool));
     registry.register(Box::new(tools::RadialBasisFunctionInterpolationTool));
     registry.register(Box::new(tools::TinInterpolationTool));
+    }
+    #[cfg(feature = "lidar")]
+    {
     registry.register(Box::new(tools::LidarNearestNeighbourGriddingTool));
     registry.register(Box::new(tools::LidarIdwInterpolationTool));
     registry.register(Box::new(tools::LidarTinGriddingTool));
@@ -528,6 +549,9 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::LidarEigenvalueFeaturesTool));
     registry.register(Box::new(tools::LidarRansacPlanesTool));
     registry.register(Box::new(tools::LidarRooftopAnalysisTool));
+    }
+    #[cfg(feature = "gis")]
+    {
     registry.register(Box::new(tools::LowestPositionTool));
     registry.register(Box::new(tools::MaxAbsoluteOverlayTool));
     registry.register(Box::new(tools::MaxOverlayTool));
@@ -625,7 +649,13 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::BlockMinimumTool));
     registry.register(Box::new(tools::BlockMaximumTool));
     registry.register(Box::new(tools::AggregateRasterTool));
+    }
+    #[cfg(feature = "remote_sensing")]
+    {
     registry.register(Box::new(tools::OtsuThresholdingTool));
+    }
+    #[cfg(feature = "geomorphometry")]
+    {
     registry.register(Box::new(tools::PlanCurvatureTool));
     registry.register(Box::new(tools::ProfileCurvatureTool));
     registry.register(Box::new(tools::TangentialCurvatureTool));
@@ -733,6 +763,9 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::HypsometricallyTintedHillshadeTool));
     registry.register(Box::new(tools::TopoRenderTool));
     registry.register(Box::new(tools::SkylineAnalysisTool));
+    }
+    #[cfg(feature = "stream_network_analysis")]
+    {
     registry.register(Box::new(tools::StrahlerStreamOrderTool));
     registry.register(Box::new(tools::HortonStreamOrderTool));
     registry.register(Box::new(tools::HackStreamOrderTool));
@@ -755,13 +788,22 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::RasterizeStreamsTool));
     registry.register(Box::new(tools::LongProfileTool));
     registry.register(Box::new(tools::LongProfileFromPointsTool));
+    }
+    #[cfg(feature = "pro_stream_tools")]
+    {
     registry.register(Box::new(tools::PruneVectorStreamsTool));
     registry.register(Box::new(tools::RiverCenterlinesTool));
     registry.register(Box::new(tools::RidgeAndValleyVectorsTool));
+    }
+    #[cfg(feature = "stream_network_analysis")]
+    {
     registry.register(Box::new(tools::RepairStreamVectorTopologyTool));
     registry.register(Box::new(tools::VectorStreamNetworkAnalysisTool));
     registry.register(Box::new(tools::BurnStreamsTool));
     registry.register(Box::new(tools::HortonRatiosTool));
+    }
+    #[cfg(feature = "hydrology")]
+    {
     registry.register(Box::new(tools::BreachDepressionsLeastCostTool));
     registry.register(Box::new(tools::BreachSingleCellPitsTool));
     registry.register(Box::new(tools::FillDepressionsTool));
@@ -810,6 +852,9 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::HillslopesTool));
     registry.register(Box::new(tools::StrahlerOrderBasinsTool));
     registry.register(Box::new(tools::IsobasinsTool));
+    }
+    #[cfg(feature = "flow_algorithms")]
+    {
     registry.register(Box::new(tools::D8PointerTool));
     registry.register(Box::new(tools::D8FlowAccumTool));
     registry.register(Box::new(tools::DInfPointerTool));
@@ -822,4 +867,5 @@ pub fn register_default_tools(registry: &mut ToolRegistry) {
     registry.register(Box::new(tools::QinFlowAccumulationTool));
     registry.register(Box::new(tools::QuinnFlowAccumulationTool));
     registry.register(Box::new(tools::MinimalDispersionFlowAlgorithmTool));
+}
 }
