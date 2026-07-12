@@ -24,7 +24,9 @@ use wbvector::memory_store as vector_memory_store;
 
 use crate::memory_store;
 use super::flow_algorithms::{D8FlowAccumTool, D8PointerTool};
+#[cfg(feature = "pro_stream_tools")]
 mod pro_stream_tools;
+#[cfg(feature = "pro_stream_tools")]
 pub use pro_stream_tools::{PruneVectorStreamsTool, RiverCenterlinesTool, RidgeAndValleyVectorsTool};
 
 // ──────────────────────────────────────────────────────────────────────────────
