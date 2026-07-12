@@ -1,0 +1,27 @@
+[package]
+name = "whitebox_hydro_cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "C-ABI dynamic library + thin CLI exposing only the hydrology subset of whitebox_next_gen"
+publish = false
+
+# 同时输出 cdylib（C ABI 动态库）与 rlib（让 CLI 复用 dispatch 逻辑）。
+# `[[bin]]` 仍会从 src/main.rs 编译出 whitebox-hydro 可执行文件。
+[lib]
+name = "whitebox_hydro"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "whitebox-hydro"
+path = "src/main.rs"
+
+[dependencies]
+# 共享运行时类型、Tool trait、ToolArgs、ToolContext、AllowAllCapabilities
+wbcore = { path = "../wbcore" }
+# 仅启用开源工具库中的水文工具族及其必要依赖。
+wbtools_oss = { path = "../wbtools_oss", default-features = false, features = ["hydrology"] }
+
+anyhow = "1"
+serde_json = "1"
