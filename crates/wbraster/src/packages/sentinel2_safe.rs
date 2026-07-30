@@ -177,7 +177,9 @@ impl Sentinel2SafePackage {
 
     /// Resolve a canonical spectral band key to a raster file path.
     pub fn band_path(&self, key: &str) -> Option<&Path> {
-        self.bands.get(&key.to_ascii_uppercase()).map(PathBuf::as_path)
+        self.bands
+            .get(&key.to_ascii_uppercase())
+            .map(PathBuf::as_path)
     }
 
     /// Resolve a canonical QA layer key to a raster file path.
@@ -457,7 +459,11 @@ mod tests {
         "#;
         fs::write(safe.join("MTD_MSIL2A.xml"), xml).unwrap();
 
-        let img = safe.join("GRANULE").join("T32ABC_001").join("IMG_DATA").join("R10m");
+        let img = safe
+            .join("GRANULE")
+            .join("T32ABC_001")
+            .join("IMG_DATA")
+            .join("R10m");
         fs::create_dir_all(&img).unwrap();
         fs::write(img.join("T32ABC_20260331T152000_B04_10m.jp2"), b"").unwrap();
         fs::write(img.join("T32ABC_20260331T152000_B08_10m.jp2"), b"").unwrap();
@@ -490,8 +496,14 @@ mod tests {
         assert!(pkg.aux_path("AOT").is_some(), "AOT aux layer missing");
         assert!(pkg.aux_path("WVP").is_some(), "WVP aux layer missing");
         assert!(pkg.aux_path("TCI").is_some(), "TCI aux layer missing");
-        assert!(pkg.band_path("AOT").is_none(), "AOT must not bleed into bands");
-        assert!(pkg.band_path("TCI").is_none(), "TCI must not bleed into bands");
+        assert!(
+            pkg.band_path("AOT").is_none(),
+            "AOT must not bleed into bands"
+        );
+        assert!(
+            pkg.band_path("TCI").is_none(),
+            "TCI must not bleed into bands"
+        );
     }
 
     #[test]
@@ -506,10 +518,7 @@ mod tests {
         )
         .unwrap();
 
-        let qid = safe
-            .join("GRANULE")
-            .join("T17TNJ_001")
-            .join("QI_DATA");
+        let qid = safe.join("GRANULE").join("T17TNJ_001").join("QI_DATA");
         fs::create_dir_all(&qid).unwrap();
         fs::write(qid.join("MSK_CLDPRB_20m.jp2"), b"").unwrap();
         fs::write(qid.join("MSK_SNWPRB_20m.jp2"), b"").unwrap();
@@ -517,7 +526,11 @@ mod tests {
         fs::write(qid.join("MSK_DETFOO_B02.jp2"), b"").unwrap();
         fs::write(qid.join("MSK_QUALIT_B02.jp2"), b"").unwrap();
 
-        let img = safe.join("GRANULE").join("T17TNJ_001").join("IMG_DATA").join("R10m");
+        let img = safe
+            .join("GRANULE")
+            .join("T17TNJ_001")
+            .join("IMG_DATA")
+            .join("R10m");
         fs::create_dir_all(&img).unwrap();
         fs::write(img.join("T17TNJ_20260101T000000_B04_10m.jp2"), b"").unwrap();
 

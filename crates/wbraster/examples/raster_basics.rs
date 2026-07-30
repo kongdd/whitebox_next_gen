@@ -43,7 +43,10 @@ fn main() -> Result<()> {
 
     println!("Loaded raster: {} cols x {} rows", loaded.cols, loaded.rows);
     println!("Cell (row=1, col=2) = {}", loaded.get(0, 1, 2));
-    println!("Cell (row=2, col=3) nodata? {}", loaded.is_nodata(loaded.get(0, 2, 3)));
+    println!(
+        "Cell (row=2, col=3) nodata? {}",
+        loaded.is_nodata(loaded.get(0, 2, 3))
+    );
 
     let x = loaded.col_center_x(4);
     let y = loaded.row_center_y(3);

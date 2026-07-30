@@ -228,10 +228,7 @@ impl LandsatBundle {
     /// Read a canonical auxiliary layer directly as a [`Raster`].
     pub fn read_aux_layer(&self, key: &str) -> Result<Raster> {
         let p = self.aux_path(key).ok_or_else(|| {
-            RasterError::MissingField(format!(
-                "aux layer '{}' not found in Landsat bundle",
-                key
-            ))
+            RasterError::MissingField(format!("aux layer '{}' not found in Landsat bundle", key))
         })?;
         Raster::read(p)
     }
@@ -245,12 +242,10 @@ impl LandsatBundle {
         let kv = parse_mtl_key_values(&mtl_text);
         let rk = |name: &str| format!("{}_{}", name, band_number);
 
-        let mult = get_number(&kv, &[&rk("REFLECTANCE_MULT_BAND")]).ok_or_else(|| {
-            RasterError::MissingField(rk("REFLECTANCE_MULT_BAND"))
-        })?;
-        let add = get_number(&kv, &[&rk("REFLECTANCE_ADD_BAND")]).ok_or_else(|| {
-            RasterError::MissingField(rk("REFLECTANCE_ADD_BAND"))
-        })?;
+        let mult = get_number(&kv, &[&rk("REFLECTANCE_MULT_BAND")])
+            .ok_or_else(|| RasterError::MissingField(rk("REFLECTANCE_MULT_BAND")))?;
+        let add = get_number(&kv, &[&rk("REFLECTANCE_ADD_BAND")])
+            .ok_or_else(|| RasterError::MissingField(rk("REFLECTANCE_ADD_BAND")))?;
 
         Ok(LandsatReflectanceCoefficients { mult, add })
     }
@@ -264,12 +259,10 @@ impl LandsatBundle {
         let kv = parse_mtl_key_values(&mtl_text);
         let rk = |name: &str| format!("{}_{}", name, band_number);
 
-        let radiance_mult = get_number(&kv, &[&rk("RADIANCE_MULT_BAND")]).ok_or_else(|| {
-            RasterError::MissingField(rk("RADIANCE_MULT_BAND"))
-        })?;
-        let radiance_add = get_number(&kv, &[&rk("RADIANCE_ADD_BAND")]).ok_or_else(|| {
-            RasterError::MissingField(rk("RADIANCE_ADD_BAND"))
-        })?;
+        let radiance_mult = get_number(&kv, &[&rk("RADIANCE_MULT_BAND")])
+            .ok_or_else(|| RasterError::MissingField(rk("RADIANCE_MULT_BAND")))?;
+        let radiance_add = get_number(&kv, &[&rk("RADIANCE_ADD_BAND")])
+            .ok_or_else(|| RasterError::MissingField(rk("RADIANCE_ADD_BAND")))?;
         let k1 = get_number(&kv, &[&rk("K1_CONSTANT_BAND")])
             .ok_or_else(|| RasterError::MissingField(rk("K1_CONSTANT_BAND")))?;
         let k2 = get_number(&kv, &[&rk("K2_CONSTANT_BAND")])
@@ -291,7 +284,11 @@ fn find_mtl_file(bundle_root: &Path) -> Result<Option<PathBuf>> {
         .into_iter()
         .filter(|p| {
             p.file_name()
-                .map(|n| n.to_string_lossy().to_ascii_uppercase().ends_with("_MTL.TXT"))
+                .map(|n| {
+                    n.to_string_lossy()
+                        .to_ascii_uppercase()
+                        .ends_with("_MTL.TXT")
+                })
                 .unwrap_or(false)
         })
         .collect();
@@ -520,12 +517,21 @@ END
         )
         .expect("write mtl");
 
-        fs::write(root.join("LC09_L2SP_018030_20240202_20240210_02_T1_SR_B2.TIF"), b"")
-            .expect("band b2");
-        fs::write(root.join("LC09_L2SP_018030_20240202_20240210_02_T1_SR_B4.TIF"), b"")
-            .expect("band b4");
-        fs::write(root.join("LC09_L2SP_018030_20240202_20240210_02_T1_ST_B10.TIF"), b"")
-            .expect("band b10");
+        fs::write(
+            root.join("LC09_L2SP_018030_20240202_20240210_02_T1_SR_B2.TIF"),
+            b"",
+        )
+        .expect("band b2");
+        fs::write(
+            root.join("LC09_L2SP_018030_20240202_20240210_02_T1_SR_B4.TIF"),
+            b"",
+        )
+        .expect("band b4");
+        fs::write(
+            root.join("LC09_L2SP_018030_20240202_20240210_02_T1_ST_B10.TIF"),
+            b"",
+        )
+        .expect("band b10");
         fs::write(
             root.join("LC09_L2SP_018030_20240202_20240210_02_T1_QA_PIXEL.TIF"),
             b"",
@@ -536,17 +542,26 @@ END
             b"",
         )
         .expect("qa radsat");
-        fs::write(root.join("LC09_L2SP_018030_20240202_20240210_02_T1_SAA.TIF"), b"")
-            .expect("aux saa");
+        fs::write(
+            root.join("LC09_L2SP_018030_20240202_20240210_02_T1_SAA.TIF"),
+            b"",
+        )
+        .expect("aux saa");
 
         let bundle = LandsatBundle::open(&root).expect("open landsat bundle");
 
         assert_eq!(bundle.mission, LandsatMission::Landsat9);
         assert_eq!(bundle.processing_level, LandsatProcessingLevel::L2);
-        assert_eq!(bundle.product_id.as_deref(), Some("LC09_L2SP_018030_20240202_20240210_02_T1"));
+        assert_eq!(
+            bundle.product_id.as_deref(),
+            Some("LC09_L2SP_018030_20240202_20240210_02_T1")
+        );
         assert_eq!(bundle.collection_number.as_deref(), Some("2"));
         assert_eq!(bundle.acquisition_date_utc.as_deref(), Some("2024-02-02"));
-        assert_eq!(bundle.scene_center_time_utc.as_deref(), Some("16:42:31.1234560Z"));
+        assert_eq!(
+            bundle.scene_center_time_utc.as_deref(),
+            Some("16:42:31.1234560Z")
+        );
         assert_eq!(bundle.path_row, Some((18, 30)));
         assert_eq!(bundle.cloud_cover_percent, Some(12.34));
         assert_eq!(bundle.sun_azimuth_deg, Some(145.2));
@@ -565,8 +580,7 @@ END
         let tmp = tempfile::tempdir().expect("tempdir");
         let root = tmp.path().join("L8_EMPTY");
         fs::create_dir_all(&root).expect("create root");
-        fs::write(root.join("LC08_X_MTL.txt"), "SPACECRAFT_ID = \"LANDSAT_8\"")
-            .expect("write mtl");
+        fs::write(root.join("LC08_X_MTL.txt"), "SPACECRAFT_ID = \"LANDSAT_8\"").expect("write mtl");
 
         let err = LandsatBundle::open(&root).expect_err("should fail due to missing bands");
         let msg = format!("{err}");

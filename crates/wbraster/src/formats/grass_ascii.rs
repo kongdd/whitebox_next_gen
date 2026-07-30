@@ -9,10 +9,10 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
+use crate::crs_info::CrsInfo;
 use crate::error::{RasterError, Result};
 use crate::io_utils::{format_float, with_extension};
 use crate::raster::{DataType, Raster, RasterConfig};
-use crate::crs_info::CrsInfo;
 
 /// Read a GRASS ASCII raster from `path`.
 pub fn read(path: &str) -> Result<Raster> {
@@ -146,7 +146,8 @@ fn parse_with_source<R: BufRead>(reader: R, source: &str) -> Result<Raster> {
         cell_size_y: Some(y_res),
         nodata,
         data_type,
-        crs: crs,        metadata,
+        crs: crs,
+        metadata,
         ..Default::default()
     };
     Raster::from_data(cfg, data)
@@ -204,19 +205,23 @@ pub fn write_to<W: Write>(w: &mut W, raster: &Raster) -> Result<()> {
 }
 
 fn parse_usize(field: &str, val: &str) -> Result<usize> {
-    val.trim().parse::<usize>().map_err(|_| RasterError::ParseError {
-        field: field.into(),
-        value: val.into(),
-        expected: "positive integer".into(),
-    })
+    val.trim()
+        .parse::<usize>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "positive integer".into(),
+        })
 }
 
 fn parse_f64(field: &str, val: &str) -> Result<f64> {
-    val.trim().parse::<f64>().map_err(|_| RasterError::ParseError {
-        field: field.into(),
-        value: val.into(),
-        expected: "floating-point number".into(),
-    })
+    val.trim()
+        .parse::<f64>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "floating-point number".into(),
+        })
 }
 
 fn read_prj_sidecar(source: &str) -> Option<String> {

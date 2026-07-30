@@ -12,8 +12,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::error::{RasterError, Result};
-use crate::raster::{DataType, RasterConfig};
 use crate::raster::Raster;
+use crate::raster::{DataType, RasterConfig};
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ZarrV3Root {
@@ -80,8 +80,12 @@ pub(crate) fn is_v3_store(dir: &Path) -> bool {
 /// `"group"` (as opposed to `"array"`).  Returns `false` on any parse error
 /// so that callers can fall through to the normal array path.
 pub(crate) fn is_v3_group(dir: &Path) -> bool {
-    let Ok(s) = fs::read_to_string(dir.join("zarr.json")) else { return false; };
-    let Ok(v) = serde_json::from_str::<Value>(&s) else { return false; };
+    let Ok(s) = fs::read_to_string(dir.join("zarr.json")) else {
+        return false;
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&s) else {
+        return false;
+    };
     v.get("node_type").and_then(Value::as_str) == Some("group")
 }
 
@@ -152,11 +156,9 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
         .ok_or_else(|| RasterError::CorruptData("zarr.json missing required 'data_type'".into()))?;
     let (dtype, default_endian) = parse_v3_data_type(data_type)?;
 
-    let chunk_shape = parse_regular_chunk_shape(
-        root.chunk_grid
-            .as_ref()
-            .ok_or_else(|| RasterError::CorruptData("zarr.json missing required 'chunk_grid'".into()))?,
-    )?;
+    let chunk_shape = parse_regular_chunk_shape(root.chunk_grid.as_ref().ok_or_else(|| {
+        RasterError::CorruptData("zarr.json missing required 'chunk_grid'".into())
+    })?)?;
     if chunk_shape.len() != shape.len() {
         return Err(RasterError::CorruptData(format!(
             "chunk_shape has {} dimension(s) but shape has {}; they must match",
@@ -165,7 +167,11 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
         )));
     }
     let (chunk_bands, chunk_rows, chunk_cols) = if chunk_shape.len() == 3 {
-        (chunk_shape[0].max(1), chunk_shape[1].max(1), chunk_shape[2].max(1))
+        (
+            chunk_shape[0].max(1),
+            chunk_shape[1].max(1),
+            chunk_shape[2].max(1),
+        )
     } else {
         (1, chunk_shape[0].max(1), chunk_shape[1].max(1))
     };
@@ -181,13 +187,18 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
         TransposeSpec::None | TransposeSpec::C => None,
         TransposeSpec::F => {
             let v: Vec<usize> = (0..ndim).rev().collect();
-            if v.iter().enumerate().all(|(i, &p)| p == i) { None } else { Some(v) }
+            if v.iter().enumerate().all(|(i, &p)| p == i) {
+                None
+            } else {
+                Some(v)
+            }
         }
         TransposeSpec::Explicit(v) => {
             if v.len() != ndim {
                 return Err(RasterError::CorruptData(format!(
                     "transpose order length {} does not match array ndim {}",
-                    v.len(), ndim
+                    v.len(),
+                    ndim
                 )));
             }
             let mut seen = vec![false; ndim];
@@ -204,7 +215,11 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
                 }
                 seen[p] = true;
             }
-            if v.iter().enumerate().all(|(i, &p)| p == i) { None } else { Some(v) }
+            if v.iter().enumerate().all(|(i, &p)| p == i) {
+                None
+            } else {
+                Some(v)
+            }
         }
     };
 
@@ -212,9 +227,18 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
     let early_mode = parse_validation_mode_from_attrs(early_attrs);
     validate_dimension_names(root.dimension_names.as_deref(), shape.len(), early_mode)?;
     let nodata = early_attrs
-        .and_then(|a| a.get("nodata")).and_then(Value::as_f64)
-        .or_else(|| early_attrs.and_then(|a| a.get("_FillValue")).and_then(Value::as_f64))
-        .or_else(|| early_attrs.and_then(|a| a.get("missing_value")).and_then(Value::as_f64))
+        .and_then(|a| a.get("nodata"))
+        .and_then(Value::as_f64)
+        .or_else(|| {
+            early_attrs
+                .and_then(|a| a.get("_FillValue"))
+                .and_then(Value::as_f64)
+        })
+        .or_else(|| {
+            early_attrs
+                .and_then(|a| a.get("missing_value"))
+                .and_then(Value::as_f64)
+        })
         .unwrap_or_else(|| fill_value_to_f64(root.fill_value.as_ref()).unwrap_or(-9999.0));
 
     let mut data = vec![nodata; bands * rows * cols];
@@ -257,8 +281,10 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
                             if n_stored == full_size {
                                 // Standard padded chunk (spec-compliant producers always pad
                                 // boundary chunks to the full chunk shape before encoding).
-                                let decoded = decode_typed_buffer(&raw, full_size, dtype, codec_endian)?;
-                                let untransposed = apply_inverse_transpose(&decoded, order, &full_shape);
+                                let decoded =
+                                    decode_typed_buffer(&raw, full_size, dtype, codec_endian)?;
+                                let untransposed =
+                                    apply_inverse_transpose(&decoded, order, &full_shape);
                                 if this_size == full_size {
                                     untransposed
                                 } else {
@@ -267,13 +293,17 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
                             } else if n_stored == this_size {
                                 // Unpadded boundary chunk (non-spec-compliant producer but
                                 // encountered in the wild; handle gracefully).
-                                let decoded = decode_typed_buffer(&raw, this_size, dtype, codec_endian)?;
+                                let decoded =
+                                    decode_typed_buffer(&raw, this_size, dtype, codec_endian)?;
                                 apply_inverse_transpose(&decoded, order, &this_shape)
                             } else {
                                 return Err(RasterError::CorruptData(format!(
                                     "v3 chunk size mismatch with transpose: \
                                      expected {} or {} values ({}bpp), got {} bytes",
-                                    full_size, this_size, bpp, raw.len()
+                                    full_size,
+                                    this_size,
+                                    bpp,
+                                    raw.len()
                                 )));
                             }
                         } else {
@@ -294,7 +324,8 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
                                 let src_i = bb * this_rows * this_cols + rr * this_cols + cc2;
                                 let dst_row = cr * chunk_rows + rr;
                                 let dst_col = cc * chunk_cols + cc2;
-                                data_cb[bb * band_plane_len + dst_row * cols + dst_col] = chunk_data[src_i];
+                                data_cb[bb * band_plane_len + dst_row * cols + dst_col] =
+                                    chunk_data[src_i];
                             }
                         }
                     }
@@ -307,10 +338,7 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
         data.fill(nodata);
     }
 
-    let attrs_obj = root
-        .attributes
-        .as_ref()
-        .and_then(Value::as_object);
+    let attrs_obj = root.attributes.as_ref().and_then(Value::as_object);
     let validation_mode = parse_validation_mode_from_attrs(attrs_obj);
     let transform = parse_transform_from_attrs(attrs_obj, validation_mode)?;
     let x_min = attrs_obj
@@ -385,8 +413,8 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
                     .and_then(|a| a.get("proj4"))
                     .and_then(Value::as_str)
                     .map(ToOwned::to_owned)
-                    })
-                    .or_else(|| attrs_obj.and_then(parse_proj4_from_grid_mapping_attrs)),
+            })
+            .or_else(|| attrs_obj.and_then(parse_proj4_from_grid_mapping_attrs)),
     };
 
     let cfg = RasterConfig {
@@ -399,7 +427,8 @@ pub(crate) fn read_from_dir(dir: &Path) -> Result<Raster> {
         cell_size_y,
         nodata,
         data_type: dtype,
-        crs: crs,        metadata: vec![
+        crs: crs,
+        metadata: vec![
             ("zarr_version".into(), "3".into()),
             ("zarr_chunk_key_encoding".into(), encoding_name),
             ("zarr_dimension_separator".into(), encoding_sep),
@@ -438,8 +467,16 @@ pub(crate) fn write_to_dir(raster: &Raster, dir: &Path) -> Result<()> {
                     raster
                         .metadata
                         .iter()
-                        .find(|(k, _)| k == "zarr_dimension_separator" || k == "zarr_chunk_separator")
-                        .map(|(_, v)| if v == "/" { "/".to_owned() } else { ".".to_owned() })
+                        .find(|(k, _)| {
+                            k == "zarr_dimension_separator" || k == "zarr_chunk_separator"
+                        })
+                        .map(|(_, v)| {
+                            if v == "/" {
+                                "/".to_owned()
+                            } else {
+                                ".".to_owned()
+                            }
+                        })
                         .unwrap_or_else(|| ".".to_owned()),
                 )
             } else {
@@ -448,8 +485,16 @@ pub(crate) fn write_to_dir(raster: &Raster, dir: &Path) -> Result<()> {
                     raster
                         .metadata
                         .iter()
-                        .find(|(k, _)| k == "zarr_dimension_separator" || k == "zarr_chunk_separator")
-                        .map(|(_, v)| if v == "." { ".".to_owned() } else { "/".to_owned() })
+                        .find(|(k, _)| {
+                            k == "zarr_dimension_separator" || k == "zarr_chunk_separator"
+                        })
+                        .map(|(_, v)| {
+                            if v == "." {
+                                ".".to_owned()
+                            } else {
+                                "/".to_owned()
+                            }
+                        })
                         .unwrap_or_else(|| "/".to_owned()),
                 )
             }
@@ -569,7 +614,9 @@ pub(crate) fn write_to_dir(raster: &Raster, dir: &Path) -> Result<()> {
                 let this_rows = (rows - cr * chunk_rows).min(chunk_rows);
                 let this_cols = (cols - cc * chunk_cols).min(chunk_cols);
 
-                let mut raw = Vec::with_capacity(this_bands * this_rows * this_cols * raster.data_type.size_bytes());
+                let mut raw = Vec::with_capacity(
+                    this_bands * this_rows * this_cols * raster.data_type.size_bytes(),
+                );
                 for bb in 0..this_bands {
                     for rr in 0..this_rows {
                         for cc2 in 0..this_cols {
@@ -624,9 +671,10 @@ fn validate_root(root: &ZarrV3Root) -> Result<()> {
         )));
     }
 
-    let shape = root.shape.as_ref().ok_or_else(|| {
-        RasterError::CorruptData("zarr.json missing required 'shape'".into())
-    })?;
+    let shape = root
+        .shape
+        .as_ref()
+        .ok_or_else(|| RasterError::CorruptData("zarr.json missing required 'shape'".into()))?;
     if shape.len() != 2 && shape.len() != 3 {
         return Err(RasterError::UnsupportedDataType(format!(
             "only 2D or 3D [band,y,x] zarr v3 arrays are supported (got {}D)",
@@ -754,7 +802,9 @@ fn parse_regular_chunk_shape(v: &Value) -> Result<Vec<usize>> {
         .as_object()
         .and_then(|c| c.get("chunk_shape"))
         .and_then(Value::as_array)
-        .ok_or_else(|| RasterError::CorruptData("chunk_grid.configuration.chunk_shape missing".into()))?;
+        .ok_or_else(|| {
+            RasterError::CorruptData("chunk_grid.configuration.chunk_shape missing".into())
+        })?;
     if arr.len() != 2 && arr.len() != 3 {
         return Err(RasterError::UnsupportedDataType(format!(
             "only 2D or 3D chunk_shape supported (got {}D)",
@@ -785,7 +835,13 @@ fn parse_chunk_key_encoding(v: Option<&Value>) -> Result<(String, String)> {
         .and_then(Value::as_object)
         .and_then(|cfg| cfg.get("separator"))
         .and_then(Value::as_str)
-        .map(|s| if s == "." { ".".to_owned() } else { "/".to_owned() })
+        .map(|s| {
+            if s == "." {
+                ".".to_owned()
+            } else {
+                "/".to_owned()
+            }
+        })
         .unwrap_or_else(|| {
             if encoding.name == "v2" {
                 ".".to_owned()
@@ -803,7 +859,10 @@ fn parse_chunk_key_encoding(v: Option<&Value>) -> Result<(String, String)> {
 
 type CompressorSpec = Option<(String, Option<i32>)>;
 
-fn parse_codec_pipeline(codecs: &[Value], default_endian: Endian) -> Result<(Endian, CompressorSpec, TransposeSpec)> {
+fn parse_codec_pipeline(
+    codecs: &[Value],
+    default_endian: Endian,
+) -> Result<(Endian, CompressorSpec, TransposeSpec)> {
     let parsed: Vec<Codec> = codecs
         .iter()
         .cloned()
@@ -826,7 +885,11 @@ fn parse_codec_pipeline(codecs: &[Value], default_endian: Endian) -> Result<(End
                     .and_then(|cfg| cfg.get("endian"))
                     .and_then(Value::as_str)
                 {
-                    endian = if e == "big" { Endian::Big } else { Endian::Little };
+                    endian = if e == "big" {
+                        Endian::Big
+                    } else {
+                        Endian::Little
+                    };
                 }
             }
             "zlib" | "gzip" | "gz" | "zstd" | "lz4" => {
@@ -850,20 +913,23 @@ fn parse_codec_pipeline(codecs: &[Value], default_endian: Endian) -> Result<(End
                     Some(Value::String(s)) if s.eq_ignore_ascii_case("C") => TransposeSpec::C,
                     Some(Value::String(s)) if s.eq_ignore_ascii_case("F") => TransposeSpec::F,
                     Some(Value::Array(arr)) => {
-                        let perm: Option<Vec<usize>> = arr
-                            .iter()
-                            .map(|v| v.as_u64().map(|n| n as usize))
-                            .collect();
+                        let perm: Option<Vec<usize>> =
+                            arr.iter().map(|v| v.as_u64().map(|n| n as usize)).collect();
                         match perm {
                             Some(p) => TransposeSpec::Explicit(p),
-                            None => return Err(RasterError::CorruptData(
-                                "transpose codec 'order' array contains non-integer values".into(),
-                            )),
+                            None => {
+                                return Err(RasterError::CorruptData(
+                                    "transpose codec 'order' array contains non-integer values"
+                                        .into(),
+                                ))
+                            }
                         }
                     }
-                    _ => return Err(RasterError::CorruptData(
-                        "transpose codec has unrecognized 'order' configuration".into(),
-                    )),
+                    _ => {
+                        return Err(RasterError::CorruptData(
+                            "transpose codec has unrecognized 'order' configuration".into(),
+                        ))
+                    }
                 };
             }
             other => {
@@ -920,7 +986,12 @@ fn metadata_usize(raster: &Raster, key: &str) -> Option<usize> {
         .and_then(|(_, v)| v.parse::<usize>().ok())
 }
 
-fn decode_typed_buffer(raw: &[u8], n_values: usize, dtype: DataType, endian: Endian) -> Result<Vec<f64>> {
+fn decode_typed_buffer(
+    raw: &[u8],
+    n_values: usize,
+    dtype: DataType,
+    endian: Endian,
+) -> Result<Vec<f64>> {
     let bpp = dtype.size_bytes();
     let expected = n_values * bpp;
     if raw.len() != expected {
@@ -952,9 +1023,7 @@ fn fill_value_to_f64(v: Option<&Value>) -> Option<f64> {
     }
 }
 
-fn parse_transform_tuple_from_attrs(
-    attrs: &serde_json::Map<String, Value>,
-) -> Option<[f64; 6]> {
+fn parse_transform_tuple_from_attrs(attrs: &serde_json::Map<String, Value>) -> Option<[f64; 6]> {
     let arr = attrs.get("transform")?.as_array()?;
     if arr.len() < 6 {
         return None;
@@ -1013,9 +1082,7 @@ fn parse_epsg_from_crs_str(s: &str) -> Option<u32> {
         .rev()
         .collect();
     if !digits.is_empty()
-        && (upper.contains(":EPSG::")
-            || upper.contains("/EPSG/")
-            || upper.contains(":EPSG:"))
+        && (upper.contains(":EPSG::") || upper.contains("/EPSG/") || upper.contains(":EPSG:"))
     {
         return digits.parse::<u32>().ok();
     }
@@ -1062,9 +1129,7 @@ fn parse_epsg_from_crs_json(v: &Value) -> Option<u32> {
     }
 }
 
-fn parse_epsg_from_crs_value_from_attrs(
-    attrs: &serde_json::Map<String, Value>,
-) -> Option<u32> {
+fn parse_epsg_from_crs_value_from_attrs(attrs: &serde_json::Map<String, Value>) -> Option<u32> {
     parse_epsg_from_crs_json(attrs.get("crs")?)
 }
 
@@ -1078,9 +1143,7 @@ fn grid_mapping_object_from_attrs(
     }
 }
 
-fn parse_epsg_from_grid_mapping_attrs(
-    attrs: &serde_json::Map<String, Value>,
-) -> Option<u32> {
+fn parse_epsg_from_grid_mapping_attrs(attrs: &serde_json::Map<String, Value>) -> Option<u32> {
     let gm = grid_mapping_object_from_attrs(attrs)?;
     gm.get("epsg")
         .and_then(parse_epsg_from_crs_json)
@@ -1090,25 +1153,29 @@ fn parse_epsg_from_grid_mapping_attrs(
         .or_else(|| gm.get("spatial_ref").and_then(parse_epsg_from_crs_json))
 }
 
-fn parse_wkt_from_grid_mapping_attrs(
-    attrs: &serde_json::Map<String, Value>,
-) -> Option<String> {
+fn parse_wkt_from_grid_mapping_attrs(attrs: &serde_json::Map<String, Value>) -> Option<String> {
     let gm = grid_mapping_object_from_attrs(attrs)?;
     gm.get("crs_wkt")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
-        .or_else(|| gm.get("spatial_ref").and_then(Value::as_str).map(ToOwned::to_owned))
+        .or_else(|| {
+            gm.get("spatial_ref")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
         .or_else(|| gm.get("wkt").and_then(Value::as_str).map(ToOwned::to_owned))
 }
 
-fn parse_proj4_from_grid_mapping_attrs(
-    attrs: &serde_json::Map<String, Value>,
-) -> Option<String> {
+fn parse_proj4_from_grid_mapping_attrs(attrs: &serde_json::Map<String, Value>) -> Option<String> {
     let gm = grid_mapping_object_from_attrs(attrs)?;
     gm.get("crs_proj4")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
-        .or_else(|| gm.get("proj4").and_then(Value::as_str).map(ToOwned::to_owned))
+        .or_else(|| {
+            gm.get("proj4")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
 }
 
 fn parse_transform_from_attrs_strict(
@@ -1120,7 +1187,10 @@ fn parse_transform_from_attrs_strict(
 
     let transform = if attrs.get("transform").is_some() {
         Some(parse_transform_tuple_from_attrs(attrs).ok_or_else(|| {
-            RasterError::CorruptData("invalid geospatial metadata: 'transform' must contain at least 6 numeric values".into())
+            RasterError::CorruptData(
+                "invalid geospatial metadata: 'transform' must contain at least 6 numeric values"
+                    .into(),
+            )
         })?)
     } else {
         None
@@ -1128,7 +1198,9 @@ fn parse_transform_from_attrs_strict(
 
     let geotransform = if attrs.get("GeoTransform").is_some() {
         Some(parse_geotransform_string_from_attrs(attrs).ok_or_else(|| {
-            RasterError::CorruptData("invalid geospatial metadata: 'GeoTransform' must contain 6 numeric values".into())
+            RasterError::CorruptData(
+                "invalid geospatial metadata: 'GeoTransform' must contain 6 numeric values".into(),
+            )
         })?)
     } else {
         None
@@ -1138,7 +1210,8 @@ fn parse_transform_from_attrs_strict(
         (Some(a), Some(b)) => {
             if !same_transform(&a, &b) {
                 return Err(RasterError::CorruptData(
-                    "conflicting geospatial metadata: 'transform' and 'GeoTransform' disagree".into(),
+                    "conflicting geospatial metadata: 'transform' and 'GeoTransform' disagree"
+                        .into(),
                 ));
             }
             Ok(Some(a))
@@ -1255,7 +1328,9 @@ fn validate_dimension_names(
     ndim: usize,
     mode: ValidationMode,
 ) -> Result<()> {
-    let Some(names) = names else { return Ok(()); };
+    let Some(names) = names else {
+        return Ok(());
+    };
     // Only meaningful for 3D arrays whose dimension count matches the shape.
     if names.len() != ndim || ndim != 3 {
         return Ok(());
@@ -1264,8 +1339,14 @@ fn validate_dimension_names(
     const SPATIAL_Y: &[&str] = &["y", "lat", "latitude", "row", "northing"];
     const SPATIAL_X: &[&str] = &["x", "lon", "longitude", "col", "easting"];
     const BAND_LIKE: &[&str] = &[
-        "band", "time", "level", "depth", "pressure",
-        "wavelength", "channel", "z",
+        "band",
+        "time",
+        "level",
+        "depth",
+        "pressure",
+        "wavelength",
+        "channel",
+        "z",
     ];
 
     let d0 = names[0].to_ascii_lowercase();
@@ -1448,7 +1529,11 @@ fn extract_valid_subchunk(data: &[f64], full_shape: &[usize], valid_shape: &[usi
     let mut out = Vec::with_capacity(n_valid);
     let mut coords = vec![0usize; ndim];
     loop {
-        let src: usize = coords.iter().zip(full_strides.iter()).map(|(&c, &s)| c * s).sum();
+        let src: usize = coords
+            .iter()
+            .zip(full_strides.iter())
+            .map(|(&c, &s)| c * s)
+            .sum();
         out.push(data[src]);
         // Advance coords in C-order (last axis fastest).
         let mut carry = true;
@@ -1462,7 +1547,9 @@ fn extract_valid_subchunk(data: &[f64], full_shape: &[usize], valid_shape: &[usi
                 }
             }
         }
-        if carry { break; }
+        if carry {
+            break;
+        }
     }
     out
 }
@@ -1472,14 +1559,18 @@ fn compress_bytes(compressor: &Option<(String, Option<i32>)>, raw: &[u8]) -> Res
         None => Ok(raw.to_vec()),
         Some((name, level)) => match name.to_ascii_lowercase().as_str() {
             "zlib" => {
-                let mut enc =
-                    ZlibEncoder::new(Vec::new(), Compression::new(level.unwrap_or(6).clamp(0, 9) as u32));
+                let mut enc = ZlibEncoder::new(
+                    Vec::new(),
+                    Compression::new(level.unwrap_or(6).clamp(0, 9) as u32),
+                );
                 enc.write_all(raw)?;
                 enc.finish().map_err(RasterError::Io)
             }
             "gzip" | "gz" => {
-                let mut enc =
-                    GzEncoder::new(Vec::new(), Compression::new(level.unwrap_or(6).clamp(0, 9) as u32));
+                let mut enc = GzEncoder::new(
+                    Vec::new(),
+                    Compression::new(level.unwrap_or(6).clamp(0, 9) as u32),
+                );
                 enc.write_all(raw)?;
                 enc.finish().map_err(RasterError::Io)
             }

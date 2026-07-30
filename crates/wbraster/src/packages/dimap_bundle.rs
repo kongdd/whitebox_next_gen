@@ -64,7 +64,12 @@ impl DimapBundle {
             extract_first_tag_value(&metadata_text, &["IMAGING_DATE", "ACQUISITION_DATE"]),
             extract_first_tag_value(&metadata_text, &["IMAGING_TIME", "ACQUISITION_TIME"]),
         )
-        .or_else(|| extract_first_tag_value(&metadata_text, &["ACQUISITION_DATETIME", "IMAGING_DATETIME"]));
+        .or_else(|| {
+            extract_first_tag_value(
+                &metadata_text,
+                &["ACQUISITION_DATETIME", "IMAGING_DATETIME"],
+            )
+        });
         let processing_level = extract_first_tag_value(
             &metadata_text,
             &["PROCESSING_LEVEL", "PRODUCTION_LEVEL", "PRODUCT_LEVEL"],
@@ -73,14 +78,10 @@ impl DimapBundle {
             &metadata_text,
             &["CLOUD_COVER", "CLOUD_COVERAGE", "CLOUDCOVER"],
         );
-        let sun_azimuth_deg = extract_first_tag_number(
-            &metadata_text,
-            &["SUN_AZIMUTH", "SUN_AZIMUTH_ANGLE"],
-        );
-        let sun_elevation_deg = extract_first_tag_number(
-            &metadata_text,
-            &["SUN_ELEVATION", "SUN_ELEVATION_ANGLE"],
-        );
+        let sun_azimuth_deg =
+            extract_first_tag_number(&metadata_text, &["SUN_AZIMUTH", "SUN_AZIMUTH_ANGLE"]);
+        let sun_elevation_deg =
+            extract_first_tag_number(&metadata_text, &["SUN_ELEVATION", "SUN_ELEVATION_ANGLE"]);
 
         let mut bands = BTreeMap::new();
         let mut profile_bands: BTreeMap<String, BTreeMap<String, PathBuf>> = BTreeMap::new();
@@ -149,7 +150,9 @@ impl DimapBundle {
 
     /// Resolve canonical band path.
     pub fn band_path(&self, key: &str) -> Option<&Path> {
-        self.bands.get(&key.to_ascii_uppercase()).map(PathBuf::as_path)
+        self.bands
+            .get(&key.to_ascii_uppercase())
+            .map(PathBuf::as_path)
     }
 
     /// Resolve canonical band path for a specific profile key.
@@ -162,9 +165,9 @@ impl DimapBundle {
 
     /// Read canonical band raster.
     pub fn read_band(&self, key: &str) -> Result<Raster> {
-        let p = self.band_path(key).ok_or_else(|| {
-            RasterError::MissingField(format!("DIMAP band '{}' not found", key))
-        })?;
+        let p = self
+            .band_path(key)
+            .ok_or_else(|| RasterError::MissingField(format!("DIMAP band '{}' not found", key)))?;
         Raster::read(p)
     }
 
@@ -398,12 +401,30 @@ mod tests {
 
     #[test]
     fn maps_xs_and_swir_variants() {
-        assert_eq!(canonical_band_key(Path::new("IMG_XS1.JP2")).as_deref(), Some("B1"));
-        assert_eq!(canonical_band_key(Path::new("IMG_XS2.JP2")).as_deref(), Some("B2"));
-        assert_eq!(canonical_band_key(Path::new("IMG_XS3.JP2")).as_deref(), Some("B3"));
-        assert_eq!(canonical_band_key(Path::new("IMG_XS4.JP2")).as_deref(), Some("B4"));
-        assert_eq!(canonical_band_key(Path::new("IMG_SWIR1.TIF")).as_deref(), Some("SWIR1"));
-        assert_eq!(canonical_band_key(Path::new("IMG_SWIR2.TIF")).as_deref(), Some("SWIR2"));
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_XS1.JP2")).as_deref(),
+            Some("B1")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_XS2.JP2")).as_deref(),
+            Some("B2")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_XS3.JP2")).as_deref(),
+            Some("B3")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_XS4.JP2")).as_deref(),
+            Some("B4")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_SWIR1.TIF")).as_deref(),
+            Some("SWIR1")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_SWIR2.TIF")).as_deref(),
+            Some("SWIR2")
+        );
     }
 
     #[test]
@@ -420,7 +441,10 @@ mod tests {
         fs::write(root.join("IMG_XS1.JP2"), b"").expect("b1");
 
         let b = DimapBundle::open(&root).expect("open");
-        assert_eq!(b.acquisition_datetime_utc.as_deref(), Some("2026-04-01T10:11:12.000Z"));
+        assert_eq!(
+            b.acquisition_datetime_utc.as_deref(),
+            Some("2026-04-01T10:11:12.000Z")
+        );
         assert_eq!(b.processing_level.as_deref(), Some("L2A"));
         assert_eq!(b.cloud_cover_percent, Some(7.5));
         assert_eq!(b.sun_azimuth_deg, Some(145.0));

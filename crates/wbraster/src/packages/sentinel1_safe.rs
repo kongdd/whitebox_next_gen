@@ -324,11 +324,7 @@ impl Sentinel1SafePackage {
         );
         let acquisition_datetime_utc = extract_first_text(
             &manifest_text,
-            &[
-                "startTime",
-                "safe:startTime",
-                "acquisitionStartTime",
-            ],
+            &["startTime", "safe:startTime", "acquisitionStartTime"],
         );
         let spatial_bounds = extract_tag_text(&manifest_text, "coordinates")
             .and_then(|coords| parse_gml_bounds(&coords));
@@ -463,9 +459,9 @@ impl Sentinel1SafePackage {
 
     /// Read and parse the thermal noise LUT associated with a measurement key.
     pub fn read_noise_lut(&self, key: &str) -> Result<Sentinel1NoiseLut> {
-        let path = self
-            .noise_path(key)
-            .ok_or_else(|| RasterError::MissingField(format!("noise '{}' not found in SAFE package", key)))?;
+        let path = self.noise_path(key).ok_or_else(|| {
+            RasterError::MissingField(format!("noise '{}' not found in SAFE package", key))
+        })?;
         let xml = fs::read_to_string(path)?;
         parse_noise_lut(&xml)
     }
@@ -518,10 +514,7 @@ impl Sentinel1SafePackage {
     /// each carrying an ECEF position (m) and velocity (m/s).
     pub fn read_orbit_vectors(&self, key: &str) -> Result<Vec<Sentinel1OrbitVector>> {
         let path = self.annotation_path(key).ok_or_else(|| {
-            RasterError::MissingField(format!(
-                "annotation '{}' not found in SAFE package",
-                key
-            ))
+            RasterError::MissingField(format!("annotation '{}' not found in SAFE package", key))
         })?;
         let xml = fs::read_to_string(path)?;
         parse_orbit_vectors(&xml)
@@ -534,10 +527,7 @@ impl Sentinel1SafePackage {
     /// image `(row, col)`.
     pub fn read_geolocation_grid(&self, key: &str) -> Result<Sentinel1GeolocationGrid> {
         let path = self.annotation_path(key).ok_or_else(|| {
-            RasterError::MissingField(format!(
-                "annotation '{}' not found in SAFE package",
-                key
-            ))
+            RasterError::MissingField(format!("annotation '{}' not found in SAFE package", key))
         })?;
         let xml = fs::read_to_string(path)?;
         parse_geolocation_grid(&xml)
@@ -549,10 +539,7 @@ impl Sentinel1SafePackage {
     /// which is expected for GRD products where burst metadata is not applicable.
     pub fn read_burst_list(&self, key: &str) -> Result<Sentinel1BurstList> {
         let path = self.annotation_path(key).ok_or_else(|| {
-            RasterError::MissingField(format!(
-                "annotation '{}' not found in SAFE package",
-                key
-            ))
+            RasterError::MissingField(format!("annotation '{}' not found in SAFE package", key))
         })?;
         let xml = fs::read_to_string(path)?;
         parse_burst_list(&xml)
@@ -757,22 +744,22 @@ fn parse_calibration_lut(xml: &str) -> Result<Sentinel1CalibrationLut> {
             .ok_or_else(|| RasterError::MissingField("calibrationVector/line".to_string()))?
             .parse::<usize>()
             .map_err(|e| RasterError::Other(format!("invalid calibration line value: {e}")))?;
-        let pixels = parse_usize_list(
-            &extract_tag_text(&block, "pixel")
-                .ok_or_else(|| RasterError::MissingField("calibrationVector/pixel".to_string()))?,
-        )?;
-        let sigma_nought = parse_f64_list(
-            &extract_tag_text(&block, "sigmaNought")
-                .ok_or_else(|| RasterError::MissingField("calibrationVector/sigmaNought".to_string()))?,
-        )?;
-        let beta_nought = parse_f64_list(
-            &extract_tag_text(&block, "betaNought")
-                .ok_or_else(|| RasterError::MissingField("calibrationVector/betaNought".to_string()))?,
-        )?;
-        let gamma = parse_f64_list(
-            &extract_tag_text(&block, "gamma")
-                .ok_or_else(|| RasterError::MissingField("calibrationVector/gamma".to_string()))?,
-        )?;
+        let pixels =
+            parse_usize_list(&extract_tag_text(&block, "pixel").ok_or_else(|| {
+                RasterError::MissingField("calibrationVector/pixel".to_string())
+            })?)?;
+        let sigma_nought =
+            parse_f64_list(&extract_tag_text(&block, "sigmaNought").ok_or_else(|| {
+                RasterError::MissingField("calibrationVector/sigmaNought".to_string())
+            })?)?;
+        let beta_nought =
+            parse_f64_list(&extract_tag_text(&block, "betaNought").ok_or_else(|| {
+                RasterError::MissingField("calibrationVector/betaNought".to_string())
+            })?)?;
+        let gamma =
+            parse_f64_list(&extract_tag_text(&block, "gamma").ok_or_else(|| {
+                RasterError::MissingField("calibrationVector/gamma".to_string())
+            })?)?;
         let dn = match extract_tag_text(&block, "dn") {
             Some(text) => parse_f64_list(&text)?,
             None => Vec::new(),
@@ -827,7 +814,11 @@ fn parse_noise_lut(xml: &str) -> Result<Sentinel1NoiseLut> {
         )?;
         validate_calibration_vector_lengths(&pixels, &noise, "noiseLut")?;
 
-        vectors.push(Sentinel1NoiseVector { line, pixels, noise });
+        vectors.push(Sentinel1NoiseVector {
+            line,
+            pixels,
+            noise,
+        });
     }
 
     if vectors.is_empty() {
@@ -858,9 +849,9 @@ fn validate_calibration_vector_lengths(
 fn parse_usize_list(text: &str) -> Result<Vec<usize>> {
     text.split_whitespace()
         .map(|token| {
-            token
-                .parse::<usize>()
-                .map_err(|e| RasterError::Other(format!("invalid integer list value '{token}': {e}")))
+            token.parse::<usize>().map_err(|e| {
+                RasterError::Other(format!("invalid integer list value '{token}': {e}"))
+            })
         })
         .collect()
 }
@@ -868,9 +859,9 @@ fn parse_usize_list(text: &str) -> Result<Vec<usize>> {
 fn parse_f64_list(text: &str) -> Result<Vec<f64>> {
     text.split_whitespace()
         .map(|token| {
-            token
-                .parse::<f64>()
-                .map_err(|e| RasterError::Other(format!("invalid numeric list value '{token}': {e}")))
+            token.parse::<f64>().map_err(|e| {
+                RasterError::Other(format!("invalid numeric list value '{token}': {e}"))
+            })
         })
         .collect()
 }
@@ -912,11 +903,13 @@ fn calibrate_measurement_raster(
                     continue;
                 }
 
-                let lut = calibration.interpolated_value(row, col, target).ok_or_else(|| {
-                    RasterError::MissingField(format!(
-                        "no calibration LUT value available for row {row}, col {col}"
-                    ))
-                })?;
+                let lut = calibration
+                    .interpolated_value(row, col, target)
+                    .ok_or_else(|| {
+                        RasterError::MissingField(format!(
+                            "no calibration LUT value available for row {row}, col {col}"
+                        ))
+                    })?;
                 if !lut.is_finite() || lut == 0.0 {
                     return Err(RasterError::Other(format!(
                         "invalid calibration LUT value at row {row}, col {col}: {lut}"
@@ -1254,15 +1247,11 @@ fn parse_geolocation_grid(xml: &str) -> Result<Sentinel1GeolocationGrid> {
             .parse::<usize>()
             .map_err(|e| RasterError::Other(format!("invalid geolocation pixel: {e}")))?;
         let latitude = extract_tag_text(&block, "latitude")
-            .ok_or_else(|| {
-                RasterError::MissingField("geolocationGridPoint/latitude".to_string())
-            })?
+            .ok_or_else(|| RasterError::MissingField("geolocationGridPoint/latitude".to_string()))?
             .parse::<f64>()
             .map_err(|e| RasterError::Other(format!("invalid latitude: {e}")))?;
         let longitude = extract_tag_text(&block, "longitude")
-            .ok_or_else(|| {
-                RasterError::MissingField("geolocationGridPoint/longitude".to_string())
-            })?
+            .ok_or_else(|| RasterError::MissingField("geolocationGridPoint/longitude".to_string()))?
             .parse::<f64>()
             .map_err(|e| RasterError::Other(format!("invalid longitude: {e}")))?;
         let height = extract_tag_text(&block, "height")
@@ -1327,15 +1316,11 @@ fn parse_burst_list(xml: &str) -> Result<Sentinel1BurstList> {
             .map_err(|e| RasterError::Other(format!("invalid byteOffset: {e}")))?;
         let first_valid_samples = parse_i32_list(
             &extract_tag_text(&block, "firstValidSample")
-                .ok_or_else(|| {
-                    RasterError::MissingField("burst/firstValidSample".to_string())
-                })?,
+                .ok_or_else(|| RasterError::MissingField("burst/firstValidSample".to_string()))?,
         )?;
         let last_valid_samples = parse_i32_list(
             &extract_tag_text(&block, "lastValidSample")
-                .ok_or_else(|| {
-                    RasterError::MissingField("burst/lastValidSample".to_string())
-                })?,
+                .ok_or_else(|| RasterError::MissingField("burst/lastValidSample".to_string()))?,
         )?;
 
         bursts.push(Sentinel1Burst {
@@ -1488,8 +1473,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let safe = tmp.path().join("S1A_IW_GRD_TEST.SAFE");
         fs::create_dir_all(&safe).expect("create safe root");
-        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>")
-            .expect("write manifest");
+        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>").expect("write manifest");
 
         let measurement_dir = safe.join("measurement");
         fs::create_dir_all(&measurement_dir).expect("create measurement dir");
@@ -1566,8 +1550,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let safe = tmp.path().join("S1A_IW_GRD_TEST.SAFE");
         fs::create_dir_all(&safe).expect("create safe root");
-        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>")
-            .expect("write manifest");
+        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>").expect("write manifest");
 
         let measurement_dir = safe.join("measurement");
         fs::create_dir_all(&measurement_dir).expect("create measurement dir");
@@ -1654,8 +1637,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let safe = tmp.path().join("S1A_IW_SLC_TEST.SAFE");
         fs::create_dir_all(&safe).expect("create safe root");
-        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>")
-            .expect("write manifest");
+        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>").expect("write manifest");
 
         let measurement_dir = safe.join("measurement");
         fs::create_dir_all(&measurement_dir).expect("create measurement dir");
@@ -1687,8 +1669,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let safe = tmp.path().join("S1A_IW_GRD_DB_TEST.SAFE");
         fs::create_dir_all(&safe).expect("create safe root");
-        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>")
-            .expect("write manifest");
+        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>").expect("write manifest");
 
         let measurement_dir = safe.join("measurement");
         fs::create_dir_all(&measurement_dir).expect("create measurement dir");
@@ -1741,8 +1722,16 @@ mod tests {
             .expect("calibrate to dB");
         // 10 * log10(100) = 20.0
         let expected = 20.0_f64;
-        assert!((db.get(0, 0, 0) - expected).abs() < 1e-4, "col 0: {}", db.get(0, 0, 0));
-        assert!((db.get(0, 0, 1) - expected).abs() < 1e-4, "col 1: {}", db.get(0, 0, 1));
+        assert!(
+            (db.get(0, 0, 0) - expected).abs() < 1e-4,
+            "col 0: {}",
+            db.get(0, 0, 0)
+        );
+        assert!(
+            (db.get(0, 0, 1) - expected).abs() < 1e-4,
+            "col 1: {}",
+            db.get(0, 0, 1)
+        );
         // Verify metadata tag was set
         assert!(db
             .metadata
@@ -1755,8 +1744,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let safe = tmp.path().join("S1A_IW_GRD_ORBIT_TEST.SAFE");
         fs::create_dir_all(&safe).expect("create safe root");
-        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>")
-            .expect("write manifest");
+        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>").expect("write manifest");
 
         let measurement_dir = safe.join("measurement");
         fs::create_dir_all(&measurement_dir).expect("create measurement dir");
@@ -1974,15 +1962,12 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let safe = tmp.path().join("S1A_IW_GRD_DUAL_POL_TEST.SAFE");
         fs::create_dir_all(&safe).expect("create safe root");
-        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>")
-            .expect("write manifest");
+        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>").expect("write manifest");
 
         let mdir = safe.join("measurement");
         fs::create_dir_all(&mdir).expect("create measurement dir");
-        fs::write(mdir.join("s1a-iw-grd-vv-20260401t120000.tiff"), b"")
-            .expect("write VV");
-        fs::write(mdir.join("s1a-iw-grd-vh-20260401t120000.tiff"), b"")
-            .expect("write VH");
+        fs::write(mdir.join("s1a-iw-grd-vv-20260401t120000.tiff"), b"").expect("write VV");
+        fs::write(mdir.join("s1a-iw-grd-vh-20260401t120000.tiff"), b"").expect("write VH");
 
         let pkg = Sentinel1SafePackage::open(&safe).expect("open");
         let mut pols = pkg.list_polarizations();

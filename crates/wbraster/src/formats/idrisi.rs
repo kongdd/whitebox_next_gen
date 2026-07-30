@@ -38,10 +38,10 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
-use crate::error::{Result, RasterError};
+use crate::crs_info::CrsInfo;
+use crate::error::{RasterError, Result};
 use crate::io_utils::*;
 use crate::raster::{DataType, Raster, RasterConfig};
-use crate::crs_info::CrsInfo;
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -62,11 +62,11 @@ pub fn write(raster: &Raster, path: &str) -> Result<()> {
     } else {
         path.to_string()
     };
-        if raster.bands != 1 {
-            return Err(RasterError::UnsupportedDataType(
-                "Idrisi writer currently supports single-band rasters only".into(),
-            ));
-        }
+    if raster.bands != 1 {
+        return Err(RasterError::UnsupportedDataType(
+            "Idrisi writer currently supports single-band rasters only".into(),
+        ));
+    }
     let rst_path = with_extension(&rdc_path, "rst");
     write_rdc(raster, &rdc_path)?;
     write_rst(raster, &rst_path)?;
@@ -116,7 +116,9 @@ fn parse_rdc(path: &str) -> Result<IdrisiHeader> {
         let line = line?;
         // Idrisi uses `: ` as separator
         let line = line.trim();
-        if line.is_empty() || line.starts_with(';') { continue; }
+        if line.is_empty() || line.starts_with(';') {
+            continue;
+        }
         let colon_pos = match line.find(':') {
             Some(p) => p,
             None => continue,
@@ -125,38 +127,50 @@ fn parse_rdc(path: &str) -> Result<IdrisiHeader> {
         let val = line[colon_pos + 1..].trim().to_string();
 
         match key.as_str() {
-            "file title"   => title = val,
-            "data type"    => data_type = idrisi_data_type(&val),
-            "columns"      => cols = Some(parse_usize("columns", &val)?),
-            "rows"         => rows = Some(parse_usize("rows", &val)?),
-            "min. x"       => x_min = Some(parse_f64("min. x", &val)?),
-            "max. x"       => x_max = Some(parse_f64("max. x", &val)?),
-            "min. y"       => y_min = Some(parse_f64("min. y", &val)?),
-            "max. y"       => y_max = Some(parse_f64("max. y", &val)?),
-            "flag value"   => nodata = parse_f64("flag value", &val).unwrap_or(-9999.0),
-            "ref. system"  => ref_system = val,
-            "byteorder"    => byte_order = parse_byte_order(&val),
+            "file title" => title = val,
+            "data type" => data_type = idrisi_data_type(&val),
+            "columns" => cols = Some(parse_usize("columns", &val)?),
+            "rows" => rows = Some(parse_usize("rows", &val)?),
+            "min. x" => x_min = Some(parse_f64("min. x", &val)?),
+            "max. x" => x_max = Some(parse_f64("max. x", &val)?),
+            "min. y" => y_min = Some(parse_f64("min. y", &val)?),
+            "max. y" => y_max = Some(parse_f64("max. y", &val)?),
+            "flag value" => nodata = parse_f64("flag value", &val).unwrap_or(-9999.0),
+            "ref. system" => ref_system = val,
+            "byteorder" => byte_order = parse_byte_order(&val),
             _ => {}
         }
     }
 
-    let cols  = cols .ok_or_else(|| RasterError::MissingField("columns".into()))?;
-    let rows  = rows .ok_or_else(|| RasterError::MissingField("rows".into()))?;
+    let cols = cols.ok_or_else(|| RasterError::MissingField("columns".into()))?;
+    let rows = rows.ok_or_else(|| RasterError::MissingField("rows".into()))?;
     let x_min = x_min.ok_or_else(|| RasterError::MissingField("min. X".into()))?;
     let x_max = x_max.ok_or_else(|| RasterError::MissingField("max. X".into()))?;
     let y_min = y_min.ok_or_else(|| RasterError::MissingField("min. Y".into()))?;
     let y_max = y_max.ok_or_else(|| RasterError::MissingField("max. Y".into()))?;
 
-    Ok(IdrisiHeader { data_type, byte_order, cols, rows, x_min, x_max, y_min, y_max, nodata, title, ref_system })
+    Ok(IdrisiHeader {
+        data_type,
+        byte_order,
+        cols,
+        rows,
+        x_min,
+        x_max,
+        y_min,
+        y_max,
+        nodata,
+        title,
+        ref_system,
+    })
 }
 
 fn idrisi_data_type(s: &str) -> DataType {
     match s.trim().to_ascii_lowercase().as_str() {
-        "byte"    => DataType::U8,
+        "byte" => DataType::U8,
         "integer" => DataType::I16,
-        "real"    => DataType::F32,
-        "rgb24"   => DataType::U32,
-        _         => DataType::F32,
+        "real" => DataType::F32,
+        "rgb24" => DataType::U32,
+        _ => DataType::F32,
     }
 }
 
@@ -166,9 +180,10 @@ fn idrisi_data_type_str(dt: DataType) -> Result<&'static str> {
         DataType::I16 => Ok("integer"),
         DataType::F32 => Ok("real"),
         DataType::U32 => Ok("RGB24"),
-        _ => Err(RasterError::UnsupportedDataType(
-            format!("Idrisi/TerrSet writer does not support {:?}", dt),
-        )),
+        _ => Err(RasterError::UnsupportedDataType(format!(
+            "Idrisi/TerrSet writer does not support {:?}",
+            dt
+        ))),
     }
 }
 
@@ -231,7 +246,8 @@ fn read_from_header(rdc_path: &str) -> Result<Raster> {
         cell_size_y: Some(cell_size_y),
         nodata: hdr.nodata,
         data_type: hdr.data_type,
-        crs: crs,        metadata,
+        crs: crs,
+        metadata,
         ..Default::default()
     };
     Raster::from_data(cfg, data)
@@ -315,9 +331,10 @@ fn read_rst(path: &str, hdr: &IdrisiHeader) -> Result<Vec<f64>> {
             }
         }
         _ => {
-            return Err(RasterError::UnsupportedDataType(
-                format!("Idrisi/TerrSet reader does not support {:?}", hdr.data_type),
-            ));
+            return Err(RasterError::UnsupportedDataType(format!(
+                "Idrisi/TerrSet reader does not support {:?}",
+                hdr.data_type
+            )));
         }
     }
     Ok(data)
@@ -326,15 +343,21 @@ fn read_rst(path: &str, hdr: &IdrisiHeader) -> Result<Vec<f64>> {
 // ─── Write ────────────────────────────────────────────────────────────────────
 
 fn write_rdc(raster: &Raster, rdc_path: &str) -> Result<()> {
-    let title = raster.metadata.iter()
+    let title = raster
+        .metadata
+        .iter()
         .find(|(k, _)| k == "title")
         .map(|(_, v)| v.as_str())
         .unwrap_or("untitled");
-    let ref_system = raster.metadata.iter()
+    let ref_system = raster
+        .metadata
+        .iter()
         .find(|(k, _)| k == "ref_system")
         .map(|(_, v)| v.as_str())
         .unwrap_or("plane");
-    let byte_order = raster.metadata.iter()
+    let byte_order = raster
+        .metadata
+        .iter()
         .find(|(k, _)| k.eq_ignore_ascii_case("byteorder"))
         .map(|(_, v)| parse_byte_order(v))
         .unwrap_or(IdrisiByteOrder::Little);
@@ -343,7 +366,11 @@ fn write_rdc(raster: &Raster, rdc_path: &str) -> Result<()> {
     let mut w = BufWriter::new(File::create(rdc_path)?);
     writeln!(w, "file format : IDRISI Raster A.1")?;
     writeln!(w, "file title  : {title}")?;
-    writeln!(w, "data type   : {}", idrisi_data_type_str(raster.data_type)?)?;
+    writeln!(
+        w,
+        "data type   : {}",
+        idrisi_data_type_str(raster.data_type)?
+    )?;
     writeln!(w, "file type   : binary")?;
     writeln!(w, "columns     : {}", raster.cols)?;
     writeln!(w, "rows        : {}", raster.rows)?;
@@ -372,7 +399,9 @@ fn write_rdc(raster: &Raster, rdc_path: &str) -> Result<()> {
 
 fn write_rst(raster: &Raster, rst_path: &str) -> Result<()> {
     let mut w = BufWriter::with_capacity(512 * 1024, File::create(rst_path)?);
-    let byte_order = raster.metadata.iter()
+    let byte_order = raster
+        .metadata
+        .iter()
         .find(|(k, _)| k.eq_ignore_ascii_case("byteorder"))
         .map(|(_, v)| parse_byte_order(v))
         .unwrap_or(IdrisiByteOrder::Little);
@@ -412,9 +441,10 @@ fn write_rst(raster: &Raster, rst_path: &str) -> Result<()> {
             }
         }
         _ => {
-            return Err(RasterError::UnsupportedDataType(
-                format!("Idrisi/TerrSet writer does not support {:?}", raster.data_type),
-            ));
+            return Err(RasterError::UnsupportedDataType(format!(
+                "Idrisi/TerrSet writer does not support {:?}",
+                raster.data_type
+            )));
         }
     }
     w.flush()?;
@@ -424,15 +454,23 @@ fn write_rst(raster: &Raster, rst_path: &str) -> Result<()> {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn parse_usize(field: &str, val: &str) -> Result<usize> {
-    val.trim().parse::<usize>().map_err(|_| RasterError::ParseError {
-        field: field.into(), value: val.into(), expected: "positive integer".into(),
-    })
+    val.trim()
+        .parse::<usize>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "positive integer".into(),
+        })
 }
 
 fn parse_f64(field: &str, val: &str) -> Result<f64> {
-    val.trim().parse::<f64>().map_err(|_| RasterError::ParseError {
-        field: field.into(), value: val.into(), expected: "float".into(),
-    })
+    val.trim()
+        .parse::<f64>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "float".into(),
+        })
 }
 
 #[cfg(test)]
@@ -443,16 +481,28 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn tmp(suffix: &str) -> String {
-        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos();
-        temp_dir().join(format!("idrisi_test_{ts}{suffix}")).to_string_lossy().into_owned()
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos();
+        temp_dir()
+            .join(format!("idrisi_test_{ts}{suffix}"))
+            .to_string_lossy()
+            .into_owned()
     }
 
     #[test]
     fn idrisi_roundtrip() {
         let rdc = tmp(".rdc");
         let cfg = RasterConfig {
-            cols: 4, rows: 3, cell_size: 10.0, x_min: 0.0, y_min: 0.0,
-            nodata: -9999.0, data_type: DataType::F32, ..Default::default()
+            cols: 4,
+            rows: 3,
+            cell_size: 10.0,
+            x_min: 0.0,
+            y_min: 0.0,
+            nodata: -9999.0,
+            data_type: DataType::F32,
+            ..Default::default()
         };
         let data: Vec<f64> = (0..12).map(|i| i as f64).collect();
         let r = Raster::from_data(cfg, data).unwrap();

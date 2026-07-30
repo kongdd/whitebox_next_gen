@@ -79,8 +79,10 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::crs_info::CrsInfo;
-use crate::error::{Result, RasterError};
-use crate::io_utils::{read_f32_le, read_f64_le, read_i32_le, read_i16_le, read_u16_le, read_u32_le};
+use crate::error::{RasterError, Result};
+use crate::io_utils::{
+    read_f32_le, read_f64_le, read_i16_le, read_i32_le, read_u16_le, read_u32_le,
+};
 use crate::raster::{DataType, Raster, RasterConfig};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -98,11 +100,11 @@ const ENTRY_HDR_LEN_OFFSET_V2: usize = 32;
 const DEFAULT_ENTRY_HDR_LEN: usize = 128;
 
 // ERDAS pixel-type enum values (EPTType).
-const EPT_U1: u32  = 0;
-const EPT_U2: u32  = 1;
-const EPT_U4: u32  = 2;
-const EPT_U8: u32  = 3;
-const EPT_S8: u32  = 4;
+const EPT_U1: u32 = 0;
+const EPT_U2: u32 = 1;
+const EPT_U4: u32 = 2;
+const EPT_U8: u32 = 3;
+const EPT_S8: u32 = 4;
 const EPT_U16: u32 = 5;
 const EPT_S16: u32 = 6;
 const EPT_U32: u32 = 7;
@@ -195,7 +197,10 @@ fn read_native(path: &str) -> Result<Raster> {
             Ok(v) => v,
             Err(_) => continue,
         };
-        let children = children_of.get(&node.file_offset).cloned().unwrap_or_default();
+        let children = children_of
+            .get(&node.file_offset)
+            .cloned()
+            .unwrap_or_default();
 
         // Locate RasterDMS child for tiled storage.
         let dms_node = children
@@ -206,8 +211,10 @@ fn read_native(path: &str) -> Result<Raster> {
         // Locate nodata child.
         let nodata_val = children
             .iter()
-            .find(|&&ci| nodes[ci].name == "Eimg_NonInitializedValue"
-                      || nodes[ci].type_name == "Eimg_NonInitializedValue")
+            .find(|&&ci| {
+                nodes[ci].name == "Eimg_NonInitializedValue"
+                    || nodes[ci].type_name == "Eimg_NonInitializedValue"
+            })
             .and_then(|&ci| parse_nodata_node(&raw, &nodes[ci]));
 
         let pixels = read_band_pixels(&raw, &band_info, dms_node)?;
@@ -312,7 +319,11 @@ fn read_via_gdal_translate(path: &str) -> Result<Raster> {
 
     let status = match status {
         Ok(status) if status.success() => status,
-        _ => return Err(RasterError::CorruptData("HFA: native parser failed and GDAL fallback was unavailable".into())),
+        _ => {
+            return Err(RasterError::CorruptData(
+                "HFA: native parser failed and GDAL fallback was unavailable".into(),
+            ))
+        }
     };
     let _ = status;
 
@@ -331,11 +342,19 @@ fn read_root_and_entry_header_len(raw: &[u8]) -> Result<(usize, usize)> {
 
     let r1 = read_u32_le(raw, ROOT_PTR_OFFSET_V1) as usize;
     let e1_raw = read_u16_le(raw, ENTRY_HDR_LEN_OFFSET_V1) as usize;
-    let e1 = if e1_raw == 0 { DEFAULT_ENTRY_HDR_LEN } else { e1_raw };
+    let e1 = if e1_raw == 0 {
+        DEFAULT_ENTRY_HDR_LEN
+    } else {
+        e1_raw
+    };
 
     let r2 = read_u32_le(raw, ROOT_PTR_OFFSET_V2) as usize;
     let e2_raw = read_u16_le(raw, ENTRY_HDR_LEN_OFFSET_V2) as usize;
-    let e2 = if e2_raw == 0 { DEFAULT_ENTRY_HDR_LEN } else { e2_raw };
+    let e2 = if e2_raw == 0 {
+        DEFAULT_ENTRY_HDR_LEN
+    } else {
+        e2_raw
+    };
 
     let v1_ok = plausible_entry_len(e1) && plausible_root(r1, raw.len());
     let v2_ok = plausible_entry_len(e2) && plausible_root(r2, raw.len());
@@ -465,11 +484,12 @@ fn collect_nodes(
         let a_score = (!a_name.is_empty() as usize) + (!a_type.is_empty() as usize);
         let b_score = (!b_name.is_empty() as usize) + (!b_type.is_empty() as usize);
 
-        let (name, type_name, data_offset, data_size, next_entry, child_entry) = if b_score > a_score {
-            (b_name, b_type, b_data_offset, b_data_size, b_next, b_child)
-        } else {
-            (a_name, a_type, a_data_offset, a_data_size, a_next, a_child)
-        };
+        let (name, type_name, data_offset, data_size, next_entry, child_entry) =
+            if b_score > a_score {
+                (b_name, b_type, b_data_offset, b_data_size, b_next, b_child)
+            } else {
+                (a_name, a_type, a_data_offset, a_data_size, a_next, a_child)
+            };
 
         let node = NodeHdr {
             name,
@@ -518,23 +538,22 @@ fn scan_for_layer_nodes(raw: &[u8], entry_hdr_len: usize) -> Vec<NodeHdr> {
             continue;
         }
 
-        let (name, type_name, data_offset, data_size) = if type_b == "Eimg_Layer"
-            || type_b == "Eimg_Layer_SubSample"
-        {
-            (
-                nul_terminated_str(&node_raw[16..80]).to_string(),
-                type_b.to_string(),
-                read_u32_le(node_raw, 112) as usize,
-                read_u32_le(node_raw, 116) as usize,
-            )
-        } else {
-            (
-                nul_terminated_str(&node_raw[..64]).to_string(),
-                type_a.to_string(),
-                read_u32_le(node_raw, 96) as usize,
-                read_u32_le(node_raw, 100) as usize,
-            )
-        };
+        let (name, type_name, data_offset, data_size) =
+            if type_b == "Eimg_Layer" || type_b == "Eimg_Layer_SubSample" {
+                (
+                    nul_terminated_str(&node_raw[16..80]).to_string(),
+                    type_b.to_string(),
+                    read_u32_le(node_raw, 112) as usize,
+                    read_u32_le(node_raw, 116) as usize,
+                )
+            } else {
+                (
+                    nul_terminated_str(&node_raw[..64]).to_string(),
+                    type_a.to_string(),
+                    read_u32_le(node_raw, 96) as usize,
+                    read_u32_le(node_raw, 100) as usize,
+                )
+            };
 
         if data_offset == 0 || data_size < 52 || data_offset + 52 > raw.len() {
             continue;
@@ -600,8 +619,16 @@ fn parse_eimg_layer(raw: &[u8], node: &NodeHdr) -> Result<EimgLayer> {
         width,
         height,
         pixel_type,
-        block_width: if block_width > 0.0 { block_width } else { width as f64 },
-        block_height: if block_height > 0.0 { block_height } else { height as f64 },
+        block_width: if block_width > 0.0 {
+            block_width
+        } else {
+            width as f64
+        },
+        block_height: if block_height > 0.0 {
+            block_height
+        } else {
+            height as f64
+        },
         compress_type,
         data_file_offset,
         data_file_size,
@@ -621,11 +648,7 @@ fn parse_nodata_node(raw: &[u8], node: &NodeHdr) -> Option<f64> {
 
 // ─── Pixel data reader ────────────────────────────────────────────────────────
 
-fn read_band_pixels(
-    raw: &[u8],
-    info: &EimgLayer,
-    dms_node: Option<&NodeHdr>,
-) -> Result<PixelGrid> {
+fn read_band_pixels(raw: &[u8], info: &EimgLayer, dms_node: Option<&NodeHdr>) -> Result<PixelGrid> {
     let cols = info.width as usize;
     let rows = info.height as usize;
 
@@ -715,7 +738,8 @@ fn read_tiled_pixels(
     let num_virtual_blocks = read_i32_le(d, 0) as usize;
     if num_virtual_blocks == 0 || d.len() < DMS_HEADER + num_virtual_blocks * BLOCK_INFO_SIZE {
         return Err(RasterError::CorruptData(format!(
-            "HFA: RasterDMS block count {num_virtual_blocks} inconsistent with node data size {}", d.len()
+            "HFA: RasterDMS block count {num_virtual_blocks} inconsistent with node data size {}",
+            d.len()
         )));
     }
 
@@ -733,11 +757,14 @@ fn read_tiled_pixels(
         let compress = read_i32_le(d, base + 20) as u32;
         if file_code == 0 || data_offset != 0 {
             // file_code == 0 means main file; data_offset == 0 → uninitialized tile (skip)
-            tile_map.insert(logical_num, TileRef {
-                file_offset: data_offset as usize,
-                data_size: data_size as usize,
-                compress_type: compress,
-            });
+            tile_map.insert(
+                logical_num,
+                TileRef {
+                    file_offset: data_offset as usize,
+                    data_size: data_size as usize,
+                    compress_type: compress,
+                },
+            );
         }
     }
 
@@ -768,10 +795,11 @@ fn read_tiled_pixels(
                     continue; // partial/corrupt tile — leave as NaN
                 }
                 let comp = &raw[file_off..file_off + tile_ref.data_size];
-                let uncompressed = match uncompress_hfa_rlc_block(comp, info.pixel_type, pixel_count) {
-                    Ok(v) => v,
-                    Err(_) => continue, // bad compressed tile — leave as NaN
-                };
+                let uncompressed =
+                    match uncompress_hfa_rlc_block(comp, info.pixel_type, pixel_count) {
+                        Ok(v) => v,
+                        Err(_) => continue, // bad compressed tile — leave as NaN
+                    };
                 decode_pixels_from_bytes(&uncompressed, info.pixel_type, pixel_count)?
             } else {
                 return Err(RasterError::UnsupportedDataType(format!(
@@ -819,17 +847,20 @@ struct TileRef {
 /// Return the number of bytes required for `count` pixels of the given EPT type.
 fn pixel_bytes(pixel_type: u32, count: usize) -> Result<usize> {
     let bytes = match pixel_type {
-        EPT_U1  => count.div_ceil(8),
-        EPT_U2  => count.div_ceil(4),
-        EPT_U4  => count.div_ceil(2),
-        EPT_U8 | EPT_S8   => count,
+        EPT_U1 => count.div_ceil(8),
+        EPT_U2 => count.div_ceil(4),
+        EPT_U4 => count.div_ceil(2),
+        EPT_U8 | EPT_S8 => count,
         EPT_U16 | EPT_S16 => count * 2,
         EPT_U32 | EPT_S32 => count * 4,
-        EPT_F32            => count * 4,
-        EPT_F64            => count * 8,
-        _ => return Err(RasterError::UnsupportedDataType(format!(
-            "HFA: pixel type {} (complex/unknown) is not supported", pixel_type
-        ))),
+        EPT_F32 => count * 4,
+        EPT_F64 => count * 8,
+        _ => {
+            return Err(RasterError::UnsupportedDataType(format!(
+                "HFA: pixel type {} (complex/unknown) is not supported",
+                pixel_type
+            )))
+        }
     };
     Ok(bytes)
 }
@@ -838,7 +869,9 @@ fn pixel_bytes(pixel_type: u32, count: usize) -> Result<usize> {
 fn decode_pixels(raw: &[u8], offset: usize, pixel_type: u32, count: usize) -> Result<Vec<f64>> {
     let bytes_needed = pixel_bytes(pixel_type, count)?;
     if raw.len() < offset + bytes_needed {
-        return Err(RasterError::CorruptData("HFA: pixel buffer too short".into()));
+        return Err(RasterError::CorruptData(
+            "HFA: pixel buffer too short".into(),
+        ));
     }
     decode_pixels_from_bytes(&raw[offset..offset + bytes_needed], pixel_type, count)
 }
@@ -863,7 +896,11 @@ fn decode_pixels_from_bytes(src: &[u8], pixel_type: u32, count: usize) -> Result
         EPT_U4 => {
             for i in 0..count {
                 let byte = src[i / 2];
-                let val = if i % 2 == 0 { byte & 0x0F } else { (byte >> 4) & 0x0F };
+                let val = if i % 2 == 0 {
+                    byte & 0x0F
+                } else {
+                    (byte >> 4) & 0x0F
+                };
                 out.push(val as f64);
             }
         }
@@ -909,7 +946,8 @@ fn decode_pixels_from_bytes(src: &[u8], pixel_type: u32, count: usize) -> Result
         }
         _ => {
             return Err(RasterError::UnsupportedDataType(format!(
-                "HFA: pixel type {} is not supported", pixel_type
+                "HFA: pixel type {} is not supported",
+                pixel_type
             )));
         }
     }
@@ -926,14 +964,18 @@ fn decode_pixels_from_bytes(src: &[u8], pixel_type: u32, count: usize) -> Result
 /// - bytes 13..:  run-count stream (if numRuns != -1) and/or values stream
 fn uncompress_hfa_rlc_block(comp: &[u8], pixel_type: u32, pixel_count: usize) -> Result<Vec<u8>> {
     if comp.len() < 13 {
-        return Err(RasterError::CorruptData("HFA: compressed block header too short".into()));
+        return Err(RasterError::CorruptData(
+            "HFA: compressed block header too short".into(),
+        ));
     }
 
     let data_min = read_u32_le(comp, 0);
     let num_runs = read_i32_le(comp, 4);
     let data_offset = read_i32_le(comp, 8);
     if data_offset < 13 || (data_offset as usize) > comp.len() {
-        return Err(RasterError::CorruptData("HFA: invalid compressed block dataOffset".into()));
+        return Err(RasterError::CorruptData(
+            "HFA: invalid compressed block dataOffset".into(),
+        ));
     }
     let num_bits = comp[12] as usize;
 
@@ -955,13 +997,17 @@ fn uncompress_hfa_rlc_block(comp: &[u8], pixel_type: u32, pixel_count: usize) ->
     }
 
     if num_runs < 0 {
-        return Err(RasterError::CorruptData("HFA: invalid numRuns in compressed block".into()));
+        return Err(RasterError::CorruptData(
+            "HFA: invalid numRuns in compressed block".into(),
+        ));
     }
 
     let mut counter_pos = 13usize;
     for _ in 0..(num_runs as usize) {
         if counter_pos >= comp.len() {
-            return Err(RasterError::CorruptData("HFA: truncated run-count stream".into()));
+            return Err(RasterError::CorruptData(
+                "HFA: truncated run-count stream".into(),
+            ));
         }
         let first = comp[counter_pos];
         counter_pos += 1;
@@ -971,14 +1017,18 @@ fn uncompress_hfa_rlc_block(comp: &[u8], pixel_type: u32, pixel_count: usize) ->
             0x00 => {}
             0x40 => {
                 if counter_pos + 1 > comp.len() {
-                    return Err(RasterError::CorruptData("HFA: truncated 2-byte run-count".into()));
+                    return Err(RasterError::CorruptData(
+                        "HFA: truncated 2-byte run-count".into(),
+                    ));
                 }
                 repeat = (repeat << 8) | comp[counter_pos] as usize;
                 counter_pos += 1;
             }
             0x80 => {
                 if counter_pos + 2 > comp.len() {
-                    return Err(RasterError::CorruptData("HFA: truncated 3-byte run-count".into()));
+                    return Err(RasterError::CorruptData(
+                        "HFA: truncated 3-byte run-count".into(),
+                    ));
                 }
                 repeat = (repeat << 16)
                     | ((comp[counter_pos] as usize) << 8)
@@ -987,7 +1037,9 @@ fn uncompress_hfa_rlc_block(comp: &[u8], pixel_type: u32, pixel_count: usize) ->
             }
             _ => {
                 if counter_pos + 3 > comp.len() {
-                    return Err(RasterError::CorruptData("HFA: truncated 4-byte run-count".into()));
+                    return Err(RasterError::CorruptData(
+                        "HFA: truncated 4-byte run-count".into(),
+                    ));
                 }
                 repeat = (repeat << 24)
                     | ((comp[counter_pos] as usize) << 16)
@@ -1032,7 +1084,9 @@ fn read_value_bits(values: &[u8], bit_pos: &mut usize, num_bits: usize) -> Resul
 
     let total_bits = values.len() * 8;
     if *bit_pos + num_bits > total_bits {
-        return Err(RasterError::CorruptData("HFA: truncated compressed value stream".into()));
+        return Err(RasterError::CorruptData(
+            "HFA: truncated compressed value stream".into(),
+        ));
     }
 
     let mut v = 0_u32;
@@ -1097,7 +1151,7 @@ fn write_pixel_value(dst: &mut [u8], pixel_type: u32, pixel_idx: usize, value: u
 fn ept_to_data_type(ept: u32) -> Result<DataType> {
     match ept {
         EPT_U1 | EPT_U2 | EPT_U4 | EPT_U8 => Ok(DataType::U8),
-        EPT_S8  => Ok(DataType::I8),
+        EPT_S8 => Ok(DataType::I8),
         EPT_U16 => Ok(DataType::U16),
         EPT_S16 => Ok(DataType::I16),
         EPT_U32 => Ok(DataType::U32),
@@ -1130,7 +1184,9 @@ fn ept_to_data_type(ept: u32) -> Result<DataType> {
 fn parse_eprj_map_info(raw: &[u8], node: &NodeHdr, raster_rows: usize) -> Result<GeoTransform> {
     let off = node.data_offset;
     if raw.len() <= off || node.data_size < 4 {
-        return Err(RasterError::CorruptData("HFA: Eprj_MapInfo data missing".into()));
+        return Err(RasterError::CorruptData(
+            "HFA: Eprj_MapInfo data missing".into(),
+        ));
     }
     let d = &raw[off..off + node.data_size.min(raw.len() - off)];
     let mut cursor = 0usize;
@@ -1148,15 +1204,15 @@ fn parse_eprj_map_info(raw: &[u8], node: &NodeHdr, raster_rows: usize) -> Result
         ));
     }
 
-    let ul_x = read_f64_le(d, cursor);          // upperLeftCenter.x
-    let ul_y = read_f64_le(d, cursor + 8);      // upperLeftCenter.y
+    let ul_x = read_f64_le(d, cursor); // upperLeftCenter.x
+    let ul_y = read_f64_le(d, cursor + 8); // upperLeftCenter.y
     cursor += 16;
 
     // lowerRightCenter (16 bytes, skipped)
     cursor += 16;
 
-    let px = read_f64_le(d, cursor);            // pixelSize.x
-    let py = read_f64_le(d, cursor + 8);        // pixelSize.y
+    let px = read_f64_le(d, cursor); // pixelSize.x
+    let py = read_f64_le(d, cursor + 8); // pixelSize.y
 
     if px <= 0.0 || py <= 0.0 {
         return Err(RasterError::CorruptData(format!(
@@ -1227,36 +1283,29 @@ fn sphere_to_epsg(sphere_name: &str, semi_major: f64) -> Option<u32> {
         (("WGS84", 6_378_137.0, 1.0), 4326),
         (("WGS 84", 6_378_137.0, 1.0), 4326),
         (("WGS 1984", 6_378_137.0, 1.0), 4326),
-
         // NAD83 (North American Datum 1983) — uses WGS-84 ellipsoid in modern form
         (("NAD83", 6_378_137.0, 1.0), 4269),
         (("NAD 83", 6_378_137.0, 1.0), 4269),
         (("NAD 1983", 6_378_137.0, 1.0), 4269),
         (("NORTH AMERICAN DATUM 1983", 6_378_137.0, 1.0), 4269),
-
         // WGS-72 (older, used in some legacy data)
         (("WGS72", 6_378_135.0, 1.0), 4322),
         (("WGS 72", 6_378_135.0, 1.0), 4322),
-
         // NAD27 (North American Datum 1927) — Clarke 1880 ellipsoid
         (("NAD27", 6_378_249.145, 1.0), 4267),
         (("NAD 27", 6_378_249.145, 1.0), 4267),
         (("NAD 1927", 6_378_249.145, 1.0), 4267),
         (("NORTH AMERICAN DATUM 1927", 6_378_249.145, 1.0), 4267),
-
         // ED50 (European Datum 1950) — International 1924 ellipsoid
         (("ED50", 6_378_388.0, 1.0), 4230),
         (("ED 50", 6_378_388.0, 1.0), 4230),
         (("EUROPEAN DATUM 1950", 6_378_388.0, 1.0), 4230),
-
         // International 1924 (Hayford ellipsoid) — can map to multiple EPSG codes
         (("INTERNATIONAL 1924", 6_378_388.0, 1.0), 4229),
         (("HAYFORD", 6_378_388.0, 1.0), 4229),
-
         // Bessel 1841 (used in Central Europe, Asia)
         (("BESSEL 1841", 6_377_397.155, 1.0), 4004),
         (("BESSEL", 6_377_397.155, 1.0), 4004),
-
         // Clarke 1880 (used in many countries)
         (("CLARKE 1880", 6_378_249.145, 1.0), 4011),
     ];
@@ -1602,8 +1651,7 @@ fn projected_to_epsg(
     // ─── Tier C scaffold: additional ERDAS projected codes ───────────────
     // Conservative seed mappings only. This branch is intentionally strict
     // and should expand with verified proNumber + parameter signatures.
-    if let Some(epsg) = projected_tier_c_seed_epsg(pro_number, sphere_epsg, pro_params, pro_name)
-    {
+    if let Some(epsg) = projected_tier_c_seed_epsg(pro_number, sphere_epsg, pro_params, pro_name) {
         return Some(epsg);
     }
 
@@ -2105,8 +2153,7 @@ fn seed_epsg_from_projection_name(name: &str) -> Option<u32> {
 /// This fallback targets embedded text like `PROJCS[...]` or `GEOGCS[...]`
 /// when ERDAS projection number mapping is unavailable.
 fn extract_wkt_from_raw(raw: &[u8]) -> Option<String> {
-    extract_balanced_wkt(raw, b"PROJCS[")
-        .or_else(|| extract_balanced_wkt(raw, b"GEOGCS["))
+    extract_balanced_wkt(raw, b"PROJCS[").or_else(|| extract_balanced_wkt(raw, b"GEOGCS["))
 }
 
 /// Extract a balanced bracketed WKT expression starting at a keyword token.
@@ -2142,7 +2189,11 @@ fn extract_balanced_wkt(raw: &[u8], token: &[u8]) -> Option<String> {
         .trim()
         .to_string();
 
-    if wkt.is_empty() { None } else { Some(wkt) }
+    if wkt.is_empty() {
+        None
+    } else {
+        Some(wkt)
+    }
 }
 
 /// Parse an `Eprj_ProParameters` data block to extract CRS information.
@@ -2174,7 +2225,7 @@ fn parse_eprj_pro_parameters(raw: &[u8], node: &NodeHdr) -> Result<CrsInfo> {
     if d.len() < 8 {
         return Ok(CrsInfo::default());
     }
-    let pro_type   = read_i32_le(d, 0);
+    let pro_type = read_i32_le(d, 0);
     let pro_number = read_i32_le(d, 4);
     let mut cursor = 8usize;
 
@@ -2233,7 +2284,10 @@ fn parse_eprj_pro_parameters(raw: &[u8], node: &NodeHdr) -> Result<CrsInfo> {
     // Geographic: proType == 0, proNumber == 0 → apply Tier A datum detection.
     if pro_type == 0 && pro_number == 0 {
         if let Some(epsg) = sphere_to_epsg(&sphere_name, semi_major) {
-            return Ok(CrsInfo { epsg: Some(epsg), ..Default::default() });
+            return Ok(CrsInfo {
+                epsg: Some(epsg),
+                ..Default::default()
+            });
         }
         // Geographic but unrecognized datum → return without EPSG.
         return Ok(CrsInfo::default());
@@ -2249,7 +2303,10 @@ fn parse_eprj_pro_parameters(raw: &[u8], node: &NodeHdr) -> Result<CrsInfo> {
             Some(&pro_params),
             pro_name.as_deref(),
         ) {
-            return Ok(CrsInfo { epsg: Some(epsg), ..Default::default() });
+            return Ok(CrsInfo {
+                epsg: Some(epsg),
+                ..Default::default()
+            });
         }
     }
 
@@ -2262,7 +2319,10 @@ fn parse_eprj_pro_parameters(raw: &[u8], node: &NodeHdr) -> Result<CrsInfo> {
         Some(&pro_params),
         pro_name.as_deref(),
     ) {
-        return Ok(CrsInfo { epsg: Some(epsg), ..Default::default() });
+        return Ok(CrsInfo {
+            epsg: Some(epsg),
+            ..Default::default()
+        });
     }
 
     // Tier B v3 fallback: recover explicit WKT from raw HFA payload if present.
@@ -2290,7 +2350,7 @@ mod tests {
         // [290] Eimg_Layer data (52 bytes)
         // [342] Pixel data
         const FILE_HDR: usize = 34;
-        const ROOT_OFFSET: usize = FILE_HDR;          // root node at byte 34
+        const ROOT_OFFSET: usize = FILE_HDR; // root node at byte 34
         const BAND_OFFSET: usize = ROOT_OFFSET + 128; // band node at byte 162
         const BAND_DATA_OFFSET: usize = BAND_OFFSET + 128; // band data at 290
         const PIXEL_OFFSET: usize = BAND_DATA_OFFSET + 52; // pixels at 342
@@ -2331,14 +2391,14 @@ mod tests {
 
         // Eimg_Layer data block (52 bytes)
         let d = &mut buf[BAND_DATA_OFFSET..BAND_DATA_OFFSET + 52];
-        d[0..4].copy_from_slice(&(width as i32).to_le_bytes());    // width
-        d[4..8].copy_from_slice(&(height as i32).to_le_bytes());   // height
-        d[8..12].copy_from_slice(&1i32.to_le_bytes());             // layerType = raster
+        d[0..4].copy_from_slice(&(width as i32).to_le_bytes()); // width
+        d[4..8].copy_from_slice(&(height as i32).to_le_bytes()); // height
+        d[8..12].copy_from_slice(&1i32.to_le_bytes()); // layerType = raster
         d[12..16].copy_from_slice(&(pixel_type as i32).to_le_bytes()); // pixelType
-        // blockWidth, blockHeight (float64) = 0 → we default to width/height
-        d[32..36].copy_from_slice(&0i32.to_le_bytes());            // compressType = none
-        d[36..40].copy_from_slice(&0u32.to_le_bytes());            // ptr Edsc_Table = null
-        d[40..44].copy_from_slice(&1i32.to_le_bytes());            // numRasters
+                                                                       // blockWidth, blockHeight (float64) = 0 → we default to width/height
+        d[32..36].copy_from_slice(&0i32.to_le_bytes()); // compressType = none
+        d[36..40].copy_from_slice(&0u32.to_le_bytes()); // ptr Edsc_Table = null
+        d[40..44].copy_from_slice(&1i32.to_le_bytes()); // numRasters
         d[44..48].copy_from_slice(&(PIXEL_OFFSET as u32).to_le_bytes()); // dataOffset
         d[48..52].copy_from_slice(&(pixels.len() as i32).to_le_bytes()); // dataSize
 
@@ -2360,8 +2420,10 @@ mod tests {
             for col in 0..4isize {
                 let expected = (row * 4 + col) as f64;
                 let actual = r.get(0, row, col);
-                assert!((actual - expected).abs() < 1e-9,
-                    "({row},{col}): expected {expected}, got {actual}");
+                assert!(
+                    (actual - expected).abs() < 1e-9,
+                    "({row},{col}): expected {expected}, got {actual}"
+                );
             }
         }
     }
@@ -2385,7 +2447,10 @@ mod tests {
         let result = read_from_raw(&raw);
         assert!(result.is_err());
         let msg = result.unwrap_err().to_string();
-        assert!(msg.contains("EHFA_HEADER_TAG") || msg.contains("magic"), "msg: {msg}");
+        assert!(
+            msg.contains("EHFA_HEADER_TAG") || msg.contains("magic"),
+            "msg: {msg}"
+        );
     }
 
     #[test]
@@ -2630,7 +2695,13 @@ mod tests {
         params[5] = 90.0; // latitude of origin
         params[6] = 0.0; // false easting
         params[7] = 0.0; // false northing
-        let epsg = projected_to_epsg(11, 0, 4326, Some(&params), Some("Lambert Azimuthal Equal Area"));
+        let epsg = projected_to_epsg(
+            11,
+            0,
+            4326,
+            Some(&params),
+            Some("Lambert Azimuthal Equal Area"),
+        );
         assert_eq!(epsg, Some(6931));
     }
 
@@ -2641,7 +2712,13 @@ mod tests {
         params[5] = -90.0; // latitude of origin
         params[6] = 0.0; // false easting
         params[7] = 0.0; // false northing
-        let epsg = projected_to_epsg(11, 0, 4326, Some(&params), Some("Lambert Azimuthal Equal Area"));
+        let epsg = projected_to_epsg(
+            11,
+            0,
+            4326,
+            Some(&params),
+            Some("Lambert Azimuthal Equal Area"),
+        );
         assert_eq!(epsg, Some(6932));
     }
 
@@ -2652,7 +2729,13 @@ mod tests {
         params[5] = 52.0; // latitude of origin
         params[6] = 4_321_000.0; // false easting
         params[7] = 3_210_000.0; // false northing
-        let epsg = projected_to_epsg(11, 0, 4258, Some(&params), Some("Lambert Azimuthal Equal Area"));
+        let epsg = projected_to_epsg(
+            11,
+            0,
+            4258,
+            Some(&params),
+            Some("Lambert Azimuthal Equal Area"),
+        );
         assert_eq!(epsg, Some(3035));
     }
 
@@ -2682,7 +2765,13 @@ mod tests {
 
     #[test]
     fn tier_c_name_parse_explicit_epsg_colon() {
-        let epsg = projected_to_epsg(9999, 0, 4326, None, Some("ETRS89 / LAEA Europe (EPSG:3035)"));
+        let epsg = projected_to_epsg(
+            9999,
+            0,
+            4326,
+            None,
+            Some("ETRS89 / LAEA Europe (EPSG:3035)"),
+        );
         assert_eq!(epsg, Some(3035));
     }
 
@@ -2744,8 +2833,14 @@ mod tests {
 
     /// Read from a raw byte buffer (test hook — mirrors `read()` minus File I/O).
     fn read_from_raw(raw: &[u8]) -> Result<Raster> {
-        if raw.len() < 34 { return Err(RasterError::CorruptData("too short".into())); }
-        if &raw[..16] != MAGIC { return Err(RasterError::UnknownFormat("HFA: missing EHFA_HEADER_TAG magic bytes".into())); }
+        if raw.len() < 34 {
+            return Err(RasterError::CorruptData("too short".into()));
+        }
+        if &raw[..16] != MAGIC {
+            return Err(RasterError::UnknownFormat(
+                "HFA: missing EHFA_HEADER_TAG magic bytes".into(),
+            ));
+        }
         let (root_ptr, entry_hdr_len) = read_root_and_entry_header_len(raw)?;
         let mut nodes: Vec<NodeHdr> = Vec::new();
         collect_nodes(raw, root_ptr, entry_hdr_len, None, &mut nodes)?;
@@ -2755,7 +2850,9 @@ mod tests {
                 children_of.entry(p).or_default().push(i);
             }
         }
-        let band_indices: Vec<usize> = nodes.iter().enumerate()
+        let band_indices: Vec<usize> = nodes
+            .iter()
+            .enumerate()
             .filter(|(_, n)| n.type_name == "Eimg_Layer")
             .map(|(i, _)| i)
             .collect();
@@ -2766,27 +2863,46 @@ mod tests {
         for &bi in &band_indices {
             let node = &nodes[bi];
             let band_info = parse_eimg_layer(raw, node)?;
-            let children = children_of.get(&node.file_offset).cloned().unwrap_or_default();
-            let dms_node = children.iter()
+            let children = children_of
+                .get(&node.file_offset)
+                .cloned()
+                .unwrap_or_default();
+            let dms_node = children
+                .iter()
                 .find(|&&ci| nodes[ci].name == "RasterDMS" || nodes[ci].type_name == "Edms_State")
                 .map(|&ci| &nodes[ci]);
-            let nodata_val = children.iter()
-                .find(|&&ci| nodes[ci].name == "Eimg_NonInitializedValue"
-                          || nodes[ci].type_name == "Eimg_NonInitializedValue")
+            let nodata_val = children
+                .iter()
+                .find(|&&ci| {
+                    nodes[ci].name == "Eimg_NonInitializedValue"
+                        || nodes[ci].type_name == "Eimg_NonInitializedValue"
+                })
                 .and_then(|&ci| parse_nodata_node(raw, &nodes[ci]));
             let pixels = read_band_pixels(raw, &band_info, dms_node)?;
-            bands.push(BandData { pixels, nodata: nodata_val, pixel_type: band_info.pixel_type });
+            bands.push(BandData {
+                pixels,
+                nodata: nodata_val,
+                pixel_type: band_info.pixel_type,
+            });
         }
         let (cols, rows) = (bands[0].pixels.cols, bands[0].pixels.rows);
         let num_bands = bands.len();
         let data_type = ept_to_data_type(bands[0].pixel_type)?;
         let nodata = bands[0].nodata.unwrap_or(-9999.0);
         let mut all_data: Vec<f64> = Vec::with_capacity(num_bands * rows * cols);
-        for b in bands { all_data.extend_from_slice(&b.pixels.data); }
+        for b in bands {
+            all_data.extend_from_slice(&b.pixels.data);
+        }
         let cfg = RasterConfig {
-            cols, rows, bands: num_bands,
-            x_min: 0.0, y_min: 0.0, cell_size: 1.0,
-            nodata, data_type, ..Default::default()
+            cols,
+            rows,
+            bands: num_bands,
+            x_min: 0.0,
+            y_min: 0.0,
+            cell_size: 1.0,
+            nodata,
+            data_type,
+            ..Default::default()
         };
         Raster::from_data(cfg, all_data)
     }

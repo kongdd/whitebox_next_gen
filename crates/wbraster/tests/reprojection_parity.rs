@@ -38,12 +38,21 @@ fn assert_raster_close(
     assert_eq!(actual.cols, expected.cols, "{case_name}: cols mismatch");
     assert_eq!(actual.rows, expected.rows, "{case_name}: rows mismatch");
     assert_eq!(actual.bands, expected.bands, "{case_name}: bands mismatch");
-    assert_eq!(actual.crs.epsg, expected.crs.epsg, "{case_name}: epsg mismatch");
+    assert_eq!(
+        actual.crs.epsg, expected.crs.epsg,
+        "{case_name}: epsg mismatch"
+    );
 
     let a_stats = actual.statistics();
     let e_stats = expected.statistics();
-    assert!(a_stats.valid_count > 0, "{case_name}: actual raster contains no valid cells");
-    assert!(e_stats.valid_count > 0, "{case_name}: expected raster contains no valid cells");
+    assert!(
+        a_stats.valid_count > 0,
+        "{case_name}: actual raster contains no valid cells"
+    );
+    assert!(
+        e_stats.valid_count > 0,
+        "{case_name}: expected raster contains no valid cells"
+    );
     assert!(
         (a_stats.mean - e_stats.mean).abs() <= mean_tol,
         "{case_name}: mean mismatch too high (actual={}, expected={}, tol={})",
@@ -73,7 +82,10 @@ fn assert_raster_close(
         }
     }
 
-    assert!(overlap_count > 0, "{case_name}: no overlapping valid cells found");
+    assert!(
+        overlap_count > 0,
+        "{case_name}: no overlapping valid cells found"
+    );
     let mae = abs_err_sum / overlap_count as f64;
     let rmse = (sq_err_sum / overlap_count as f64).sqrt();
 
@@ -125,10 +137,38 @@ fn parity_core_resamplers_match_gdal_fixtures() {
         .expect("missing source parity fixture");
 
     let cases = [
-        (ResampleMethod::Nearest, "expected_epsg3857_near.tif", 0.8, 1.1, 1.3, 3.0),
-        (ResampleMethod::Bilinear, "expected_epsg3857_bilinear.tif", 0.8, 1.1, 1.3, 3.0),
-        (ResampleMethod::Cubic, "expected_epsg3857_cubic.tif", 1.2, 1.5, 1.7, 4.0),
-        (ResampleMethod::Lanczos, "expected_epsg3857_lanczos.tif", 1.2, 1.5, 1.7, 4.0),
+        (
+            ResampleMethod::Nearest,
+            "expected_epsg3857_near.tif",
+            0.8,
+            1.1,
+            1.3,
+            3.0,
+        ),
+        (
+            ResampleMethod::Bilinear,
+            "expected_epsg3857_bilinear.tif",
+            0.8,
+            1.1,
+            1.3,
+            3.0,
+        ),
+        (
+            ResampleMethod::Cubic,
+            "expected_epsg3857_cubic.tif",
+            1.2,
+            1.5,
+            1.7,
+            4.0,
+        ),
+        (
+            ResampleMethod::Lanczos,
+            "expected_epsg3857_lanczos.tif",
+            1.2,
+            1.5,
+            1.7,
+            4.0,
+        ),
     ];
 
     for (method, fixture_name, mean_tol, mae_tol, rmse_tol, max_err_tol) in cases {

@@ -1,19 +1,19 @@
 //! Integration tests: round-trip every format through write→read and verify
 //! that all pixel values, extents, and nodata values are preserved.
 
+use flate2::write::{GzEncoder, ZlibEncoder};
+use flate2::Compression;
+use serde_json::json;
+use std::env::temp_dir;
+use std::fs;
+use std::io::Write;
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
+use wbraster::raster::RasterData;
 use wbraster::{
     CogWriteOptions, DataType, GeoTiffCompression, GeoTiffLayout, GeoTiffWriteOptions,
     Jpeg2000Compression, Jpeg2000WriteOptions, Raster, RasterConfig, RasterFormat,
 };
-use wbraster::raster::RasterData;
-use flate2::Compression;
-use flate2::write::{GzEncoder, ZlibEncoder};
-use serde_json::json;
-use std::io::Write;
-use std::env::temp_dir;
-use std::fs;
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -88,13 +88,13 @@ fn assert_external_fixture_expectations(r: &Raster, prefix: &str) {
         let col = parts[1]
             .parse::<usize>()
             .unwrap_or_else(|_| panic!("{cell_var}: invalid col '{}': {cell_spec}", parts[1]));
-        let expected_value = parts[2].parse::<f64>().unwrap_or_else(|_| {
-            panic!("{cell_var}: invalid value '{}': {cell_spec}", parts[2])
-        });
+        let expected_value = parts[2]
+            .parse::<f64>()
+            .unwrap_or_else(|_| panic!("{cell_var}: invalid value '{}': {cell_spec}", parts[2]));
         let tol = if parts.len() == 4 {
-            parts[3].parse::<f64>().unwrap_or_else(|_| {
-                panic!("{cell_var}: invalid tol '{}': {cell_spec}", parts[3])
-            })
+            parts[3]
+                .parse::<f64>()
+                .unwrap_or_else(|_| panic!("{cell_var}: invalid tol '{}': {cell_spec}", parts[3]))
         } else {
             1e-6
         };
@@ -289,15 +289,7 @@ fn h5dump_dataset_raw_bytes(file_path: &str, dataset_path: &str) -> Option<Vec<u
 
     let raw_path = tmp("_h5dump_raw.bin");
     let output = Command::new("h5dump")
-        .args([
-            "-d",
-            dataset_path,
-            "-b",
-            "LE",
-            "-o",
-            &raw_path,
-            file_path,
-        ])
+        .args(["-d", dataset_path, "-b", "LE", "-o", &raw_path, file_path])
         .output()
         .ok()?;
 
@@ -409,17 +401,20 @@ fn assert_raster_equal(a: &Raster, b: &Raster, tol: f64, label: &str) {
     assert!(
         (a.x_min - b.x_min).abs() < tol,
         "{label}: x_min {:.6} vs {:.6}",
-        a.x_min, b.x_min
+        a.x_min,
+        b.x_min
     );
     assert!(
         (a.y_min - b.y_min).abs() < tol,
         "{label}: y_min {:.6} vs {:.6}",
-        a.y_min, b.y_min
+        a.y_min,
+        b.y_min
     );
     assert!(
         (a.cell_size_x - b.cell_size_x).abs() < tol,
         "{label}: cell_size {:.6} vs {:.6}",
-        a.cell_size_x, b.cell_size_x
+        a.cell_size_x,
+        b.cell_size_x
     );
     for band in 0..a.bands {
         for row in 0..a.rows {
@@ -569,7 +564,9 @@ fn compress_fixture(raw: &[u8], compressor: &str) -> Vec<u8> {
             enc.write_all(raw).unwrap();
             enc.finish().unwrap()
         }
-        "zstd" => ruzstd::encoding::compress_to_vec(raw, ruzstd::encoding::CompressionLevel::Default),
+        "zstd" => {
+            ruzstd::encoding::compress_to_vec(raw, ruzstd::encoding::CompressionLevel::Default)
+        }
         "lz4" => {
             let mut enc = lz4_flex::frame::FrameEncoder::new(Vec::new());
             enc.write_all(raw).unwrap();
@@ -685,7 +682,13 @@ fn roundtrip_pcraster_ordinal_int4() {
         ..Default::default()
     };
     let data: Vec<f64> = (0..24)
-        .map(|i| if i == 5 { i32::MIN as f64 } else { (i % 10) as f64 })
+        .map(|i| {
+            if i == 5 {
+                i32::MIN as f64
+            } else {
+                (i % 10) as f64
+            }
+        })
         .collect();
     let r = Raster::from_data(cfg, data).unwrap();
 
@@ -725,10 +728,23 @@ fn roundtrip_geopackage_multiband_native_default_raw() {
     r.write(&path, RasterFormat::GeoPackage).unwrap();
     let r2 = Raster::read(&path).unwrap();
 
-    assert_eq!(r2.cols, r.cols, "GeoPackage native multiband: cols mismatch");
-    assert_eq!(r2.rows, r.rows, "GeoPackage native multiband: rows mismatch");
-    assert_eq!(r2.bands, r.bands, "GeoPackage native multiband: bands mismatch");
-    assert_eq!(r2.data_type, DataType::I16, "GeoPackage native multiband: data_type mismatch");
+    assert_eq!(
+        r2.cols, r.cols,
+        "GeoPackage native multiband: cols mismatch"
+    );
+    assert_eq!(
+        r2.rows, r.rows,
+        "GeoPackage native multiband: rows mismatch"
+    );
+    assert_eq!(
+        r2.bands, r.bands,
+        "GeoPackage native multiband: bands mismatch"
+    );
+    assert_eq!(
+        r2.data_type,
+        DataType::I16,
+        "GeoPackage native multiband: data_type mismatch"
+    );
 
     for &(col, row) in &[(0isize, 0isize), (8, 5), (66, 58)] {
         assert_eq!(
@@ -759,8 +775,14 @@ fn roundtrip_geopackage_with_pyramids_png() {
     assert_eq!(r.cols, r2.cols, "GeoPackage pyramid png: cols mismatch");
     assert_eq!(r.rows, r2.rows, "GeoPackage pyramid png: rows mismatch");
     assert_eq!(r.bands, r2.bands, "GeoPackage pyramid png: bands mismatch");
-    assert!((r.x_min - r2.x_min).abs() < 1e-9, "GeoPackage pyramid png: x_min mismatch");
-    assert!((r.y_min - r2.y_min).abs() < 1e-9, "GeoPackage pyramid png: y_min mismatch");
+    assert!(
+        (r.x_min - r2.x_min).abs() < 1e-9,
+        "GeoPackage pyramid png: x_min mismatch"
+    );
+    assert!(
+        (r.y_min - r2.y_min).abs() < 1e-9,
+        "GeoPackage pyramid png: y_min mismatch"
+    );
 
     // Verify representative non-nodata cells match exactly for PNG tiles.
     let sample_cells = [(1isize, 0isize), (2, 1), (4, 3)];
@@ -791,8 +813,14 @@ fn roundtrip_geopackage_with_pyramids_jpeg() {
     assert_eq!(r.cols, r2.cols, "GeoPackage pyramid jpeg: cols mismatch");
     assert_eq!(r.rows, r2.rows, "GeoPackage pyramid jpeg: rows mismatch");
     assert_eq!(r.bands, r2.bands, "GeoPackage pyramid jpeg: bands mismatch");
-    assert!((r.x_min - r2.x_min).abs() < 1e-9, "GeoPackage pyramid jpeg: x_min mismatch");
-    assert!((r.y_min - r2.y_min).abs() < 1e-9, "GeoPackage pyramid jpeg: y_min mismatch");
+    assert!(
+        (r.x_min - r2.x_min).abs() < 1e-9,
+        "GeoPackage pyramid jpeg: x_min mismatch"
+    );
+    assert!(
+        (r.y_min - r2.y_min).abs() < 1e-9,
+        "GeoPackage pyramid jpeg: y_min mismatch"
+    );
 
     for row in 0..r.rows {
         for col in 0..r.cols {
@@ -818,7 +846,7 @@ fn roundtrip_esri_binary() {
     let r = make_test_raster();
     r.write(&dir, RasterFormat::EsriBinary).unwrap();
     let r2 = Raster::read(&dir).unwrap();
-    assert_raster_equal(&r, &r2, 1e-4, "EsriBinary");  // f32 precision
+    assert_raster_equal(&r, &r2, 1e-4, "EsriBinary"); // f32 precision
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -940,8 +968,7 @@ fn roundtrip_geotiff_cog_legacy_metadata_ignored() {
     r.metadata.push(("geotiff_cog".into(), "true".into()));
     r.metadata
         .push(("geotiff_compression".into(), "deflate".into()));
-    r.metadata
-        .push(("geotiff_tile_size".into(), "256".into()));
+    r.metadata.push(("geotiff_tile_size".into(), "256".into()));
 
     r.write(&path, RasterFormat::GeoTiff).unwrap();
     let r2 = Raster::read(&path).unwrap();
@@ -1035,12 +1062,7 @@ fn roundtrip_geotiff_write_cog_with_options_convenience() {
 
     r.write_cog_with_options(&path, &opts).unwrap();
     let r2 = Raster::read(&path).unwrap();
-    assert_raster_equal(
-        &r,
-        &r2,
-        1e-4,
-        "GeoTIFF write_cog_with_options convenience",
-    );
+    assert_raster_equal(&r, &r2, 1e-4, "GeoTIFF write_cog_with_options convenience");
     let _ = std::fs::remove_file(&path);
 }
 
@@ -1144,8 +1166,16 @@ fn roundtrip_zarr_v3_multichunk() {
     r.metadata.push(("zarr_chunk_cols".into(), "3".into()));
 
     r.write(&dir, RasterFormat::Zarr).unwrap();
-    assert!(std::path::Path::new(&dir).join("c").join("0").join("0").exists());
-    assert!(std::path::Path::new(&dir).join("c").join("2").join("4").exists());
+    assert!(std::path::Path::new(&dir)
+        .join("c")
+        .join("0")
+        .join("0")
+        .exists());
+    assert!(std::path::Path::new(&dir)
+        .join("c")
+        .join("2")
+        .join("4")
+        .exists());
 
     let r2 = Raster::read(&dir).unwrap();
     assert_raster_equal(&r, &r2, 1e-5, "Zarr v3 multichunk");
@@ -1195,16 +1225,7 @@ fn read_python_style_zarr_v3_default_zlib() {
         .map(|i| if i == 13 { -9999.0 } else { i as f64 * 0.2 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        4,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 4, 3, "default", "/", "zlib", "little", &data,
     );
 
     let r = Raster::read(&dir).unwrap();
@@ -1232,21 +1253,16 @@ fn read_python_style_zarr_v3_v2_zstd() {
     let rows = 7;
     let cols = 10;
     let data: Vec<f64> = (0..rows * cols)
-        .map(|i| if i == 0 { -9999.0 } else { (i as f64).sin() * 10.0 })
+        .map(|i| {
+            if i == 0 {
+                -9999.0
+            } else {
+                (i as f64).sin() * 10.0
+            }
+        })
         .collect();
     let write_result = std::panic::catch_unwind(|| {
-        write_python_style_v3_store(
-            &dir,
-            rows,
-            cols,
-            3,
-            4,
-            "v2",
-            ".",
-            "zstd",
-            "little",
-            &data,
-        );
+        write_python_style_v3_store(&dir, rows, cols, 3, 4, "v2", ".", "zstd", "little", &data);
     });
     if write_result.is_err() {
         eprintln!(
@@ -1284,16 +1300,7 @@ fn read_python_style_zarr_v3_default_gzip() {
         .map(|i| if i == 21 { -9999.0 } else { (i as f64) * 0.125 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        3,
-        4,
-        "default",
-        "/",
-        "gzip",
-        "little",
-        &data,
+        &dir, rows, cols, 3, 4, "default", "/", "gzip", "little", &data,
     );
 
     let r = Raster::read(&dir).unwrap();
@@ -1321,20 +1328,15 @@ fn read_python_style_zarr_v3_v2_lz4() {
     let rows = 10;
     let cols = 7;
     let data: Vec<f64> = (0..rows * cols)
-        .map(|i| if i == 33 { -9999.0 } else { ((i as f64) - 10.0) * 0.75 })
+        .map(|i| {
+            if i == 33 {
+                -9999.0
+            } else {
+                ((i as f64) - 10.0) * 0.75
+            }
+        })
         .collect();
-    write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        4,
-        3,
-        "v2",
-        ".",
-        "lz4",
-        "little",
-        &data,
-    );
+    write_python_style_v3_store(&dir, rows, cols, 4, 3, "v2", ".", "lz4", "little", &data);
 
     let r = Raster::read(&dir).unwrap();
     let expected = Raster::from_data(
@@ -1361,20 +1363,15 @@ fn read_python_style_zarr_v3_big_endian_bytes() {
     let rows = 6;
     let cols = 11;
     let data: Vec<f64> = (0..rows * cols)
-        .map(|i| if i == 12 { -9999.0 } else { (i as f64) * 1.5 - 2.0 })
+        .map(|i| {
+            if i == 12 {
+                -9999.0
+            } else {
+                (i as f64) * 1.5 - 2.0
+            }
+        })
         .collect();
-    write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        5,
-        "default",
-        "/",
-        "none",
-        "big",
-        &data,
-    );
+    write_python_style_v3_store(&dir, rows, cols, 2, 5, "default", "/", "none", "big", &data);
 
     let r = Raster::read(&dir).unwrap();
     let expected = Raster::from_data(
@@ -1401,20 +1398,15 @@ fn read_python_style_zarr_v3_v2_slash_big_endian_gzip() {
     let rows = 9;
     let cols = 9;
     let data: Vec<f64> = (0..rows * cols)
-        .map(|i| if i == 40 { -9999.0 } else { (i as f64) * 0.33 - 5.0 })
+        .map(|i| {
+            if i == 40 {
+                -9999.0
+            } else {
+                (i as f64) * 0.33 - 5.0
+            }
+        })
         .collect();
-    write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        4,
-        4,
-        "v2",
-        "/",
-        "gzip",
-        "big",
-        &data,
-    );
+    write_python_style_v3_store(&dir, rows, cols, 4, 4, "v2", "/", "gzip", "big", &data);
 
     let r = Raster::read(&dir).unwrap();
     let expected = Raster::from_data(
@@ -1449,16 +1441,7 @@ fn read_python_style_zarr_v3_transform_only_georef_attrs() {
         .map(|i| if i == 9 { -9999.0 } else { (i as f64) * 0.4 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        3,
-        4,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 3, 4, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -1474,14 +1457,7 @@ fn read_python_style_zarr_v3_transform_only_georef_attrs() {
     attrs.remove("cell_size_y");
     attrs.insert(
         "transform".into(),
-        json!([
-            100.0,
-            0.5,
-            0.0,
-            -27.0,
-            0.0,
-            -0.5
-        ]),
+        json!([100.0, 0.5, 0.0, -27.0, 0.0, -0.5]),
     );
     std::fs::write(
         &zarr_json_path,
@@ -1505,7 +1481,12 @@ fn read_python_style_zarr_v3_transform_only_georef_attrs() {
     )
     .unwrap();
 
-    assert_raster_equal(&expected, &r, 1e-5, "Python-style Zarr v3 transform-only attrs");
+    assert_raster_equal(
+        &expected,
+        &r,
+        1e-5,
+        "Python-style Zarr v3 transform-only attrs",
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -1518,16 +1499,7 @@ fn read_python_style_zarr_v3_crs_alias_attrs() {
         .map(|i| if i == 11 { -9999.0 } else { (i as f64) * 0.3 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        3,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 3, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -1557,7 +1529,12 @@ fn read_python_style_zarr_v3_crs_alias_attrs() {
 
     let r = Raster::read(&dir).unwrap();
     assert_eq!(r.crs.epsg, Some(32617));
-    assert!(r.crs.wkt.as_deref().unwrap_or_default().contains("UTM zone 17N"));
+    assert!(r
+        .crs
+        .wkt
+        .as_deref()
+        .unwrap_or_default()
+        .contains("UTM zone 17N"));
     assert!(r
         .crs
         .proj4
@@ -1592,16 +1569,7 @@ fn read_python_style_zarr_v3_crs_from_epsg_string_attr() {
         .map(|i| if i == 6 { -9999.0 } else { (i as f64) * 0.6 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 2, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -1635,16 +1603,7 @@ fn read_python_style_zarr_v3_crs_from_epsg_object_attr() {
         .map(|i| if i == 6 { -9999.0 } else { (i as f64) * 0.6 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 2, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -1686,16 +1645,7 @@ fn read_python_style_zarr_v3_crs_from_authority_code_object_attr() {
         .map(|i| if i == 6 { -9999.0 } else { (i as f64) * 0.6 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 2, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -1737,16 +1687,7 @@ fn read_python_style_zarr_v3_crs_from_ogc_urn_attr() {
         .map(|i| if i == 6 { -9999.0 } else { (i as f64) * 0.6 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 2, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -1780,16 +1721,7 @@ fn read_python_style_zarr_v3_crs_from_ogc_url_attr() {
         .map(|i| if i == 6 { -9999.0 } else { (i as f64) * 0.6 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 2, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -1801,7 +1733,10 @@ fn read_python_style_zarr_v3_crs_from_ogc_url_attr() {
         .expect("zarr.json attributes object missing");
     attrs.remove("crs_epsg");
     attrs.remove("epsg");
-    attrs.insert("crs".into(), json!("https://www.opengis.net/def/crs/EPSG/0/3395"));
+    attrs.insert(
+        "crs".into(),
+        json!("https://www.opengis.net/def/crs/EPSG/0/3395"),
+    );
     std::fs::write(
         &zarr_json_path,
         serde_json::to_string_pretty(&zarr_json).unwrap(),
@@ -1823,16 +1758,7 @@ fn read_python_style_zarr_v3_crs_from_grid_mapping_named_object_attr() {
         .map(|i| if i == 6 { -9999.0 } else { (i as f64) * 0.6 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 2, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -1865,8 +1791,18 @@ fn read_python_style_zarr_v3_crs_from_grid_mapping_named_object_attr() {
 
     let r = Raster::read(&dir).unwrap();
     assert_eq!(r.crs.epsg, Some(32617));
-    assert!(r.crs.wkt.as_deref().unwrap_or_default().contains("UTM zone 17N"));
-    assert!(r.crs.proj4.as_deref().unwrap_or_default().contains("+proj=utm"));
+    assert!(r
+        .crs
+        .wkt
+        .as_deref()
+        .unwrap_or_default()
+        .contains("UTM zone 17N"));
+    assert!(r
+        .crs
+        .proj4
+        .as_deref()
+        .unwrap_or_default()
+        .contains("+proj=utm"));
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -1880,16 +1816,7 @@ fn read_python_style_zarr_v3_geotransform_string_only_attrs() {
         .map(|i| if i == 9 { -9999.0 } else { (i as f64) * 0.4 })
         .collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        3,
-        4,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 3, 4, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -1943,16 +1870,7 @@ fn read_python_style_zarr_v3_fails_on_conflicting_xmin_and_transform() {
     let cols = 5;
     let data: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 2, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -1964,14 +1882,7 @@ fn read_python_style_zarr_v3_fails_on_conflicting_xmin_and_transform() {
         .expect("zarr.json attributes object missing");
     attrs.insert(
         "transform".into(),
-        json!([
-            100.0,
-            0.5,
-            0.0,
-            -28.0,
-            0.0,
-            -0.5
-        ]),
+        json!([100.0, 0.5, 0.0, -28.0, 0.0, -0.5]),
     );
     attrs.insert("x_min".into(), json!(999.0));
     std::fs::write(
@@ -1996,16 +1907,7 @@ fn read_python_style_zarr_v3_fails_on_invalid_geotransform_string() {
     let cols = 5;
     let data: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 2, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -2043,16 +1945,7 @@ fn read_python_style_zarr_v3_lenient_mode_allows_conflicting_georef_metadata() {
     let cols = 5;
     let data: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 2, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -2064,14 +1957,7 @@ fn read_python_style_zarr_v3_lenient_mode_allows_conflicting_georef_metadata() {
         .expect("zarr.json attributes object missing");
     attrs.insert(
         "transform".into(),
-        json!([
-            100.0,
-            0.5,
-            0.0,
-            -28.0,
-            0.0,
-            -0.5
-        ]),
+        json!([100.0, 0.5, 0.0, -28.0, 0.0, -0.5]),
     );
     attrs.insert("x_min".into(), json!(999.0));
     attrs.insert("zarr_validation_mode".into(), json!("lenient"));
@@ -2094,16 +1980,7 @@ fn read_python_style_zarr_v3_lenient_mode_allows_invalid_geotransform_string() {
     let cols = 5;
     let data: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
     write_python_style_v3_store(
-        &dir,
-        rows,
-        cols,
-        2,
-        3,
-        "default",
-        "/",
-        "zlib",
-        "little",
-        &data,
+        &dir, rows, cols, 2, 3, "default", "/", "zlib", "little", &data,
     );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
@@ -2142,7 +2019,9 @@ fn read_python_style_zarr_v3_nodata_from_cf_fill_value_attr() {
     let rows = 4;
     let cols = 5;
     let data: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    write_python_style_v3_store(&dir, rows, cols, 4, 5, "default", "/", "zlib", "little", &data);
+    write_python_style_v3_store(
+        &dir, rows, cols, 4, 5, "default", "/", "zlib", "little", &data,
+    );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
     let mut zarr_json: serde_json::Value =
@@ -2153,7 +2032,11 @@ fn read_python_style_zarr_v3_nodata_from_cf_fill_value_attr() {
         .expect("attributes object missing");
     attrs.remove("nodata");
     attrs.insert("_FillValue".into(), json!(-32768.0_f64));
-    std::fs::write(&zarr_json_path, serde_json::to_string_pretty(&zarr_json).unwrap()).unwrap();
+    std::fs::write(
+        &zarr_json_path,
+        serde_json::to_string_pretty(&zarr_json).unwrap(),
+    )
+    .unwrap();
 
     let r = Raster::read(&dir).expect("should read nodata from _FillValue");
     assert!(
@@ -2171,7 +2054,9 @@ fn read_python_style_zarr_v3_nodata_from_missing_value_attr() {
     let rows = 4;
     let cols = 5;
     let data: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    write_python_style_v3_store(&dir, rows, cols, 4, 5, "default", "/", "zlib", "little", &data);
+    write_python_style_v3_store(
+        &dir, rows, cols, 4, 5, "default", "/", "zlib", "little", &data,
+    );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
     let mut zarr_json: serde_json::Value =
@@ -2182,7 +2067,11 @@ fn read_python_style_zarr_v3_nodata_from_missing_value_attr() {
         .expect("attributes object missing");
     attrs.remove("nodata");
     attrs.insert("missing_value".into(), json!(-1.0_f64));
-    std::fs::write(&zarr_json_path, serde_json::to_string_pretty(&zarr_json).unwrap()).unwrap();
+    std::fs::write(
+        &zarr_json_path,
+        serde_json::to_string_pretty(&zarr_json).unwrap(),
+    )
+    .unwrap();
 
     let r = Raster::read(&dir).expect("should read nodata from missing_value");
     assert!(
@@ -2200,7 +2089,9 @@ fn read_python_style_zarr_v3_explicit_nodata_takes_precedence_over_cf_fill_value
     let rows = 4;
     let cols = 5;
     let data: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    write_python_style_v3_store(&dir, rows, cols, 4, 5, "default", "/", "zlib", "little", &data);
+    write_python_style_v3_store(
+        &dir, rows, cols, 4, 5, "default", "/", "zlib", "little", &data,
+    );
 
     let zarr_json_path = std::path::Path::new(&dir).join("zarr.json");
     let mut zarr_json: serde_json::Value =
@@ -2211,7 +2102,11 @@ fn read_python_style_zarr_v3_explicit_nodata_takes_precedence_over_cf_fill_value
         .expect("attributes object missing");
     // nodata remains -9999 from the writer; add a contradicting _FillValue
     attrs.insert("_FillValue".into(), json!(0.0_f64));
-    std::fs::write(&zarr_json_path, serde_json::to_string_pretty(&zarr_json).unwrap()).unwrap();
+    std::fs::write(
+        &zarr_json_path,
+        serde_json::to_string_pretty(&zarr_json).unwrap(),
+    )
+    .unwrap();
 
     let r = Raster::read(&dir).expect("should read OK");
     assert!(
@@ -2324,9 +2219,7 @@ fn read_python_style_zarr_v3_dimension_names_unrecognized_2d_accepted() {
     let rows = 4;
     let cols = 5;
     let data: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    write_v3_store_with_dimension_names(
-        &dir, rows, cols, json!(["dim_0", "dim_1"]), None, &data,
-    );
+    write_v3_store_with_dimension_names(&dir, rows, cols, json!(["dim_0", "dim_1"]), None, &data);
     let r = Raster::read(&dir).expect("unrecognized 2D dimension_names should be accepted");
     assert_eq!(r.rows, rows);
     assert_eq!(r.cols, cols);
@@ -2467,15 +2360,20 @@ fn write_v3_multiscale_group(
     group_dir: &str,
     rows: usize,
     cols: usize,
-    data0: &[f64],   // full-res level  (rows * cols values)
-    data1: &[f64],   // half-res level  ((rows/2) * (cols/2) values)
+    data0: &[f64], // full-res level  (rows * cols values)
+    data1: &[f64], // half-res level  ((rows/2) * (cols/2) values)
 ) {
     let rows1 = rows / 2;
     let cols1 = cols / 2;
 
     // ── helper: write a single-level v3 array ─────────────────────────────
-    let write_level = |level_dir: &std::path::Path, r: usize, c: usize, data: &[f64],
-                        cell: f64, x_min: f64, y_min: f64| {
+    let write_level = |level_dir: &std::path::Path,
+                       r: usize,
+                       c: usize,
+                       data: &[f64],
+                       cell: f64,
+                       x_min: f64,
+                       y_min: f64| {
         std::fs::create_dir_all(level_dir).unwrap();
         let zarr_json = json!({
             "zarr_format": 3,
@@ -2500,7 +2398,8 @@ fn write_v3_multiscale_group(
         std::fs::write(
             level_dir.join("zarr.json"),
             serde_json::to_string_pretty(&zarr_json).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         // Write single uncompressed chunk.
         let mut raw = Vec::with_capacity(r * c * 4);
@@ -2515,7 +2414,7 @@ fn write_v3_multiscale_group(
     let base = std::path::Path::new(group_dir);
     std::fs::create_dir_all(base).unwrap();
 
-    write_level(&base.join("0"), rows,  cols,  data0, 0.5, 100.0, -30.0);
+    write_level(&base.join("0"), rows, cols, data0, 0.5, 100.0, -30.0);
     write_level(&base.join("1"), rows1, cols1, data1, 1.0, 100.0, -30.0);
 
     // ── group zarr.json with OME-NGFF multiscales attribute ───────────────
@@ -2535,7 +2434,8 @@ fn write_v3_multiscale_group(
     std::fs::write(
         base.join("zarr.json"),
         serde_json::to_string_pretty(&group_json).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 /// Write a minimal zarr v2 multi-scale group at `group_dir`.
@@ -2552,8 +2452,13 @@ fn write_v2_multiscale_group(
     let rows1 = rows / 2;
     let cols1 = cols / 2;
 
-    let write_level = |level_dir: &std::path::Path, r: usize, c: usize, data: &[f64],
-                        cell: f64, x_min: f64, y_min: f64| {
+    let write_level = |level_dir: &std::path::Path,
+                       r: usize,
+                       c: usize,
+                       data: &[f64],
+                       cell: f64,
+                       x_min: f64,
+                       y_min: f64| {
         std::fs::create_dir_all(level_dir).unwrap();
 
         let zarray = json!({
@@ -2569,7 +2474,8 @@ fn write_v2_multiscale_group(
         std::fs::write(
             level_dir.join(".zarray"),
             serde_json::to_string_pretty(&zarray).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let zattrs = json!({
             "x_min": x_min,
@@ -2581,7 +2487,8 @@ fn write_v2_multiscale_group(
         std::fs::write(
             level_dir.join(".zattrs"),
             serde_json::to_string_pretty(&zattrs).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
 
         // Single uncompressed chunk (v2 key "0.0").
         let mut raw = Vec::with_capacity(r * c * 4);
@@ -2594,7 +2501,7 @@ fn write_v2_multiscale_group(
     let base = std::path::Path::new(group_dir);
     std::fs::create_dir_all(base).unwrap();
 
-    write_level(&base.join("0"), rows,  cols,  data0, 0.5, 100.0, -30.0);
+    write_level(&base.join("0"), rows, cols, data0, 0.5, 100.0, -30.0);
     write_level(&base.join("1"), rows1, cols1, data1, 1.0, 100.0, -30.0);
 
     // .zgroup at group root.
@@ -2613,7 +2520,8 @@ fn write_v2_multiscale_group(
     std::fs::write(
         base.join(".zattrs"),
         serde_json::to_string_pretty(&zattrs).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 #[test]
@@ -2623,7 +2531,9 @@ fn read_zarr_v3_multiscale_group_reads_full_res_by_default() {
     let rows = 8;
     let cols = 10;
     let data0: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2)).map(|i| (i * 4) as f64).collect();
+    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2))
+        .map(|i| (i * 4) as f64)
+        .collect();
     write_v3_multiscale_group(&dir, rows, cols, &data0, &data1);
 
     let r = Raster::read(&dir).expect("v3 group root should open at level 0");
@@ -2651,7 +2561,9 @@ fn read_zarr_v3_multiscale_group_level1_via_direct_path() {
     let rows = 8;
     let cols = 10;
     let data0: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2)).map(|i| (i * 4) as f64).collect();
+    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2))
+        .map(|i| (i * 4) as f64)
+        .collect();
     write_v3_multiscale_group(&dir, rows, cols, &data0, &data1);
 
     let level1_path = format!("{dir}/1");
@@ -2675,7 +2587,9 @@ fn read_zarr_v3_multiscale_group_fallback_no_ome_attrs() {
     let rows = 6;
     let cols = 8;
     let data0: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2)).map(|i| (i * 4) as f64).collect();
+    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2))
+        .map(|i| (i * 4) as f64)
+        .collect();
     write_v3_multiscale_group(&dir, rows, cols, &data0, &data1);
 
     // Overwrite the group zarr.json with one that has NO multiscales attribute.
@@ -2687,7 +2601,8 @@ fn read_zarr_v3_multiscale_group_fallback_no_ome_attrs() {
     std::fs::write(
         std::path::Path::new(&dir).join("zarr.json"),
         serde_json::to_string_pretty(&bare_group).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     let r = Raster::read(&dir).expect("fallback numeric scan should open level 0");
     assert_eq!(r.rows, rows);
@@ -2702,7 +2617,9 @@ fn read_zarr_v2_multiscale_group_reads_full_res_by_default() {
     let rows = 8;
     let cols = 10;
     let data0: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2)).map(|i| (i * 4) as f64).collect();
+    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2))
+        .map(|i| (i * 4) as f64)
+        .collect();
     write_v2_multiscale_group(&dir, rows, cols, &data0, &data1);
 
     let r = Raster::read(&dir).expect("v2 group root should open at level 0");
@@ -2723,7 +2640,9 @@ fn read_zarr_v2_multiscale_group_level1_via_direct_path() {
     let rows = 8;
     let cols = 10;
     let data0: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2)).map(|i| (i * 4) as f64).collect();
+    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2))
+        .map(|i| (i * 4) as f64)
+        .collect();
     write_v2_multiscale_group(&dir, rows, cols, &data0, &data1);
 
     let level1_path = format!("{dir}/1");
@@ -2746,7 +2665,9 @@ fn read_zarr_v2_multiscale_group_fallback_no_ome_attrs() {
     let rows = 6;
     let cols = 8;
     let data0: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2)).map(|i| (i * 4) as f64).collect();
+    let data1: Vec<f64> = (0..(rows / 2) * (cols / 2))
+        .map(|i| (i * 4) as f64)
+        .collect();
     write_v2_multiscale_group(&dir, rows, cols, &data0, &data1);
 
     // Remove the .zattrs so there is no multiscales block.
@@ -2768,7 +2689,8 @@ fn read_zarr_v3_group_with_no_levels_returns_error() {
     std::fs::write(
         std::path::Path::new(&dir).join("zarr.json"),
         serde_json::to_string_pretty(&group_json).unwrap(),
-    ).unwrap();
+    )
+    .unwrap();
 
     let result = Raster::read(&dir);
     assert!(result.is_err(), "empty group should return an error");
@@ -2789,7 +2711,9 @@ fn existing_zarr_v3_array_reads_unaffected_by_group_detection() {
     let rows = 4;
     let cols = 5;
     let data: Vec<f64> = (0..rows * cols).map(|i| i as f64).collect();
-    write_python_style_v3_store(&dir, rows, cols, 4, 5, "default", "/", "zlib", "little", &data);
+    write_python_style_v3_store(
+        &dir, rows, cols, 4, 5, "default", "/", "zlib", "little", &data,
+    );
 
     let r = Raster::read(&dir).expect("plain v3 array should still read fine");
     assert_eq!(r.rows, rows);
@@ -2801,18 +2725,12 @@ fn existing_zarr_v3_array_reads_unaffected_by_group_detection() {
 #[test]
 fn external_zarr_v2_fixture_smoke_local_path() {
     let Some(path) = env_var_trimmed("WBRASTER_EXTERNAL_ZARR_V2_FIXTURE") else {
-        eprintln!(
-            "skipping: set WBRASTER_EXTERNAL_ZARR_V2_FIXTURE to a local .zarr directory"
-        );
+        eprintln!("skipping: set WBRASTER_EXTERNAL_ZARR_V2_FIXTURE to a local .zarr directory");
         return;
     };
 
-    let r = Raster::read(&path).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external v2 fixture at '{}': {e}",
-            path
-        )
-    });
+    let r = Raster::read(&path)
+        .unwrap_or_else(|e| panic!("failed reading external v2 fixture at '{}': {e}", path));
     assert!(r.rows > 0, "external v2 fixture has no rows");
     assert!(r.cols > 0, "external v2 fixture has no cols");
     assert_external_fixture_expectations(&r, "WBRASTER_EXTERNAL_ZARR_V2");
@@ -2821,18 +2739,12 @@ fn external_zarr_v2_fixture_smoke_local_path() {
 #[test]
 fn external_zarr_v3_fixture_smoke_local_path() {
     let Some(path) = env_var_trimmed("WBRASTER_EXTERNAL_ZARR_V3_FIXTURE") else {
-        eprintln!(
-            "skipping: set WBRASTER_EXTERNAL_ZARR_V3_FIXTURE to a local .zarr directory"
-        );
+        eprintln!("skipping: set WBRASTER_EXTERNAL_ZARR_V3_FIXTURE to a local .zarr directory");
         return;
     };
 
-    let r = Raster::read(&path).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external v3 fixture at '{}': {e}",
-            path
-        )
-    });
+    let r = Raster::read(&path)
+        .unwrap_or_else(|e| panic!("failed reading external v3 fixture at '{}': {e}", path));
     assert!(r.rows > 0, "external v3 fixture has no rows");
     assert!(r.cols > 0, "external v3 fixture has no cols");
     assert_external_fixture_expectations(&r, "WBRASTER_EXTERNAL_ZARR_V3");
@@ -2871,17 +2783,21 @@ fn external_hdf5_viirs_vnp21_latitude_uri_multilevel_smoke() {
         return;
     };
 
-    let uri = format!(
-        "{path}#dataset=/VIIRS_Swath_LSTE/Geolocation Fields/latitude"
-    );
+    let uri = format!("{path}#dataset=/VIIRS_Swath_LSTE/Geolocation Fields/latitude");
     let r = Raster::read(&uri).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external VNP21 latitude URI fixture at '{path}': {e}"
-        )
+        panic!("failed reading external VNP21 latitude URI fixture at '{path}': {e}")
     });
 
-    assert!(r.rows >= 1236, "latitude fixture rows unexpectedly small: {}", r.rows);
-    assert!(r.cols >= 993, "latitude fixture cols unexpectedly small: {}", r.cols);
+    assert!(
+        r.rows >= 1236,
+        "latitude fixture rows unexpectedly small: {}",
+        r.rows
+    );
+    assert!(
+        r.cols >= 993,
+        "latitude fixture cols unexpectedly small: {}",
+        r.cols
+    );
     assert_eq!(r.data_type, DataType::F32);
 
     let sample_a = r.get(0, 1234, 987);
@@ -2907,17 +2823,21 @@ fn external_hdf5_viirs_vnp21_longitude_uri_multilevel_smoke() {
         return;
     };
 
-    let uri = format!(
-        "{path}:///VIIRS_Swath_LSTE/Geolocation Fields/longitude"
-    );
+    let uri = format!("{path}:///VIIRS_Swath_LSTE/Geolocation Fields/longitude");
     let r = Raster::read(&uri).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external VNP21 longitude URI fixture at '{path}': {e}"
-        )
+        panic!("failed reading external VNP21 longitude URI fixture at '{path}': {e}")
     });
 
-    assert!(r.rows >= 1236, "longitude fixture rows unexpectedly small: {}", r.rows);
-    assert!(r.cols >= 993, "longitude fixture cols unexpectedly small: {}", r.cols);
+    assert!(
+        r.rows >= 1236,
+        "longitude fixture rows unexpectedly small: {}",
+        r.rows
+    );
+    assert!(
+        r.cols >= 993,
+        "longitude fixture cols unexpectedly small: {}",
+        r.cols
+    );
     assert_eq!(r.data_type, DataType::F32);
 
     let sample_a = r.get(0, 1234, 987);
@@ -2945,13 +2865,19 @@ fn external_hdf5_viirs_vnp21_lst_uri_multilevel_smoke() {
 
     let uri = format!("{path}#dataset=/VIIRS_Swath_LSTE/Data Fields/LST");
     let r = Raster::read(&uri).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external VNP21 LST URI fixture at '{path}': {e}"
-        )
+        panic!("failed reading external VNP21 LST URI fixture at '{path}': {e}")
     });
 
-    assert!(r.rows >= 802, "LST fixture rows unexpectedly small: {}", r.rows);
-    assert!(r.cols >= 1604, "LST fixture cols unexpectedly small: {}", r.cols);
+    assert!(
+        r.rows >= 802,
+        "LST fixture rows unexpectedly small: {}",
+        r.rows
+    );
+    assert!(
+        r.cols >= 1604,
+        "LST fixture cols unexpectedly small: {}",
+        r.cols
+    );
     assert_eq!(r.data_type, DataType::U16);
 
     let sample_a = r.get(0, 800, 1600);
@@ -2971,9 +2897,7 @@ fn external_hdf5_viirs_vnp21_lst_err_uri_multilevel_smoke() {
 
     let uri = format!("{path}:///VIIRS_Swath_LSTE/Data Fields/LST_err");
     let r = Raster::read(&uri).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external VNP21 LST_err URI fixture at '{path}': {e}"
-        )
+        panic!("failed reading external VNP21 LST_err URI fixture at '{path}': {e}")
     });
 
     assert!(
@@ -3005,13 +2929,19 @@ fn external_hdf5_viirs_vnp21_pwv_uri_multilevel_smoke() {
 
     let uri = format!("{path}#dataset=/VIIRS_Swath_LSTE/Data Fields/PWV");
     let r = Raster::read(&uri).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external VNP21 PWV URI fixture at '{path}': {e}"
-        )
+        panic!("failed reading external VNP21 PWV URI fixture at '{path}': {e}")
     });
 
-    assert!(r.rows >= 802, "PWV fixture rows unexpectedly small: {}", r.rows);
-    assert!(r.cols >= 1604, "PWV fixture cols unexpectedly small: {}", r.cols);
+    assert!(
+        r.rows >= 802,
+        "PWV fixture rows unexpectedly small: {}",
+        r.rows
+    );
+    assert!(
+        r.cols >= 1604,
+        "PWV fixture cols unexpectedly small: {}",
+        r.cols
+    );
     assert_eq!(r.data_type, DataType::U16);
 
     let sample_a = r.get(0, 800, 1600);
@@ -3031,9 +2961,7 @@ fn external_hdf5_viirs_vnp21_oceanpix_uri_multilevel_smoke() {
 
     let uri = format!("{path}#dataset=/VIIRS_Swath_LSTE/Data Fields/oceanpix");
     let r = Raster::read(&uri).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external VNP21 oceanpix URI fixture at '{path}': {e}"
-        )
+        panic!("failed reading external VNP21 oceanpix URI fixture at '{path}': {e}")
     });
 
     assert!(
@@ -3091,8 +3019,9 @@ fn external_hdf5_viirs_vnp21_qc_uri_multilevel_smoke() {
     };
 
     let uri = format!("{path}#dataset=/VIIRS_Swath_LSTE/Data Fields/QC");
-    let r = Raster::read(&uri)
-        .unwrap_or_else(|e| panic!("failed reading external VNP21 QC URI fixture at '{path}': {e}"));
+    let r = Raster::read(&uri).unwrap_or_else(|e| {
+        panic!("failed reading external VNP21 QC URI fixture at '{path}': {e}")
+    });
 
     assert_eq!(r.data_type, DataType::U16);
     // Ground truth from h5dump raw bytes.
@@ -3219,13 +3148,19 @@ fn external_hdf5_viirs_vnp13_ndvi_uri_multilevel_smoke() {
         "{path}#dataset=/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI"
     );
     let r = Raster::read(&uri).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external VNP13 NDVI URI fixture at '{path}': {e}"
-        )
+        panic!("failed reading external VNP13 NDVI URI fixture at '{path}': {e}")
     });
 
-    assert!(r.rows >= 2, "VNP13 NDVI rows unexpectedly small: {}", r.rows);
-    assert!(r.cols >= 12, "VNP13 NDVI cols unexpectedly small: {}", r.cols);
+    assert!(
+        r.rows >= 2,
+        "VNP13 NDVI rows unexpectedly small: {}",
+        r.rows
+    );
+    assert!(
+        r.cols >= 12,
+        "VNP13 NDVI cols unexpectedly small: {}",
+        r.cols
+    );
     assert_eq!(r.data_type, DataType::I16);
 
     assert_eq!(r.get(0, 0, 0), 6177.0);
@@ -3241,17 +3176,18 @@ fn external_hdf5_viirs_vnp13_evi_uri_multilevel_smoke() {
         return;
     };
 
-    let uri = format!(
-        "{path}:///HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI"
-    );
+    let uri =
+        format!("{path}:///HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI");
     let r = Raster::read(&uri).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external VNP13 EVI URI fixture at '{path}': {e}"
-        )
+        panic!("failed reading external VNP13 EVI URI fixture at '{path}': {e}")
     });
 
     assert!(r.rows >= 1, "VNP13 EVI rows unexpectedly small: {}", r.rows);
-    assert!(r.cols >= 12, "VNP13 EVI cols unexpectedly small: {}", r.cols);
+    assert!(
+        r.cols >= 12,
+        "VNP13 EVI cols unexpectedly small: {}",
+        r.cols
+    );
     assert_eq!(r.data_type, DataType::I16);
 
     assert_eq!(r.get(0, 0, 0), 2304.0);
@@ -3271,13 +3207,19 @@ fn external_hdf5_viirs_vnp13_evi2_uri_multilevel_smoke() {
         "{path}#dataset=/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI2"
     );
     let r = Raster::read(&uri).unwrap_or_else(|e| {
-        panic!(
-            "failed reading external VNP13 EVI2 URI fixture at '{path}': {e}"
-        )
+        panic!("failed reading external VNP13 EVI2 URI fixture at '{path}': {e}")
     });
 
-    assert!(r.rows >= 1, "VNP13 EVI2 rows unexpectedly small: {}", r.rows);
-    assert!(r.cols >= 12, "VNP13 EVI2 cols unexpectedly small: {}", r.cols);
+    assert!(
+        r.rows >= 1,
+        "VNP13 EVI2 rows unexpectedly small: {}",
+        r.rows
+    );
+    assert!(
+        r.cols >= 12,
+        "VNP13 EVI2 cols unexpectedly small: {}",
+        r.cols
+    );
     assert_eq!(r.data_type, DataType::I16);
 
     assert_eq!(r.get(0, 0, 0), 2263.0);
@@ -3420,8 +3362,7 @@ fn write_transpose_v3_store(
 
             // Stored (transposed) shape: stored_shape[i] = this_shape[order[i]]
             let this_shape = [this_rows, this_cols];
-            let stored_shape: Vec<usize> =
-                order_vec.iter().map(|&ax| this_shape[ax]).collect();
+            let stored_shape: Vec<usize> = order_vec.iter().map(|&ax| this_shape[ax]).collect();
 
             let mut stored_strides = vec![1usize; ndim];
             for d in (0..ndim - 1).rev() {
@@ -3485,7 +3426,9 @@ fn zarr_v3_transpose_explicit_permutation_single_chunk() {
     let dir = tmp("_v3_transpose_explicit.zarr");
     let rows = 3;
     let cols = 4;
-    let data: Vec<f64> = (0..(rows * cols)).map(|i| (i as f64) * 0.25 - 1.0).collect();
+    let data: Vec<f64> = (0..(rows * cols))
+        .map(|i| (i as f64) * 0.25 - 1.0)
+        .collect();
 
     write_transpose_v3_store(&dir, rows, cols, rows, cols, &json!([1, 0]), &data);
 
@@ -3686,7 +3629,7 @@ fn zarr_v3_rejects_shape_chunk_rank_mismatch() {
 fn statistics_api() {
     let r = make_test_raster();
     let stats = r.statistics();
-    assert_eq!(stats.valid_count, 23);   // one nodata cell
+    assert_eq!(stats.valid_count, 23); // one nodata cell
     assert_eq!(stats.nodata_count, 1);
     assert!((stats.min - 0.0).abs() < 1e-10);
     assert!((stats.max - 11.5).abs() < 1e-10);

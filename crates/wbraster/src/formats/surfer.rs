@@ -7,10 +7,10 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
+use crate::crs_info::CrsInfo;
 use crate::error::{RasterError, Result};
 use crate::io_utils::{format_float, with_extension};
 use crate::raster::{DataType, Raster, RasterConfig};
-use crate::crs_info::CrsInfo;
 
 const SURFER_NODATA_ASCII: f64 = 1.71041e38;
 const SURFER_NODATA_BINARY: f64 = 1.70141e38;
@@ -121,9 +121,7 @@ fn read_dsaa<R: BufRead>(reader: R) -> Result<Raster> {
 
     let line1 = next_data_line(&mut lines)?;
     if !line1.eq_ignore_ascii_case("DSAA") {
-        return Err(RasterError::CorruptData(
-            "invalid DSAA header magic".into(),
-        ));
+        return Err(RasterError::CorruptData("invalid DSAA header magic".into()));
     }
 
     let dims = next_data_line(&mut lines)?;
@@ -226,11 +224,15 @@ fn read_dsrb(path: &str) -> Result<Raster> {
 
     let grid_id = read_i32_le_at(&bytes, &mut off)?;
     if grid_id != 0x4449_5247 {
-        return Err(RasterError::CorruptData("missing GRID section in DSRB".into()));
+        return Err(RasterError::CorruptData(
+            "missing GRID section in DSRB".into(),
+        ));
     }
     let grid_sz = read_i32_le_at(&bytes, &mut off)?;
     if grid_sz != 72 {
-        return Err(RasterError::CorruptData("unexpected DSRB GRID section size".into()));
+        return Err(RasterError::CorruptData(
+            "unexpected DSRB GRID section size".into(),
+        ));
     }
 
     let rows = read_i32_le_at(&bytes, &mut off)? as usize;
@@ -301,8 +303,18 @@ fn write_dsaa<W: Write>(w: &mut W, raster: &Raster) -> Result<()> {
 
     writeln!(w, "DSAA")?;
     writeln!(w, "{} {}", raster.cols, raster.rows)?;
-    writeln!(w, "{} {}", format_float(raster.x_min, 10), format_float(raster.x_max(), 10))?;
-    writeln!(w, "{} {}", format_float(raster.y_min, 10), format_float(raster.y_max(), 10))?;
+    writeln!(
+        w,
+        "{} {}",
+        format_float(raster.x_min, 10),
+        format_float(raster.x_max(), 10)
+    )?;
+    writeln!(
+        w,
+        "{} {}",
+        format_float(raster.y_min, 10),
+        format_float(raster.y_max(), 10)
+    )?;
     writeln!(w, "{} {}", format_float(zmin, 10), format_float(zmax, 10))?;
 
     for row in (0..raster.rows).rev() {
@@ -371,7 +383,11 @@ fn write_dsrb_binary<W: Write>(w: &mut W, raster: &Raster) -> Result<()> {
     for row in (0..raster.rows).rev() {
         let slice = raster.row_slice(0, row as isize);
         for v in slice {
-            let out = if raster.is_nodata(v) { SURFER_NODATA_BINARY } else { v };
+            let out = if raster.is_nodata(v) {
+                SURFER_NODATA_BINARY
+            } else {
+                v
+            };
             w.write_all(&out.to_le_bytes())?;
         }
     }
@@ -410,7 +426,9 @@ fn parse_f64(field: &str, val: &str) -> Result<f64> {
 
 fn read_i32_le_at(buf: &[u8], off: &mut usize) -> Result<i32> {
     if *off + 4 > buf.len() {
-        return Err(RasterError::CorruptData("unexpected EOF in DSRB i32".into()));
+        return Err(RasterError::CorruptData(
+            "unexpected EOF in DSRB i32".into(),
+        ));
     }
     let out = i32::from_le_bytes(buf[*off..*off + 4].try_into().unwrap());
     *off += 4;
@@ -419,7 +437,9 @@ fn read_i32_le_at(buf: &[u8], off: &mut usize) -> Result<i32> {
 
 fn read_f64_le_at(buf: &[u8], off: &mut usize) -> Result<f64> {
     if *off + 8 > buf.len() {
-        return Err(RasterError::CorruptData("unexpected EOF in DSRB f64".into()));
+        return Err(RasterError::CorruptData(
+            "unexpected EOF in DSRB f64".into(),
+        ));
     }
     let out = f64::from_le_bytes(buf[*off..*off + 8].try_into().unwrap());
     *off += 8;
@@ -468,8 +488,14 @@ DSAA
     }
 
     fn tmp(suffix: &str) -> String {
-        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos();
-        temp_dir().join(format!("surfer_test_{ts}{suffix}")).to_string_lossy().into_owned()
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos();
+        temp_dir()
+            .join(format!("surfer_test_{ts}{suffix}"))
+            .to_string_lossy()
+            .into_owned()
     }
 
     #[test]
@@ -510,7 +536,10 @@ DSAA
         write(&r, &path).unwrap();
 
         let bytes = std::fs::read(&path).unwrap();
-        assert_eq!(i32::from_le_bytes(bytes[0..4].try_into().unwrap()), 0x4252_5344);
+        assert_eq!(
+            i32::from_le_bytes(bytes[0..4].try_into().unwrap()),
+            0x4252_5344
+        );
 
         let r2 = read(&path).unwrap();
         assert_eq!(r2.cols, 2);

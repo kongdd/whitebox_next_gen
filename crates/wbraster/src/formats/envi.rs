@@ -33,10 +33,10 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
-use crate::error::{Result, RasterError};
+use crate::crs_info::CrsInfo;
+use crate::error::{RasterError, Result};
 use crate::io_utils::*;
 use crate::raster::{DataType, Raster, RasterConfig};
-use crate::crs_info::CrsInfo;
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -87,7 +87,12 @@ struct EnviHeader {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-enum Interleave { #[default] Bsq, Bil, Bip }
+enum Interleave {
+    #[default]
+    Bsq,
+    Bil,
+    Bip,
+}
 
 fn parse_envi_header(path: &str) -> Result<EnviHeader> {
     let file = File::open(path)?;
@@ -123,9 +128,9 @@ fn parse_envi_header(path: &str) -> Result<EnviHeader> {
     // First line must be "ENVI"
     let first_line = all_text.lines().next().unwrap_or("").trim();
     if !first_line.eq_ignore_ascii_case("ENVI") {
-        return Err(RasterError::CorruptData(
-            format!("not an ENVI header: first line is '{first_line}'")
-        ));
+        return Err(RasterError::CorruptData(format!(
+            "not an ENVI header: first line is '{first_line}'"
+        )));
     }
 
     // Flatten multi-line brace values
@@ -133,7 +138,9 @@ fn parse_envi_header(path: &str) -> Result<EnviHeader> {
 
     for line in flat.lines() {
         let line = line.trim();
-        if line.is_empty() || line.eq_ignore_ascii_case("ENVI") { continue; }
+        if line.is_empty() || line.eq_ignore_ascii_case("ENVI") {
+            continue;
+        }
 
         let eq_pos = match line.find('=') {
             Some(p) => p,
@@ -143,24 +150,24 @@ fn parse_envi_header(path: &str) -> Result<EnviHeader> {
         let val = line[eq_pos + 1..].trim().to_string();
         // Strip surrounding braces if present
         let val = if val.starts_with('{') && val.ends_with('}') {
-            val[1..val.len()-1].trim().to_string()
+            val[1..val.len() - 1].trim().to_string()
         } else {
             val
         };
 
         match key.as_str() {
-            "samples"             => samples       = Some(parse_usize_h("samples", &val)?),
-            "lines"               => lines         = Some(parse_usize_h("lines", &val)?),
-            "bands"               => bands         = parse_usize_h("bands", &val)?,
-            "header offset"       => header_offset = val.trim().parse::<u64>().unwrap_or(0),
-            "data type"           => data_type     = envi_data_type(&val),
-            "interleave"          => interleave    = parse_interleave(&val),
-            "byte order"          => byte_order_le = val.trim() == "0",
-            "data ignore value"   => nodata        = val.trim().parse::<f64>().unwrap_or(-9999.0),
-            "description"         => description   = val,
-            "coordinate system string" => crs      = CrsInfo::from_wkt(&val),
-            "data file"           => data_file     = Some(val),
-            "map info"            => {
+            "samples" => samples = Some(parse_usize_h("samples", &val)?),
+            "lines" => lines = Some(parse_usize_h("lines", &val)?),
+            "bands" => bands = parse_usize_h("bands", &val)?,
+            "header offset" => header_offset = val.trim().parse::<u64>().unwrap_or(0),
+            "data type" => data_type = envi_data_type(&val),
+            "interleave" => interleave = parse_interleave(&val),
+            "byte order" => byte_order_le = val.trim() == "0",
+            "data ignore value" => nodata = val.trim().parse::<f64>().unwrap_or(-9999.0),
+            "description" => description = val,
+            "coordinate system string" => crs = CrsInfo::from_wkt(&val),
+            "data file" => data_file = Some(val),
+            "map info" => {
                 parse_map_info(
                     &val,
                     &mut x_min,
@@ -177,7 +184,7 @@ fn parse_envi_header(path: &str) -> Result<EnviHeader> {
     }
 
     let samples = samples.ok_or_else(|| RasterError::MissingField("samples".into()))?;
-    let lines   = lines  .ok_or_else(|| RasterError::MissingField("lines".into()))?;
+    let lines = lines.ok_or_else(|| RasterError::MissingField("lines".into()))?;
 
     Ok(EnviHeader {
         samples,
@@ -192,7 +199,8 @@ fn parse_envi_header(path: &str) -> Result<EnviHeader> {
         cell_size_x,
         cell_size_y,
         nodata,
-        crs: crs,        map_projection,
+        crs: crs,
+        map_projection,
         map_datum,
         map_units,
         description,
@@ -206,10 +214,20 @@ fn flatten_envi_braces(text: &str) -> String {
     let mut in_braces = false;
     for ch in text.chars() {
         match ch {
-            '{' => { in_braces = true; out.push('{'); }
-            '}' => { in_braces = false; out.push('}'); }
-            '\n' if in_braces => { out.push(' '); } // fold line breaks inside braces
-            c => { out.push(c); }
+            '{' => {
+                in_braces = true;
+                out.push('{');
+            }
+            '}' => {
+                in_braces = false;
+                out.push('}');
+            }
+            '\n' if in_braces => {
+                out.push(' ');
+            } // fold line breaks inside braces
+            c => {
+                out.push(c);
+            }
         }
     }
     out
@@ -217,20 +235,20 @@ fn flatten_envi_braces(text: &str) -> String {
 
 fn envi_data_type(s: &str) -> DataType {
     match s.trim() {
-        "1"  => DataType::U8,
-        "2"  => DataType::I16,
-        "3"  => DataType::I32,
-        "4"  => DataType::F32,
-        "5"  => DataType::F64,
+        "1" => DataType::U8,
+        "2" => DataType::I16,
+        "3" => DataType::I32,
+        "4" => DataType::F32,
+        "5" => DataType::F64,
         "12" => DataType::U16,
         "13" => DataType::U32,
-        _    => DataType::F32,
+        _ => DataType::F32,
     }
 }
 
 fn envi_data_type_code(dt: DataType) -> u8 {
     match dt {
-        DataType::U8  => 1,
+        DataType::U8 => 1,
         DataType::I16 => 2,
         DataType::I32 => 3,
         DataType::F32 => 4,
@@ -239,7 +257,7 @@ fn envi_data_type_code(dt: DataType) -> u8 {
         DataType::U32 => 13,
         DataType::I64 => 14,
         DataType::U64 => 15,
-        DataType::I8  => 1, // promote
+        DataType::I8 => 1, // promote
     }
 }
 
@@ -247,7 +265,7 @@ fn parse_interleave(s: &str) -> Interleave {
     match s.trim().to_ascii_lowercase().as_str() {
         "bil" => Interleave::Bil,
         "bip" => Interleave::Bip,
-        _     => Interleave::Bsq,
+        _ => Interleave::Bsq,
     }
 }
 
@@ -266,13 +284,15 @@ fn parse_map_info(
     let parts: Vec<&str> = val.split(',').collect();
     // [0]=projection, [1]=ref_pixel_x (1-based), [2]=ref_pixel_y (1-based),
     // [3]=ref_easting, [4]=ref_northing, [5]=x_dim, [6]=y_dim
-    if parts.len() < 7 { return; }
+    if parts.len() < 7 {
+        return;
+    }
     let ref_px: f64 = parts[1].trim().parse().unwrap_or(1.0);
     let ref_py: f64 = parts[2].trim().parse().unwrap_or(1.0);
-    let ref_e:  f64 = parts[3].trim().parse().unwrap_or(0.0);
-    let ref_n:  f64 = parts[4].trim().parse().unwrap_or(0.0);
-    let xd:     f64 = parts[5].trim().parse().unwrap_or(1.0);
-    let yd:     f64 = parts[6].trim().parse().unwrap_or(1.0);
+    let ref_e: f64 = parts[3].trim().parse().unwrap_or(0.0);
+    let ref_n: f64 = parts[4].trim().parse().unwrap_or(0.0);
+    let xd: f64 = parts[5].trim().parse().unwrap_or(1.0);
+    let yd: f64 = parts[6].trim().parse().unwrap_or(1.0);
     // ENVI map info gives upper-left corner of ref pixel (1-based index)
     // x_min = ref_e - (ref_px - 1) * xd
     // y_max = ref_n + (ref_py - 1) * yd   (Northings increases upward)
@@ -307,7 +327,11 @@ fn envi_data_path(hdr_path: &str) -> String {
     // Try common data extensions
     let base = hdr_path.trim_end_matches(".hdr").trim_end_matches(".HDR");
     for ext in &["img", "dat", "bin", "raw", ""] {
-        let candidate = if ext.is_empty() { base.to_string() } else { format!("{base}.{ext}") };
+        let candidate = if ext.is_empty() {
+            base.to_string()
+        } else {
+            format!("{base}.{ext}")
+        };
         if std::path::Path::new(&candidate).exists() {
             return candidate;
         }
@@ -319,8 +343,10 @@ fn read_from_header(hdr_path: &str) -> Result<Raster> {
     let hdr = parse_envi_header(hdr_path)?;
 
     let data_path = if let Some(ref f) = hdr.data_file {
-        let dir = std::path::Path::new(hdr_path).parent()
-            .map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| ".".into());
+        let dir = std::path::Path::new(hdr_path)
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| ".".into());
         format!("{dir}/{f}")
     } else {
         envi_data_path(hdr_path)
@@ -391,13 +417,21 @@ fn read_data(path: &str, hdr: &EnviHeader) -> Result<Vec<f64>> {
         }
         DataType::I16 => {
             for _ in 0..n {
-                let v = if le { read_i16_le_stream(&mut file)? } else { read_i16_be_stream(&mut file)? };
+                let v = if le {
+                    read_i16_le_stream(&mut file)?
+                } else {
+                    read_i16_be_stream(&mut file)?
+                };
                 linear.push(v as f64);
             }
         }
         DataType::I32 => {
             for _ in 0..n {
-                let v = if le { read_i32_le_stream(&mut file)? } else { read_i32_be_stream(&mut file)? };
+                let v = if le {
+                    read_i32_le_stream(&mut file)?
+                } else {
+                    read_i32_be_stream(&mut file)?
+                };
                 linear.push(v as f64);
             }
         }
@@ -405,7 +439,11 @@ fn read_data(path: &str, hdr: &EnviHeader) -> Result<Vec<f64>> {
             for _ in 0..n {
                 let mut b = [0u8; 2];
                 file.read_exact(&mut b)?;
-                let v = if le { u16::from_le_bytes(b) } else { u16::from_be_bytes(b) };
+                let v = if le {
+                    u16::from_le_bytes(b)
+                } else {
+                    u16::from_be_bytes(b)
+                };
                 linear.push(v as f64);
             }
         }
@@ -413,19 +451,31 @@ fn read_data(path: &str, hdr: &EnviHeader) -> Result<Vec<f64>> {
             for _ in 0..n {
                 let mut b = [0u8; 4];
                 file.read_exact(&mut b)?;
-                let v = if le { u32::from_le_bytes(b) } else { u32::from_be_bytes(b) };
+                let v = if le {
+                    u32::from_le_bytes(b)
+                } else {
+                    u32::from_be_bytes(b)
+                };
                 linear.push(v as f64);
             }
         }
         DataType::F32 => {
             for _ in 0..n {
-                let v = if le { read_f32_le_stream(&mut file)? } else { read_f32_be_stream(&mut file)? };
+                let v = if le {
+                    read_f32_le_stream(&mut file)?
+                } else {
+                    read_f32_be_stream(&mut file)?
+                };
                 linear.push(v as f64);
             }
         }
         DataType::F64 => {
             for _ in 0..n {
-                let v = if le { read_f64_le_stream(&mut file)? } else { read_f64_be_stream(&mut file)? };
+                let v = if le {
+                    read_f64_le_stream(&mut file)?
+                } else {
+                    read_f64_be_stream(&mut file)?
+                };
                 linear.push(v);
             }
         }
@@ -459,11 +509,16 @@ fn write_header(raster: &Raster, hdr_path: &str) -> Result<()> {
     let data_basename = {
         let dp = envi_data_path(hdr_path);
         std::path::Path::new(&dp)
-            .file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default()
     };
-    let desc = raster.metadata.iter()
+    let desc = raster
+        .metadata
+        .iter()
         .find(|(k, _)| k == "description")
-        .map(|(_, v)| v.as_str()).unwrap_or("Created by gis_raster");
+        .map(|(_, v)| v.as_str())
+        .unwrap_or("Created by gis_raster");
     let interleave = raster
         .metadata
         .iter()
@@ -612,9 +667,13 @@ fn append_sample_le(out: &mut Vec<u8>, dt: DataType, v: f64) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn parse_usize_h(field: &str, val: &str) -> Result<usize> {
-    val.trim().parse::<usize>().map_err(|_| RasterError::ParseError {
-        field: field.into(), value: val.into(), expected: "positive integer".into(),
-    })
+    val.trim()
+        .parse::<usize>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "positive integer".into(),
+        })
 }
 
 #[cfg(test)]
@@ -625,16 +684,28 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn tmp(suffix: &str) -> String {
-        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos();
-        temp_dir().join(format!("envi_test_{ts}{suffix}")).to_string_lossy().into_owned()
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos();
+        temp_dir()
+            .join(format!("envi_test_{ts}{suffix}"))
+            .to_string_lossy()
+            .into_owned()
     }
 
     #[test]
     fn envi_roundtrip() {
         let hdr = tmp(".hdr");
         let cfg = RasterConfig {
-            cols: 5, rows: 4, cell_size: 0.5, x_min: 10.0, y_min: 20.0,
-            nodata: -9999.0, data_type: DataType::F32, ..Default::default()
+            cols: 5,
+            rows: 4,
+            cell_size: 0.5,
+            x_min: 10.0,
+            y_min: 20.0,
+            nodata: -9999.0,
+            data_type: DataType::F32,
+            ..Default::default()
         };
         let data: Vec<f64> = (0..20).map(|i| i as f64).collect();
         let r = Raster::from_data(cfg, data).unwrap();
@@ -642,8 +713,16 @@ mod tests {
         let r2 = read(&hdr).unwrap();
         assert_eq!(r2.cols, 5);
         assert_eq!(r2.rows, 4);
-        assert!((r2.get(0, 0, 0) - 0.0).abs() < 1e-4, "got {:?}", r2.get(0, 0, 0));
-        assert!((r2.get(0, 3, 4) - 19.0).abs() < 1e-3, "got {:?}", r2.get(0, 3, 4));
+        assert!(
+            (r2.get(0, 0, 0) - 0.0).abs() < 1e-4,
+            "got {:?}",
+            r2.get(0, 0, 0)
+        );
+        assert!(
+            (r2.get(0, 3, 4) - 19.0).abs() < 1e-3,
+            "got {:?}",
+            r2.get(0, 3, 4)
+        );
         let img = with_extension(&hdr, "img");
         let _ = std::fs::remove_file(&hdr);
         let _ = std::fs::remove_file(&img);
@@ -695,9 +774,12 @@ mod tests {
             data_type: DataType::F32,
             ..Default::default()
         };
-        cfg.metadata.push(("envi_map_projection".into(), "UTM".into()));
-        cfg.metadata.push(("envi_map_datum".into(), "WGS-84".into()));
-        cfg.metadata.push(("envi_map_units".into(), "Meters".into()));
+        cfg.metadata
+            .push(("envi_map_projection".into(), "UTM".into()));
+        cfg.metadata
+            .push(("envi_map_datum".into(), "WGS-84".into()));
+        cfg.metadata
+            .push(("envi_map_units".into(), "Meters".into()));
         let r = Raster::from_data(cfg, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
 
         write(&r, &hdr).unwrap();

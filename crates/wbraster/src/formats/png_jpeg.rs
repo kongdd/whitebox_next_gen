@@ -32,17 +32,19 @@ struct WorldFile {
 }
 
 /// Read a PNG raster with optional world-file georeferencing and `.prj` CRS sidecar.
-/// 
+///
 /// PNG files are read in RGB/RGBA format and treated as single-band rasters.
 /// Georeferencing is optionally loaded from accompanying `.pgw`, `.pngw`, or `.wld` world files.
 /// CRS information is loaded from accompanying `.prj` sidecar file if available.
 pub fn read_png(path: &str) -> Result<Raster> {
     let file = File::open(path)?;
     let decoder = png::Decoder::new(BufReader::new(file));
-    let mut reader = decoder.read_info().map_err(|e| RasterError::CorruptData(format!("PNG decode error: {e}")))?;
-    let out_size = reader
-        .output_buffer_size()
-        .ok_or_else(|| RasterError::CorruptData("PNG decode error: unknown output buffer size".into()))?;
+    let mut reader = decoder
+        .read_info()
+        .map_err(|e| RasterError::CorruptData(format!("PNG decode error: {e}")))?;
+    let out_size = reader.output_buffer_size().ok_or_else(|| {
+        RasterError::CorruptData("PNG decode error: unknown output buffer size".into())
+    })?;
     let mut buf = vec![0u8; out_size];
     let info = reader
         .next_frame(&mut buf)
@@ -122,7 +124,7 @@ pub fn read_png(path: &str) -> Result<Raster> {
 }
 
 /// Read a JPEG raster with optional world-file georeferencing and `.prj` CRS sidecar.
-/// 
+///
 /// JPEG files are decoded to RGB or grayscale depending on the image format.
 /// Georeferencing is optionally loaded from accompanying `.jgw`, `.jpgw`, `.jpegw`, or `.wld` world files.
 /// CRS information is loaded from accompanying `.prj` sidecar file if available.
@@ -197,20 +199,44 @@ pub fn write_png(raster: &Raster, path: &str) -> Result<()> {
     let (color, depth, bytes) = match raster.bands {
         1 => {
             if raster.data_type == DataType::U16 {
-                (png::ColorType::Grayscale, png::BitDepth::Sixteen, raster_to_chunky_u16_be_bytes(raster, 1)?)
+                (
+                    png::ColorType::Grayscale,
+                    png::BitDepth::Sixteen,
+                    raster_to_chunky_u16_be_bytes(raster, 1)?,
+                )
             } else {
-                (png::ColorType::Grayscale, png::BitDepth::Eight, raster_to_chunky_u8(raster, 1)?)
+                (
+                    png::ColorType::Grayscale,
+                    png::BitDepth::Eight,
+                    raster_to_chunky_u8(raster, 1)?,
+                )
             }
         }
-        2 => (png::ColorType::GrayscaleAlpha, png::BitDepth::Eight, raster_to_chunky_u8(raster, 2)?),
+        2 => (
+            png::ColorType::GrayscaleAlpha,
+            png::BitDepth::Eight,
+            raster_to_chunky_u8(raster, 2)?,
+        ),
         3 => {
             if raster.data_type == DataType::U16 {
-                (png::ColorType::Rgb, png::BitDepth::Sixteen, raster_to_chunky_u16_be_bytes(raster, 3)?)
+                (
+                    png::ColorType::Rgb,
+                    png::BitDepth::Sixteen,
+                    raster_to_chunky_u16_be_bytes(raster, 3)?,
+                )
             } else {
-                (png::ColorType::Rgb, png::BitDepth::Eight, raster_to_chunky_u8(raster, 3)?)
+                (
+                    png::ColorType::Rgb,
+                    png::BitDepth::Eight,
+                    raster_to_chunky_u8(raster, 3)?,
+                )
             }
         }
-        4 => (png::ColorType::Rgba, png::BitDepth::Eight, raster_to_chunky_u8(raster, 4)?),
+        4 => (
+            png::ColorType::Rgba,
+            png::BitDepth::Eight,
+            raster_to_chunky_u8(raster, 4)?,
+        ),
         b => {
             return Err(RasterError::UnsupportedDataType(format!(
                 "PNG writer supports 1, 2, 3, or 4 bands; got {b}"
@@ -240,8 +266,14 @@ pub fn write_jpeg(raster: &Raster, path: &str) -> Result<()> {
     let rows = raster.rows;
 
     let (bytes, color) = match raster.bands {
-        1 => (raster_to_chunky_u8(raster, 1)?, jpeg_encoder::ColorType::Luma),
-        3 => (raster_to_chunky_u8(raster, 3)?, jpeg_encoder::ColorType::Rgb),
+        1 => (
+            raster_to_chunky_u8(raster, 1)?,
+            jpeg_encoder::ColorType::Luma,
+        ),
+        3 => (
+            raster_to_chunky_u8(raster, 3)?,
+            jpeg_encoder::ColorType::Rgb,
+        ),
         b => {
             return Err(RasterError::UnsupportedDataType(format!(
                 "JPEG writer supports 1 or 3 bands; got {b}"
@@ -313,7 +345,9 @@ fn config_from_world_file(
 
 fn read_world_file(image_path: &str) -> Result<Option<WorldFile>> {
     for candidate in world_file_candidates(image_path) {
-        let Ok(file) = File::open(&candidate) else { continue };
+        let Ok(file) = File::open(&candidate) else {
+            continue;
+        };
         let reader = BufReader::new(file);
         let mut vals: Vec<f64> = Vec::with_capacity(6);
         for line in reader.lines() {
@@ -431,7 +465,9 @@ fn raster_to_chunky_u8(raster: &Raster, expected_bands: usize) -> Result<Vec<u8>
         let row = (p / raster.cols) as isize;
         let col = (p % raster.cols) as isize;
         for b in 0..raster.bands {
-            let v = raster.get_raw(b as isize, row, col).unwrap_or(raster.nodata);
+            let v = raster
+                .get_raw(b as isize, row, col)
+                .unwrap_or(raster.nodata);
             out.push(f64_to_u8(v));
         }
     }
@@ -452,7 +488,9 @@ fn raster_to_chunky_u16_be_bytes(raster: &Raster, expected_bands: usize) -> Resu
         let row = (p / raster.cols) as isize;
         let col = (p % raster.cols) as isize;
         for b in 0..raster.bands {
-            let v = raster.get_raw(b as isize, row, col).unwrap_or(raster.nodata);
+            let v = raster
+                .get_raw(b as isize, row, col)
+                .unwrap_or(raster.nodata);
             out.extend_from_slice(&f64_to_u16(v).to_be_bytes());
         }
     }

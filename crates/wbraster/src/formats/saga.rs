@@ -29,10 +29,10 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
-use crate::error::{Result, RasterError};
+use crate::crs_info::CrsInfo;
+use crate::error::{RasterError, Result};
 use crate::io_utils::*;
 use crate::raster::{DataType, Raster, RasterConfig};
-use crate::crs_info::CrsInfo;
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -53,16 +53,16 @@ pub fn write(raster: &Raster, path: &str) -> Result<()> {
     } else {
         path.to_string()
     };
-        if raster.bands != 1 {
-            return Err(RasterError::UnsupportedDataType(
-                "SAGA writer currently supports single-band rasters only".into(),
-            ));
-        }
-        let big_endian = saga_write_big_endian(raster);
+    if raster.bands != 1 {
+        return Err(RasterError::UnsupportedDataType(
+            "SAGA writer currently supports single-band rasters only".into(),
+        ));
+    }
+    let big_endian = saga_write_big_endian(raster);
     let sdat_path = with_extension(&sgrd_path, "sdat");
-        write_header(raster, &sgrd_path, big_endian)?;
-        write_data(raster, &sdat_path, big_endian)?;
-        write_prj_sidecar(raster, &sgrd_path)
+    write_header(raster, &sgrd_path, big_endian)?;
+    write_data(raster, &sdat_path, big_endian)?;
+    write_prj_sidecar(raster, &sgrd_path)
 }
 
 // ─── Header ───────────────────────────────────────────────────────────────────
@@ -73,8 +73,8 @@ struct SagaHeader {
     data_format: DataType,
     data_offset: u64,
     big_endian: bool,
-    x_min_center: f64,  // cell-center X of first column
-    y_min_center: f64,  // cell-center Y of first row (bottom-most when toptobottom=false)
+    x_min_center: f64, // cell-center X of first column
+    y_min_center: f64, // cell-center Y of first row (bottom-most when toptobottom=false)
     cols: usize,
     rows: usize,
     cell_size: f64,
@@ -105,23 +105,23 @@ fn parse_header(path: &str) -> Result<SagaHeader> {
             None => continue,
         };
         match key.as_str() {
-            "name"             => name = val,
-            "dataformat"       => {
+            "name" => name = val,
+            "dataformat" => {
                 data_format = saga_data_type(&val).ok_or_else(|| RasterError::ParseError {
                     field: "DATAFORMAT".into(),
                     value: val.clone(),
                     expected: "BYTE|SHORT|DWORD|INT|FLOAT|DOUBLE".into(),
                 })?;
             }
-            "datafile_offset"  => data_offset = val.trim().parse::<u64>().unwrap_or(0),
-            "byteorder_big"    => big_endian = val.trim().eq_ignore_ascii_case("true"),
-            "position_xmin"    => x_min_center = Some(parse_f64("position_xmin", &val)?),
-            "position_ymin"    => y_min_center = Some(parse_f64("position_ymin", &val)?),
-            "cellcount_x"      => cols = Some(parse_usize("cellcount_x", &val)?),
-            "cellcount_y"      => rows = Some(parse_usize("cellcount_y", &val)?),
-            "cellsize"         => cell_size = Some(parse_f64("cellsize", &val)?),
-            "nodata_value"     => nodata = parse_f64("nodata_value", &val)?,
-            "toptobottom"      => top_to_bottom = val.trim().eq_ignore_ascii_case("true"),
+            "datafile_offset" => data_offset = val.trim().parse::<u64>().unwrap_or(0),
+            "byteorder_big" => big_endian = val.trim().eq_ignore_ascii_case("true"),
+            "position_xmin" => x_min_center = Some(parse_f64("position_xmin", &val)?),
+            "position_ymin" => y_min_center = Some(parse_f64("position_ymin", &val)?),
+            "cellcount_x" => cols = Some(parse_usize("cellcount_x", &val)?),
+            "cellcount_y" => rows = Some(parse_usize("cellcount_y", &val)?),
+            "cellsize" => cell_size = Some(parse_f64("cellsize", &val)?),
+            "nodata_value" => nodata = parse_f64("nodata_value", &val)?,
+            "toptobottom" => top_to_bottom = val.trim().eq_ignore_ascii_case("true"),
             _ => {}
         }
     }
@@ -129,8 +129,10 @@ fn parse_header(path: &str) -> Result<SagaHeader> {
     let cols = cols.ok_or_else(|| RasterError::MissingField("CELLCOUNT_X".into()))?;
     let rows = rows.ok_or_else(|| RasterError::MissingField("CELLCOUNT_Y".into()))?;
     let cell_size = cell_size.ok_or_else(|| RasterError::MissingField("CELLSIZE".into()))?;
-    let x_min_center = x_min_center.ok_or_else(|| RasterError::MissingField("POSITION_XMIN".into()))?;
-    let y_min_center = y_min_center.ok_or_else(|| RasterError::MissingField("POSITION_YMIN".into()))?;
+    let x_min_center =
+        x_min_center.ok_or_else(|| RasterError::MissingField("POSITION_XMIN".into()))?;
+    let y_min_center =
+        y_min_center.ok_or_else(|| RasterError::MissingField("POSITION_YMIN".into()))?;
 
     Ok(SagaHeader {
         name,
@@ -156,13 +158,13 @@ fn saga_data_type(s: &str) -> Option<DataType> {
         "INT" | "INTEGER" => Some(DataType::I32),
         "FLOAT" => Some(DataType::F32),
         "DOUBLE" => Some(DataType::F64),
-        _        => None,
+        _ => None,
     }
 }
 
 fn saga_data_type_str(dt: DataType) -> Result<&'static str> {
     match dt {
-        DataType::U8  => Ok("BYTE"),
+        DataType::U8 => Ok("BYTE"),
         DataType::I16 => Ok("SHORT"),
         DataType::U16 => Ok("WORD"),
         DataType::U32 => Ok("DWORD"),
@@ -196,7 +198,11 @@ fn read_from_header(sgrd_path: &str) -> Result<Raster> {
         ("name".to_string(), hdr.name),
         (
             "saga_byteorder_big".to_string(),
-            if hdr.big_endian { "true".to_string() } else { "false".to_string() },
+            if hdr.big_endian {
+                "true".to_string()
+            } else {
+                "false".to_string()
+            },
         ),
     ];
     if let Some(ref text) = prj_text {
@@ -211,7 +217,8 @@ fn read_from_header(sgrd_path: &str) -> Result<Raster> {
         cell_size: hdr.cell_size,
         nodata: hdr.nodata,
         data_type: hdr.data_format,
-        crs: crs,        metadata,
+        crs: crs,
+        metadata,
         ..Default::default()
     };
     Raster::from_data(cfg, data)
@@ -283,12 +290,26 @@ fn read_data(path: &str, hdr: &SagaHeader) -> Result<Vec<f64>> {
             data.extend(buf.iter().map(|&b| b as f64));
         }
         DataType::I16 => {
-            if be { for _ in 0..n { data.push(read_i16_be_stream(&mut file)? as f64); } }
-            else  { for _ in 0..n { data.push(read_i16_le_stream(&mut file)? as f64); } }
+            if be {
+                for _ in 0..n {
+                    data.push(read_i16_be_stream(&mut file)? as f64);
+                }
+            } else {
+                for _ in 0..n {
+                    data.push(read_i16_le_stream(&mut file)? as f64);
+                }
+            }
         }
         DataType::I32 => {
-            if be { for _ in 0..n { data.push(read_i32_be_stream(&mut file)? as f64); } }
-            else  { for _ in 0..n { data.push(read_i32_le_stream(&mut file)? as f64); } }
+            if be {
+                for _ in 0..n {
+                    data.push(read_i32_be_stream(&mut file)? as f64);
+                }
+            } else {
+                for _ in 0..n {
+                    data.push(read_i32_le_stream(&mut file)? as f64);
+                }
+            }
         }
         DataType::U32 => {
             if be {
@@ -306,14 +327,24 @@ fn read_data(path: &str, hdr: &SagaHeader) -> Result<Vec<f64>> {
             }
         }
         DataType::F32 => {
-            if be { read_all!(read_f32_be_stream) }
-            else  { read_all!(read_f32_le_stream) }
+            if be {
+                read_all!(read_f32_be_stream)
+            } else {
+                read_all!(read_f32_le_stream)
+            }
         }
         DataType::F64 => {
-            if be { read_all!(read_f64_be_stream) }
-            else  { read_all!(read_f64_le_stream) }
+            if be {
+                read_all!(read_f64_be_stream)
+            } else {
+                read_all!(read_f64_le_stream)
+            }
         }
-        _ => return Err(RasterError::UnsupportedDataType(hdr.data_format.to_string())),
+        _ => {
+            return Err(RasterError::UnsupportedDataType(
+                hdr.data_format.to_string(),
+            ))
+        }
     }
 
     // If TOPTOBOTTOM = FALSE (the default), data is stored south-to-north.
@@ -338,23 +369,43 @@ fn flip_rows(data: &mut [f64], cols: usize, rows: usize) {
 // ─── Write ────────────────────────────────────────────────────────────────────
 
 fn write_header(raster: &Raster, sgrd_path: &str, big_endian: bool) -> Result<()> {
-    let name = raster.metadata.iter()
+    let name = raster
+        .metadata
+        .iter()
         .find(|(k, _)| k == "name")
         .map(|(_, v)| v.as_str())
         .unwrap_or("unnamed");
     let stats = raster.statistics();
     let sdat_name = std::path::Path::new(sgrd_path)
-        .file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
 
     let mut w = BufWriter::new(File::create(sgrd_path)?);
     writeln!(w, "NAME\t\t\t= {name}")?;
     writeln!(w, "DESCRIPTION\t\t=")?;
     writeln!(w, "UNIT\t\t\t=")?;
-    writeln!(w, "DATAFORMAT\t\t= {}", saga_data_type_str(raster.data_type)?)?;
+    writeln!(
+        w,
+        "DATAFORMAT\t\t= {}",
+        saga_data_type_str(raster.data_type)?
+    )?;
     writeln!(w, "DATAFILE_OFFSET\t\t= 0")?;
-    writeln!(w, "BYTEORDER_BIG\t\t= {}", if big_endian { "TRUE" } else { "FALSE" })?;
-    writeln!(w, "POSITION_XMIN\t\t= {}", format_float(raster.x_min + raster.cell_size_x * 0.5, 10))?;
-    writeln!(w, "POSITION_YMIN\t\t= {}", format_float(raster.y_min + raster.cell_size_y * 0.5, 10))?;
+    writeln!(
+        w,
+        "BYTEORDER_BIG\t\t= {}",
+        if big_endian { "TRUE" } else { "FALSE" }
+    )?;
+    writeln!(
+        w,
+        "POSITION_XMIN\t\t= {}",
+        format_float(raster.x_min + raster.cell_size_x * 0.5, 10)
+    )?;
+    writeln!(
+        w,
+        "POSITION_YMIN\t\t= {}",
+        format_float(raster.y_min + raster.cell_size_y * 0.5, 10)
+    )?;
     writeln!(w, "CELLCOUNT_X\t\t= {}", raster.cols)?;
     writeln!(w, "CELLCOUNT_Y\t\t= {}", raster.rows)?;
     writeln!(w, "CELLSIZE\t\t= {}", format_float(raster.cell_size_x, 10))?;
@@ -473,10 +524,15 @@ fn saga_write_big_endian(raster: &Raster) -> bool {
     raster
         .metadata
         .iter()
-        .find(|(k, _)| k.eq_ignore_ascii_case("saga_byteorder_big") || k.eq_ignore_ascii_case("byteorder_big"))
+        .find(|(k, _)| {
+            k.eq_ignore_ascii_case("saga_byteorder_big") || k.eq_ignore_ascii_case("byteorder_big")
+        })
         .map(|(_, v)| {
             let t = v.trim().to_ascii_lowercase();
-            matches!(t.as_str(), "true" | "1" | "yes" | "y" | "big" | "msb" | "msbfirst")
+            matches!(
+                t.as_str(),
+                "true" | "1" | "yes" | "y" | "big" | "msb" | "msbfirst"
+            )
         })
         .unwrap_or(false)
 }
@@ -484,36 +540,56 @@ fn saga_write_big_endian(raster: &Raster) -> bool {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn parse_usize(field: &str, val: &str) -> Result<usize> {
-    val.trim().parse::<usize>().map_err(|_| RasterError::ParseError {
-        field: field.into(), value: val.into(), expected: "positive integer".into(),
-    })
+    val.trim()
+        .parse::<usize>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "positive integer".into(),
+        })
 }
 
 fn parse_f64(field: &str, val: &str) -> Result<f64> {
-    val.trim().parse::<f64>().map_err(|_| RasterError::ParseError {
-        field: field.into(), value: val.into(), expected: "float".into(),
-    })
+    val.trim()
+        .parse::<f64>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "float".into(),
+        })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::raster::RasterConfig;
     use crate::crs_info::CrsInfo;
+    use crate::raster::RasterConfig;
     use std::env::temp_dir;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn tmp_path(suffix: &str) -> String {
-        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos();
-        temp_dir().join(format!("saga_test_{ts}{suffix}")).to_string_lossy().into_owned()
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .subsec_nanos();
+        temp_dir()
+            .join(format!("saga_test_{ts}{suffix}"))
+            .to_string_lossy()
+            .into_owned()
     }
 
     #[test]
     fn saga_roundtrip() {
         let sgrd = tmp_path(".sgrd");
         let cfg = RasterConfig {
-            cols: 3, rows: 2, cell_size: 5.0, x_min: 10.0, y_min: 20.0,
-            nodata: -99999.0, data_type: DataType::F32, ..Default::default()
+            cols: 3,
+            rows: 2,
+            cell_size: 5.0,
+            x_min: 10.0,
+            y_min: 20.0,
+            nodata: -99999.0,
+            data_type: DataType::F32,
+            ..Default::default()
         };
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
         let r = Raster::from_data(cfg, data).unwrap();
@@ -521,8 +597,16 @@ mod tests {
         let r2 = read(&sgrd).unwrap();
         assert_eq!(r2.cols, 3);
         assert_eq!(r2.rows, 2);
-        assert!((r2.get(0, 0, 0) - 1.0).abs() < 1e-4, "got {:?}", r2.get(0, 0, 0));
-        assert!((r2.get(0, 1, 2) - 6.0).abs() < 1e-4, "got {:?}", r2.get(0, 1, 2));
+        assert!(
+            (r2.get(0, 0, 0) - 1.0).abs() < 1e-4,
+            "got {:?}",
+            r2.get(0, 0, 0)
+        );
+        assert!(
+            (r2.get(0, 1, 2) - 6.0).abs() < 1e-4,
+            "got {:?}",
+            r2.get(0, 1, 2)
+        );
         // Clean up
         let _ = std::fs::remove_file(&sgrd);
         let _ = std::fs::remove_file(with_extension(&sgrd, "sdat"));
@@ -565,7 +649,8 @@ mod tests {
             data_type: DataType::F32,
             ..Default::default()
         };
-        cfg.metadata.push(("saga_byteorder_big".to_string(), "true".to_string()));
+        cfg.metadata
+            .push(("saga_byteorder_big".to_string(), "true".to_string()));
         let data = vec![1.25, 2.5, 3.75, 4.0];
         let r = Raster::from_data(cfg, data).unwrap();
         write(&r, &sgrd).unwrap();

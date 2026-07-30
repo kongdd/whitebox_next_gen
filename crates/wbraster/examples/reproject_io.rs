@@ -51,7 +51,10 @@ fn main() -> Result<()> {
     let out = data_dir().join("projected_3857.tif");
     projected.write(out.to_str().unwrap(), wbraster::RasterFormat::GeoTiff)?;
 
-    println!("Source: {} x {}, EPSG {:?}", src.cols, src.rows, src.crs.epsg);
+    println!(
+        "Source: {} x {}, EPSG {:?}",
+        src.cols, src.rows, src.crs.epsg
+    );
     println!(
         "Projected: {} x {}, EPSG {:?}",
         projected.cols, projected.rows, projected.crs.epsg

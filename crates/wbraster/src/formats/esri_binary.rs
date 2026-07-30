@@ -24,7 +24,7 @@ use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
 
-use crate::error::{Result, RasterError};
+use crate::error::{RasterError, Result};
 use crate::io_utils::*;
 use crate::raster::{DataType, Raster, RasterConfig};
 
@@ -42,7 +42,8 @@ pub fn read(path: &str) -> Result<Raster> {
 pub fn write(raster: &Raster, path: &str) -> Result<()> {
     // Resolve the grid directory — strip trailing .adf if a file was given
     let dir = if path.ends_with(".adf") {
-        Path::new(path).parent()
+        Path::new(path)
+            .parent()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| ".".to_string())
     } else {
@@ -59,7 +60,7 @@ pub fn write(raster: &Raster, path: &str) -> Result<()> {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const HDR_ADF_MAGIC: [u8; 8] = [0x00, 0x00, 0x27, 0x0A, 0xFF, 0xFF, 0xFB, 0xF8];
-const DATA_MAGIC: [u8; 8]   = [0x00, 0x00, 0x27, 0x0A, 0xFF, 0xFF, 0xFB, 0xF8];
+const DATA_MAGIC: [u8; 8] = [0x00, 0x00, 0x27, 0x0A, 0xFF, 0xFF, 0xFB, 0xF8];
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
@@ -70,7 +71,8 @@ fn resolve_grid_dir(path: &str) -> Result<String> {
     }
     if p.is_file() {
         // Strip the filename to get the parent dir
-        return Ok(p.parent()
+        return Ok(p
+            .parent()
             .map(|d| d.to_string_lossy().to_string())
             .unwrap_or_else(|| ".".to_string()));
     }
@@ -110,7 +112,8 @@ fn read_from_dir(dir: &str) -> Result<Raster> {
         cell_size_y: Some(cell_size_y),
         nodata: hdr.nodata,
         data_type: DataType::F32,
-        crs: crs,        ..Default::default()
+        crs: crs,
+        ..Default::default()
     };
     Raster::from_data(cfg, data)
 }
@@ -126,9 +129,10 @@ struct HdrAdf {
 fn read_hdr_adf(path: &str) -> Result<HdrAdf> {
     let buf = fs::read(path)?;
     if buf.len() < 50 {
-        return Err(RasterError::CorruptData(
-            format!("hdr.adf too short ({} bytes)", buf.len())
-        ));
+        return Err(RasterError::CorruptData(format!(
+            "hdr.adf too short ({} bytes)",
+            buf.len()
+        )));
     }
 
     // Magic / version at offset 0
@@ -153,9 +157,10 @@ fn read_dblbnd(dir: &str) -> Result<(f64, f64, f64, f64)> {
     let path = format!("{dir}/dblbnd.adf");
     let buf = fs::read(&path)?;
     if buf.len() < 32 {
-        return Err(RasterError::CorruptData(
-            format!("dblbnd.adf too short ({} bytes)", buf.len())
-        ));
+        return Err(RasterError::CorruptData(format!(
+            "dblbnd.adf too short ({} bytes)",
+            buf.len()
+        )));
     }
     let x_min = read_f64_be(&buf, 0);
     let y_min = read_f64_be(&buf, 8);
@@ -187,11 +192,15 @@ fn read_tile_data(path: &str, cols: usize, rows: usize, nodata: f64) -> Result<V
     let file_size = file_meta.len() as usize;
 
     // Determine data offset: most real files either have 8-byte header or 28-byte header
-    let data_offset = if file_size == expected_bytes { 0 }
-    else if file_size == expected_bytes + 8 { 8 }
-    else if file_size >= expected_bytes + 28 { 28 }
-    else if file_size > expected_bytes { file_size - expected_bytes }
-    else {
+    let data_offset = if file_size == expected_bytes {
+        0
+    } else if file_size == expected_bytes + 8 {
+        8
+    } else if file_size >= expected_bytes + 28 {
+        28
+    } else if file_size > expected_bytes {
+        file_size - expected_bytes
+    } else {
         return Err(RasterError::CorruptData(format!(
             "tile data file {path} is {} bytes; expected at least {expected_bytes}",
             file_size
@@ -206,7 +215,11 @@ fn read_tile_data(path: &str, cols: usize, rows: usize, nodata: f64) -> Result<V
         let v = read_f32_be_stream(&mut file)? as f64;
         // The AIG nodata is typically ~1.175e-38 (the minimum positive f32)
         // Map it to the raster nodata
-        let v = if (v - 1.175_494_e-38_f32 as f64).abs() < 1e-40 { nodata } else { v };
+        let v = if (v - 1.175_494_e-38_f32 as f64).abs() < 1e-40 {
+            nodata
+        } else {
+            v
+        };
         data.push(v);
     }
     Ok(data)
@@ -329,15 +342,22 @@ mod tests {
         impl TempDir {
             pub fn new() -> Self {
                 use std::time::{SystemTime, UNIX_EPOCH};
-                let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos();
+                let ts = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .subsec_nanos();
                 let p = std::env::temp_dir().join(format!("gis_raster_test_{ts}"));
                 std::fs::create_dir_all(&p).unwrap();
                 TempDir(p)
             }
-            pub fn path(&self) -> &str { self.0.to_str().unwrap() }
+            pub fn path(&self) -> &str {
+                self.0.to_str().unwrap()
+            }
         }
         impl Drop for TempDir {
-            fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
         }
     }
 
@@ -347,9 +367,12 @@ mod tests {
         let dir = format!("{}/testgrid", td.path());
 
         let cfg = RasterConfig {
-            cols: 3, rows: 2,
-            x_min: 0.0, y_min: 0.0,
-            cell_size: 10.0, nodata: -9999.0,
+            cols: 3,
+            rows: 2,
+            x_min: 0.0,
+            y_min: 0.0,
+            cell_size: 10.0,
+            nodata: -9999.0,
             ..Default::default()
         };
         let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0];

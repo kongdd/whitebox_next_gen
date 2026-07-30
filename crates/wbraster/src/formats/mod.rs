@@ -1,33 +1,33 @@
 //! Format registry and auto-detection.
 
+pub mod dted;
+pub mod envi;
+pub mod er_mapper;
 pub mod esri_ascii;
 pub mod esri_binary;
 pub mod esri_float;
-pub mod grass_ascii;
-pub mod surfer;
-pub mod pcraster;
-pub mod saga;
-pub mod idrisi;
-pub mod er_mapper;
-pub mod envi;
-pub mod geotiff;
 pub mod geopackage;
-pub mod jpeg2000;
-pub mod png_jpeg;
-pub mod zarr;
-pub mod xyz;
-pub mod dted;
-pub mod hfa;
 pub(crate) mod geopackage_sqlite;
-pub(crate) mod zarr_v3;
+pub mod geotiff;
+pub mod grass_ascii;
+pub mod hfa;
+pub mod idrisi;
+pub mod jpeg2000;
 pub(crate) mod jpeg2000_core;
+pub mod pcraster;
+pub mod png_jpeg;
+pub mod saga;
+pub mod surfer;
+pub mod xyz;
+pub mod zarr;
+pub(crate) mod zarr_v3;
 
 #[cfg(test)]
 mod jpeg2000_validation_tests;
 
-use crate::error::{Result, RasterError};
-use crate::raster::Raster;
+use crate::error::{RasterError, Result};
 use crate::io_utils::extension_lower;
+use crate::raster::Raster;
 use std::collections::BTreeSet;
 use std::fs;
 use std::fs::File;
@@ -44,14 +44,15 @@ struct HdfDatasetUri {
 }
 
 fn parse_hdf_dataset_uri(path: &str) -> Option<HdfDatasetUri> {
-    let (container_path, raw_dataset_path) = if let Some((container, dataset)) = path.split_once("#dataset=") {
-        (container, dataset)
-    } else if let Some((container, dataset)) = path.split_once(":///") {
-        // Legacy alias retained for backward compatibility.
-        (container, dataset)
-    } else {
-        return None;
-    };
+    let (container_path, raw_dataset_path) =
+        if let Some((container, dataset)) = path.split_once("#dataset=") {
+            (container, dataset)
+        } else if let Some((container, dataset)) = path.split_once(":///") {
+            // Legacy alias retained for backward compatibility.
+            (container, dataset)
+        } else {
+            return None;
+        };
     if container_path.is_empty() {
         return None;
     }
@@ -129,7 +130,10 @@ fn read_hdf5_raster_dataset_uri(path: &str, parsed: &HdfDatasetUri) -> Result<Ra
     };
 
     let metadata = vec![
-        ("hdf_container_path".to_string(), parsed.container_path.clone()),
+        (
+            "hdf_container_path".to_string(),
+            parsed.container_path.clone(),
+        ),
         ("hdf_dataset_path".to_string(), parsed.dataset_path.clone()),
         (
             "hdf_materialization_scope".to_string(),
@@ -219,13 +223,15 @@ fn read_hdf5_raster_dataset_uri_from_chunked_single_leaf(
     contiguous_error: RasterError,
 ) -> Result<Raster> {
     let container_path = Path::new(&parsed.container_path);
-    if let Ok(value) =
-        resolve_hdf5_viirs_vnp21_bounded_layout(container_path, &parsed.dataset_path)
+    if let Ok(value) = resolve_hdf5_viirs_vnp21_bounded_layout(container_path, &parsed.dataset_path)
     {
         return materialize_hdf5_chunked_layout_to_raster(parsed, value);
     }
 
-    let resolved = match resolve_hdf5_staged_chunked_single_leaf_layout(container_path, &parsed.dataset_path) {
+    let resolved = match resolve_hdf5_staged_chunked_single_leaf_layout(
+        container_path,
+        &parsed.dataset_path,
+    ) {
         Ok(value) => value,
         Err(chunked_err) => {
             match resolve_hdf5_viirs_vnp21_bounded_layout(container_path, &parsed.dataset_path) {
@@ -253,9 +259,11 @@ fn materialize_hdf5_chunked_layout_to_raster(
     parsed: &HdfDatasetUri,
     resolved: ResolvedHdf5ChunkedSingleLeafLayout,
 ) -> Result<Raster> {
-
     let mut metadata = vec![
-        ("hdf_container_path".to_string(), parsed.container_path.clone()),
+        (
+            "hdf_container_path".to_string(),
+            parsed.container_path.clone(),
+        ),
         ("hdf_dataset_path".to_string(), parsed.dataset_path.clone()),
         (
             "hdf_materialization_scope".to_string(),
@@ -263,14 +271,9 @@ fn materialize_hdf5_chunked_layout_to_raster(
         ),
     ];
 
-    let georef_hint = derive_hdf5_georef_hint(
-        Path::new(&parsed.container_path),
-        &parsed.dataset_path,
-    );
-    if let Some(extra_metadata) = georef_hint
-        .as_ref()
-        .map(|hint| hint.metadata.clone())
-    {
+    let georef_hint =
+        derive_hdf5_georef_hint(Path::new(&parsed.container_path), &parsed.dataset_path);
+    if let Some(extra_metadata) = georef_hint.as_ref().map(|hint| hint.metadata.clone()) {
         metadata.extend(extra_metadata);
     }
 
@@ -390,7 +393,10 @@ fn derive_hdf5_georef_hint(container_path: &Path, dataset_path: &str) -> Option<
             cell_size: 1.0,
             cell_size_y: Some(1.0),
             metadata: vec![
-                ("hdf_georef_model".to_string(), "swath_geolocation".to_string()),
+                (
+                    "hdf_georef_model".to_string(),
+                    "swath_geolocation".to_string(),
+                ),
                 (
                     "hdf_georef_latitude_path".to_string(),
                     "/VIIRS_Swath_LSTE/Geolocation Fields/latitude".to_string(),
@@ -465,7 +471,10 @@ fn derive_viirs_vnp13_grid_georef_hint(container_path: &Path) -> Option<Hdf5Geor
         cell_size: dx,
         cell_size_y: Some(-dy),
         metadata: vec![
-            ("hdf_georef_model".to_string(), "grid_affine_from_dim_arrays".to_string()),
+            (
+                "hdf_georef_model".to_string(),
+                "grid_affine_from_dim_arrays".to_string(),
+            ),
             ("hdf_georef_xdim_path".to_string(), XDIM_PATH.to_string()),
             ("hdf_georef_ydim_path".to_string(), YDIM_PATH.to_string()),
         ],
@@ -517,7 +526,8 @@ fn read_hdf4_raster_dataset_uri(parsed: &HdfDatasetUri) -> Result<Raster> {
         )));
     }
 
-    let geometry = wbhdf::hdf4::derive_hdf4_grid_geometry_for_dataset(&summary, &parsed.dataset_path).ok();
+    let geometry =
+        wbhdf::hdf4::derive_hdf4_grid_geometry_for_dataset(&summary, &parsed.dataset_path).ok();
     let (x_min, y_min, cell_size_x, cell_size_y) = if let Some(g) = geometry {
         (
             g.upper_left_mtrs.0,
@@ -530,7 +540,10 @@ fn read_hdf4_raster_dataset_uri(parsed: &HdfDatasetUri) -> Result<Raster> {
     };
 
     let mut metadata = Vec::<(String, String)>::new();
-    metadata.push(("hdf_container_path".to_string(), parsed.container_path.clone()));
+    metadata.push((
+        "hdf_container_path".to_string(),
+        parsed.container_path.clone(),
+    ));
     metadata.push(("hdf_dataset_path".to_string(), parsed.dataset_path.clone()));
     if let Some(projection) = resolved.projection {
         metadata.push(("hdf_projection".to_string(), projection));
@@ -713,52 +726,53 @@ impl RasterFormat {
     /// Read a raster from `path` using this format's reader.
     pub fn read(&self, path: &str) -> Result<Raster> {
         match self {
-            Self::EsriAscii  => esri_ascii::read(path),
+            Self::EsriAscii => esri_ascii::read(path),
             Self::EsriBinary => esri_binary::read(path),
             Self::GrassAscii => grass_ascii::read(path),
-            Self::SurferGrd  => surfer::read(path),
-            Self::Pcraster   => pcraster::read(path),
-            Self::Saga       => saga::read(path),
-            Self::Idrisi     => idrisi::read(path),
-            Self::ErMapper   => er_mapper::read(path),
-            Self::Envi       => envi::read(path),
-            Self::GeoTiff    => geotiff::read(path),
+            Self::SurferGrd => surfer::read(path),
+            Self::Pcraster => pcraster::read(path),
+            Self::Saga => saga::read(path),
+            Self::Idrisi => idrisi::read(path),
+            Self::ErMapper => er_mapper::read(path),
+            Self::Envi => envi::read(path),
+            Self::GeoTiff => geotiff::read(path),
             Self::GeoPackage => geopackage::read(path),
-            Self::Jpeg2000   => jpeg2000::read(path),
-            Self::Jpeg       => png_jpeg::read_jpeg(path),
-            Self::Png        => png_jpeg::read_png(path),
-            Self::Zarr       => zarr::read(path),
-            Self::EsriFloat  => esri_float::read(path),
-            Self::Xyz        => xyz::read(path),
-            Self::Dted       => dted::read(path),
-            Self::HfaImg     => hfa::read(path),
+            Self::Jpeg2000 => jpeg2000::read(path),
+            Self::Jpeg => png_jpeg::read_jpeg(path),
+            Self::Png => png_jpeg::read_png(path),
+            Self::Zarr => zarr::read(path),
+            Self::EsriFloat => esri_float::read(path),
+            Self::Xyz => xyz::read(path),
+            Self::Dted => dted::read(path),
+            Self::HfaImg => hfa::read(path),
         }
     }
 
     /// Write `raster` to `path` using this format's writer.
     pub fn write(&self, raster: &Raster, path: &str) -> Result<()> {
         match self {
-            Self::EsriAscii  => esri_ascii::write(raster, path),
+            Self::EsriAscii => esri_ascii::write(raster, path),
             Self::EsriBinary => esri_binary::write(raster, path),
             Self::GrassAscii => grass_ascii::write(raster, path),
-            Self::SurferGrd  => surfer::write(raster, path),
-            Self::Pcraster   => pcraster::write(raster, path),
-            Self::Saga       => saga::write(raster, path),
-            Self::Idrisi     => idrisi::write(raster, path),
-            Self::ErMapper   => er_mapper::write(raster, path),
-            Self::Envi       => envi::write(raster, path),
-            Self::GeoTiff    => geotiff::write(raster, path),
+            Self::SurferGrd => surfer::write(raster, path),
+            Self::Pcraster => pcraster::write(raster, path),
+            Self::Saga => saga::write(raster, path),
+            Self::Idrisi => idrisi::write(raster, path),
+            Self::ErMapper => er_mapper::write(raster, path),
+            Self::Envi => envi::write(raster, path),
+            Self::GeoTiff => geotiff::write(raster, path),
             Self::GeoPackage => geopackage::write(raster, path),
-            Self::Jpeg2000   => jpeg2000::write(raster, path),
-            Self::Jpeg       => png_jpeg::write_jpeg(raster, path),
-            Self::Png        => png_jpeg::write_png(raster, path),
-            Self::Zarr       => zarr::write(raster, path),
-            Self::EsriFloat  => esri_float::write(raster, path),
-            Self::Xyz        => xyz::write(raster, path),
-            Self::Dted       => dted::write(raster, path),
-            Self::HfaImg     => Err(RasterError::UnsupportedDataType(
+            Self::Jpeg2000 => jpeg2000::write(raster, path),
+            Self::Jpeg => png_jpeg::write_jpeg(raster, path),
+            Self::Png => png_jpeg::write_png(raster, path),
+            Self::Zarr => zarr::write(raster, path),
+            Self::EsriFloat => esri_float::write(raster, path),
+            Self::Xyz => xyz::write(raster, path),
+            Self::Dted => dted::write(raster, path),
+            Self::HfaImg => Err(RasterError::UnsupportedDataType(
                 "ERDAS IMAGINE HFA is read-only in this implementation; \
-                 use GeoTIFF (.tif) for output".into(),
+                 use GeoTIFF (.tif) for output"
+                    .into(),
             )),
         }
     }
@@ -791,13 +805,26 @@ fn detect_ascii_text(path: &str) -> Result<RasterFormat> {
             continue;
         }
         if let Some((key, _)) = crate::io_utils::parse_key_value(t) {
-            if matches!(key.as_str(), "ncols" | "nrows" | "xllcorner" | "xllcenter" | "yllcorner" | "yllcenter" | "cellsize" | "nodata_value") {
+            if matches!(
+                key.as_str(),
+                "ncols"
+                    | "nrows"
+                    | "xllcorner"
+                    | "xllcenter"
+                    | "yllcorner"
+                    | "yllcenter"
+                    | "cellsize"
+                    | "nodata_value"
+            ) {
                 saw_esri = true;
             }
         }
         if let Some((k, _)) = t.split_once(':') {
             let k = k.trim().to_ascii_lowercase();
-            if matches!(k.as_str(), "north" | "south" | "east" | "west" | "rows" | "cols" | "null" | "type") {
+            if matches!(
+                k.as_str(),
+                "north" | "south" | "east" | "west" | "rows" | "cols" | "null" | "type"
+            ) {
                 saw_grass = true;
             }
         }
@@ -822,7 +849,11 @@ fn detect_hdr(path: &str) -> Result<RasterFormat> {
             if trimmed.is_empty() {
                 continue;
             }
-            let first = trimmed.split_ascii_whitespace().next().unwrap_or("").to_ascii_uppercase();
+            let first = trimmed
+                .split_ascii_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_ascii_uppercase();
             return match first.as_str() {
                 "ENVI" => Ok(RasterFormat::Envi),
                 _ => Ok(RasterFormat::EsriFloat),
@@ -851,7 +882,8 @@ fn detect_img(path: &str) -> Result<RasterFormat> {
         Ok(RasterFormat::Envi)
     } else {
         Err(RasterError::UnknownFormat(
-            ".img — not recognized as HFA (missing EHFA_HEADER_TAG) or ENVI (no .hdr sidecar)".into(),
+            ".img — not recognized as HFA (missing EHFA_HEADER_TAG) or ENVI (no .hdr sidecar)"
+                .into(),
         ))
     }
 }
@@ -915,27 +947,55 @@ fn resolve_hdf5_staged_contiguous_layout(
     dataset_path: &str,
     materialization_scope: &str,
 ) -> Result<ResolvedHdf5ContiguousLayout> {
-        let bytes = fs::read(container_path)
-            .map_err(|err| RasterError::Other(format!("HDF5 container read failed: {err}")))?;
-        let marker_offsets = collect_marker_offsets_for_dataset_path(&bytes, dataset_path);
+    let bytes = fs::read(container_path)
+        .map_err(|err| RasterError::Other(format!("HDF5 container read failed: {err}")))?;
+    let marker_offsets = collect_marker_offsets_for_dataset_path(&bytes, dataset_path);
 
-        let parsed = wbhdf::object_header::probe_file_object_headers(container_path)
-            .map_err(|err| RasterError::Other(format!("HDF5 object-header probe failed: {err}")))?;
+    let parsed = wbhdf::object_header::probe_file_object_headers(container_path)
+        .map_err(|err| RasterError::Other(format!("HDF5 object-header probe failed: {err}")))?;
 
-        let mut candidates = Vec::<CandidateHdf5ContiguousLayout>::new();
-        for header in &parsed.v2_headers {
-            let dimensions = header
-                .dataspaces
-                .first()
-                .map(|dataspace| dataspace.dimensions.clone())
-                .unwrap_or_default();
-            let datatype_size = header.datatypes.first().map(|datatype| datatype.size as usize);
+    let mut candidates = Vec::<CandidateHdf5ContiguousLayout>::new();
+    for header in &parsed.v2_headers {
+        let dimensions = header
+            .dataspaces
+            .first()
+            .map(|dataspace| dataspace.dimensions.clone())
+            .unwrap_or_default();
+        let datatype_size = header
+            .datatypes
+            .first()
+            .map(|datatype| datatype.size as usize);
 
-            for message in &header.messages {
-                if let Some((byte_offset, byte_len)) = parse_v2_contiguous_layout_message(&bytes, message) {
+        for message in &header.messages {
+            if let Some((byte_offset, byte_len)) =
+                parse_v2_contiguous_layout_message(&bytes, message)
+            {
+                let candidate = build_contiguous_candidate(
+                    byte_offset,
+                    byte_len,
+                    &dimensions,
+                    datatype_size,
+                    &marker_offsets,
+                    header.offset,
+                )?;
+                if let Some(candidate) = candidate {
+                    candidates.push(candidate);
+                }
+            }
+        }
+
+        for continuation in &header.continuations {
+            if let Ok(chunk) =
+                wbhdf::object_header::parse_continuation_chunk_in_file(container_path, continuation)
+            {
+                for layout in &chunk.layouts {
+                    if layout.layout_class != 1 || layout.data_size == 0 {
+                        continue;
+                    }
+
                     let candidate = build_contiguous_candidate(
-                        byte_offset,
-                        byte_len,
+                        layout.data_address,
+                        layout.data_size,
                         &dimensions,
                         datatype_size,
                         &marker_offsets,
@@ -946,221 +1006,203 @@ fn resolve_hdf5_staged_contiguous_layout(
                     }
                 }
             }
-
-            for continuation in &header.continuations {
-                if let Ok(chunk) = wbhdf::object_header::parse_continuation_chunk_in_file(container_path, continuation) {
-                    for layout in &chunk.layouts {
-                        if layout.layout_class != 1 || layout.data_size == 0 {
-                            continue;
-                        }
-
-                        let candidate = build_contiguous_candidate(
-                            layout.data_address,
-                            layout.data_size,
-                            &dimensions,
-                            datatype_size,
-                            &marker_offsets,
-                            header.offset,
-                        )?;
-                        if let Some(candidate) = candidate {
-                            candidates.push(candidate);
-                        }
-                    }
-                }
-            }
         }
+    }
 
-        candidates.sort_by(|left, right| {
-            right
-                .score
-                .cmp(&left.score)
-                .then(left.distance.cmp(&right.distance))
-                .then(left.object_header_offset.cmp(&right.object_header_offset))
-        });
+    candidates.sort_by(|left, right| {
+        right
+            .score
+            .cmp(&left.score)
+            .then(left.distance.cmp(&right.distance))
+            .then(left.object_header_offset.cmp(&right.object_header_offset))
+    });
 
-        let selected = candidates.into_iter().next().ok_or_else(|| {
+    let selected = candidates.into_iter().next().ok_or_else(|| {
             RasterError::Other(format!(
                 "HDF5 raster materialization could not resolve contiguous layout metadata for dataset '{}'",
                 dataset_path
             ))
         })?;
 
-        let element_count = usize::try_from(selected.byte_len)
-            .ok()
-            .and_then(|byte_len| byte_len.checked_div(selected.bytes_per_value))
-            .ok_or_else(|| {
-                RasterError::Other(format!(
-                    "HDF5 contiguous layout byte length overflow for dataset '{}': {}",
-                    dataset_path, selected.byte_len
-                ))
-            })?;
+    let element_count = usize::try_from(selected.byte_len)
+        .ok()
+        .and_then(|byte_len| byte_len.checked_div(selected.bytes_per_value))
+        .ok_or_else(|| {
+            RasterError::Other(format!(
+                "HDF5 contiguous layout byte length overflow for dataset '{}': {}",
+                dataset_path, selected.byte_len
+            ))
+        })?;
 
-        let (rows, cols) = if let (Some(rows), Some(cols)) = (selected.rows, selected.cols) {
-            (rows, cols)
-        } else {
-            (1, element_count)
-        };
+    let (rows, cols) = if let (Some(rows), Some(cols)) = (selected.rows, selected.cols) {
+        (rows, cols)
+    } else {
+        (1, element_count)
+    };
 
-        Ok(ResolvedHdf5ContiguousLayout {
-            byte_offset: selected.byte_offset,
-            bytes_per_value: selected.bytes_per_value,
-            element_count,
-            rows,
-            cols,
-            materialization_scope: materialization_scope.to_string(),
-        })
+    Ok(ResolvedHdf5ContiguousLayout {
+        byte_offset: selected.byte_offset,
+        bytes_per_value: selected.bytes_per_value,
+        element_count,
+        rows,
+        cols,
+        materialization_scope: materialization_scope.to_string(),
+    })
 }
 
 fn build_contiguous_candidate(
-        byte_offset: u64,
-        byte_len: u64,
-        dimensions: &[u64],
-        datatype_size: Option<usize>,
-        marker_offsets: &[usize],
-        object_header_offset: usize,
-    ) -> Result<Option<CandidateHdf5ContiguousLayout>> {
-        if byte_len == 0 {
-            return Ok(None);
-        }
+    byte_offset: u64,
+    byte_len: u64,
+    dimensions: &[u64],
+    datatype_size: Option<usize>,
+    marker_offsets: &[usize],
+    object_header_offset: usize,
+) -> Result<Option<CandidateHdf5ContiguousLayout>> {
+    if byte_len == 0 {
+        return Ok(None);
+    }
 
-        let byte_len_usize = usize::try_from(byte_len).map_err(|_| {
-            RasterError::Other(format!(
-                "HDF5 contiguous layout byte length does not fit usize: {}",
-                byte_len
-            ))
-        })?;
-        let bytes_per_value = datatype_size.unwrap_or(0);
-        if !matches!(bytes_per_value, 4 | 8) {
-            return Ok(None);
-        }
+    let byte_len_usize = usize::try_from(byte_len).map_err(|_| {
+        RasterError::Other(format!(
+            "HDF5 contiguous layout byte length does not fit usize: {}",
+            byte_len
+        ))
+    })?;
+    let bytes_per_value = datatype_size.unwrap_or(0);
+    if !matches!(bytes_per_value, 4 | 8) {
+        return Ok(None);
+    }
 
-        if byte_len_usize % bytes_per_value != 0 {
-            return Ok(None);
-        }
+    if byte_len_usize % bytes_per_value != 0 {
+        return Ok(None);
+    }
 
-        let inferred_element_count = byte_len_usize / bytes_per_value;
-        let (rows, cols, dims_match) = match rows_cols_from_dimensions(dimensions)? {
-            Some((rows, cols)) if rows.checked_mul(cols) == Some(inferred_element_count) => {
-                (Some(rows), Some(cols), true)
-            }
-            Some(_) => (None, None, false),
-            None => (None, None, false),
-        };
-
-        let distance = nearest_marker_distance(object_header_offset, marker_offsets);
-        let mut score = 0usize;
-        score += 8;
-        if dims_match {
-            score += 6;
+    let inferred_element_count = byte_len_usize / bytes_per_value;
+    let (rows, cols, dims_match) = match rows_cols_from_dimensions(dimensions)? {
+        Some((rows, cols)) if rows.checked_mul(cols) == Some(inferred_element_count) => {
+            (Some(rows), Some(cols), true)
         }
-        if distance <= 16 * 1024 {
-            score += 6;
-        } else if distance <= 128 * 1024 {
-            score += 4;
-        } else if distance <= 512 * 1024 {
-            score += 2;
-        }
+        Some(_) => (None, None, false),
+        None => (None, None, false),
+    };
 
-        Ok(Some(CandidateHdf5ContiguousLayout {
-            byte_offset,
-            byte_len,
-            bytes_per_value,
-            rows,
-            cols,
-            score,
-            distance,
-            object_header_offset,
-        }))
+    let distance = nearest_marker_distance(object_header_offset, marker_offsets);
+    let mut score = 0usize;
+    score += 8;
+    if dims_match {
+        score += 6;
+    }
+    if distance <= 16 * 1024 {
+        score += 6;
+    } else if distance <= 128 * 1024 {
+        score += 4;
+    } else if distance <= 512 * 1024 {
+        score += 2;
+    }
+
+    Ok(Some(CandidateHdf5ContiguousLayout {
+        byte_offset,
+        byte_len,
+        bytes_per_value,
+        rows,
+        cols,
+        score,
+        distance,
+        object_header_offset,
+    }))
 }
 
 fn rows_cols_from_dimensions(dimensions: &[u64]) -> Result<Option<(usize, usize)>> {
-        if dimensions.is_empty() {
-            return Ok(None);
-        }
+    if dimensions.is_empty() {
+        return Ok(None);
+    }
 
-        if dimensions.len() == 1 {
-            let cols = usize::try_from(dimensions[0]).map_err(|_| {
-                RasterError::Other(format!(
-                    "HDF5 dataspace dimension does not fit usize: {}",
-                    dimensions[0]
-                ))
-            })?;
-            return Ok(Some((1, cols)));
-        }
-
-        let rows = usize::try_from(dimensions[0]).map_err(|_| {
+    if dimensions.len() == 1 {
+        let cols = usize::try_from(dimensions[0]).map_err(|_| {
             RasterError::Other(format!(
                 "HDF5 dataspace dimension does not fit usize: {}",
                 dimensions[0]
             ))
         })?;
-        let mut cols = 1usize;
-        for dimension in &dimensions[1..] {
-            let dim = usize::try_from(*dimension).map_err(|_| {
-                RasterError::Other(format!(
-                    "HDF5 dataspace dimension does not fit usize: {}",
-                    dimension
-                ))
-            })?;
-            cols = cols.checked_mul(dim).ok_or_else(|| {
-                RasterError::Other("HDF5 dataspace column-product overflow".to_string())
-            })?;
-        }
+        return Ok(Some((1, cols)));
+    }
 
-        Ok(Some((rows, cols)))
+    let rows = usize::try_from(dimensions[0]).map_err(|_| {
+        RasterError::Other(format!(
+            "HDF5 dataspace dimension does not fit usize: {}",
+            dimensions[0]
+        ))
+    })?;
+    let mut cols = 1usize;
+    for dimension in &dimensions[1..] {
+        let dim = usize::try_from(*dimension).map_err(|_| {
+            RasterError::Other(format!(
+                "HDF5 dataspace dimension does not fit usize: {}",
+                dimension
+            ))
+        })?;
+        cols = cols.checked_mul(dim).ok_or_else(|| {
+            RasterError::Other("HDF5 dataspace column-product overflow".to_string())
+        })?;
+    }
+
+    Ok(Some((rows, cols)))
 }
 
 fn parse_v2_contiguous_layout_message(
     bytes: &[u8],
     message: &wbhdf::object_header::ObjectHeaderMessageHeader,
 ) -> Option<(u64, u64)> {
-        if message.type_id != 0x08 || message.size < 18 {
-            return None;
-        }
-        let end = message.data_offset.checked_add(message.size as usize)?;
-        if end > bytes.len() {
-            return None;
-        }
+    if message.type_id != 0x08 || message.size < 18 {
+        return None;
+    }
+    let end = message.data_offset.checked_add(message.size as usize)?;
+    if end > bytes.len() {
+        return None;
+    }
 
-        let layout_class = bytes[message.data_offset + 1];
-        if layout_class != 1 {
-            return None;
-        }
+    let layout_class = bytes[message.data_offset + 1];
+    if layout_class != 1 {
+        return None;
+    }
 
-        let data_address = u64::from_le_bytes(
-            bytes[message.data_offset + 2..message.data_offset + 10]
-                .try_into()
-                .ok()?,
-        );
-        let data_size = u64::from_le_bytes(
-            bytes[message.data_offset + 10..message.data_offset + 18]
-                .try_into()
-                .ok()?,
-        );
-        Some((data_address, data_size))
+    let data_address = u64::from_le_bytes(
+        bytes[message.data_offset + 2..message.data_offset + 10]
+            .try_into()
+            .ok()?,
+    );
+    let data_size = u64::from_le_bytes(
+        bytes[message.data_offset + 10..message.data_offset + 18]
+            .try_into()
+            .ok()?,
+    );
+    Some((data_address, data_size))
 }
 
 fn collect_marker_offsets_for_dataset_path(bytes: &[u8], dataset_path: &str) -> Vec<usize> {
-        let mut offsets = collect_ascii_marker_offsets(bytes, dataset_path);
-        for component in dataset_path.split('/').filter(|component| !component.is_empty()) {
-            offsets.extend(collect_ascii_marker_offsets(bytes, component));
-        }
-        offsets.sort_unstable();
-        offsets.dedup();
-        offsets
+    let mut offsets = collect_ascii_marker_offsets(bytes, dataset_path);
+    for component in dataset_path
+        .split('/')
+        .filter(|component| !component.is_empty())
+    {
+        offsets.extend(collect_ascii_marker_offsets(bytes, component));
+    }
+    offsets.sort_unstable();
+    offsets.dedup();
+    offsets
 }
 
 fn collect_ascii_marker_offsets(bytes: &[u8], marker: &str) -> Vec<usize> {
-        let marker_bytes = marker.as_bytes();
-        if marker_bytes.is_empty() || marker_bytes.len() > bytes.len() {
-            return Vec::new();
-        }
+    let marker_bytes = marker.as_bytes();
+    if marker_bytes.is_empty() || marker_bytes.len() > bytes.len() {
+        return Vec::new();
+    }
 
-        bytes
-            .windows(marker_bytes.len())
-            .enumerate()
-            .filter_map(|(offset, window)| (window == marker_bytes).then_some(offset))
-            .collect()
+    bytes
+        .windows(marker_bytes.len())
+        .enumerate()
+        .filter_map(|(offset, window)| (window == marker_bytes).then_some(offset))
+        .collect()
 }
 
 fn nearest_marker_distance(anchor_offset: usize, markers: &[usize]) -> usize {
@@ -1180,22 +1222,28 @@ fn resolve_hdf5_staged_chunked_single_leaf_layout(
     let marker_offsets = collect_marker_offsets_for_dataset_path(&bytes, dataset_path);
 
     let headers = wbhdf::object_header::discover_v1_object_headers_in_file(container_path, 512)
-        .map_err(|err| RasterError::Other(format!("HDF5 v1 object-header discovery failed: {err}")))?;
+        .map_err(|err| {
+            RasterError::Other(format!("HDF5 v1 object-header discovery failed: {err}"))
+        })?;
 
     let mut candidates = Vec::<CandidateHdf5ChunkedSingleLeafLayout>::new();
     for header in headers {
-        let Some(datatype_size) = header.datatypes.first().map(|datatype| datatype.size as usize) else {
+        let Some(datatype_size) = header
+            .datatypes
+            .first()
+            .map(|datatype| datatype.size as usize)
+        else {
             continue;
         };
         if !matches!(datatype_size, 4 | 8) {
             continue;
         }
 
-        let Some((rows, cols)) = header
-            .dataspaces
-            .first()
-            .and_then(|dataspace| rows_cols_from_dimensions(&dataspace.dimensions).ok().flatten())
-        else {
+        let Some((rows, cols)) = header.dataspaces.first().and_then(|dataspace| {
+            rows_cols_from_dimensions(&dataspace.dimensions)
+                .ok()
+                .flatten()
+        }) else {
             continue;
         };
 
@@ -1214,7 +1262,9 @@ fn resolve_hdf5_staged_chunked_single_leaf_layout(
                 continue;
             }
 
-            let Some((chunk_rows, chunk_cols)) = rows_cols_from_chunk_dimensions(&chunked_layout.chunk_dimensions)? else {
+            let Some((chunk_rows, chunk_cols)) =
+                rows_cols_from_chunk_dimensions(&chunked_layout.chunk_dimensions)?
+            else {
                 continue;
             };
             if chunk_rows == 0 || chunk_cols == 0 {
@@ -1302,26 +1352,31 @@ fn resolve_hdf5_staged_chunked_single_leaf_layout(
     }
 
     let data = if candidate.datatype_size == 4 {
-        let total_values = candidate.row_count.checked_mul(candidate.col_count).ok_or_else(|| {
-            RasterError::Other(format!(
-                "HDF5 chunked assembled-size overflow for dataset '{}'",
-                dataset_path
-            ))
-        })?;
-        let mut assembled = vec![0.0_f32; total_values];
-        for record in &records {
-            let decoded = decode_chunk_record_f32(
-                container_path,
-                record,
-                candidate.filter_pipeline.as_ref(),
-            )
-                .map_err(|err| RasterError::Other(format!("HDF5 chunked f32 decode failed: {err}")))?;
-            let expected_chunk_values = candidate.chunk_rows.checked_mul(candidate.chunk_cols).ok_or_else(|| {
+        let total_values = candidate
+            .row_count
+            .checked_mul(candidate.col_count)
+            .ok_or_else(|| {
                 RasterError::Other(format!(
-                    "HDF5 chunked chunk-size overflow for dataset '{}'",
+                    "HDF5 chunked assembled-size overflow for dataset '{}'",
                     dataset_path
                 ))
             })?;
+        let mut assembled = vec![0.0_f32; total_values];
+        for record in &records {
+            let decoded =
+                decode_chunk_record_f32(container_path, record, candidate.filter_pipeline.as_ref())
+                    .map_err(|err| {
+                        RasterError::Other(format!("HDF5 chunked f32 decode failed: {err}"))
+                    })?;
+            let expected_chunk_values = candidate
+                .chunk_rows
+                .checked_mul(candidate.chunk_cols)
+                .ok_or_else(|| {
+                    RasterError::Other(format!(
+                        "HDF5 chunked chunk-size overflow for dataset '{}'",
+                        dataset_path
+                    ))
+                })?;
             if decoded.len() != expected_chunk_values {
                 return Err(RasterError::Other(format!(
                     "HDF5 chunked f32 decoded value count mismatch for dataset '{}': expected {}, found {}",
@@ -1343,26 +1398,31 @@ fn resolve_hdf5_staged_chunked_single_leaf_layout(
         }
         Hdf5ChunkedDecodedData::F32(assembled)
     } else {
-        let total_values = candidate.row_count.checked_mul(candidate.col_count).ok_or_else(|| {
-            RasterError::Other(format!(
-                "HDF5 chunked assembled-size overflow for dataset '{}'",
-                dataset_path
-            ))
-        })?;
-        let mut assembled = vec![0.0_f64; total_values];
-        for record in &records {
-            let decoded = decode_chunk_record_f64(
-                container_path,
-                record,
-                candidate.filter_pipeline.as_ref(),
-            )
-                .map_err(|err| RasterError::Other(format!("HDF5 chunked f64 decode failed: {err}")))?;
-            let expected_chunk_values = candidate.chunk_rows.checked_mul(candidate.chunk_cols).ok_or_else(|| {
+        let total_values = candidate
+            .row_count
+            .checked_mul(candidate.col_count)
+            .ok_or_else(|| {
                 RasterError::Other(format!(
-                    "HDF5 chunked chunk-size overflow for dataset '{}'",
+                    "HDF5 chunked assembled-size overflow for dataset '{}'",
                     dataset_path
                 ))
             })?;
+        let mut assembled = vec![0.0_f64; total_values];
+        for record in &records {
+            let decoded =
+                decode_chunk_record_f64(container_path, record, candidate.filter_pipeline.as_ref())
+                    .map_err(|err| {
+                        RasterError::Other(format!("HDF5 chunked f64 decode failed: {err}"))
+                    })?;
+            let expected_chunk_values = candidate
+                .chunk_rows
+                .checked_mul(candidate.chunk_cols)
+                .ok_or_else(|| {
+                    RasterError::Other(format!(
+                        "HDF5 chunked chunk-size overflow for dataset '{}'",
+                        dataset_path
+                    ))
+                })?;
             if decoded.len() != expected_chunk_values {
                 return Err(RasterError::Other(format!(
                     "HDF5 chunked f64 decoded value count mismatch for dataset '{}': expected {}, found {}",
@@ -1423,9 +1483,9 @@ fn rows_cols_from_chunk_dimensions(dimensions: &[u32]) -> Result<Option<(usize, 
                 dimension
             ))
         })?;
-        cols = cols.checked_mul(dim).ok_or_else(|| {
-            RasterError::Other("HDF5 chunk column-product overflow".to_string())
-        })?;
+        cols = cols
+            .checked_mul(dim)
+            .ok_or_else(|| RasterError::Other("HDF5 chunk column-product overflow".to_string()))?;
     }
     Ok(Some((rows, cols)))
 }
@@ -1627,11 +1687,12 @@ fn resolve_hdf5_viirs_catalog_layout(
     container_path: &Path,
     field: &ViirsFieldCatalogEntry,
 ) -> Result<ResolvedHdf5ChunkedSingleLeafLayout> {
-    wbhdf::dataset::resolve_dataset_in_file(container_path, field.dataset_path)
-        .map_err(|err| RasterError::Other(format!(
+    wbhdf::dataset::resolve_dataset_in_file(container_path, field.dataset_path).map_err(|err| {
+        RasterError::Other(format!(
             "{} catalog dataset-path resolution failed for '{}': {err}",
             field.product, field.dataset_path
-        )))?;
+        ))
+    })?;
 
     let discovered = match discover_viirs_profile_layout(
         container_path,
@@ -1658,10 +1719,12 @@ fn resolve_hdf5_viirs_catalog_layout(
         initial_max_leaf_nodes,
         initial_max_records,
     )
-    .map_err(|err| RasterError::Other(format!(
-        "{} catalog chunk-index traversal failed for '{}': {err}",
-        field.product, field.dataset_path
-    )))?;
+    .map_err(|err| {
+        RasterError::Other(format!(
+            "{} catalog chunk-index traversal failed for '{}': {err}",
+            field.product, field.dataset_path
+        ))
+    })?;
 
     if records.is_empty() {
         return Err(RasterError::Other(format!(
@@ -1926,11 +1989,11 @@ fn discover_viirs_profile_layout(
 
     let headers = wbhdf::object_header::discover_v1_object_headers_in_file(container_path, 8_192)
         .map_err(|err| {
-            RasterError::Other(format!(
-                "{} bounded fallback v1 object-header discovery failed: {err}",
-                profile_name
-            ))
-        })?;
+        RasterError::Other(format!(
+            "{} bounded fallback v1 object-header discovery failed: {err}",
+            profile_name
+        ))
+    })?;
 
     let mut candidates = Vec::<(usize, usize, usize, usize, ResolvedViirsProfileLayout)>::new();
     for header in headers {
@@ -1940,11 +2003,11 @@ fn discover_viirs_profile_layout(
             .map(|datatype| datatype.size as usize);
         let datatype_matches = datatype_size == Some(expected_datatype_size);
 
-        let Some((rows, cols)) = header
-            .dataspaces
-            .first()
-            .and_then(|dataspace| rows_cols_from_dimensions(&dataspace.dimensions).ok().flatten())
-        else {
+        let Some((rows, cols)) = header.dataspaces.first().and_then(|dataspace| {
+            rows_cols_from_dimensions(&dataspace.dimensions)
+                .ok()
+                .flatten()
+        }) else {
             continue;
         };
 
@@ -1956,12 +2019,13 @@ fn discover_viirs_profile_layout(
                 continue;
             }
 
-            let chunk_row_height = usize::try_from(chunked_layout.chunk_dimensions[0]).map_err(|_| {
-                RasterError::Other(format!(
-                    "{} bounded fallback chunk-row-height does not fit usize for dataset '{}'",
-                    profile_name, dataset_path
-                ))
-            })?;
+            let chunk_row_height =
+                usize::try_from(chunked_layout.chunk_dimensions[0]).map_err(|_| {
+                    RasterError::Other(format!(
+                        "{} bounded fallback chunk-row-height does not fit usize for dataset '{}'",
+                        profile_name, dataset_path
+                    ))
+                })?;
             let Some(&chunk_col_width_raw) = chunked_layout.chunk_dimensions.get(1) else {
                 continue;
             };
@@ -2090,8 +2154,7 @@ fn infer_vnp21_row_dimension_index_from_records(
         match best {
             None => best = Some((dim, max_offset, distinct)),
             Some((_, best_max, best_distinct)) => {
-                if distinct > best_distinct
-                    || (distinct == best_distinct && max_offset < best_max)
+                if distinct > best_distinct || (distinct == best_distinct && max_offset < best_max)
                 {
                     best = Some((dim, max_offset, distinct));
                 }

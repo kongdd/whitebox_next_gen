@@ -36,8 +36,12 @@ fn main() -> Result<()> {
         }
     }
 
-    raster.metadata.push(("gpkg_tile_encoding".into(), "raw".into()));
-    raster.metadata.push(("gpkg_raw_compression".into(), "deflate".into()));
+    raster
+        .metadata
+        .push(("gpkg_tile_encoding".into(), "raw".into()));
+    raster
+        .metadata
+        .push(("gpkg_raw_compression".into(), "deflate".into()));
 
     let path = data_dir().join("multiband.gpkg");
     raster.write(path.to_str().unwrap(), RasterFormat::GeoPackage)?;

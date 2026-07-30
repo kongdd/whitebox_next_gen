@@ -50,7 +50,7 @@ fn main() {
     // Create test data: 1000×1000 raster with varying values and some nodata
     let mut data = Vec::with_capacity(1000 * 1000);
     let nodata = -32768.0;
-    
+
     for i in 0..1000 {
         for j in 0..1000 {
             let value = (i as f64 * 10.0 + j as f64) % 500.0;
@@ -82,16 +82,10 @@ fn main() {
     // Benchmark 1: full-raster scalar vs SIMD statistics
     println!("Benchmark 1: Full raster statistics (1000×1000 with ~10% nodata)");
     let iterations = 100;
-    let (scalar_stats, elapsed_scalar) = benchmark_statistics_mode(
-        &raster,
-        StatisticsComputationMode::Scalar,
-        iterations,
-    );
-    let (simd_stats, elapsed_simd) = benchmark_statistics_mode(
-        &raster,
-        StatisticsComputationMode::Simd,
-        iterations,
-    );
+    let (scalar_stats, elapsed_scalar) =
+        benchmark_statistics_mode(&raster, StatisticsComputationMode::Scalar, iterations);
+    let (simd_stats, elapsed_simd) =
+        benchmark_statistics_mode(&raster, StatisticsComputationMode::Simd, iterations);
     println!("  Scalar: {:.2}ms", elapsed_scalar.as_secs_f64() * 1000.0);
     println!("  SIMD:   {:.2}ms", elapsed_simd.as_secs_f64() * 1000.0);
     println!(
@@ -105,18 +99,18 @@ fn main() {
 
     // Benchmark 2: band statistics scalar vs SIMD
     println!("\nBenchmark 2: Band statistics computation");
-    let (scalar_band_stats, elapsed_band_scalar) = benchmark_band_statistics_mode(
-        &raster,
-        StatisticsComputationMode::Scalar,
-        iterations,
+    let (scalar_band_stats, elapsed_band_scalar) =
+        benchmark_band_statistics_mode(&raster, StatisticsComputationMode::Scalar, iterations);
+    let (simd_band_stats, elapsed_band_simd) =
+        benchmark_band_statistics_mode(&raster, StatisticsComputationMode::Simd, iterations);
+    println!(
+        "  Scalar: {:.2}ms",
+        elapsed_band_scalar.as_secs_f64() * 1000.0
     );
-    let (simd_band_stats, elapsed_band_simd) = benchmark_band_statistics_mode(
-        &raster,
-        StatisticsComputationMode::Simd,
-        iterations,
+    println!(
+        "  SIMD:   {:.2}ms",
+        elapsed_band_simd.as_secs_f64() * 1000.0
     );
-    println!("  Scalar: {:.2}ms", elapsed_band_scalar.as_secs_f64() * 1000.0);
-    println!("  SIMD:   {:.2}ms", elapsed_band_simd.as_secs_f64() * 1000.0);
     println!(
         "  Speedup: {:.2}x",
         elapsed_band_scalar.as_secs_f64() / elapsed_band_simd.as_secs_f64()

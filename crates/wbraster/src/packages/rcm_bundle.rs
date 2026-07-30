@@ -118,17 +118,23 @@ impl RcmBundle {
                 &xml,
                 &["incidenceAngleNearRange", "nearRangeIncidenceAngle"],
             );
-            incidence_angle_far_deg = extract_first_number(
-                &xml,
-                &["incidenceAngleFarRange", "farRangeIncidenceAngle"],
-            );
+            incidence_angle_far_deg =
+                extract_first_number(&xml, &["incidenceAngleFarRange", "farRangeIncidenceAngle"]);
             pixel_spacing_range_m = extract_first_number(
                 &xml,
-                &["sampledPixelSpacing", "pixelSpacingRange", "rangePixelSpacing"],
+                &[
+                    "sampledPixelSpacing",
+                    "pixelSpacingRange",
+                    "rangePixelSpacing",
+                ],
             );
             pixel_spacing_azimuth_m = extract_first_number(
                 &xml,
-                &["sampledLineSpacing", "pixelSpacingAzimuth", "azimuthPixelSpacing"],
+                &[
+                    "sampledLineSpacing",
+                    "pixelSpacingAzimuth",
+                    "azimuthPixelSpacing",
+                ],
             );
         }
 
@@ -395,7 +401,10 @@ mod tests {
         let b = RcmBundle::open(&root).expect("open rcm");
         assert_eq!(b.product_type.as_deref(), Some("GRD"));
         assert_eq!(b.acquisition_mode.as_deref(), Some("SC30"));
-        assert_eq!(b.acquisition_datetime_utc.as_deref(), Some("2026-04-01T12:30:00.000000Z"));
+        assert_eq!(
+            b.acquisition_datetime_utc.as_deref(),
+            Some("2026-04-01T12:30:00.000000Z")
+        );
         assert_eq!(b.polarizations, vec!["VH", "VV"]);
         assert_eq!(b.orbit_direction.as_deref(), Some("DESCENDING"));
         assert_eq!(b.look_direction.as_deref(), Some("RIGHT"));
@@ -409,10 +418,22 @@ mod tests {
 
     #[test]
     fn canonical_measurement_key_extracts_polarization_across_name_variants() {
-        assert_eq!(canonical_measurement_key(Path::new("rcm_scene_VV.tif")), "VV");
-        assert_eq!(canonical_measurement_key(Path::new("rcm-scene-vh.tif")), "VH");
-        assert_eq!(canonical_measurement_key(Path::new("RCM.HV.channel.tiff")), "HV");
-        assert_eq!(canonical_measurement_key(Path::new("RCM__HH__SLC.tif")), "HH");
+        assert_eq!(
+            canonical_measurement_key(Path::new("rcm_scene_VV.tif")),
+            "VV"
+        );
+        assert_eq!(
+            canonical_measurement_key(Path::new("rcm-scene-vh.tif")),
+            "VH"
+        );
+        assert_eq!(
+            canonical_measurement_key(Path::new("RCM.HV.channel.tiff")),
+            "HV"
+        );
+        assert_eq!(
+            canonical_measurement_key(Path::new("RCM__HH__SLC.tif")),
+            "HH"
+        );
     }
 
     #[test]
@@ -421,8 +442,11 @@ mod tests {
         let root = tmp.path().join("RCM_DUP_POL");
         fs::create_dir_all(&root).expect("create root");
 
-        fs::write(root.join("product.xml"), "<product><polarizations>VV</polarizations></product>")
-            .expect("write xml");
+        fs::write(
+            root.join("product.xml"),
+            "<product><polarizations>VV</polarizations></product>",
+        )
+        .expect("write xml");
         fs::write(root.join("rcm_scene_VV.tif"), b"").expect("write vv 1");
         fs::write(root.join("rcm_scene_cal_VV.tif"), b"").expect("write vv 2");
 

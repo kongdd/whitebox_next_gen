@@ -5,11 +5,8 @@
 //! which is sufficient for round-tripping through every supported format.
 
 use wbprojection::{
+    from_proj_string, identify_epsg_from_crs, identify_epsg_from_wkt_with_policy, to_ogc_wkt,
     EpsgIdentifyPolicy,
-    from_proj_string,
-    identify_epsg_from_crs,
-    identify_epsg_from_wkt_with_policy,
-    to_ogc_wkt,
 };
 
 /// A spatial / coordinate reference system description.

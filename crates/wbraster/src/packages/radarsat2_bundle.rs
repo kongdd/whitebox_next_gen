@@ -112,17 +112,23 @@ impl Radarsat2Bundle {
                 &xml,
                 &["incidenceAngleNearRange", "nearRangeIncidenceAngle"],
             );
-            incidence_angle_far_deg = extract_first_number(
-                &xml,
-                &["incidenceAngleFarRange", "farRangeIncidenceAngle"],
-            );
+            incidence_angle_far_deg =
+                extract_first_number(&xml, &["incidenceAngleFarRange", "farRangeIncidenceAngle"]);
             pixel_spacing_range_m = extract_first_number(
                 &xml,
-                &["sampledPixelSpacing", "pixelSpacingRange", "rangePixelSpacing"],
+                &[
+                    "sampledPixelSpacing",
+                    "pixelSpacingRange",
+                    "rangePixelSpacing",
+                ],
             );
             pixel_spacing_azimuth_m = extract_first_number(
                 &xml,
-                &["sampledLineSpacing", "pixelSpacingAzimuth", "azimuthPixelSpacing"],
+                &[
+                    "sampledLineSpacing",
+                    "pixelSpacingAzimuth",
+                    "azimuthPixelSpacing",
+                ],
             );
         }
 
@@ -168,10 +174,7 @@ impl Radarsat2Bundle {
     /// Read a canonical measurement directly as a [`Raster`].
     pub fn read_measurement(&self, key: &str) -> Result<Raster> {
         let p = self.measurement_path(key).ok_or_else(|| {
-            RasterError::MissingField(format!(
-                "RADARSAT-2 measurement '{}' not found",
-                key
-            ))
+            RasterError::MissingField(format!("RADARSAT-2 measurement '{}' not found", key))
         })?;
         Raster::read(p)
     }
@@ -392,7 +395,10 @@ mod tests {
         let b = Radarsat2Bundle::open(&root).expect("open rs2");
         assert_eq!(b.product_type.as_deref(), Some("SLC"));
         assert_eq!(b.acquisition_mode.as_deref(), Some("FQ"));
-        assert_eq!(b.acquisition_datetime_utc.as_deref(), Some("2026-04-01T11:00:00.000000Z"));
+        assert_eq!(
+            b.acquisition_datetime_utc.as_deref(),
+            Some("2026-04-01T11:00:00.000000Z")
+        );
         assert_eq!(b.polarizations, vec!["HH", "HV"]);
         assert_eq!(b.orbit_direction.as_deref(), Some("ASCENDING"));
         assert_eq!(b.look_direction.as_deref(), Some("RIGHT"));
@@ -408,8 +414,14 @@ mod tests {
     fn canonical_measurement_key_extracts_polarization_across_name_variants() {
         assert_eq!(canonical_measurement_key(Path::new("imagery_HH.tif")), "HH");
         assert_eq!(canonical_measurement_key(Path::new("imagery-hv.tif")), "HV");
-        assert_eq!(canonical_measurement_key(Path::new("rs2.vh.channel.tiff")), "VH");
-        assert_eq!(canonical_measurement_key(Path::new("RS2__VV__SLC.tif")), "VV");
+        assert_eq!(
+            canonical_measurement_key(Path::new("rs2.vh.channel.tiff")),
+            "VH"
+        );
+        assert_eq!(
+            canonical_measurement_key(Path::new("RS2__VV__SLC.tif")),
+            "VV"
+        );
     }
 
     #[test]
@@ -418,8 +430,11 @@ mod tests {
         let root = tmp.path().join("RS2_DUP_POL");
         fs::create_dir_all(&root).expect("create root");
 
-        fs::write(root.join("product.xml"), "<product><polarizations>HH</polarizations></product>")
-            .expect("write xml");
+        fs::write(
+            root.join("product.xml"),
+            "<product><polarizations>HH</polarizations></product>",
+        )
+        .expect("write xml");
         fs::write(root.join("imagery_HH.tif"), b"").expect("write hh 1");
         fs::write(root.join("imagery_cal_HH.tif"), b"").expect("write hh 2");
 

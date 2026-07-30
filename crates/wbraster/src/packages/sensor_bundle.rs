@@ -20,7 +20,7 @@ use super::maxar_worldview_bundle::MaxarWorldViewBundle;
 use super::planetscope_bundle::PlanetScopeBundle;
 use super::radarsat2_bundle::Radarsat2Bundle;
 use super::rcm_bundle::RcmBundle;
-use super::safe_bundle::{SafeBundle, SafeMission, detect_safe_mission, open_safe_bundle};
+use super::safe_bundle::{detect_safe_mission, open_safe_bundle, SafeBundle, SafeMission};
 
 /// Sensor bundle family represented by a package root.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,7 +125,10 @@ pub fn detect_sensor_bundle_family(bundle_root: impl AsRef<Path>) -> Result<Sens
             dimap_marker = true;
         }
 
-        if filename.ends_with(".IMD") || filename.contains("WORLDVIEW") || filename.contains("MAXAR") {
+        if filename.ends_with(".IMD")
+            || filename.contains("WORLDVIEW")
+            || filename.contains("MAXAR")
+        {
             maxar_marker = true;
         }
 
@@ -152,7 +155,11 @@ pub fn detect_sensor_bundle_family(bundle_root: impl AsRef<Path>) -> Result<Sens
                 if u.contains("DIMAP") || u.contains("PLEIADES") || u.contains("SPOT") {
                     dimap_marker = true;
                 }
-                if u.contains("WORLDVIEW") || u.contains("MAXAR") || u.contains("GEOEYE") || u.contains("QUICKBIRD") {
+                if u.contains("WORLDVIEW")
+                    || u.contains("MAXAR")
+                    || u.contains("GEOEYE")
+                    || u.contains("QUICKBIRD")
+                {
                     maxar_marker = true;
                 }
             }
@@ -178,7 +185,11 @@ pub fn detect_sensor_bundle_family(bundle_root: impl AsRef<Path>) -> Result<Sens
                 if u.contains("DIMAP") || u.contains("PLEIADES") || u.contains("SPOT") {
                     dimap_marker = true;
                 }
-                if u.contains("WORLDVIEW") || u.contains("MAXAR") || u.contains("GEOEYE") || u.contains("QUICKBIRD") {
+                if u.contains("WORLDVIEW")
+                    || u.contains("MAXAR")
+                    || u.contains("GEOEYE")
+                    || u.contains("QUICKBIRD")
+                {
                     maxar_marker = true;
                 }
             }
@@ -241,7 +252,8 @@ pub fn detect_sensor_bundle_family(bundle_root: impl AsRef<Path>) -> Result<Sens
         .file_name()
         .map(|n| n.to_string_lossy().to_ascii_uppercase())
         .unwrap_or_default();
-    let looks_like_safe_root = root_name.ends_with(".SAFE") || bundle_root.join("manifest.safe").is_file();
+    let looks_like_safe_root =
+        root_name.ends_with(".SAFE") || bundle_root.join("manifest.safe").is_file();
     if looks_like_safe_root {
         if let Ok(safe_mission) = detect_safe_mission(bundle_root) {
             match safe_mission {
@@ -264,13 +276,13 @@ pub fn open_sensor_bundle(bundle_root: impl AsRef<Path>) -> Result<SensorBundle>
         }
         SensorBundleFamily::Landsat => Ok(SensorBundle::Landsat(LandsatBundle::open(bundle_root)?)),
         SensorBundleFamily::Iceye => Ok(SensorBundle::Iceye(IceyeBundle::open(bundle_root)?)),
-        SensorBundleFamily::PlanetScope => {
-            Ok(SensorBundle::PlanetScope(PlanetScopeBundle::open(bundle_root)?))
-        }
+        SensorBundleFamily::PlanetScope => Ok(SensorBundle::PlanetScope(PlanetScopeBundle::open(
+            bundle_root,
+        )?)),
         SensorBundleFamily::Dimap => Ok(SensorBundle::Dimap(DimapBundle::open(bundle_root)?)),
-        SensorBundleFamily::MaxarWorldView => {
-            Ok(SensorBundle::MaxarWorldView(MaxarWorldViewBundle::open(bundle_root)?))
-        }
+        SensorBundleFamily::MaxarWorldView => Ok(SensorBundle::MaxarWorldView(
+            MaxarWorldViewBundle::open(bundle_root)?,
+        )),
         SensorBundleFamily::Radarsat2 => {
             Ok(SensorBundle::Radarsat2(Radarsat2Bundle::open(bundle_root)?))
         }
@@ -473,8 +485,11 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let root = tmp.path().join("LANDSAT");
         fs::create_dir_all(&root).expect("create root");
-        fs::write(root.join("LC09_TEST_MTL.txt"), "SPACECRAFT_ID = \"LANDSAT_9\"")
-            .expect("write mtl");
+        fs::write(
+            root.join("LC09_TEST_MTL.txt"),
+            "SPACECRAFT_ID = \"LANDSAT_9\"",
+        )
+        .expect("write mtl");
 
         let fam = detect_sensor_bundle_family(&root).expect("detect");
         assert_eq!(fam, SensorBundleFamily::Landsat);
@@ -509,8 +524,11 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let root = tmp.path().join("DIMAP");
         fs::create_dir_all(&root).expect("create root");
-        fs::write(root.join("DIM_PHR1A_PMS_001.XML"), "<Dimap_Document>DIMAP</Dimap_Document>")
-            .expect("xml");
+        fs::write(
+            root.join("DIM_PHR1A_PMS_001.XML"),
+            "<Dimap_Document>DIMAP</Dimap_Document>",
+        )
+        .expect("xml");
 
         let fam = detect_sensor_bundle_family(&root).expect("detect");
         assert_eq!(fam, SensorBundleFamily::Dimap);
@@ -715,7 +733,10 @@ WRS_ROW = 3
         }
 
         let opened = open_sensor_bundle_path(&zip_path).expect("open nested SAFE zip");
-        assert!(matches!(opened.bundle, SensorBundle::Safe(SafeBundle::Sentinel1(_))));
+        assert!(matches!(
+            opened.bundle,
+            SensorBundle::Safe(SafeBundle::Sentinel1(_))
+        ));
         assert!(opened.extracted_root.is_some());
     }
 }

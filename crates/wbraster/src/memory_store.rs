@@ -49,10 +49,7 @@ pub fn put_raster_arc(raster: Arc<Raster>) -> String {
 
 /// Retrieves a shared handle to the raster associated with `id`, or `None` if absent.
 pub fn get_raster_arc_by_id(id: &str) -> Option<Arc<Raster>> {
-    store()
-        .lock()
-        .ok()
-        .and_then(|map| map.get(id).cloned())
+    store().lock().ok().and_then(|map| map.get(id).cloned())
 }
 
 /// Retrieves a shared handle to the raster identified by a `memory://raster/<id>` path.
@@ -86,8 +83,8 @@ pub fn remove_raster_by_id(id: &str) -> Option<Raster> {
     store()
         .lock()
         .ok()
-    .and_then(|mut map| map.remove(id))
-    .map(|r| Arc::try_unwrap(r).unwrap_or_else(|shared| (*shared).clone()))
+        .and_then(|mut map| map.remove(id))
+        .map(|r| Arc::try_unwrap(r).unwrap_or_else(|shared| (*shared).clone()))
 }
 
 /// Removes and returns the raster identified by a `memory://raster/<id>` path.
@@ -121,7 +118,7 @@ pub fn raster_store_bytes() -> usize {
         .lock()
         .map(|map| {
             map.values()
-            .map(|r| r.data.len() * r.data_type.size_bytes())
+                .map(|r| r.data.len() * r.data_type.size_bytes())
                 .sum()
         })
         .unwrap_or(0)
@@ -191,4 +188,3 @@ mod tests {
         assert!(get_raster_by_id(&id2).is_none());
     }
 }
-

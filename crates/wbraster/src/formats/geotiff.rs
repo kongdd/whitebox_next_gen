@@ -1,9 +1,9 @@
 //! GeoTIFF / BigTIFF / COG adapter for wbraster.
 
-use wbgeotiff as gt;
+use crate::crs_info::CrsInfo;
 use crate::error::{RasterError, Result};
 use crate::raster::{DataType, Raster, RasterConfig, RasterData};
-use crate::crs_info::CrsInfo;
+use wbgeotiff as gt;
 
 fn metadata_value_case_insensitive<'a>(
     metadata: &'a [(String, String)],
@@ -20,8 +20,8 @@ fn raster_is_packed_rgb(raster: &Raster) -> bool {
         return false;
     }
 
-    let color_interp = metadata_value_case_insensitive(&raster.metadata, "color_interpretation")
-        .unwrap_or("");
+    let color_interp =
+        metadata_value_case_insensitive(&raster.metadata, "color_interpretation").unwrap_or("");
     color_interp.eq_ignore_ascii_case("packed_rgb")
 }
 
@@ -228,7 +228,10 @@ pub fn read(path: &str) -> Result<Raster> {
         data_type = DataType::F64;
         metadata.push(("geotiff_values_normalized".into(), "true".into()));
         metadata.push(("geotiff_values_total_scale".into(), total_scale.to_string()));
-        metadata.push(("geotiff_values_total_offset".into(), total_offset.to_string()));
+        metadata.push((
+            "geotiff_values_total_offset".into(),
+            total_offset.to_string(),
+        ));
     }
 
     let cfg = RasterConfig {
@@ -241,7 +244,8 @@ pub fn read(path: &str) -> Result<Raster> {
         cell_size_y,
         nodata,
         data_type,
-        crs: crs,        metadata,
+        crs: crs,
+        metadata,
     };
 
     Raster::from_data_native(cfg, data)
@@ -260,7 +264,11 @@ pub fn write_with_options(raster: &Raster, path: &str, opts: &GeoTiffWriteOption
     let width = raster.cols as u32;
     let height = raster.rows as u32;
     let packed_rgb_write = raster_is_packed_rgb(raster);
-    let bands = if packed_rgb_write { 3u16 } else { raster.bands as u16 };
+    let bands = if packed_rgb_write {
+        3u16
+    } else {
+        raster.bands as u16
+    };
 
     let compression = opts
         .compression
@@ -347,14 +355,18 @@ fn map_data_type(sample_format: gt::SampleFormat, bits: u16) -> Result<DataType>
     }
 }
 
-fn read_native_data(tiff: &gt::GeoTiff, data_type: DataType, npix: usize, bands: usize) -> Result<RasterData> {
+fn read_native_data(
+    tiff: &gt::GeoTiff,
+    data_type: DataType,
+    npix: usize,
+    bands: usize,
+) -> Result<RasterData> {
     match data_type {
         DataType::U8 => {
             if bands == 1 {
-                return Ok(RasterData::U8(
-                    tiff.read_band_u8(0)
-                        .map_err(|e| RasterError::Other(format!("GeoTIFF decode error: {e}")))?,
-                ));
+                return Ok(RasterData::U8(tiff.read_band_u8(0).map_err(|e| {
+                    RasterError::Other(format!("GeoTIFF decode error: {e}"))
+                })?));
             }
             let mut out = Vec::with_capacity(npix * bands);
             for band in 0..bands {
@@ -367,10 +379,9 @@ fn read_native_data(tiff: &gt::GeoTiff, data_type: DataType, npix: usize, bands:
         }
         DataType::I8 => {
             if bands == 1 {
-                return Ok(RasterData::I8(
-                    tiff.read_band_i8(0)
-                        .map_err(|e| RasterError::Other(format!("GeoTIFF decode error: {e}")))?,
-                ));
+                return Ok(RasterData::I8(tiff.read_band_i8(0).map_err(|e| {
+                    RasterError::Other(format!("GeoTIFF decode error: {e}"))
+                })?));
             }
             let mut out = Vec::with_capacity(npix * bands);
             for band in 0..bands {
@@ -383,10 +394,9 @@ fn read_native_data(tiff: &gt::GeoTiff, data_type: DataType, npix: usize, bands:
         }
         DataType::U16 => {
             if bands == 1 {
-                return Ok(RasterData::U16(
-                    tiff.read_band_u16(0)
-                        .map_err(|e| RasterError::Other(format!("GeoTIFF decode error: {e}")))?,
-                ));
+                return Ok(RasterData::U16(tiff.read_band_u16(0).map_err(|e| {
+                    RasterError::Other(format!("GeoTIFF decode error: {e}"))
+                })?));
             }
             let mut out = Vec::with_capacity(npix * bands);
             for band in 0..bands {
@@ -399,10 +409,9 @@ fn read_native_data(tiff: &gt::GeoTiff, data_type: DataType, npix: usize, bands:
         }
         DataType::I16 => {
             if bands == 1 {
-                return Ok(RasterData::I16(
-                    tiff.read_band_i16(0)
-                        .map_err(|e| RasterError::Other(format!("GeoTIFF decode error: {e}")))?,
-                ));
+                return Ok(RasterData::I16(tiff.read_band_i16(0).map_err(|e| {
+                    RasterError::Other(format!("GeoTIFF decode error: {e}"))
+                })?));
             }
             let mut out = Vec::with_capacity(npix * bands);
             for band in 0..bands {
@@ -415,10 +424,9 @@ fn read_native_data(tiff: &gt::GeoTiff, data_type: DataType, npix: usize, bands:
         }
         DataType::U32 => {
             if bands == 1 {
-                return Ok(RasterData::U32(
-                    tiff.read_band_u32(0)
-                        .map_err(|e| RasterError::Other(format!("GeoTIFF decode error: {e}")))?,
-                ));
+                return Ok(RasterData::U32(tiff.read_band_u32(0).map_err(|e| {
+                    RasterError::Other(format!("GeoTIFF decode error: {e}"))
+                })?));
             }
             let mut out = Vec::with_capacity(npix * bands);
             for band in 0..bands {
@@ -431,10 +439,9 @@ fn read_native_data(tiff: &gt::GeoTiff, data_type: DataType, npix: usize, bands:
         }
         DataType::I32 => {
             if bands == 1 {
-                return Ok(RasterData::I32(
-                    tiff.read_band_i32(0)
-                        .map_err(|e| RasterError::Other(format!("GeoTIFF decode error: {e}")))?,
-                ));
+                return Ok(RasterData::I32(tiff.read_band_i32(0).map_err(|e| {
+                    RasterError::Other(format!("GeoTIFF decode error: {e}"))
+                })?));
             }
             let mut out = Vec::with_capacity(npix * bands);
             for band in 0..bands {
@@ -447,10 +454,9 @@ fn read_native_data(tiff: &gt::GeoTiff, data_type: DataType, npix: usize, bands:
         }
         DataType::U64 => {
             if bands == 1 {
-                return Ok(RasterData::U64(
-                    tiff.read_band_u64(0)
-                        .map_err(|e| RasterError::Other(format!("GeoTIFF decode error: {e}")))?,
-                ));
+                return Ok(RasterData::U64(tiff.read_band_u64(0).map_err(|e| {
+                    RasterError::Other(format!("GeoTIFF decode error: {e}"))
+                })?));
             }
             let mut out = Vec::with_capacity(npix * bands);
             for band in 0..bands {
@@ -463,10 +469,9 @@ fn read_native_data(tiff: &gt::GeoTiff, data_type: DataType, npix: usize, bands:
         }
         DataType::I64 => {
             if bands == 1 {
-                return Ok(RasterData::I64(
-                    tiff.read_band_i64(0)
-                        .map_err(|e| RasterError::Other(format!("GeoTIFF decode error: {e}")))?,
-                ));
+                return Ok(RasterData::I64(tiff.read_band_i64(0).map_err(|e| {
+                    RasterError::Other(format!("GeoTIFF decode error: {e}"))
+                })?));
             }
             let mut out = Vec::with_capacity(npix * bands);
             for band in 0..bands {
@@ -479,10 +484,9 @@ fn read_native_data(tiff: &gt::GeoTiff, data_type: DataType, npix: usize, bands:
         }
         DataType::F32 => {
             if bands == 1 {
-                return Ok(RasterData::F32(
-                    tiff.read_band_f32(0)
-                        .map_err(|e| RasterError::Other(format!("GeoTIFF decode error: {e}")))?,
-                ));
+                return Ok(RasterData::F32(tiff.read_band_f32(0).map_err(|e| {
+                    RasterError::Other(format!("GeoTIFF decode error: {e}"))
+                })?));
             }
             let mut out = Vec::with_capacity(npix * bands);
             for band in 0..bands {
@@ -495,10 +499,9 @@ fn read_native_data(tiff: &gt::GeoTiff, data_type: DataType, npix: usize, bands:
         }
         DataType::F64 => {
             if bands == 1 {
-                return Ok(RasterData::F64(
-                    tiff.read_band_f64(0)
-                        .map_err(|e| RasterError::Other(format!("GeoTIFF decode error: {e}")))?,
-                ));
+                return Ok(RasterData::F64(tiff.read_band_f64(0).map_err(|e| {
+                    RasterError::Other(format!("GeoTIFF decode error: {e}"))
+                })?));
             }
             let mut out = Vec::with_capacity(npix * bands);
             for band in 0..bands {
@@ -530,15 +533,20 @@ fn vertical_units_to_meters_factor(tiff: &gt::GeoTiff) -> Option<f64> {
 
     // EPSG unit codes commonly used in GeoTIFF GeoKeys.
     let factor = match *unit_code {
-        9001 => 1.0,                // metre
-        9002 => 0.3048,             // foot (international)
-        9003 => 1200.0 / 3937.0,    // US survey foot
+        9001 => 1.0,             // metre
+        9002 => 0.3048,          // foot (international)
+        9003 => 1200.0 / 3937.0, // US survey foot
         _ => return None,
     };
     Some(factor)
 }
 
-fn apply_linear_value_transform(data: RasterData, nodata: f64, scale: f64, offset: f64) -> RasterData {
+fn apply_linear_value_transform(
+    data: RasterData,
+    nodata: f64,
+    scale: f64,
+    offset: f64,
+) -> RasterData {
     let nodata_is_nan = nodata.is_nan();
     let mut out = data.to_f64_vec();
     for value in &mut out {
@@ -574,9 +582,9 @@ fn raster_to_chunky_u8_from_packed_rgb(r: &Raster) -> Vec<u8> {
     let mut out = Vec::with_capacity(npix * 3);
     if let Some(buf) = r.data_u32() {
         for &packed in buf.iter().take(npix) {
-            out.push( (packed        & 0xFF) as u8);  // R
-            out.push(((packed >>  8) & 0xFF) as u8);  // G
-            out.push(((packed >> 16) & 0xFF) as u8);  // B
+            out.push((packed & 0xFF) as u8); // R
+            out.push(((packed >> 8) & 0xFF) as u8); // G
+            out.push(((packed >> 16) & 0xFF) as u8); // B
         }
     } else {
         // Fallback: raster backed by a non-native store (memory://f64 etc.)
@@ -584,8 +592,8 @@ fn raster_to_chunky_u8_from_packed_rgb(r: &Raster) -> Vec<u8> {
             let row = p / r.cols;
             let col = p % r.cols;
             let packed = r.get_raw(0, row as isize, col as isize).unwrap_or(0.0) as u32;
-            out.push( (packed        & 0xFF) as u8);
-            out.push(((packed >>  8) & 0xFF) as u8);
+            out.push((packed & 0xFF) as u8);
+            out.push(((packed >> 8) & 0xFF) as u8);
             out.push(((packed >> 16) & 0xFF) as u8);
         }
     }
@@ -905,7 +913,8 @@ mod tests {
             .map(|i| if i == 7 { -9999.0 } else { i as f64 * 0.25 })
             .collect();
         let mut r = Raster::from_data(cfg, data).unwrap();
-        r.metadata.push(("geotiff_compression".into(), "deflate".into()));
+        r.metadata
+            .push(("geotiff_compression".into(), "deflate".into()));
 
         write(&r, &path).unwrap();
         let r2 = read(&path).unwrap();
@@ -944,7 +953,9 @@ mod tests {
             data_type: DataType::I8,
             ..Default::default()
         };
-        let data = vec![-128.0, -2.0, -1.0, 0.0, 1.0, 2.0, 7.0, 12.0, 25.0, 63.0, 64.0, 127.0];
+        let data = vec![
+            -128.0, -2.0, -1.0, 0.0, 1.0, 2.0, 7.0, 12.0, 25.0, 63.0, 64.0, 127.0,
+        ];
         let r = Raster::from_data(cfg, data.clone()).unwrap();
 
         write(&r, &path).unwrap();
@@ -976,24 +987,51 @@ mod tests {
             data_type: DataType::U64,
             ..Default::default()
         };
-        let data = RasterData::U64(vec![0, 1, 255, 65_535, 1_000_000, 9_007_199_254_740_991, u64::MAX - 1, u64::MAX]);
+        let data = RasterData::U64(vec![
+            0,
+            1,
+            255,
+            65_535,
+            1_000_000,
+            9_007_199_254_740_991,
+            u64::MAX - 1,
+            u64::MAX,
+        ]);
         let r = Raster::from_data_native(cfg, data.clone()).unwrap();
 
         write(&r, &path).unwrap();
         let r2 = read(&path).unwrap();
 
         assert_eq!(r2.data_type, DataType::U64);
-        assert_eq!(r2.data_u64().unwrap(), match &data { RasterData::U64(values) => values.as_slice(), _ => unreachable!() });
+        assert_eq!(
+            r2.data_u64().unwrap(),
+            match &data {
+                RasterData::U64(values) => values.as_slice(),
+                _ => unreachable!(),
+            }
+        );
 
         let _ = std::fs::remove_file(path);
     }
 
     #[test]
     fn map_data_type_accepts_subword_integer_bit_depths() {
-        assert_eq!(map_data_type(gt::SampleFormat::Uint, 15).unwrap(), DataType::U16);
-        assert_eq!(map_data_type(gt::SampleFormat::Uint, 31).unwrap(), DataType::U32);
-        assert_eq!(map_data_type(gt::SampleFormat::Int, 15).unwrap(), DataType::I16);
-        assert_eq!(map_data_type(gt::SampleFormat::Int, 31).unwrap(), DataType::I32);
+        assert_eq!(
+            map_data_type(gt::SampleFormat::Uint, 15).unwrap(),
+            DataType::U16
+        );
+        assert_eq!(
+            map_data_type(gt::SampleFormat::Uint, 31).unwrap(),
+            DataType::U32
+        );
+        assert_eq!(
+            map_data_type(gt::SampleFormat::Int, 15).unwrap(),
+            DataType::I16
+        );
+        assert_eq!(
+            map_data_type(gt::SampleFormat::Int, 31).unwrap(),
+            DataType::I32
+        );
         assert!(map_data_type(gt::SampleFormat::IeeeFloat, 15).is_err());
     }
 }

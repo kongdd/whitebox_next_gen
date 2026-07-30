@@ -37,17 +37,14 @@ pub enum Jp2Error {
     /// Image dimensions are zero or otherwise invalid.
     #[error("Invalid image dimensions: {width}×{height}×{components}")]
     InvalidDimensions {
-        width:      u32,
-        height:     u32,
+        width: u32,
+        height: u32,
         components: u16,
     },
 
     /// Requested band index is out of range.
     #[error("Component {index} out of range (image has {components} components)")]
-    ComponentOutOfRange {
-        index:      usize,
-        components: usize,
-    },
+    ComponentOutOfRange { index: usize, components: usize },
 
     /// The requested or detected bit depth is not supported.
     #[error("Unsupported bit depth: {0}")]
@@ -55,10 +52,7 @@ pub enum Jp2Error {
 
     /// The requested or detected sample format is not supported.
     #[error("Unsupported sample format: signed={signed}, bits={bits}")]
-    UnsupportedSampleFormat {
-        signed: bool,
-        bits:   u8,
-    },
+    UnsupportedSampleFormat { signed: bool, bits: u8 },
 
     /// The DWT or entropy coding configuration is unsupported.
     #[error("Unsupported coding parameter: {0}")]
@@ -66,10 +60,7 @@ pub enum Jp2Error {
 
     /// A DWT coefficient buffer is the wrong size.
     #[error("DWT buffer size mismatch: expected {expected}, got {actual}")]
-    DwtSizeMismatch {
-        expected: usize,
-        actual:   usize,
-    },
+    DwtSizeMismatch { expected: usize, actual: usize },
 
     /// Arithmetic overflow in tile / codestream calculations.
     #[error("Arithmetic overflow: {0}")]
@@ -77,10 +68,7 @@ pub enum Jp2Error {
 
     /// Data buffer size does not match declared image geometry.
     #[error("Data size mismatch: expected {expected} samples, got {actual}")]
-    DataSizeMismatch {
-        expected: usize,
-        actual:   usize,
-    },
+    DataSizeMismatch { expected: usize, actual: usize },
 
     /// The GeoJP2 UUID box contains invalid GeoTIFF metadata.
     #[error("Invalid GeoJP2 metadata: {0}")]

@@ -68,14 +68,31 @@ impl fmt::Display for RasterError {
             RasterError::Io(e) => write!(f, "I/O error: {e}"),
             RasterError::UnknownFormat(s) => write!(f, "unknown raster format: {s}"),
             RasterError::MissingField(s) => write!(f, "missing required header field: {s}"),
-            RasterError::ParseError { field, value, expected } => {
-                write!(f, "parse error in field '{field}': got '{value}', expected {expected}")
+            RasterError::ParseError {
+                field,
+                value,
+                expected,
+            } => {
+                write!(
+                    f,
+                    "parse error in field '{field}': got '{value}', expected {expected}"
+                )
             }
             RasterError::InvalidDimensions { cols, rows } => {
                 write!(f, "invalid dimensions: {cols}×{rows}")
             }
-            RasterError::OutOfBounds { band, col, row, bands, cols, rows } => {
-                write!(f, "pixel ({band},{col},{row}) is out of bounds ({bands}×{cols}×{rows})")
+            RasterError::OutOfBounds {
+                band,
+                col,
+                row,
+                bands,
+                cols,
+                rows,
+            } => {
+                write!(
+                    f,
+                    "pixel ({band},{col},{row}) is out of bounds ({bands}×{cols}×{rows})"
+                )
             }
             RasterError::UnsupportedDataType(s) => {
                 write!(f, "data type not supported by this format: {s}")

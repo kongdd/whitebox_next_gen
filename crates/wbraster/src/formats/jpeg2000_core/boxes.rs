@@ -19,38 +19,36 @@
 //! 5. XML box        (`xml `) — GML/arbitrary XML metadata (optional)
 //! 6. Contiguous Codestream box (`jp2c`) — the actual JPEG 2000 codestream
 
-use std::io::{Read, Seek, SeekFrom, Write};
 use super::error::{Jp2Error, Result};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 // ── Box type constants ────────────────────────────────────────────────────────
 
 pub mod box_type {
-    pub const SIGNATURE:    [u8; 4] = *b"jP  ";
-    pub const FILE_TYPE:    [u8; 4] = *b"ftyp";
-    pub const JP2_HEADER:   [u8; 4] = *b"jp2h";
+    pub const SIGNATURE: [u8; 4] = *b"jP  ";
+    pub const FILE_TYPE: [u8; 4] = *b"ftyp";
+    pub const JP2_HEADER: [u8; 4] = *b"jp2h";
     pub const IMAGE_HEADER: [u8; 4] = *b"ihdr";
-    pub const COLOUR_SPEC:  [u8; 4] = *b"colr";
-    pub const PALETTE:      [u8; 4] = *b"pclr";
-    pub const COMP_MAP:     [u8; 4] = *b"cmap";
-    pub const CHAN_DEF:      [u8; 4] = *b"cdef";
-    pub const RESOLUTION:   [u8; 4] = *b"res ";
-    pub const CODESTREAM:   [u8; 4] = *b"jp2c";
-    pub const UUID:         [u8; 4] = *b"uuid";
-    pub const UUID_INFO:    [u8; 4] = *b"uinf";
-    pub const XML:          [u8; 4] = *b"xml ";
+    pub const COLOUR_SPEC: [u8; 4] = *b"colr";
+    pub const PALETTE: [u8; 4] = *b"pclr";
+    pub const COMP_MAP: [u8; 4] = *b"cmap";
+    pub const CHAN_DEF: [u8; 4] = *b"cdef";
+    pub const RESOLUTION: [u8; 4] = *b"res ";
+    pub const CODESTREAM: [u8; 4] = *b"jp2c";
+    pub const UUID: [u8; 4] = *b"uuid";
+    pub const UUID_INFO: [u8; 4] = *b"uinf";
+    pub const XML: [u8; 4] = *b"xml ";
     pub const INTELLECTUAL: [u8; 4] = *b"jp2i";
 }
 
 /// UUID identifying the GeoJP2 box (contains embedded GeoTIFF metadata bytes).
 pub const GEOJP2_UUID: [u8; 16] = [
-    0xb1, 0x4b, 0xf8, 0xbd, 0x08, 0x3d, 0x4b, 0x43,
-    0xa5, 0xae, 0x8c, 0xd7, 0xd5, 0xa6, 0xce, 0x03,
+    0xb1, 0x4b, 0xf8, 0xbd, 0x08, 0x3d, 0x4b, 0x43, 0xa5, 0xae, 0x8c, 0xd7, 0xd5, 0xa6, 0xce, 0x03,
 ];
 
 /// UUID identifying a World File box (alternate geolocation, less common).
 pub const WORLD_FILE_UUID: [u8; 16] = [
-    0x96, 0xa9, 0xf1, 0xf1, 0xdc, 0x98, 0x40, 0x2d,
-    0xa7, 0xae, 0xd6, 0x8e, 0x34, 0x45, 0x18, 0x09,
+    0x96, 0xa9, 0xf1, 0xf1, 0xdc, 0x98, 0x40, 0x2d, 0xa7, 0xae, 0xd6, 0x8e, 0x34, 0x45, 0x18, 0x09,
 ];
 
 // ── RawBox ────────────────────────────────────────────────────────────────────
@@ -73,7 +71,9 @@ impl RawBox {
     }
 
     /// Whether this box's type matches the given 4-byte constant.
-    pub fn is(&self, t: [u8; 4]) -> bool { self.box_type == t }
+    pub fn is(&self, t: [u8; 4]) -> bool {
+        self.box_type == t
+    }
 }
 
 // ── BoxReader ─────────────────────────────────────────────────────────────────
@@ -96,13 +96,15 @@ impl<R: Read + Seek> BoxReader<R> {
     /// Returns `None` at EOF.
     pub fn next_box(&mut self) -> Result<Option<RawBox>> {
         let file_offset = self.inner.stream_position().map_err(Jp2Error::Io)?;
-        if file_offset >= self.file_len { return Ok(None); }
+        if file_offset >= self.file_len {
+            return Ok(None);
+        }
 
         let mut hdr = [0u8; 8];
         match self.inner.read_exact(&mut hdr) {
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return Ok(None),
             Err(e) => return Err(Jp2Error::Io(e)),
-            Ok(_)  => {}
+            Ok(_) => {}
         }
 
         let lbox = u32::from_be_bytes(hdr[0..4].try_into().unwrap());
@@ -138,13 +140,19 @@ impl<R: Read + Seek> BoxReader<R> {
         let mut data = vec![0u8; payload_len as usize];
         self.inner.read_exact(&mut data).map_err(Jp2Error::Io)?;
 
-        Ok(Some(RawBox { box_type, file_offset, data }))
+        Ok(Some(RawBox {
+            box_type,
+            file_offset,
+            data,
+        }))
     }
 
     /// Collect all top-level boxes into a Vec.
     pub fn read_all(&mut self) -> Result<Vec<RawBox>> {
         let mut boxes = Vec::new();
-        while let Some(b) = self.next_box()? { boxes.push(b); }
+        while let Some(b) = self.next_box()? {
+            boxes.push(b);
+        }
         Ok(boxes)
     }
 
@@ -198,7 +206,7 @@ pub fn validate_signature(b: &RawBox) -> Result<()> {
     }
     if b.data != JP2_SIGNATURE_PAYLOAD {
         return Err(Jp2Error::NotJp2(
-            "Signature box payload does not match JP2 magic bytes".into()
+            "Signature box payload does not match JP2 magic bytes".into(),
         ));
     }
     Ok(())
@@ -213,9 +221,9 @@ pub fn write_signature<W: Write>(w: &mut W) -> std::io::Result<()> {
 /// JP2 `ftyp` box: brand `jp2 `, minor version 0, compatibility list `jp2 `.
 pub fn write_file_type<W: Write>(w: &mut W) -> std::io::Result<()> {
     let mut payload = Vec::new();
-    payload.extend_from_slice(b"jp2 ");   // BR (brand)
+    payload.extend_from_slice(b"jp2 "); // BR (brand)
     payload.extend_from_slice(&0u32.to_be_bytes()); // MinV
-    payload.extend_from_slice(b"jp2 ");   // CL (compatibility list)
+    payload.extend_from_slice(b"jp2 "); // CL (compatibility list)
     write_box(w, box_type::FILE_TYPE, &payload)
 }
 
@@ -224,17 +232,17 @@ pub fn write_file_type<W: Write>(w: &mut W) -> std::io::Result<()> {
 /// Parse the `ihdr` box payload.
 #[derive(Debug, Clone)]
 pub struct ImageHeader {
-    pub height:     u32,
-    pub width:      u32,
+    pub height: u32,
+    pub width: u32,
     pub components: u16,
     /// Bit depth minus 1 (per component; we use the first component value).
-    pub bpc:        u8,
+    pub bpc: u8,
     /// Compression type: 7 = JP2.
-    pub c:          u8,
+    pub c: u8,
     /// Colourspace unknown flag.
-    pub unk_c:      u8,
+    pub unk_c: u8,
     /// Intellectual property flag.
-    pub ipr:        u8,
+    pub ipr: u8,
 }
 
 impl ImageHeader {
@@ -246,23 +254,29 @@ impl ImageHeader {
             });
         }
         Ok(Self {
-            height:     u32::from_be_bytes(data[0..4].try_into().unwrap()),
-            width:      u32::from_be_bytes(data[4..8].try_into().unwrap()),
+            height: u32::from_be_bytes(data[0..4].try_into().unwrap()),
+            width: u32::from_be_bytes(data[4..8].try_into().unwrap()),
             components: u16::from_be_bytes(data[8..10].try_into().unwrap()),
-            bpc:        data[10],
-            c:          data[11],
-            unk_c:      data[12],
-            ipr:        data[13],
+            bpc: data[10],
+            c: data[11],
+            unk_c: data[12],
+            ipr: data[13],
         })
     }
 
     /// Actual bits per component (bpc field is value-1, or 0xFF for variable).
     pub fn bits_per_component(&self) -> u8 {
-        if self.bpc == 0xFF { 0 } else { (self.bpc & 0x7F) + 1 }
+        if self.bpc == 0xFF {
+            0
+        } else {
+            (self.bpc & 0x7F) + 1
+        }
     }
 
     /// Whether samples are signed (MSB of bpc).
-    pub fn is_signed(&self) -> bool { self.bpc & 0x80 != 0 }
+    pub fn is_signed(&self) -> bool {
+        self.bpc & 0x80 != 0
+    }
 
     pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
         let mut payload = Vec::new();
@@ -293,7 +307,13 @@ pub struct ColourSpec {
 
 impl ColourSpec {
     pub fn enumerated(cs: u32) -> Self {
-        Self { meth: 1, prec: 0, approx: 0, enumcs: Some(cs), icc_profile: None }
+        Self {
+            meth: 1,
+            prec: 0,
+            approx: 0,
+            enumcs: Some(cs),
+            icc_profile: None,
+        }
     }
 
     pub fn parse(data: &[u8]) -> Result<Self> {
@@ -303,20 +323,32 @@ impl ColourSpec {
                 message: "payload too short".into(),
             });
         }
-        let meth   = data[0];
-        let prec   = data[1] as i8;
+        let meth = data[0];
+        let prec = data[1] as i8;
         let approx = data[2];
         let (enumcs, icc_profile) = match meth {
             1 => {
                 if data.len() < 7 {
-                    return Err(Jp2Error::InvalidBox { box_type: "colr".into(), message: "enumerated colourspace truncated".into() });
+                    return Err(Jp2Error::InvalidBox {
+                        box_type: "colr".into(),
+                        message: "enumerated colourspace truncated".into(),
+                    });
                 }
-                (Some(u32::from_be_bytes(data[3..7].try_into().unwrap())), None)
+                (
+                    Some(u32::from_be_bytes(data[3..7].try_into().unwrap())),
+                    None,
+                )
             }
             2 => (None, Some(data[3..].to_vec())),
             _ => (None, None),
         };
-        Ok(Self { meth, prec, approx, enumcs, icc_profile })
+        Ok(Self {
+            meth,
+            prec,
+            approx,
+            enumcs,
+            icc_profile,
+        })
     }
 
     pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -369,9 +401,12 @@ pub fn write_xml_box<W: Write>(w: &mut W, xml: &str) -> std::io::Result<()> {
 /// Numerators/denominators for vertical and horizontal resolution.
 #[derive(Debug, Clone)]
 pub struct ResolutionBox {
-    pub vr_n: u16, pub vr_d: u16,
-    pub hr_n: u16, pub hr_d: u16,
-    pub vr_e: i8,  pub hr_e: i8,
+    pub vr_n: u16,
+    pub vr_d: u16,
+    pub hr_n: u16,
+    pub hr_d: u16,
+    pub vr_e: i8,
+    pub hr_e: i8,
 }
 
 impl ResolutionBox {

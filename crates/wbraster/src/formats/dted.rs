@@ -37,7 +37,7 @@ use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 
 use crate::crs_info::CrsInfo;
-use crate::error::{Result, RasterError};
+use crate::error::{RasterError, Result};
 use crate::raster::{DataType, Raster, RasterConfig};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -223,14 +223,14 @@ pub fn write(raster: &Raster, path: &str) -> Result<()> {
     write_4digit(&mut uhl[47..51], cols as u32);
     write_4digit(&mut uhl[51..55], rows as u32);
     uhl[55] = b'0'; // multiple accuracy flag
-    // bytes 56-79 remain spaces
+                    // bytes 56-79 remain spaces
     w.write_all(&uhl)?;
 
     // ── DSI (648 bytes, mostly informational) ─────────────────────────────
     let mut dsi = [b' '; DSI_SIZE];
     dsi[0..3].copy_from_slice(b"DSI");
     dsi[3] = b' '; // security code
-    // Data edition and maintenance fields left as spaces.
+                   // Data edition and maintenance fields left as spaces.
     w.write_all(&dsi)?;
 
     // ── ACC (2700 bytes, accuracy record) ─────────────────────────────────
@@ -283,30 +283,32 @@ fn parse_dted_coord(bytes: &[u8]) -> Result<f64> {
             "DTED: coordinate field too short".into(),
         ));
     }
-    let s = std::str::from_utf8(&bytes[..8]).map_err(|_| {
-        RasterError::CorruptData("DTED: coordinate field not valid ASCII".into())
-    })?;
-    let deg: f64 = s[0..3].trim().parse().map_err(|_| {
-        RasterError::ParseError {
+    let s = std::str::from_utf8(&bytes[..8])
+        .map_err(|_| RasterError::CorruptData("DTED: coordinate field not valid ASCII".into()))?;
+    let deg: f64 = s[0..3]
+        .trim()
+        .parse()
+        .map_err(|_| RasterError::ParseError {
             field: "DTED coord degrees".into(),
             value: s[0..3].into(),
             expected: "integer".into(),
-        }
-    })?;
-    let min: f64 = s[3..5].trim().parse().map_err(|_| {
-        RasterError::ParseError {
+        })?;
+    let min: f64 = s[3..5]
+        .trim()
+        .parse()
+        .map_err(|_| RasterError::ParseError {
             field: "DTED coord minutes".into(),
             value: s[3..5].into(),
             expected: "integer".into(),
-        }
-    })?;
-    let sec: f64 = s[5..7].trim().parse().map_err(|_| {
-        RasterError::ParseError {
+        })?;
+    let sec: f64 = s[5..7]
+        .trim()
+        .parse()
+        .map_err(|_| RasterError::ParseError {
             field: "DTED coord seconds".into(),
             value: s[5..7].into(),
             expected: "integer".into(),
-        }
-    })?;
+        })?;
     let hemi = bytes[7].to_ascii_uppercase();
     let decimal = deg + min / 60.0 + sec / 3600.0;
     let signed = match hemi {
@@ -318,14 +320,15 @@ fn parse_dted_coord(bytes: &[u8]) -> Result<f64> {
 
 /// Parse a 4-character zero-padded decimal integer from ASCII bytes.
 fn parse_4digit_ascii(bytes: &[u8]) -> Result<u32> {
-    let s = std::str::from_utf8(bytes).map_err(|_| {
-        RasterError::CorruptData("DTED: non-ASCII field".into())
-    })?;
-    s.trim().parse::<u32>().map_err(|_| RasterError::ParseError {
-        field: "DTED 4-digit field".into(),
-        value: s.into(),
-        expected: "non-negative integer".into(),
-    })
+    let s = std::str::from_utf8(bytes)
+        .map_err(|_| RasterError::CorruptData("DTED: non-ASCII field".into()))?;
+    s.trim()
+        .parse::<u32>()
+        .map_err(|_| RasterError::ParseError {
+            field: "DTED 4-digit field".into(),
+            value: s.into(),
+            expected: "non-negative integer".into(),
+        })
 }
 
 /// Encode a decimal degree value as `DDDMMSSh` into an 8-byte ASCII slice.
@@ -336,9 +339,17 @@ fn encode_dted_coord(out: &mut [u8], decimal: f64, is_latitude: bool) {
     let min = min_f.trunc() as u32;
     let sec = ((min_f - min as f64) * 60.0).round() as u32;
     let hemi = if is_latitude {
-        if decimal >= 0.0 { b'N' } else { b'S' }
+        if decimal >= 0.0 {
+            b'N'
+        } else {
+            b'S'
+        }
     } else {
-        if decimal >= 0.0 { b'E' } else { b'W' }
+        if decimal >= 0.0 {
+            b'E'
+        } else {
+            b'W'
+        }
     };
     let s = format!("{deg:03}{min:02}{sec:02}");
     out[..7].copy_from_slice(s.as_bytes());
@@ -403,7 +414,10 @@ mod tests {
             cell_size: 10.0 / 36000.0, // 10" in degrees
             nodata: NODATA,
             data_type: DataType::I16,
-            crs: CrsInfo { epsg: Some(4326), ..Default::default() },
+            crs: CrsInfo {
+                epsg: Some(4326),
+                ..Default::default()
+            },
             ..Default::default()
         };
         let elev = vec![100.0, 200.0, 300.0, 400.0, 500.0, 600.0];
@@ -451,7 +465,7 @@ mod tests {
         // DSI + ACC stay zero
         let rec = HEADER_SIZE;
         buf[rec] = 0xAA; // sentinel
-        // block count (3 bytes)
+                         // block count (3 bytes)
         buf[rec + 1..rec + 4].copy_from_slice(&[0, 0, 0]);
         // lon count (2 bytes) = 0
         // lat count (2 bytes) = 0

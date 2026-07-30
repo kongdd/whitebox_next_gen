@@ -95,22 +95,21 @@ impl MaxarWorldViewBundle {
                     &text,
                     &["earliestAcqTime", "FIRSTLINETIME", "ACQUISITIONDATETIME"],
                 )
-                .or_else(|| extract_first_xml_tag(&text, &["FIRSTLINETIME", "ACQUISITIONDATETIME"]));
-                cloud_cover_percent = extract_first_assignment_number(
-                    &text,
-                    &["cloudCover", "CLOUDCOVER"],
-                )
-                .or_else(|| extract_first_xml_tag_number(&text, &["CLOUDCOVER", "CLOUD_COVER"]));
-                sun_azimuth_deg = extract_first_assignment_number(
-                    &text,
-                    &["meanSunAz", "MEANSUNAZ"],
-                )
-                .or_else(|| extract_first_xml_tag_number(&text, &["MEANSUNAZ", "SUN_AZIMUTH"]));
-                sun_elevation_deg = extract_first_assignment_number(
-                    &text,
-                    &["meanSunEl", "MEANSUNEL"],
-                )
-                .or_else(|| extract_first_xml_tag_number(&text, &["MEANSUNEL", "SUN_ELEVATION"]));
+                .or_else(|| {
+                    extract_first_xml_tag(&text, &["FIRSTLINETIME", "ACQUISITIONDATETIME"])
+                });
+                cloud_cover_percent =
+                    extract_first_assignment_number(&text, &["cloudCover", "CLOUDCOVER"]).or_else(
+                        || extract_first_xml_tag_number(&text, &["CLOUDCOVER", "CLOUD_COVER"]),
+                    );
+                sun_azimuth_deg =
+                    extract_first_assignment_number(&text, &["meanSunAz", "MEANSUNAZ"]).or_else(
+                        || extract_first_xml_tag_number(&text, &["MEANSUNAZ", "SUN_AZIMUTH"]),
+                    );
+                sun_elevation_deg =
+                    extract_first_assignment_number(&text, &["meanSunEl", "MEANSUNEL"]).or_else(
+                        || extract_first_xml_tag_number(&text, &["MEANSUNEL", "SUN_ELEVATION"]),
+                    );
                 off_nadir_angle_deg = extract_first_assignment_number(
                     &text,
                     &["meanOffNadirViewAngle", "MEANOFFNADIRVIEWANGLE"],
@@ -169,7 +168,9 @@ impl MaxarWorldViewBundle {
 
     /// Resolve canonical band path.
     pub fn band_path(&self, key: &str) -> Option<&Path> {
-        self.bands.get(&key.to_ascii_uppercase()).map(PathBuf::as_path)
+        self.bands
+            .get(&key.to_ascii_uppercase())
+            .map(PathBuf::as_path)
     }
 
     /// Resolve canonical band path for a specific profile key.
@@ -242,34 +243,48 @@ fn canonical_band_key(path: &Path) -> Option<String> {
     if has_any_token(&tokens, &["P", "PAN", "BANDP"]) {
         return Some("PAN".to_string());
     }
-    if has_all_tokens(&tokens, &["BAND", "C"]) || has_any_token(&tokens, &["BANDC", "COAST", "COASTAL"]) {
+    if has_all_tokens(&tokens, &["BAND", "C"])
+        || has_any_token(&tokens, &["BANDC", "COAST", "COASTAL"])
+    {
         return Some("B1".to_string());
     }
     if has_all_tokens(&tokens, &["BAND", "B"]) || has_any_token(&tokens, &["BANDB", "BLUE", "B2"]) {
         return Some("B2".to_string());
     }
-    if has_all_tokens(&tokens, &["BAND", "G"]) || has_any_token(&tokens, &["BANDG", "GREEN", "B3"]) {
+    if has_all_tokens(&tokens, &["BAND", "G"]) || has_any_token(&tokens, &["BANDG", "GREEN", "B3"])
+    {
         return Some("B3".to_string());
     }
     if has_all_tokens(&tokens, &["BAND", "R"]) || has_any_token(&tokens, &["BANDR", "RED", "B4"]) {
         return Some("B4".to_string());
     }
-    if has_all_tokens(&tokens, &["BAND", "N"]) || has_any_token(&tokens, &["BANDN", "NIR", "NIR1", "B5"]) {
+    if has_all_tokens(&tokens, &["BAND", "N"])
+        || has_any_token(&tokens, &["BANDN", "NIR", "NIR1", "B5"])
+    {
         return Some("B5".to_string());
     }
-    if has_all_tokens(&tokens, &["BAND", "RE"]) || has_any_token(&tokens, &["BANDRE", "RE", "REDEDGE", "B6"]) {
+    if has_all_tokens(&tokens, &["BAND", "RE"])
+        || has_any_token(&tokens, &["BANDRE", "RE", "REDEDGE", "B6"])
+    {
         return Some("RE".to_string());
     }
-    if has_all_tokens(&tokens, &["BAND", "Y"]) || has_any_token(&tokens, &["Y", "YELLOW", "BANDY"]) {
+    if has_all_tokens(&tokens, &["BAND", "Y"]) || has_any_token(&tokens, &["Y", "YELLOW", "BANDY"])
+    {
         return Some("Y".to_string());
     }
-    if has_all_tokens(&tokens, &["BAND", "N2"]) || has_any_token(&tokens, &["N2", "NIR2", "BANDN2", "B8"]) {
+    if has_all_tokens(&tokens, &["BAND", "N2"])
+        || has_any_token(&tokens, &["N2", "NIR2", "BANDN2", "B8"])
+    {
         return Some("N2".to_string());
     }
-    if has_all_tokens(&tokens, &["BAND", "S1"]) || has_any_token(&tokens, &["SWIR1", "BANDS1", "S1"]) {
+    if has_all_tokens(&tokens, &["BAND", "S1"])
+        || has_any_token(&tokens, &["SWIR1", "BANDS1", "S1"])
+    {
         return Some("SWIR1".to_string());
     }
-    if has_all_tokens(&tokens, &["BAND", "S2"]) || has_any_token(&tokens, &["SWIR2", "BANDS2", "S2"]) {
+    if has_all_tokens(&tokens, &["BAND", "S2"])
+        || has_any_token(&tokens, &["SWIR2", "BANDS2", "S2"])
+    {
         return Some("SWIR2".to_string());
     }
     if has_any_token(&tokens, &["SWIR"]) {
@@ -311,11 +326,9 @@ fn has_any_token(tokens: &[&str], candidates: &[&str]) -> bool {
 }
 
 fn has_all_tokens(tokens: &[&str], required: &[&str]) -> bool {
-    required.iter().all(|r| {
-        tokens
-            .iter()
-            .any(|t| t.eq_ignore_ascii_case(r))
-    })
+    required
+        .iter()
+        .all(|r| tokens.iter().any(|t| t.eq_ignore_ascii_case(r)))
 }
 
 fn extract_assignment(text: &str, key: &str) -> Option<String> {
@@ -453,14 +466,38 @@ mod tests {
 
     #[test]
     fn maps_worldview_multispectral_variants() {
-        assert_eq!(canonical_band_key(Path::new("IMG_BAND_C.TIF")).as_deref(), Some("B1"));
-        assert_eq!(canonical_band_key(Path::new("IMG_BAND_B.TIF")).as_deref(), Some("B2"));
-        assert_eq!(canonical_band_key(Path::new("IMG_BAND_G.TIF")).as_deref(), Some("B3"));
-        assert_eq!(canonical_band_key(Path::new("IMG_BAND_R.TIF")).as_deref(), Some("B4"));
-        assert_eq!(canonical_band_key(Path::new("IMG_BAND_N.TIF")).as_deref(), Some("B5"));
-        assert_eq!(canonical_band_key(Path::new("IMG_BAND_RE.TIF")).as_deref(), Some("RE"));
-        assert_eq!(canonical_band_key(Path::new("IMG_BAND_Y.TIF")).as_deref(), Some("Y"));
-        assert_eq!(canonical_band_key(Path::new("IMG_BAND_N2.TIF")).as_deref(), Some("N2"));
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_BAND_C.TIF")).as_deref(),
+            Some("B1")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_BAND_B.TIF")).as_deref(),
+            Some("B2")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_BAND_G.TIF")).as_deref(),
+            Some("B3")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_BAND_R.TIF")).as_deref(),
+            Some("B4")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_BAND_N.TIF")).as_deref(),
+            Some("B5")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_BAND_RE.TIF")).as_deref(),
+            Some("RE")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_BAND_Y.TIF")).as_deref(),
+            Some("Y")
+        );
+        assert_eq!(
+            canonical_band_key(Path::new("IMG_BAND_N2.TIF")).as_deref(),
+            Some("N2")
+        );
     }
 
     #[test]
@@ -477,7 +514,10 @@ mod tests {
         fs::write(root.join("IMG_BAND_R.TIF"), b"").expect("red");
 
         let b = MaxarWorldViewBundle::open(&root).expect("open");
-        assert_eq!(b.acquisition_datetime_utc.as_deref(), Some("2026-04-01T12:34:56Z"));
+        assert_eq!(
+            b.acquisition_datetime_utc.as_deref(),
+            Some("2026-04-01T12:34:56Z")
+        );
         assert_eq!(b.cloud_cover_percent, Some(3.4));
         assert_eq!(b.sun_azimuth_deg, Some(149.2));
         assert_eq!(b.sun_elevation_deg, Some(43.1));

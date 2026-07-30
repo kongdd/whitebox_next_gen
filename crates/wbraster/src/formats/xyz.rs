@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
-use crate::error::{Result, RasterError};
+use crate::error::{RasterError, Result};
 use crate::io_utils::format_float;
 use crate::raster::{DataType, Raster, RasterConfig};
 
@@ -56,7 +56,13 @@ pub fn write(raster: &Raster, path: &str) -> Result<()> {
             let x = raster.x_min + (col as f64 + 0.5) * cs;
             let _ = half; // used above in concept; x/y already cell-centre
             let z = raster.get(0, row, col);
-            writeln!(w, "{} {} {}", format_float(x, 10), format_float(y, 10), format_float(z, 6))?;
+            writeln!(
+                w,
+                "{} {} {}",
+                format_float(x, 10),
+                format_float(y, 10),
+                format_float(z, 6)
+            )?;
         }
     }
     Ok(())
@@ -85,7 +91,9 @@ fn parse<R: BufRead>(reader: R) -> Result<Raster> {
     }
 
     if points.is_empty() {
-        return Err(RasterError::CorruptData("XYZ file contains no data points".into()));
+        return Err(RasterError::CorruptData(
+            "XYZ file contains no data points".into(),
+        ));
     }
 
     build_raster(points)
@@ -105,25 +113,35 @@ fn parse_xyz_line(line: &str) -> Result<(f64, f64, f64)> {
     if tokens.len() < 3 {
         return Err(RasterError::CorruptData(format!(
             "XYZ: expected at least 3 columns per line, got {}: '{}'",
-            tokens.len(), line
+            tokens.len(),
+            line
         )));
     }
 
-    let x = tokens[0].trim().parse::<f64>().map_err(|_| RasterError::ParseError {
-        field: "X".into(),
-        value: tokens[0].into(),
-        expected: "number".into(),
-    })?;
-    let y = tokens[1].trim().parse::<f64>().map_err(|_| RasterError::ParseError {
-        field: "Y".into(),
-        value: tokens[1].into(),
-        expected: "number".into(),
-    })?;
-    let z = tokens[2].trim().parse::<f64>().map_err(|_| RasterError::ParseError {
-        field: "Z".into(),
-        value: tokens[2].into(),
-        expected: "number".into(),
-    })?;
+    let x = tokens[0]
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| RasterError::ParseError {
+            field: "X".into(),
+            value: tokens[0].into(),
+            expected: "number".into(),
+        })?;
+    let y = tokens[1]
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| RasterError::ParseError {
+            field: "Y".into(),
+            value: tokens[1].into(),
+            expected: "number".into(),
+        })?;
+    let z = tokens[2]
+        .trim()
+        .parse::<f64>()
+        .map_err(|_| RasterError::ParseError {
+            field: "Z".into(),
+            value: tokens[2].into(),
+            expected: "number".into(),
+        })?;
     Ok((x, y, z))
 }
 
@@ -204,11 +222,8 @@ fn build_raster(mut points: Vec<(f64, f64, f64)>) -> Result<Raster> {
     let y_min = ys_asc[0] - cs_y * 0.5;
 
     // Build index maps: coordinate key → column/row index.
-    let x_idx: std::collections::HashMap<i64, usize> = x_map
-        .keys()
-        .enumerate()
-        .map(|(i, k)| (*k, i))
-        .collect();
+    let x_idx: std::collections::HashMap<i64, usize> =
+        x_map.keys().enumerate().map(|(i, k)| (*k, i)).collect();
     // Rows in raster are north-to-south: row 0 = largest Y.
     let y_idx: std::collections::HashMap<i64, usize> = y_map
         .keys()

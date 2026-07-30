@@ -22,8 +22,8 @@
 //! EOC                     – End of codestream
 //! ```
 
-use std::io::Write;
 use super::error::{Jp2Error, Result};
+use std::io::Write;
 
 // ── Marker constants ──────────────────────────────────────────────────────────
 
@@ -78,28 +78,40 @@ pub struct Siz {
 
 #[derive(Debug, Clone, Copy)]
 pub struct SizComponent {
-    pub ssiz:   u8, // (signed << 7) | (bits - 1)
-    pub xrsiz:  u8, // horizontal separation
-    pub yrsiz:  u8, // vertical separation
+    pub ssiz: u8,  // (signed << 7) | (bits - 1)
+    pub xrsiz: u8, // horizontal separation
+    pub yrsiz: u8, // vertical separation
 }
 
 impl SizComponent {
     pub fn new(bits: u8, signed: bool) -> Self {
         let ssiz = if signed { 0x80 | (bits - 1) } else { bits - 1 };
-        Self { ssiz, xrsiz: 1, yrsiz: 1 }
+        Self {
+            ssiz,
+            xrsiz: 1,
+            yrsiz: 1,
+        }
     }
-    pub fn bits(&self) -> u8   { (self.ssiz & 0x7F) + 1 }
-    pub fn signed(&self) -> bool { self.ssiz & 0x80 != 0 }
+    pub fn bits(&self) -> u8 {
+        (self.ssiz & 0x7F) + 1
+    }
+    pub fn signed(&self) -> bool {
+        self.ssiz & 0x80 != 0
+    }
 }
 
 impl Siz {
     pub fn new(width: u32, height: u32, bits: u8, signed: bool, num_components: u16) -> Self {
         Self {
             rsiz: 0,
-            xsiz: width, ysiz: height,
-            x_osiz: 0, y_osiz: 0,
-            x_tsiz: width, y_tsiz: height,
-            xt_osiz: 0, yt_osiz: 0,
+            xsiz: width,
+            ysiz: height,
+            x_osiz: 0,
+            y_osiz: 0,
+            x_tsiz: width,
+            y_tsiz: height,
+            xt_osiz: 0,
+            yt_osiz: 0,
             components: (0..num_components)
                 .map(|_| SizComponent::new(bits, signed))
                 .collect(),
@@ -108,7 +120,9 @@ impl Siz {
 
     /// With explicit tile size.
     pub fn with_tiles(mut self, tw: u32, th: u32) -> Self {
-        self.x_tsiz = tw; self.y_tsiz = th; self
+        self.x_tsiz = tw;
+        self.y_tsiz = th;
+        self
     }
 
     /// Number of tiles in X direction.
@@ -120,32 +134,55 @@ impl Siz {
         (self.ysiz - self.yt_osiz + self.y_tsiz - 1) / self.y_tsiz
     }
     /// Total number of tiles.
-    pub fn num_tiles(&self) -> u32 { self.tiles_x() * self.tiles_y() }
+    pub fn num_tiles(&self) -> u32 {
+        self.tiles_x() * self.tiles_y()
+    }
 
     pub fn parse(data: &[u8]) -> Result<Self> {
         if data.len() < 38 {
-            return Err(Jp2Error::InvalidCodestream { offset: 0, message: "SIZ too short".into() });
+            return Err(Jp2Error::InvalidCodestream {
+                offset: 0,
+                message: "SIZ too short".into(),
+            });
         }
-        let rsiz   = u16::from_be_bytes(data[0..2].try_into().unwrap());
-        let xsiz   = u32::from_be_bytes(data[2..6].try_into().unwrap());
-        let ysiz   = u32::from_be_bytes(data[6..10].try_into().unwrap());
+        let rsiz = u16::from_be_bytes(data[0..2].try_into().unwrap());
+        let xsiz = u32::from_be_bytes(data[2..6].try_into().unwrap());
+        let ysiz = u32::from_be_bytes(data[6..10].try_into().unwrap());
         let x_osiz = u32::from_be_bytes(data[10..14].try_into().unwrap());
         let y_osiz = u32::from_be_bytes(data[14..18].try_into().unwrap());
         let x_tsiz = u32::from_be_bytes(data[18..22].try_into().unwrap());
         let y_tsiz = u32::from_be_bytes(data[22..26].try_into().unwrap());
         let xt_osiz = u32::from_be_bytes(data[26..30].try_into().unwrap());
         let yt_osiz = u32::from_be_bytes(data[30..34].try_into().unwrap());
-        let csiz   = u16::from_be_bytes(data[34..36].try_into().unwrap());
+        let csiz = u16::from_be_bytes(data[34..36].try_into().unwrap());
 
         if data.len() < 36 + csiz as usize * 3 {
-            return Err(Jp2Error::InvalidCodestream { offset: 0, message: "SIZ component data truncated".into() });
+            return Err(Jp2Error::InvalidCodestream {
+                offset: 0,
+                message: "SIZ component data truncated".into(),
+            });
         }
         let mut components = Vec::with_capacity(csiz as usize);
         for i in 0..csiz as usize {
             let off = 36 + i * 3;
-            components.push(SizComponent { ssiz: data[off], xrsiz: data[off+1], yrsiz: data[off+2] });
+            components.push(SizComponent {
+                ssiz: data[off],
+                xrsiz: data[off + 1],
+                yrsiz: data[off + 2],
+            });
         }
-        Ok(Self { rsiz, xsiz, ysiz, x_osiz, y_osiz, x_tsiz, y_tsiz, xt_osiz, yt_osiz, components })
+        Ok(Self {
+            rsiz,
+            xsiz,
+            ysiz,
+            x_osiz,
+            y_osiz,
+            x_tsiz,
+            y_tsiz,
+            xt_osiz,
+            yt_osiz,
+            components,
+        })
     }
 
     pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
@@ -191,7 +228,13 @@ pub enum ProgressionOrder {
 
 impl ProgressionOrder {
     pub fn from_u8(v: u8) -> Self {
-        match v { 1=>Self::Rlcp, 2=>Self::Rpcl, 3=>Self::Pcrl, 4=>Self::Cprl, _=>Self::Lrcp }
+        match v {
+            1 => Self::Rlcp,
+            2 => Self::Rpcl,
+            3 => Self::Pcrl,
+            4 => Self::Cprl,
+            _ => Self::Lrcp,
+        }
     }
 }
 
@@ -253,30 +296,59 @@ impl Cod {
 
     pub fn parse(data: &[u8]) -> Result<Self> {
         if data.len() < 10 {
-            return Err(Jp2Error::InvalidCodestream { offset: 0, message: "COD too short".into() });
+            return Err(Jp2Error::InvalidCodestream {
+                offset: 0,
+                message: "COD too short".into(),
+            });
         }
-        let scod        = data[0];
+        let scod = data[0];
         let progression = ProgressionOrder::from_u8(data[1]);
-        let num_layers  = u16::from_be_bytes(data[2..4].try_into().unwrap());
+        let num_layers = u16::from_be_bytes(data[2..4].try_into().unwrap());
         let mc_transform = data[4];
         let num_decomps = data[5];
-        let xcb         = data[6];
-        let ycb         = data[7];
-        let cblk_style  = data[8];
-        let wavelet     = data[9];
-        let precincts   = if scod & 0x01 != 0 { data[10..].to_vec() } else { Vec::new() };
-        Ok(Self { scod, progression, num_layers, mc_transform, num_decomps, xcb, ycb, cblk_style, wavelet, precincts })
+        let xcb = data[6];
+        let ycb = data[7];
+        let cblk_style = data[8];
+        let wavelet = data[9];
+        let precincts = if scod & 0x01 != 0 {
+            data[10..].to_vec()
+        } else {
+            Vec::new()
+        };
+        Ok(Self {
+            scod,
+            progression,
+            num_layers,
+            mc_transform,
+            num_decomps,
+            xcb,
+            ycb,
+            cblk_style,
+            wavelet,
+            precincts,
+        })
     }
 
     pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
         let has_precincts = !self.precincts.is_empty();
-        let scod = if has_precincts { self.scod | 0x01 } else { self.scod & !0x01 };
+        let scod = if has_precincts {
+            self.scod | 0x01
+        } else {
+            self.scod & !0x01
+        };
         let len = 12u16 + self.precincts.len() as u16;
         w.write_all(&marker::COD.to_be_bytes())?;
         w.write_all(&len.to_be_bytes())?;
         w.write_all(&[scod, self.progression as u8])?;
         w.write_all(&self.num_layers.to_be_bytes())?;
-        w.write_all(&[self.mc_transform, self.num_decomps, self.xcb, self.ycb, self.cblk_style, self.wavelet])?;
+        w.write_all(&[
+            self.mc_transform,
+            self.num_decomps,
+            self.xcb,
+            self.ycb,
+            self.cblk_style,
+            self.wavelet,
+        ])?;
         w.write_all(&self.precincts)?;
         Ok(())
     }
@@ -310,7 +382,10 @@ impl Qcd {
                 }
             }
         }
-        Self { sqcd: 0, step_sizes }
+        Self {
+            sqcd: 0,
+            step_sizes,
+        }
     }
 
     /// Scalar-expounded quantisation for lossy compression.
@@ -323,39 +398,60 @@ impl Qcd {
             let level_step = base_step * (2.0f64.powi(i as i32));
             let exp = level_step.log2().floor() as i32 + bit_depth as i32;
             let exp = exp.clamp(0, 31) as u16;
-            let mantissa = ((level_step / 2.0f64.powi(exp as i32 - bit_depth as i32 + 1)) * 2048.0) as u16 & 0x7FF;
+            let mantissa = ((level_step / 2.0f64.powi(exp as i32 - bit_depth as i32 + 1)) * 2048.0)
+                as u16
+                & 0x7FF;
             if i == 0 {
                 step_sizes.push((exp << 11) | mantissa);
             } else {
-                for _ in 0..3 { step_sizes.push((exp << 11) | mantissa); }
+                for _ in 0..3 {
+                    step_sizes.push((exp << 11) | mantissa);
+                }
             }
         }
-        Self { sqcd: 2, step_sizes }
+        Self {
+            sqcd: 2,
+            step_sizes,
+        }
     }
 
     pub fn parse(data: &[u8]) -> Result<Self> {
         if data.is_empty() {
-            return Err(Jp2Error::InvalidCodestream { offset: 0, message: "QCD empty".into() });
+            return Err(Jp2Error::InvalidCodestream {
+                offset: 0,
+                message: "QCD empty".into(),
+            });
         }
         let sqcd = data[0];
         let step_sizes: Vec<u16> = match sqcd & 0x1F {
-            0 => data[1..].iter().map(|&b| (b as u16) << 8).collect(),  // no quantisation
-            _ => data[1..].chunks_exact(2).map(|c| u16::from_be_bytes(c.try_into().unwrap())).collect(),
+            0 => data[1..].iter().map(|&b| (b as u16) << 8).collect(), // no quantisation
+            _ => data[1..]
+                .chunks_exact(2)
+                .map(|c| u16::from_be_bytes(c.try_into().unwrap()))
+                .collect(),
         };
         Ok(Self { sqcd, step_sizes })
     }
 
     pub fn write<W: Write>(&self, w: &mut W) -> std::io::Result<()> {
         let is_noquant = self.sqcd & 0x1F == 0;
-        let body_len = if is_noquant { self.step_sizes.len() } else { self.step_sizes.len() * 2 };
+        let body_len = if is_noquant {
+            self.step_sizes.len()
+        } else {
+            self.step_sizes.len() * 2
+        };
         let len = (2 + body_len) as u16;
         w.write_all(&marker::QCD.to_be_bytes())?;
         w.write_all(&len.to_be_bytes())?;
         w.write_all(&[self.sqcd])?;
         if is_noquant {
-            for &s in &self.step_sizes { w.write_all(&[(s >> 8) as u8])?; }
+            for &s in &self.step_sizes {
+                w.write_all(&[(s >> 8) as u8])?;
+            }
         } else {
-            for &s in &self.step_sizes { w.write_all(&s.to_be_bytes())?; }
+            for &s in &self.step_sizes {
+                w.write_all(&s.to_be_bytes())?;
+            }
         }
         Ok(())
     }
@@ -364,7 +460,7 @@ impl Qcd {
 // ── POC: Progression Order Change ─────────────────────────────────────────────
 
 /// POC marker segment — defines progression order changes.
-/// 
+///
 /// ISO 15444-1 Table A.18: Each POC change specifies a boundary where packets
 /// with (component ≥ comp_bound, resolution ≥ res_bound, layer ≥ layer_bound)
 /// follow a new progression order.
@@ -392,7 +488,7 @@ pub struct PocChange {
 
 impl Poc {
     /// Parse POC marker segment data.
-    /// 
+    ///
     /// Each entry in a POC marker is variable-width (4-6 bytes depending on Cpoc encoding):
     /// - 1 byte: RSpoc (res start)
     /// - 2 bytes: CSpoc (comp start) if Cpoc is 2 bytes (multicomponent), else depends on architecture
@@ -418,32 +514,38 @@ impl Poc {
         if data.len() % entry_size != 0 {
             return Err(Jp2Error::InvalidCodestream {
                 offset: 0,
-                message: format!("POC marker data length {} is not a multiple of {} (num_components={})",
-                    data.len(), entry_size, num_components),
+                message: format!(
+                    "POC marker data length {} is not a multiple of {} (num_components={})",
+                    data.len(),
+                    entry_size,
+                    num_components
+                ),
             });
         }
 
         while pos < data.len() {
-            if pos + entry_size > data.len() { break; }
+            if pos + entry_size > data.len() {
+                break;
+            }
 
             let res_start = data[pos];
             pos += 1;
 
             let comp_start = if cpoc_size == 2 {
-                u16::from_be_bytes([data[pos], data[pos+1]])
+                u16::from_be_bytes([data[pos], data[pos + 1]])
             } else {
                 data[pos] as u16
             };
             pos += cpoc_size;
 
-            let layer_end = u16::from_be_bytes([data[pos], data[pos+1]]);
+            let layer_end = u16::from_be_bytes([data[pos], data[pos + 1]]);
             pos += 2;
 
             let res_end = data[pos];
             pos += 1;
 
             let comp_end = if cpoc_size == 2 {
-                u16::from_be_bytes([data[pos], data[pos+1]])
+                u16::from_be_bytes([data[pos], data[pos + 1]])
             } else {
                 data[pos] as u16
             };
@@ -499,11 +601,14 @@ impl Sot {
 
     pub fn parse(data: &[u8]) -> Result<Self> {
         if data.len() < 8 {
-            return Err(Jp2Error::InvalidCodestream { offset: 0, message: "SOT too short".into() });
+            return Err(Jp2Error::InvalidCodestream {
+                offset: 0,
+                message: "SOT too short".into(),
+            });
         }
         Ok(Self {
-            isot:  u16::from_be_bytes(data[0..2].try_into().unwrap()),
-            psot:  u32::from_be_bytes(data[2..6].try_into().unwrap()),
+            isot: u16::from_be_bytes(data[0..2].try_into().unwrap()),
+            psot: u32::from_be_bytes(data[2..6].try_into().unwrap()),
             tpsot: data[6],
             tnsot: data[7],
         })
@@ -546,36 +651,57 @@ pub fn parse_codestream_markers(cs: &[u8]) -> Result<Vec<MarkerSegment>> {
             message: "Missing SOC marker".into(),
         });
     }
-    segments.push(MarkerSegment { marker: marker::SOC, data: Vec::new(), offset: 0 });
+    segments.push(MarkerSegment {
+        marker: marker::SOC,
+        data: Vec::new(),
+        offset: 0,
+    });
     i = 2;
 
     while i < cs.len() {
-        if cs[i] != 0xFF { i += 1; continue; }
-        if i + 1 >= cs.len() { break; }
+        if cs[i] != 0xFF {
+            i += 1;
+            continue;
+        }
+        if i + 1 >= cs.len() {
+            break;
+        }
 
-        let m = u16::from_be_bytes([cs[i], cs[i+1]]);
+        let m = u16::from_be_bytes([cs[i], cs[i + 1]]);
         i += 2;
 
         // Markers without a length field (standalone)
         match m {
             marker::SOC | marker::SOD | marker::EOC => {
-                segments.push(MarkerSegment { marker: m, data: Vec::new(), offset: i - 2 });
-                if m == marker::SOD { break; } // tile data follows; stop scanning
+                segments.push(MarkerSegment {
+                    marker: m,
+                    data: Vec::new(),
+                    offset: i - 2,
+                });
+                if m == marker::SOD {
+                    break;
+                } // tile data follows; stop scanning
                 continue;
             }
             _ => {}
         }
 
-        if i + 2 > cs.len() { break; }
-        let lseg = u16::from_be_bytes([cs[i], cs[i+1]]) as usize;
+        if i + 2 > cs.len() {
+            break;
+        }
+        let lseg = u16::from_be_bytes([cs[i], cs[i + 1]]) as usize;
         if lseg < 2 || i + lseg > cs.len() {
             return Err(Jp2Error::InvalidCodestream {
                 offset: i,
                 message: format!("Marker 0x{:04X} has invalid length {}", m, lseg),
             });
         }
-        let data = cs[i+2..i+lseg].to_vec();
-        segments.push(MarkerSegment { marker: m, data, offset: i - 2 });
+        let data = cs[i + 2..i + lseg].to_vec();
+        segments.push(MarkerSegment {
+            marker: m,
+            data,
+            offset: i - 2,
+        });
         i += lseg;
     }
 

@@ -14,10 +14,10 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
-use crate::error::{Result, RasterError};
+use crate::crs_info::CrsInfo;
+use crate::error::{RasterError, Result};
 use crate::io_utils::{format_float, parse_key_value, with_extension};
 use crate::raster::{DataType, Raster, RasterConfig};
-use crate::crs_info::CrsInfo;
 
 /// Read an Esri ASCII Grid from `path`.
 pub fn read(path: &str) -> Result<Raster> {
@@ -62,19 +62,37 @@ pub fn parse<R: BufRead>(reader: R, source: &str) -> Result<Raster> {
         header_lines += 1;
         if let Some((key, val)) = parse_key_value(line) {
             match key.as_str() {
-                "ncols"        => cols      = Some(parse_usize(&key, &val)?),
-                "nrows"        => rows      = Some(parse_usize(&key, &val)?),
-                "xllcorner"    => { xll = Some(parse_f64(&key, &val)?); xll_is_corner = true; }
-                "xllcenter"    => { xll = Some(parse_f64(&key, &val)?); xll_is_corner = false; }
-                "yllcorner"    => { yll = Some(parse_f64(&key, &val)?); yll_is_corner = true; }
-                "yllcenter"    => { yll = Some(parse_f64(&key, &val)?); yll_is_corner = false; }
-                "cellsize"     => cell_size = Some(parse_f64(&key, &val)?),
+                "ncols" => cols = Some(parse_usize(&key, &val)?),
+                "nrows" => rows = Some(parse_usize(&key, &val)?),
+                "xllcorner" => {
+                    xll = Some(parse_f64(&key, &val)?);
+                    xll_is_corner = true;
+                }
+                "xllcenter" => {
+                    xll = Some(parse_f64(&key, &val)?);
+                    xll_is_corner = false;
+                }
+                "yllcorner" => {
+                    yll = Some(parse_f64(&key, &val)?);
+                    yll_is_corner = true;
+                }
+                "yllcenter" => {
+                    yll = Some(parse_f64(&key, &val)?);
+                    yll_is_corner = false;
+                }
+                "cellsize" => cell_size = Some(parse_f64(&key, &val)?),
                 "nodata_value" | "nodata" => nodata = parse_f64(&key, &val)?,
                 _ => { /* unknown header field – ignore */ }
             }
         }
         // Stop after we've collected all mandatory fields
-        if cols.is_some() && rows.is_some() && xll.is_some() && yll.is_some() && cell_size.is_some() && header_lines >= 5 {
+        if cols.is_some()
+            && rows.is_some()
+            && xll.is_some()
+            && yll.is_some()
+            && cell_size.is_some()
+            && header_lines >= 5
+        {
             // Peek: if next line starts with a digit we're done
             // We can't easily peek with the iterator, but 6 header lines is the max
         }
@@ -82,9 +100,9 @@ pub fn parse<R: BufRead>(reader: R, source: &str) -> Result<Raster> {
 
     let cols = cols.ok_or_else(|| RasterError::MissingField("ncols".into()))?;
     let rows = rows.ok_or_else(|| RasterError::MissingField("nrows".into()))?;
-    let cs   = cell_size.ok_or_else(|| RasterError::MissingField("cellsize".into()))?;
-    let xll  = xll.ok_or_else(|| RasterError::MissingField("xllcorner/xllcenter".into()))?;
-    let yll  = yll.ok_or_else(|| RasterError::MissingField("yllcorner/yllcenter".into()))?;
+    let cs = cell_size.ok_or_else(|| RasterError::MissingField("cellsize".into()))?;
+    let xll = xll.ok_or_else(|| RasterError::MissingField("xllcorner/xllcenter".into()))?;
+    let yll = yll.ok_or_else(|| RasterError::MissingField("yllcorner/yllcenter".into()))?;
 
     // Adjust corner vs. center
     let x_min = if xll_is_corner { xll } else { xll - cs * 0.5 };
@@ -100,7 +118,9 @@ pub fn parse<R: BufRead>(reader: R, source: &str) -> Result<Raster> {
     for line_result in lines {
         let line = line_result?;
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         parse_data_line(line, nodata, &mut data)?;
         if data.len() >= cols * rows {
             break;
@@ -137,7 +157,8 @@ pub fn parse<R: BufRead>(reader: R, source: &str) -> Result<Raster> {
         cell_size: cs,
         nodata,
         data_type: DataType::F64,
-        crs: crs,        metadata,
+        crs: crs,
+        metadata,
         ..Default::default()
     };
     Raster::from_data(cfg, data)
@@ -170,7 +191,9 @@ pub fn write_to<W: Write>(w: &mut W, raster: &Raster) -> Result<()> {
         let slice = raster.row_slice(0, row as isize);
         let mut first = true;
         for v in slice {
-            if !first { write!(w, " ")?; }
+            if !first {
+                write!(w, " ")?;
+            }
             first = false;
             write!(w, "{}", format_float(v, 6))?;
         }
@@ -182,27 +205,31 @@ pub fn write_to<W: Write>(w: &mut W, raster: &Raster) -> Result<()> {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn parse_usize(field: &str, val: &str) -> Result<usize> {
-    val.trim().parse::<usize>().map_err(|_| RasterError::ParseError {
-        field: field.into(),
-        value: val.into(),
-        expected: "positive integer".into(),
-    })
+    val.trim()
+        .parse::<usize>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "positive integer".into(),
+        })
 }
 
 fn parse_f64(field: &str, val: &str) -> Result<f64> {
-    val.trim().parse::<f64>().map_err(|_| RasterError::ParseError {
-        field: field.into(),
-        value: val.into(),
-        expected: "floating-point number".into(),
-    })
+    val.trim()
+        .parse::<f64>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "floating-point number".into(),
+        })
 }
 
 /// Parse whitespace-delimited floats from a data line into `buf`.
 fn parse_data_line(line: &str, _nodata: f64, buf: &mut Vec<f64>) -> Result<()> {
     for token in line.split_ascii_whitespace() {
-        let v: f64 = token.parse().map_err(|_| RasterError::CorruptData(
-            format!("invalid data token: '{token}'")
-        ))?;
+        let v: f64 = token
+            .parse()
+            .map_err(|_| RasterError::CorruptData(format!("invalid data token: '{token}'")))?;
         buf.push(v);
     }
     Ok(())
@@ -298,7 +325,7 @@ NODATA_value -9999
 ";
         let r = parse(BufReader::new(Cursor::new(src)), "nd.asc").unwrap();
         assert_eq!(r.get(0, 0, 0), 1.0);
-        assert!(r.is_nodata(r.get(0, 0, 1)));   // nodata
+        assert!(r.is_nodata(r.get(0, 0, 1))); // nodata
         assert_eq!(r.get(0, 1, 0), 3.0);
     }
 

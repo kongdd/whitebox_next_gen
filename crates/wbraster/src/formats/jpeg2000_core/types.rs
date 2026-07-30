@@ -28,10 +28,21 @@ pub struct GeoTransform {
 impl GeoTransform {
     /// Create a new `GeoTransform` from its six components.
     pub fn new(
-        x_origin: f64, pixel_width: f64, row_rotation: f64,
-        y_origin: f64, col_rotation: f64, pixel_height: f64,
+        x_origin: f64,
+        pixel_width: f64,
+        row_rotation: f64,
+        y_origin: f64,
+        col_rotation: f64,
+        pixel_height: f64,
     ) -> Self {
-        Self { x_origin, pixel_width, row_rotation, y_origin, col_rotation, pixel_height }
+        Self {
+            x_origin,
+            pixel_width,
+            row_rotation,
+            y_origin,
+            col_rotation,
+            pixel_height,
+        }
     }
 
     /// Create a north-up (no rotation) transform.
@@ -43,7 +54,7 @@ impl GeoTransform {
 
     /// Convert pixel (col, row) → geographic (x, y).
     pub fn pixel_to_geo(&self, col: f64, row: f64) -> (f64, f64) {
-        let x = self.x_origin + col * self.pixel_width  + row * self.row_rotation;
+        let x = self.x_origin + col * self.pixel_width + row * self.row_rotation;
         let y = self.y_origin + col * self.col_rotation + row * self.pixel_height;
         (x, y)
     }
@@ -53,18 +64,22 @@ impl GeoTransform {
     /// Returns `None` if the transform is singular.
     pub fn geo_to_pixel(&self, x: f64, y: f64) -> Option<(f64, f64)> {
         let det = self.pixel_width * self.pixel_height - self.row_rotation * self.col_rotation;
-        if det.abs() < f64::EPSILON { return None; }
+        if det.abs() < f64::EPSILON {
+            return None;
+        }
         let dx = x - self.x_origin;
         let dy = y - self.y_origin;
         Some((
             (self.pixel_height * dx - self.row_rotation * dy) / det,
-            (self.pixel_width  * dy - self.col_rotation * dx) / det,
+            (self.pixel_width * dy - self.col_rotation * dx) / det,
         ))
     }
 }
 
 impl Default for GeoTransform {
-    fn default() -> Self { Self::new(0.0, 1.0, 0.0, 0.0, 0.0, -1.0) }
+    fn default() -> Self {
+        Self::new(0.0, 1.0, 0.0, 0.0, 0.0, -1.0)
+    }
 }
 
 // ── BoundingBox ───────────────────────────────────────────────────────────────
@@ -80,12 +95,24 @@ pub struct BoundingBox {
 
 impl BoundingBox {
     pub fn new(min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> Self {
-        Self { min_x, min_y, max_x, max_y }
+        Self {
+            min_x,
+            min_y,
+            max_x,
+            max_y,
+        }
     }
-    pub fn width(&self)  -> f64 { self.max_x - self.min_x }
-    pub fn height(&self) -> f64 { self.max_y - self.min_y }
+    pub fn width(&self) -> f64 {
+        self.max_x - self.min_x
+    }
+    pub fn height(&self) -> f64 {
+        self.max_y - self.min_y
+    }
     pub fn center(&self) -> (f64, f64) {
-        ((self.min_x + self.max_x) / 2.0, (self.min_y + self.max_y) / 2.0)
+        (
+            (self.min_x + self.max_x) / 2.0,
+            (self.min_y + self.max_y) / 2.0,
+        )
     }
 }
 
@@ -118,25 +145,29 @@ impl PixelType {
     /// Bytes per sample.
     pub fn byte_size(self) -> usize {
         match self {
-            Self::Uint8  => 1,
+            Self::Uint8 => 1,
             Self::Uint16 | Self::Int16 => 2,
-            Self::Int32  | Self::Float32 => 4,
+            Self::Int32 | Self::Float32 => 4,
             Self::Float64 => 8,
         }
     }
     /// Bits per sample.
-    pub fn bits(self) -> u8 { (self.byte_size() * 8) as u8 }
+    pub fn bits(self) -> u8 {
+        (self.byte_size() * 8) as u8
+    }
 
     /// The `SampleFormat` of this type.
     pub fn sample_format(self) -> SampleFormat {
         match self {
             Self::Uint8 | Self::Uint16 => SampleFormat::Uint,
-            Self::Int16 | Self::Int32  => SampleFormat::Int,
+            Self::Int16 | Self::Int32 => SampleFormat::Int,
             Self::Float32 | Self::Float64 => SampleFormat::Float,
         }
     }
     /// Whether the type is signed.
-    pub fn is_signed(self) -> bool { self.sample_format() != SampleFormat::Uint }
+    pub fn is_signed(self) -> bool {
+        self.sample_format() != SampleFormat::Uint
+    }
 }
 
 // ── ColorSpace ────────────────────────────────────────────────────────────────
@@ -160,8 +191,8 @@ impl ColorSpace {
     pub fn enumcs(self) -> u32 {
         match self {
             Self::Greyscale => 17,
-            Self::Srgb      => 16,
-            Self::YCbCr     => 18,
+            Self::Srgb => 16,
+            Self::YCbCr => 18,
             Self::MultiBand => 0,
         }
     }
@@ -171,7 +202,7 @@ impl ColorSpace {
             16 => Self::Srgb,
             17 => Self::Greyscale,
             18 => Self::YCbCr,
-            _  => Self::MultiBand,
+            _ => Self::MultiBand,
         }
     }
 }
@@ -194,5 +225,7 @@ pub enum CompressionMode {
 
 impl CompressionMode {
     /// Whether this mode uses the reversible (integer) wavelet.
-    pub fn is_lossless(self) -> bool { self == Self::Lossless }
+    pub fn is_lossless(self) -> bool {
+        self == Self::Lossless
+    }
 }

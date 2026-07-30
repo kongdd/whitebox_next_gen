@@ -74,13 +74,13 @@ fn requested_zarr_version(raster: &Raster) -> u8 {
         .unwrap_or(2)
 }
 
-    fn metadata_usize(raster: &Raster, key: &str) -> Option<usize> {
-        raster
+fn metadata_usize(raster: &Raster, key: &str) -> Option<usize> {
+    raster
         .metadata
         .iter()
         .find(|(k, _)| k == key)
         .and_then(|(_, v)| v.parse::<usize>().ok())
-    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ZarrArrayMeta {
@@ -233,7 +233,14 @@ fn read_from_dir(dir: &Path) -> Result<Raster> {
             meta.chunks[2].max(1),
         )
     } else {
-        (1, meta.shape[0], meta.shape[1], 1, meta.chunks[0].max(1), meta.chunks[1].max(1))
+        (
+            1,
+            meta.shape[0],
+            meta.shape[1],
+            1,
+            meta.chunks[0].max(1),
+            meta.chunks[1].max(1),
+        )
     };
     let (dtype, endian) = parse_zarr_dtype(&meta.dtype)?;
     let bpp = dtype.size_bytes();
@@ -279,7 +286,9 @@ fn read_from_dir(dir: &Path) -> Result<Raster> {
         cell_size_y,
         validation_mode,
     )?;
-    let nodata = attrs.get("nodata").and_then(Value::as_f64)
+    let nodata = attrs
+        .get("nodata")
+        .and_then(Value::as_f64)
         .or_else(|| attrs.get("_FillValue").and_then(Value::as_f64))
         .or_else(|| attrs.get("missing_value").and_then(Value::as_f64))
         .unwrap_or_else(|| fill_value_to_f64(meta.fill_value.as_ref()).unwrap_or(-9999.0));
@@ -302,14 +311,19 @@ fn read_from_dir(dir: &Path) -> Result<Raster> {
                     .get("spatial_ref")
                     .and_then(Value::as_str)
                     .map(ToOwned::to_owned)
-                    })
-                    .or_else(|| attrs_obj.and_then(parse_wkt_from_grid_mapping_attrs)),
+            })
+            .or_else(|| attrs_obj.and_then(parse_wkt_from_grid_mapping_attrs)),
         proj4: attrs
             .get("crs_proj4")
             .and_then(Value::as_str)
             .map(ToOwned::to_owned)
-                    .or_else(|| attrs.get("proj4").and_then(Value::as_str).map(ToOwned::to_owned))
-                    .or_else(|| attrs_obj.and_then(parse_proj4_from_grid_mapping_attrs)),
+            .or_else(|| {
+                attrs
+                    .get("proj4")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned)
+            })
+            .or_else(|| attrs_obj.and_then(parse_proj4_from_grid_mapping_attrs)),
     };
 
     let sep = meta.dimension_separator.as_deref().unwrap_or(".");
@@ -378,7 +392,8 @@ fn read_from_dir(dir: &Path) -> Result<Raster> {
         cell_size_y,
         nodata,
         data_type: dtype,
-        crs: crs,        metadata: vec![
+        crs: crs,
+        metadata: vec![
             ("zarr_version".into(), "2".into()),
             ("zarr_dimension_separator".into(), sep.to_owned()),
         ],
@@ -418,7 +433,11 @@ fn write_to_dir(raster: &Raster, dir: &Path) -> Result<()> {
 
     let meta = ZarrArrayMeta {
         zarr_format: 2,
-        shape: if bands > 1 { vec![bands, rows, cols] } else { vec![rows, cols] },
+        shape: if bands > 1 {
+            vec![bands, rows, cols]
+        } else {
+            vec![rows, cols]
+        },
         chunks: if bands > 1 {
             vec![chunk_bands, chunk_rows, chunk_cols]
         } else {
@@ -529,7 +548,8 @@ fn read_zattrs(dir: &Path) -> Result<Value> {
         return Ok(json!({}));
     }
     let s = fs::read_to_string(p)?;
-    serde_json::from_str(&s).map_err(|e| RasterError::CorruptData(format!("invalid .zattrs JSON: {e}")))
+    serde_json::from_str(&s)
+        .map_err(|e| RasterError::CorruptData(format!("invalid .zattrs JSON: {e}")))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -541,7 +561,9 @@ enum Endian {
 
 fn parse_zarr_dtype(dtype: &str) -> Result<(DataType, Endian)> {
     let mut chars = dtype.chars();
-    let first = chars.next().ok_or_else(|| RasterError::CorruptData("empty dtype".into()))?;
+    let first = chars
+        .next()
+        .ok_or_else(|| RasterError::CorruptData("empty dtype".into()))?;
     let (endian, rest) = match first {
         '<' => (Endian::Little, chars.as_str()),
         '>' => (Endian::Big, chars.as_str()),
@@ -549,7 +571,9 @@ fn parse_zarr_dtype(dtype: &str) -> Result<(DataType, Endian)> {
         _ => (Endian::Little, dtype),
     };
     let mut it = rest.chars();
-    let kind = it.next().ok_or_else(|| RasterError::CorruptData(format!("invalid dtype '{dtype}'")))?;
+    let kind = it
+        .next()
+        .ok_or_else(|| RasterError::CorruptData(format!("invalid dtype '{dtype}'")))?;
     let size: usize = it
         .as_str()
         .parse()
@@ -595,56 +619,72 @@ fn decode_sample(src: &[u8], dtype: DataType, endian: Endian) -> Result<f64> {
         DataType::U8 => src[0] as f64,
         DataType::I8 => (src[0] as i8) as f64,
         DataType::U16 => {
-            let b: [u8; 2] = src.try_into().map_err(|_| RasterError::CorruptData("bad u16 sample size".into()))?;
+            let b: [u8; 2] = src
+                .try_into()
+                .map_err(|_| RasterError::CorruptData("bad u16 sample size".into()))?;
             match endian {
                 Endian::Little | Endian::NativeOneByte => u16::from_le_bytes(b) as f64,
                 Endian::Big => u16::from_be_bytes(b) as f64,
             }
         }
         DataType::I16 => {
-            let b: [u8; 2] = src.try_into().map_err(|_| RasterError::CorruptData("bad i16 sample size".into()))?;
+            let b: [u8; 2] = src
+                .try_into()
+                .map_err(|_| RasterError::CorruptData("bad i16 sample size".into()))?;
             match endian {
                 Endian::Little | Endian::NativeOneByte => i16::from_le_bytes(b) as f64,
                 Endian::Big => i16::from_be_bytes(b) as f64,
             }
         }
         DataType::U32 => {
-            let b: [u8; 4] = src.try_into().map_err(|_| RasterError::CorruptData("bad u32 sample size".into()))?;
+            let b: [u8; 4] = src
+                .try_into()
+                .map_err(|_| RasterError::CorruptData("bad u32 sample size".into()))?;
             match endian {
                 Endian::Little | Endian::NativeOneByte => u32::from_le_bytes(b) as f64,
                 Endian::Big => u32::from_be_bytes(b) as f64,
             }
         }
         DataType::I32 => {
-            let b: [u8; 4] = src.try_into().map_err(|_| RasterError::CorruptData("bad i32 sample size".into()))?;
+            let b: [u8; 4] = src
+                .try_into()
+                .map_err(|_| RasterError::CorruptData("bad i32 sample size".into()))?;
             match endian {
                 Endian::Little | Endian::NativeOneByte => i32::from_le_bytes(b) as f64,
                 Endian::Big => i32::from_be_bytes(b) as f64,
             }
         }
         DataType::U64 => {
-            let b: [u8; 8] = src.try_into().map_err(|_| RasterError::CorruptData("bad u64 sample size".into()))?;
+            let b: [u8; 8] = src
+                .try_into()
+                .map_err(|_| RasterError::CorruptData("bad u64 sample size".into()))?;
             match endian {
                 Endian::Little | Endian::NativeOneByte => u64::from_le_bytes(b) as f64,
                 Endian::Big => u64::from_be_bytes(b) as f64,
             }
         }
         DataType::I64 => {
-            let b: [u8; 8] = src.try_into().map_err(|_| RasterError::CorruptData("bad i64 sample size".into()))?;
+            let b: [u8; 8] = src
+                .try_into()
+                .map_err(|_| RasterError::CorruptData("bad i64 sample size".into()))?;
             match endian {
                 Endian::Little | Endian::NativeOneByte => i64::from_le_bytes(b) as f64,
                 Endian::Big => i64::from_be_bytes(b) as f64,
             }
         }
         DataType::F32 => {
-            let b: [u8; 4] = src.try_into().map_err(|_| RasterError::CorruptData("bad f32 sample size".into()))?;
+            let b: [u8; 4] = src
+                .try_into()
+                .map_err(|_| RasterError::CorruptData("bad f32 sample size".into()))?;
             match endian {
                 Endian::Little | Endian::NativeOneByte => f32::from_le_bytes(b) as f64,
                 Endian::Big => f32::from_be_bytes(b) as f64,
             }
         }
         DataType::F64 => {
-            let b: [u8; 8] = src.try_into().map_err(|_| RasterError::CorruptData("bad f64 sample size".into()))?;
+            let b: [u8; 8] = src
+                .try_into()
+                .map_err(|_| RasterError::CorruptData("bad f64 sample size".into()))?;
             match endian {
                 Endian::Little | Endian::NativeOneByte => f64::from_le_bytes(b),
                 Endian::Big => f64::from_be_bytes(b),
@@ -711,7 +751,10 @@ fn parse_transform_from_attrs_strict(attrs: &Value) -> Result<Option<[f64; 6]>> 
 
     let transform = if let Some(v) = obj.get("transform") {
         Some(parse_transform_tuple(Some(v)).ok_or_else(|| {
-            RasterError::CorruptData("invalid geospatial metadata: 'transform' must contain at least 6 numeric values".into())
+            RasterError::CorruptData(
+                "invalid geospatial metadata: 'transform' must contain at least 6 numeric values"
+                    .into(),
+            )
         })?)
     } else {
         None
@@ -719,7 +762,9 @@ fn parse_transform_from_attrs_strict(attrs: &Value) -> Result<Option<[f64; 6]>> 
 
     let geotransform = if let Some(v) = obj.get("GeoTransform") {
         Some(parse_geotransform_string(Some(v)).ok_or_else(|| {
-            RasterError::CorruptData("invalid geospatial metadata: 'GeoTransform' must contain 6 numeric values".into())
+            RasterError::CorruptData(
+                "invalid geospatial metadata: 'GeoTransform' must contain 6 numeric values".into(),
+            )
         })?)
     } else {
         None
@@ -729,7 +774,8 @@ fn parse_transform_from_attrs_strict(attrs: &Value) -> Result<Option<[f64; 6]>> 
         (Some(a), Some(b)) => {
             if !same_transform(&a, &b) {
                 return Err(RasterError::CorruptData(
-                    "conflicting geospatial metadata: 'transform' and 'GeoTransform' disagree".into(),
+                    "conflicting geospatial metadata: 'transform' and 'GeoTransform' disagree"
+                        .into(),
                 ));
             }
             Ok(Some(a))
@@ -882,9 +928,7 @@ fn parse_epsg_from_crs_str(s: &str) -> Option<u32> {
         .rev()
         .collect();
     if !digits.is_empty()
-        && (upper.contains(":EPSG::")
-            || upper.contains("/EPSG/")
-            || upper.contains(":EPSG:"))
+        && (upper.contains(":EPSG::") || upper.contains("/EPSG/") || upper.contains(":EPSG:"))
     {
         return digits.parse::<u32>().ok();
     }
@@ -945,9 +989,7 @@ fn grid_mapping_object_from_attrs(
     }
 }
 
-fn parse_epsg_from_grid_mapping_attrs(
-    attrs: &serde_json::Map<String, Value>,
-) -> Option<u32> {
+fn parse_epsg_from_grid_mapping_attrs(attrs: &serde_json::Map<String, Value>) -> Option<u32> {
     let gm = grid_mapping_object_from_attrs(attrs)?;
     gm.get("epsg")
         .and_then(parse_epsg_from_crs_json)
@@ -957,25 +999,29 @@ fn parse_epsg_from_grid_mapping_attrs(
         .or_else(|| gm.get("spatial_ref").and_then(parse_epsg_from_crs_json))
 }
 
-fn parse_wkt_from_grid_mapping_attrs(
-    attrs: &serde_json::Map<String, Value>,
-) -> Option<String> {
+fn parse_wkt_from_grid_mapping_attrs(attrs: &serde_json::Map<String, Value>) -> Option<String> {
     let gm = grid_mapping_object_from_attrs(attrs)?;
     gm.get("crs_wkt")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
-        .or_else(|| gm.get("spatial_ref").and_then(Value::as_str).map(ToOwned::to_owned))
+        .or_else(|| {
+            gm.get("spatial_ref")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
         .or_else(|| gm.get("wkt").and_then(Value::as_str).map(ToOwned::to_owned))
 }
 
-fn parse_proj4_from_grid_mapping_attrs(
-    attrs: &serde_json::Map<String, Value>,
-) -> Option<String> {
+fn parse_proj4_from_grid_mapping_attrs(attrs: &serde_json::Map<String, Value>) -> Option<String> {
     let gm = grid_mapping_object_from_attrs(attrs)?;
     gm.get("crs_proj4")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
-        .or_else(|| gm.get("proj4").and_then(Value::as_str).map(ToOwned::to_owned))
+        .or_else(|| {
+            gm.get("proj4")
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
 }
 
 fn chunk_key(indices: &[usize], sep: &str) -> String {
@@ -992,12 +1038,18 @@ fn compress_bytes(compressor: &Option<CompressorSpec>, raw: &[u8]) -> Result<Vec
         None => Ok(raw.to_vec()),
         Some(c) => match c.id.to_ascii_lowercase().as_str() {
             "zlib" => {
-                let mut enc = ZlibEncoder::new(Vec::new(), Compression::new(c.level.unwrap_or(6).clamp(0, 9) as u32));
+                let mut enc = ZlibEncoder::new(
+                    Vec::new(),
+                    Compression::new(c.level.unwrap_or(6).clamp(0, 9) as u32),
+                );
                 enc.write_all(raw)?;
                 enc.finish().map_err(RasterError::Io)
             }
             "gzip" | "gz" => {
-                let mut enc = GzEncoder::new(Vec::new(), Compression::new(c.level.unwrap_or(6).clamp(0, 9) as u32));
+                let mut enc = GzEncoder::new(
+                    Vec::new(),
+                    Compression::new(c.level.unwrap_or(6).clamp(0, 9) as u32),
+                );
                 enc.write_all(raw)?;
                 enc.finish().map_err(RasterError::Io)
             }
@@ -1074,8 +1126,8 @@ fn decode_zstd(bytes: &[u8]) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
     use crate::raster::RasterConfig;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::env::temp_dir;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -1106,7 +1158,8 @@ mod tests {
         let mut data: Vec<f64> = (0..40).map(|i| i as f64 * 0.25).collect();
         data[7] = -9999.0;
         let mut r = Raster::from_data(cfg, data).unwrap();
-        r.metadata.push(("zarr_dimension_separator".into(), "/".into()));
+        r.metadata
+            .push(("zarr_dimension_separator".into(), "/".into()));
 
         let dir = tmp_dir();
         write_to_dir(&r, &dir).unwrap();
@@ -1152,7 +1205,8 @@ mod tests {
             .map(|i| i as f64)
             .collect();
         let mut r = Raster::from_data(cfg, data).unwrap();
-        r.metadata.push(("zarr_dimension_separator".into(), "/".into()));
+        r.metadata
+            .push(("zarr_dimension_separator".into(), "/".into()));
         r.metadata.push(("zarr_chunk_bands".into(), "1".into()));
 
         let dir = tmp_dir();
@@ -1226,17 +1280,7 @@ mod tests {
         obj.remove("y_min");
         obj.remove("cell_size_x");
         obj.remove("cell_size_y");
-        obj.insert(
-            "transform".into(),
-            json!([
-                10.0,
-                2.0,
-                0.0,
-                30.0,
-                0.0,
-                -2.0
-            ]),
-        );
+        obj.insert("transform".into(), json!([10.0, 2.0, 0.0, 30.0, 0.0, -2.0]));
         fs::write(
             dir.join(".zattrs"),
             serde_json::to_string_pretty(&zattrs).unwrap(),
@@ -1478,7 +1522,10 @@ mod tests {
         let obj = zattrs.as_object_mut().unwrap();
         obj.remove("crs_epsg");
         obj.remove("epsg");
-        obj.insert("crs".into(), json!("https://www.opengis.net/def/crs/EPSG/0/3857"));
+        obj.insert(
+            "crs".into(),
+            json!("https://www.opengis.net/def/crs/EPSG/0/3857"),
+        );
         fs::write(
             dir.join(".zattrs"),
             serde_json::to_string_pretty(&zattrs).unwrap(),
@@ -1535,8 +1582,18 @@ mod tests {
 
         let r2 = read_from_dir(&dir).unwrap();
         assert_eq!(r2.crs.epsg, Some(32617));
-        assert!(r2.crs.wkt.as_deref().unwrap_or_default().contains("UTM zone 17N"));
-        assert!(r2.crs.proj4.as_deref().unwrap_or_default().contains("+proj=utm"));
+        assert!(r2
+            .crs
+            .wkt
+            .as_deref()
+            .unwrap_or_default()
+            .contains("UTM zone 17N"));
+        assert!(r2
+            .crs
+            .proj4
+            .as_deref()
+            .unwrap_or_default()
+            .contains("+proj=utm"));
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1763,7 +1820,11 @@ mod tests {
         let obj = zattrs.as_object_mut().unwrap();
         obj.remove("nodata");
         obj.insert("_FillValue".into(), json!(-32768.0_f64));
-        fs::write(dir.join(".zattrs"), serde_json::to_string_pretty(&zattrs).unwrap()).unwrap();
+        fs::write(
+            dir.join(".zattrs"),
+            serde_json::to_string_pretty(&zattrs).unwrap(),
+        )
+        .unwrap();
 
         let r2 = read_from_dir(&dir).expect("should read nodata from _FillValue");
         assert!(
@@ -1798,7 +1859,11 @@ mod tests {
         let obj = zattrs.as_object_mut().unwrap();
         obj.remove("nodata");
         obj.insert("missing_value".into(), json!(-1.0_f64));
-        fs::write(dir.join(".zattrs"), serde_json::to_string_pretty(&zattrs).unwrap()).unwrap();
+        fs::write(
+            dir.join(".zattrs"),
+            serde_json::to_string_pretty(&zattrs).unwrap(),
+        )
+        .unwrap();
 
         let r2 = read_from_dir(&dir).expect("should read nodata from missing_value");
         assert!(
@@ -1833,7 +1898,11 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(dir.join(".zattrs")).unwrap()).unwrap();
         let obj = zattrs.as_object_mut().unwrap();
         obj.insert("_FillValue".into(), json!(0.0_f64));
-        fs::write(dir.join(".zattrs"), serde_json::to_string_pretty(&zattrs).unwrap()).unwrap();
+        fs::write(
+            dir.join(".zattrs"),
+            serde_json::to_string_pretty(&zattrs).unwrap(),
+        )
+        .unwrap();
 
         let r2 = read_from_dir(&dir).expect("should read OK");
         assert!(

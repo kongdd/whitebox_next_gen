@@ -115,11 +115,21 @@ impl PlanetScopeBundle {
                     );
                     acquisition_datetime_utc = extract_first_json_text(
                         &v,
-                        &["datetime", "properties.datetime", "acquired", "properties.acquired"],
+                        &[
+                            "datetime",
+                            "properties.datetime",
+                            "acquired",
+                            "properties.acquired",
+                        ],
                     );
                     product_type = extract_first_json_text(
                         &v,
-                        &["properties.item_type", "item_type", "product_type", "properties.product_type"],
+                        &[
+                            "properties.item_type",
+                            "item_type",
+                            "product_type",
+                            "properties.product_type",
+                        ],
                     );
                     cloud_cover_percent = extract_first_json_number(
                         &v,
@@ -131,11 +141,19 @@ impl PlanetScopeBundle {
                     );
                     sun_elevation_deg = extract_first_json_number(
                         &v,
-                        &["view:sun_elevation", "sun_elevation", "properties.sun_elevation"],
+                        &[
+                            "view:sun_elevation",
+                            "sun_elevation",
+                            "properties.sun_elevation",
+                        ],
                     );
                     view_angle_deg = extract_first_json_number(
                         &v,
-                        &["view:incidence_angle", "view_angle", "properties.view_angle"],
+                        &[
+                            "view:incidence_angle",
+                            "view_angle",
+                            "properties.view_angle",
+                        ],
                     );
                     off_nadir_angle_deg = extract_first_json_number(
                         &v,
@@ -166,22 +184,20 @@ impl PlanetScopeBundle {
                     );
                 }
                 if sun_azimuth_deg.is_none() {
-                    sun_azimuth_deg = extract_first_xml_number(
-                        &xml,
-                        &["sun_azimuth", "sun_azimuth_angle"],
-                    );
+                    sun_azimuth_deg =
+                        extract_first_xml_number(&xml, &["sun_azimuth", "sun_azimuth_angle"]);
                 }
                 if sun_elevation_deg.is_none() {
-                    sun_elevation_deg = extract_first_xml_number(
-                        &xml,
-                        &["sun_elevation", "sun_elevation_angle"],
-                    );
+                    sun_elevation_deg =
+                        extract_first_xml_number(&xml, &["sun_elevation", "sun_elevation_angle"]);
                 }
                 if view_angle_deg.is_none() {
-                    view_angle_deg = extract_first_xml_number(&xml, &["view_angle", "incidence_angle"]);
+                    view_angle_deg =
+                        extract_first_xml_number(&xml, &["view_angle", "incidence_angle"]);
                 }
                 if off_nadir_angle_deg.is_none() {
-                    off_nadir_angle_deg = extract_first_xml_number(&xml, &["off_nadir", "off_nadir_angle"]);
+                    off_nadir_angle_deg =
+                        extract_first_xml_number(&xml, &["off_nadir", "off_nadir_angle"]);
                 }
             }
         }
@@ -239,7 +255,9 @@ impl PlanetScopeBundle {
 
     /// Resolve canonical band path.
     pub fn band_path(&self, key: &str) -> Option<&Path> {
-        self.bands.get(&key.to_ascii_uppercase()).map(PathBuf::as_path)
+        self.bands
+            .get(&key.to_ascii_uppercase())
+            .map(PathBuf::as_path)
     }
 
     /// Resolve canonical band path for a specific profile key.
@@ -489,7 +507,10 @@ mod tests {
 
         let b = PlanetScopeBundle::open(&root).expect("open");
         assert_eq!(b.scene_id.as_deref(), Some("PSScene_01"));
-        assert_eq!(b.acquisition_datetime_utc.as_deref(), Some("2026-04-01T10:00:00Z"));
+        assert_eq!(
+            b.acquisition_datetime_utc.as_deref(),
+            Some("2026-04-01T10:00:00Z")
+        );
         assert_eq!(b.product_type.as_deref(), Some("PSScene"));
         assert!(b.band_path("B3").is_some());
         assert!(b.band_path("B4").is_some());

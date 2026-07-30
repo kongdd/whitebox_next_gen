@@ -50,10 +50,10 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 
-use crate::error::{Result, RasterError};
+use crate::crs_info::CrsInfo;
+use crate::error::{RasterError, Result};
 use crate::io_utils::*;
 use crate::raster::{DataType, Raster, RasterConfig};
-use crate::crs_info::CrsInfo;
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -68,7 +68,7 @@ pub fn read(path: &str) -> Result<Raster> {
     // Top-left corner of data:
     //   x_min = reg_easting  - regX * x_dim  (cell-center -> left edge of pixel -> then subtract regX cells)
     //   y_max = reg_northing + regY * y_dim
-    let x_min = hdr.reg_easting  - hdr.reg_cell_x * hdr.x_dim;
+    let x_min = hdr.reg_easting - hdr.reg_cell_x * hdr.x_dim;
     let y_max = hdr.reg_northing + hdr.reg_cell_y * hdr.y_dim;
     let y_min = y_max - hdr.rows as f64 * hdr.y_dim;
 
@@ -86,7 +86,10 @@ pub fn read(path: &str) -> Result<Raster> {
         metadata.push(("er_projection".to_string(), hdr.projection.clone()));
     }
     if !hdr.coordinate_type.is_empty() {
-        metadata.push(("er_coordinate_type".to_string(), hdr.coordinate_type.clone()));
+        metadata.push((
+            "er_coordinate_type".to_string(),
+            hdr.coordinate_type.clone(),
+        ));
     }
 
     let cfg = RasterConfig {
@@ -97,7 +100,8 @@ pub fn read(path: &str) -> Result<Raster> {
         cell_size,
         nodata: hdr.nodata,
         data_type: hdr.cell_type,
-        crs: crs,        metadata,
+        crs: crs,
+        metadata,
         ..Default::default()
     };
     Raster::from_data(cfg, data)
@@ -157,22 +161,44 @@ fn parse_ers_header(path: &str) -> Result<ErsHeader> {
 
     // Track nesting context
     let mut in_raster = false;
-    let mut in_coord   = false;
-    let mut in_reg     = false;
+    let mut in_coord = false;
+    let mut in_reg = false;
 
     for line_res in reader.lines() {
         let line = line_res?;
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
 
         // Context pushes
-        if line.eq_ignore_ascii_case("RasterInfo Begin")     { in_raster = true; continue; }
-        if line.eq_ignore_ascii_case("RasterInfo End")       { in_raster = false; continue; }
-        if line.eq_ignore_ascii_case("CoordinateSpace Begin"){ in_coord  = true; continue; }
-        if line.eq_ignore_ascii_case("CoordinateSpace End")  { in_coord  = false; continue; }
-        if line.eq_ignore_ascii_case("RegistrationCoord Begin") { in_reg = true; continue; }
-        if line.eq_ignore_ascii_case("RegistrationCoord End")   { in_reg = false; continue; }
-        if line.to_ascii_lowercase().ends_with("begin") || line.to_ascii_lowercase().ends_with("end") {
+        if line.eq_ignore_ascii_case("RasterInfo Begin") {
+            in_raster = true;
+            continue;
+        }
+        if line.eq_ignore_ascii_case("RasterInfo End") {
+            in_raster = false;
+            continue;
+        }
+        if line.eq_ignore_ascii_case("CoordinateSpace Begin") {
+            in_coord = true;
+            continue;
+        }
+        if line.eq_ignore_ascii_case("CoordinateSpace End") {
+            in_coord = false;
+            continue;
+        }
+        if line.eq_ignore_ascii_case("RegistrationCoord Begin") {
+            in_reg = true;
+            continue;
+        }
+        if line.eq_ignore_ascii_case("RegistrationCoord End") {
+            in_reg = false;
+            continue;
+        }
+        if line.to_ascii_lowercase().ends_with("begin")
+            || line.to_ascii_lowercase().ends_with("end")
+        {
             continue;
         }
 
@@ -185,32 +211,38 @@ fn parse_ers_header(path: &str) -> Result<ErsHeader> {
 
         if in_reg {
             match key.as_str() {
-                "eastings"  => hdr.reg_easting  = parse_f64_h("Eastings", &val)?,
+                "eastings" => hdr.reg_easting = parse_f64_h("Eastings", &val)?,
                 "northings" => hdr.reg_northing = parse_f64_h("Northings", &val)?,
                 _ => {}
             }
         } else if in_raster {
             match key.as_str() {
-                "celltype"          => hdr.cell_type = parse_cell_type(&val),
-                "nullcellvalue"     => hdr.nodata     = parse_f64_h("NullCellValue", &val).unwrap_or(-9999.0),
-                "xdimension"        => hdr.x_dim       = parse_f64_h("Xdimension", &val)?,
-                "ydimension"        => hdr.y_dim       = parse_f64_h("Ydimension", &val)?,
-                "nroflines"         => hdr.rows         = parse_usize_h("NrOfLines", &val)?,
-                "nrofcellsperline"  => hdr.cols         = parse_usize_h("NrOfCellsPerLine", &val)?,
-                "registrationcellx" => hdr.reg_cell_x   = parse_f64_h("RegistrationCellX", &val).unwrap_or(0.5),
-                "registrationcelly" => hdr.reg_cell_y   = parse_f64_h("RegistrationCellY", &val).unwrap_or(0.5),
+                "celltype" => hdr.cell_type = parse_cell_type(&val),
+                "nullcellvalue" => {
+                    hdr.nodata = parse_f64_h("NullCellValue", &val).unwrap_or(-9999.0)
+                }
+                "xdimension" => hdr.x_dim = parse_f64_h("Xdimension", &val)?,
+                "ydimension" => hdr.y_dim = parse_f64_h("Ydimension", &val)?,
+                "nroflines" => hdr.rows = parse_usize_h("NrOfLines", &val)?,
+                "nrofcellsperline" => hdr.cols = parse_usize_h("NrOfCellsPerLine", &val)?,
+                "registrationcellx" => {
+                    hdr.reg_cell_x = parse_f64_h("RegistrationCellX", &val).unwrap_or(0.5)
+                }
+                "registrationcelly" => {
+                    hdr.reg_cell_y = parse_f64_h("RegistrationCellY", &val).unwrap_or(0.5)
+                }
                 _ => {}
             }
         } else if in_coord {
             match key.as_str() {
-                "datum"      => hdr.datum      = val,
+                "datum" => hdr.datum = val,
                 "projection" => hdr.projection = val,
                 "coordinatetype" => hdr.coordinate_type = val,
                 _ => {}
             }
         } else {
             match key.as_str() {
-                "datafile"  => hdr.data_file   = val,
+                "datafile" => hdr.data_file = val,
                 "byteorder" => hdr.byte_order_le = !val.eq_ignore_ascii_case("MSBFirst"),
                 _ => {}
             }
@@ -218,7 +250,9 @@ fn parse_ers_header(path: &str) -> Result<ErsHeader> {
     }
 
     if hdr.cols == 0 || hdr.rows == 0 {
-        return Err(RasterError::MissingField("NrOfLines / NrOfCellsPerLine".into()));
+        return Err(RasterError::MissingField(
+            "NrOfLines / NrOfCellsPerLine".into(),
+        ));
     }
     if hdr.x_dim == 0.0 {
         return Err(RasterError::MissingField("Xdimension".into()));
@@ -230,9 +264,9 @@ fn parse_cell_type(s: &str) -> DataType {
     match s.to_ascii_lowercase().as_str() {
         "ieee4bytereal" | "float" | "float32" => DataType::F32,
         "ieee8bytereal" | "double" | "float64" => DataType::F64,
-        "unsignedinteger" | "uint8" | "byte"  => DataType::U8,
+        "unsignedinteger" | "uint8" | "byte" => DataType::U8,
         "signedinteger16" | "int16" | "short" => DataType::I16,
-        "signedinteger32" | "int32" | "int"   => DataType::I32,
+        "signedinteger32" | "int32" | "int" => DataType::I32,
         "unsignedinteger64" | "uint64" => DataType::U64,
         "signedinteger64" | "int64" => DataType::I64,
         _ => DataType::F32,
@@ -241,21 +275,22 @@ fn parse_cell_type(s: &str) -> DataType {
 
 fn cell_type_str(dt: DataType) -> &'static str {
     match dt {
-        DataType::U8           => "Unsigned8BitInteger",
-        DataType::I8           => "Signed8BitInteger",
+        DataType::U8 => "Unsigned8BitInteger",
+        DataType::I8 => "Signed8BitInteger",
         DataType::I16 | DataType::U16 => "Signed16BitInteger",
         DataType::I32 | DataType::U32 => "Signed32BitInteger",
         DataType::U64 => "Unsigned64BitInteger",
         DataType::I64 => "Signed64BitInteger",
-        DataType::F32          => "IEEE4ByteReal",
-        DataType::F64          => "IEEE8ByteReal",
+        DataType::F32 => "IEEE4ByteReal",
+        DataType::F64 => "IEEE8ByteReal",
     }
 }
 
 fn ers_data_path(ers_path: &str, data_file: &str) -> String {
     if !data_file.is_empty() {
         // Relative to the .ers directory
-        let dir = std::path::Path::new(ers_path).parent()
+        let dir = std::path::Path::new(ers_path)
+            .parent()
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| ".".to_string());
         format!("{dir}/{data_file}")
@@ -282,25 +317,41 @@ fn read_data(path: &str, hdr: &ErsHeader) -> Result<Vec<f64>> {
         }
         DataType::I16 => {
             for _ in 0..n {
-                let v = if le { read_i16_le_stream(&mut file)? } else { read_i16_be_stream(&mut file)? };
+                let v = if le {
+                    read_i16_le_stream(&mut file)?
+                } else {
+                    read_i16_be_stream(&mut file)?
+                };
                 data.push(v as f64);
             }
         }
         DataType::I32 => {
             for _ in 0..n {
-                let v = if le { read_i32_le_stream(&mut file)? } else { read_i32_be_stream(&mut file)? };
+                let v = if le {
+                    read_i32_le_stream(&mut file)?
+                } else {
+                    read_i32_be_stream(&mut file)?
+                };
                 data.push(v as f64);
             }
         }
         DataType::F32 => {
             for _ in 0..n {
-                let v = if le { read_f32_le_stream(&mut file)? } else { read_f32_be_stream(&mut file)? };
+                let v = if le {
+                    read_f32_le_stream(&mut file)?
+                } else {
+                    read_f32_be_stream(&mut file)?
+                };
                 data.push(v as f64);
             }
         }
         DataType::F64 => {
             for _ in 0..n {
-                let v = if le { read_f64_le_stream(&mut file)? } else { read_f64_be_stream(&mut file)? };
+                let v = if le {
+                    read_f64_le_stream(&mut file)?
+                } else {
+                    read_f64_be_stream(&mut file)?
+                };
                 data.push(v);
             }
         }
@@ -313,11 +364,13 @@ fn read_data(path: &str, hdr: &ErsHeader) -> Result<Vec<f64>> {
 
 fn write_ers_header(raster: &Raster, ers_path: &str, data_path: &str) -> Result<()> {
     let data_basename = std::path::Path::new(data_path)
-        .file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
 
     // RegistrationCoord = upper-left corner of first pixel (center of first pixel).
     // We store as top-down, so y_max is the north edge.
-    let reg_easting  = raster.x_min + raster.cell_size_x * 0.5;
+    let reg_easting = raster.x_min + raster.cell_size_x * 0.5;
     let reg_northing = raster.y_max() - raster.cell_size_y * 0.5;
 
     let md_val = |key: &str| -> Option<String> {
@@ -351,8 +404,16 @@ fn write_ers_header(raster: &Raster, ers_path: &str, data_path: &str) -> Result<
     writeln!(w, "\tRasterInfo Begin")?;
     writeln!(w, "\t\tCellType\t\t= {}", cell_type_str(raster.data_type))?;
     writeln!(w, "\t\tNullCellValue\t= {}", format_float(raster.nodata, 6))?;
-    writeln!(w, "\t\tXdimension\t\t= {}", format_float(raster.cell_size_x, 10))?;
-    writeln!(w, "\t\tYdimension\t\t= {}", format_float(raster.cell_size_y, 10))?;
+    writeln!(
+        w,
+        "\t\tXdimension\t\t= {}",
+        format_float(raster.cell_size_x, 10)
+    )?;
+    writeln!(
+        w,
+        "\t\tYdimension\t\t= {}",
+        format_float(raster.cell_size_y, 10)
+    )?;
     writeln!(w, "\t\tNrOfLines\t\t= {}", raster.rows)?;
     writeln!(w, "\t\tNrOfCellsPerLine\t= {}", raster.cols)?;
     writeln!(w, "\t\tRegistrationCoord Begin")?;
@@ -370,13 +431,13 @@ fn write_ers_header(raster: &Raster, ers_path: &str, data_path: &str) -> Result<
 fn wkt_like(s: &str) -> bool {
     let t = s.trim();
     let upper = t.to_ascii_uppercase();
-    !t.is_empty() &&
-    (upper.starts_with("GEOGCS[")
-        || upper.starts_with("PROJCS[")
-        || upper.starts_with("COMPOUNDCRS[")
-        || upper.starts_with("GEODCRS[")
-        || upper.starts_with("PROJCRS[")
-        || upper.starts_with("VERTCRS["))
+    !t.is_empty()
+        && (upper.starts_with("GEOGCS[")
+            || upper.starts_with("PROJCS[")
+            || upper.starts_with("COMPOUNDCRS[")
+            || upper.starts_with("GEODCRS[")
+            || upper.starts_with("PROJCRS[")
+            || upper.starts_with("VERTCRS["))
 }
 
 fn write_data(raster: &Raster, path: &str) -> Result<()> {
@@ -392,15 +453,23 @@ fn write_data(raster: &Raster, path: &str) -> Result<()> {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 fn parse_usize_h(field: &str, val: &str) -> Result<usize> {
-    val.trim().parse::<usize>().map_err(|_| RasterError::ParseError {
-        field: field.into(), value: val.into(), expected: "positive integer".into(),
-    })
+    val.trim()
+        .parse::<usize>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "positive integer".into(),
+        })
 }
 
 fn parse_f64_h(field: &str, val: &str) -> Result<f64> {
-    val.trim().parse::<f64>().map_err(|_| RasterError::ParseError {
-        field: field.into(), value: val.into(), expected: "float".into(),
-    })
+    val.trim()
+        .parse::<f64>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "float".into(),
+        })
 }
 
 #[cfg(test)]
@@ -411,7 +480,10 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn tmp(suffix: &str) -> String {
-        let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let pid = std::process::id();
         temp_dir()
             .join(format!("ers_test_{pid}_{ts}{suffix}"))
@@ -423,8 +495,14 @@ mod tests {
     fn ers_roundtrip() {
         let ers = tmp(".ers");
         let cfg = RasterConfig {
-            cols: 4, rows: 3, cell_size: 0.01, x_min: 100.0, y_min: -30.03,
-            nodata: -9999.0, data_type: DataType::F32, ..Default::default()
+            cols: 4,
+            rows: 3,
+            cell_size: 0.01,
+            x_min: 100.0,
+            y_min: -30.03,
+            nodata: -9999.0,
+            data_type: DataType::F32,
+            ..Default::default()
         };
         let data: Vec<f64> = (0..12).map(|i| i as f64 * 1.5).collect();
         let r = Raster::from_data(cfg, data).unwrap();
@@ -432,8 +510,16 @@ mod tests {
         let r2 = read(&ers).unwrap();
         assert_eq!(r2.cols, 4);
         assert_eq!(r2.rows, 3);
-        assert!((r2.get(0, 0, 0) - 0.0).abs() < 1e-4, "got {:?}", r2.get(0, 0, 0));
-        assert!((r2.get(0, 2, 3) - 16.5).abs() < 1e-3, "got {:?}", r2.get(0, 2, 3));
+        assert!(
+            (r2.get(0, 0, 0) - 0.0).abs() < 1e-4,
+            "got {:?}",
+            r2.get(0, 0, 0)
+        );
+        assert!(
+            (r2.get(0, 2, 3) - 16.5).abs() < 1e-3,
+            "got {:?}",
+            r2.get(0, 2, 3)
+        );
         let data_path = ers.trim_end_matches(".ers").to_string();
         let _ = std::fs::remove_file(&ers);
         let _ = std::fs::remove_file(&data_path);
@@ -454,7 +540,8 @@ mod tests {
         };
         cfg.metadata.push(("er_datum".into(), "GDA94".into()));
         cfg.metadata.push(("er_projection".into(), "MGA55".into()));
-        cfg.metadata.push(("er_coordinate_type".into(), "EN".into()));
+        cfg.metadata
+            .push(("er_coordinate_type".into(), "EN".into()));
         let r = Raster::from_data(cfg, vec![1.0, 2.0, 3.0, 4.0]).unwrap();
         write(&r, &ers).unwrap();
 
@@ -492,12 +579,21 @@ mod tests {
     fn ers_legacy_wkt_in_datum_populates_srs() {
         let ers = tmp(".ers");
         let data_path = ers.trim_end_matches(".ers").to_string();
-        let wkt = "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]]]";
+        let wkt =
+            "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]]]";
 
         let mut w = BufWriter::new(File::create(&ers).unwrap());
         writeln!(w, "DatasetHeader Begin").unwrap();
         writeln!(w, "\tVersion\t\t\t= \"6.0\"").unwrap();
-        writeln!(w, "\tDataFile\t\t= \"{}\"", std::path::Path::new(&data_path).file_name().unwrap().to_string_lossy()).unwrap();
+        writeln!(
+            w,
+            "\tDataFile\t\t= \"{}\"",
+            std::path::Path::new(&data_path)
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+        )
+        .unwrap();
         writeln!(w, "\tHeaderOffset\t\t= 0").unwrap();
         writeln!(w, "\tByteOrder\t\t= LSBFirst").unwrap();
         writeln!(w, "\tDataSetType\t\t= ERStorage").unwrap();

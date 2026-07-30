@@ -6,11 +6,11 @@
 
 use std::path::Path;
 
-use crate::error::{RasterError, Result};
 use super::dimap_bundle::DimapBundle;
 use super::landsat_bundle::{LandsatBundle, LandsatMission};
 use super::sensor_bundle::{detect_sensor_bundle_family, SensorBundleFamily};
 use super::sentinel2_safe::Sentinel2SafePackage;
+use crate::error::{RasterError, Result};
 
 // ---------------------------------------------------------------------------
 // Canonical output type
@@ -80,7 +80,9 @@ pub struct SensorBundleRegistry {
 impl SensorBundleRegistry {
     /// Creates an empty registry.
     pub fn new() -> Self {
-        Self { providers: Vec::new() }
+        Self {
+            providers: Vec::new(),
+        }
     }
 
     /// Creates a registry pre-populated with the built-in optical providers.
@@ -134,7 +136,10 @@ impl SensorBundleProvider for DimapBundleProvider {
                 entries
                     .flatten()
                     .map(|e| e.path())
-                    .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_ascii_uppercase()))
+                    .filter_map(|p| {
+                        p.file_name()
+                            .map(|n| n.to_string_lossy().to_ascii_uppercase())
+                    })
                     .any(|name| name.starts_with("DIM_") && name.ends_with(".XML"))
             })
             .unwrap_or(false)
@@ -224,7 +229,10 @@ impl SensorBundleProvider for LandsatBundleProvider {
                 entries
                     .flatten()
                     .map(|e| e.path())
-                    .filter_map(|p| p.file_name().map(|n| n.to_string_lossy().to_ascii_uppercase()))
+                    .filter_map(|p| {
+                        p.file_name()
+                            .map(|n| n.to_string_lossy().to_ascii_uppercase())
+                    })
                     .any(|name| name.ends_with("_MTL.TXT"))
             })
             .unwrap_or(false)
@@ -302,7 +310,9 @@ impl SensorBundleProvider for LandsatBundleProvider {
 }
 
 /// Band-key mapping for Landsat OLI (8/9) vs TM/ETM+ (4/5/7).
-fn mission_band_mapping(bundle: &LandsatBundle) -> (&'static str, &'static str, &'static str, &'static str) {
+fn mission_band_mapping(
+    bundle: &LandsatBundle,
+) -> (&'static str, &'static str, &'static str, &'static str) {
     match bundle.mission {
         LandsatMission::Landsat8 | LandsatMission::Landsat9 => ("B4", "B5", "B3", "B2"),
         LandsatMission::Landsat4 | LandsatMission::Landsat5 | LandsatMission::Landsat7 => {
@@ -318,7 +328,10 @@ fn mission_band_mapping(bundle: &LandsatBundle) -> (&'static str, &'static str, 
     }
 }
 
-fn combine_landsat_datetime(date_utc: Option<&str>, scene_time_utc: Option<&str>) -> Option<String> {
+fn combine_landsat_datetime(
+    date_utc: Option<&str>,
+    scene_time_utc: Option<&str>,
+) -> Option<String> {
     match (date_utc, scene_time_utc) {
         (Some(date), Some(time)) => {
             let t = time.trim();
@@ -452,10 +465,26 @@ mod tests {
             .expect("resolve dimap bundle");
 
         assert_eq!(resolved.sensor_name, "dimap");
-        assert!(resolved.red_path.as_deref().unwrap_or_default().contains("XS3"));
-        assert!(resolved.nir_path.as_deref().unwrap_or_default().contains("XS4"));
-        assert!(resolved.green_path.as_deref().unwrap_or_default().contains("XS2"));
-        assert!(resolved.blue_path.as_deref().unwrap_or_default().contains("XS1"));
+        assert!(resolved
+            .red_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("XS3"));
+        assert!(resolved
+            .nir_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("XS4"));
+        assert!(resolved
+            .green_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("XS2"));
+        assert!(resolved
+            .blue_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("XS1"));
         assert_eq!(resolved.mean_solar_azimuth_deg, Some(145.0));
         assert_eq!(resolved.mean_solar_zenith_deg, Some(48.8));
 
@@ -495,11 +524,31 @@ mod tests {
             .expect("resolve landsat9 bundle");
 
         assert_eq!(resolved.sensor_name, "landsat");
-        assert!(resolved.red_path.as_deref().unwrap_or_default().contains("_B4.TIF"));
-        assert!(resolved.nir_path.as_deref().unwrap_or_default().contains("_B5.TIF"));
-        assert!(resolved.green_path.as_deref().unwrap_or_default().contains("_B3.TIF"));
-        assert!(resolved.blue_path.as_deref().unwrap_or_default().contains("_B2.TIF"));
-        assert!(resolved.qa_qa60_path.as_deref().unwrap_or_default().contains("QA_PIXEL"));
+        assert!(resolved
+            .red_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("_B4.TIF"));
+        assert!(resolved
+            .nir_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("_B5.TIF"));
+        assert!(resolved
+            .green_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("_B3.TIF"));
+        assert!(resolved
+            .blue_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("_B2.TIF"));
+        assert!(resolved
+            .qa_qa60_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("QA_PIXEL"));
         assert_eq!(resolved.mean_solar_azimuth_deg, Some(145.2));
         assert_eq!(resolved.mean_solar_zenith_deg, Some(51.4));
         assert_eq!(
@@ -524,10 +573,26 @@ mod tests {
             .resolve_optical_bundle(&root)
             .expect("resolve landsat7 bundle");
 
-        assert!(resolved.red_path.as_deref().unwrap_or_default().contains("_B3.TIF"));
-        assert!(resolved.nir_path.as_deref().unwrap_or_default().contains("_B4.TIF"));
-        assert!(resolved.green_path.as_deref().unwrap_or_default().contains("_B2.TIF"));
-        assert!(resolved.blue_path.as_deref().unwrap_or_default().contains("_B1.TIF"));
+        assert!(resolved
+            .red_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("_B3.TIF"));
+        assert!(resolved
+            .nir_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("_B4.TIF"));
+        assert!(resolved
+            .green_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("_B2.TIF"));
+        assert!(resolved
+            .blue_path
+            .as_deref()
+            .unwrap_or_default()
+            .contains("_B1.TIF"));
 
         let _ = fs::remove_dir_all(&root);
     }

@@ -19,61 +19,296 @@
 /// One entry in the MQ probability estimation state machine.
 #[derive(Clone, Copy)]
 struct QeEntry {
-    qe:    u16,   // Probability estimate (Q-coder style, scaled)
-    nmps:  u8,    // Next state on MPS (most probable symbol)
-    nlps:  u8,    // Next state on LPS (least probable symbol)
-    switch: u8,   // Whether to switch MPS on LPS coding
+    qe: u16,    // Probability estimate (Q-coder style, scaled)
+    nmps: u8,   // Next state on MPS (most probable symbol)
+    nlps: u8,   // Next state on LPS (least probable symbol)
+    switch: u8, // Whether to switch MPS on LPS coding
 }
 
 /// The 47-entry MQ probability state table (ISO 15444-1 Table C.2).
 const QE_TABLE: [QeEntry; 47] = [
-    QeEntry { qe: 0x5601, nmps:  1, nlps:  1, switch: 1 },
-    QeEntry { qe: 0x3401, nmps:  2, nlps:  6, switch: 0 },
-    QeEntry { qe: 0x1801, nmps:  3, nlps:  9, switch: 0 },
-    QeEntry { qe: 0x0AC1, nmps:  4, nlps: 12, switch: 0 },
-    QeEntry { qe: 0x0521, nmps:  5, nlps: 29, switch: 0 },
-    QeEntry { qe: 0x0221, nmps:  38, nlps: 33, switch: 0 },
-    QeEntry { qe: 0x5601, nmps:  7, nlps:  6, switch: 1 },
-    QeEntry { qe: 0x5401, nmps:  8, nlps: 14, switch: 0 },
-    QeEntry { qe: 0x4801, nmps:  9, nlps: 14, switch: 0 },
-    QeEntry { qe: 0x3801, nmps: 10, nlps: 14, switch: 0 },
-    QeEntry { qe: 0x3001, nmps: 11, nlps: 17, switch: 0 },
-    QeEntry { qe: 0x2401, nmps: 12, nlps: 18, switch: 0 },
-    QeEntry { qe: 0x1C01, nmps: 13, nlps: 20, switch: 0 },
-    QeEntry { qe: 0x1601, nmps: 29, nlps: 21, switch: 0 },
-    QeEntry { qe: 0x5601, nmps: 15, nlps: 14, switch: 1 },
-    QeEntry { qe: 0x5401, nmps: 16, nlps: 14, switch: 0 },
-    QeEntry { qe: 0x5101, nmps: 17, nlps: 15, switch: 0 },
-    QeEntry { qe: 0x4801, nmps: 18, nlps: 16, switch: 0 },
-    QeEntry { qe: 0x3801, nmps: 19, nlps: 17, switch: 0 },
-    QeEntry { qe: 0x3401, nmps: 20, nlps: 18, switch: 0 },
-    QeEntry { qe: 0x3001, nmps: 21, nlps: 19, switch: 0 },
-    QeEntry { qe: 0x2801, nmps: 22, nlps: 19, switch: 0 },
-    QeEntry { qe: 0x2401, nmps: 23, nlps: 20, switch: 0 },
-    QeEntry { qe: 0x2201, nmps: 24, nlps: 21, switch: 0 },
-    QeEntry { qe: 0x1C01, nmps: 25, nlps: 22, switch: 0 },
-    QeEntry { qe: 0x1801, nmps: 26, nlps: 23, switch: 0 },
-    QeEntry { qe: 0x1601, nmps: 27, nlps: 24, switch: 0 },
-    QeEntry { qe: 0x1401, nmps: 28, nlps: 25, switch: 0 },
-    QeEntry { qe: 0x1201, nmps: 29, nlps: 26, switch: 0 },
-    QeEntry { qe: 0x1101, nmps: 30, nlps: 27, switch: 0 },
-    QeEntry { qe: 0x0AC1, nmps: 31, nlps: 28, switch: 0 },
-    QeEntry { qe: 0x09C1, nmps: 32, nlps: 29, switch: 0 },
-    QeEntry { qe: 0x08A1, nmps: 33, nlps: 30, switch: 0 },
-    QeEntry { qe: 0x0521, nmps: 34, nlps: 31, switch: 0 },
-    QeEntry { qe: 0x0441, nmps: 35, nlps: 32, switch: 0 },
-    QeEntry { qe: 0x02A1, nmps: 36, nlps: 33, switch: 0 },
-    QeEntry { qe: 0x0221, nmps: 37, nlps: 34, switch: 0 },
-    QeEntry { qe: 0x0141, nmps: 38, nlps: 35, switch: 0 },
-    QeEntry { qe: 0x0111, nmps: 39, nlps: 36, switch: 0 },
-    QeEntry { qe: 0x0085, nmps: 40, nlps: 37, switch: 0 },
-    QeEntry { qe: 0x0049, nmps: 41, nlps: 38, switch: 0 },
-    QeEntry { qe: 0x0025, nmps: 42, nlps: 39, switch: 0 },
-    QeEntry { qe: 0x0015, nmps: 43, nlps: 40, switch: 0 },
-    QeEntry { qe: 0x0009, nmps: 44, nlps: 41, switch: 0 },
-    QeEntry { qe: 0x0005, nmps: 45, nlps: 42, switch: 0 },
-    QeEntry { qe: 0x0001, nmps: 45, nlps: 43, switch: 0 },
-    QeEntry { qe: 0x5601, nmps: 46, nlps: 46, switch: 0 },
+    QeEntry {
+        qe: 0x5601,
+        nmps: 1,
+        nlps: 1,
+        switch: 1,
+    },
+    QeEntry {
+        qe: 0x3401,
+        nmps: 2,
+        nlps: 6,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x1801,
+        nmps: 3,
+        nlps: 9,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0AC1,
+        nmps: 4,
+        nlps: 12,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0521,
+        nmps: 5,
+        nlps: 29,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0221,
+        nmps: 38,
+        nlps: 33,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x5601,
+        nmps: 7,
+        nlps: 6,
+        switch: 1,
+    },
+    QeEntry {
+        qe: 0x5401,
+        nmps: 8,
+        nlps: 14,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x4801,
+        nmps: 9,
+        nlps: 14,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x3801,
+        nmps: 10,
+        nlps: 14,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x3001,
+        nmps: 11,
+        nlps: 17,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x2401,
+        nmps: 12,
+        nlps: 18,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x1C01,
+        nmps: 13,
+        nlps: 20,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x1601,
+        nmps: 29,
+        nlps: 21,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x5601,
+        nmps: 15,
+        nlps: 14,
+        switch: 1,
+    },
+    QeEntry {
+        qe: 0x5401,
+        nmps: 16,
+        nlps: 14,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x5101,
+        nmps: 17,
+        nlps: 15,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x4801,
+        nmps: 18,
+        nlps: 16,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x3801,
+        nmps: 19,
+        nlps: 17,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x3401,
+        nmps: 20,
+        nlps: 18,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x3001,
+        nmps: 21,
+        nlps: 19,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x2801,
+        nmps: 22,
+        nlps: 19,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x2401,
+        nmps: 23,
+        nlps: 20,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x2201,
+        nmps: 24,
+        nlps: 21,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x1C01,
+        nmps: 25,
+        nlps: 22,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x1801,
+        nmps: 26,
+        nlps: 23,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x1601,
+        nmps: 27,
+        nlps: 24,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x1401,
+        nmps: 28,
+        nlps: 25,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x1201,
+        nmps: 29,
+        nlps: 26,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x1101,
+        nmps: 30,
+        nlps: 27,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0AC1,
+        nmps: 31,
+        nlps: 28,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x09C1,
+        nmps: 32,
+        nlps: 29,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x08A1,
+        nmps: 33,
+        nlps: 30,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0521,
+        nmps: 34,
+        nlps: 31,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0441,
+        nmps: 35,
+        nlps: 32,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x02A1,
+        nmps: 36,
+        nlps: 33,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0221,
+        nmps: 37,
+        nlps: 34,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0141,
+        nmps: 38,
+        nlps: 35,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0111,
+        nmps: 39,
+        nlps: 36,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0085,
+        nmps: 40,
+        nlps: 37,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0049,
+        nmps: 41,
+        nlps: 38,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0025,
+        nmps: 42,
+        nlps: 39,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0015,
+        nmps: 43,
+        nlps: 40,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0009,
+        nmps: 44,
+        nlps: 41,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0005,
+        nmps: 45,
+        nlps: 42,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x0001,
+        nmps: 45,
+        nlps: 43,
+        switch: 0,
+    },
+    QeEntry {
+        qe: 0x5601,
+        nmps: 46,
+        nlps: 46,
+        switch: 0,
+    },
 ];
 
 /// Number of context labels used in EBCOT tier-1.
@@ -151,7 +386,9 @@ impl MqEncoder {
             if self.ct == 0 {
                 self.byte_out();
             }
-            if self.a >= 0x8000 { break; }
+            if self.a >= 0x8000 {
+                break;
+            }
         }
     }
 
@@ -197,17 +434,24 @@ impl MqEncoder {
 
 /// MQ arithmetic decoder.
 pub struct MqDecoder<'a> {
-    data:  &'a [u8],
-    pos:   usize,
-    a:     u32,
-    c:     u32,
-    ct:    i32,
-    cx:    [(u8, u8); NUM_CONTEXTS],
+    data: &'a [u8],
+    pos: usize,
+    a: u32,
+    c: u32,
+    ct: i32,
+    cx: [(u8, u8); NUM_CONTEXTS],
 }
 
 impl<'a> MqDecoder<'a> {
     pub fn new(data: &'a [u8]) -> Self {
-        let mut dec = Self { data, pos: 0, a: 0, c: 0, ct: 0, cx: [(0,0); NUM_CONTEXTS] };
+        let mut dec = Self {
+            data,
+            pos: 0,
+            a: 0,
+            c: 0,
+            ct: 0,
+            cx: [(0, 0); NUM_CONTEXTS],
+        };
         dec.init();
         dec
     }
@@ -216,8 +460,8 @@ impl<'a> MqDecoder<'a> {
     /// Context 0 starts at state index 4, context 17 is cleanup run aggregate,
     /// and context 18 is uniform.
     pub fn init_standard_j2k_contexts(&mut self) {
-        self.cx[0] = (4,  0);
-        self.cx[17] = (3,  0);
+        self.cx[0] = (4, 0);
+        self.cx[17] = (3, 0);
         self.cx[18] = (46, 0);
     }
 
@@ -230,17 +474,11 @@ impl<'a> MqDecoder<'a> {
     }
 
     fn current_byte(&self) -> u8 {
-        self.data
-            .get(self.pos)
-            .copied()
-            .unwrap_or(0xFF)
+        self.data.get(self.pos).copied().unwrap_or(0xFF)
     }
 
     fn next_byte(&self) -> u8 {
-        self.data
-            .get(self.pos + 1)
-            .copied()
-            .unwrap_or(0xFF)
+        self.data.get(self.pos + 1).copied().unwrap_or(0xFF)
     }
 
     fn byte_in(&mut self) {
@@ -269,11 +507,15 @@ impl<'a> MqDecoder<'a> {
 
     fn renorm_d(&mut self) {
         loop {
-            if self.ct == 0 { self.byte_in(); }
+            if self.ct == 0 {
+                self.byte_in();
+            }
             self.a <<= 1;
             self.c <<= 1;
             self.ct -= 1;
-            if self.a >= 0x8000 { break; }
+            if self.a >= 0x8000 {
+                break;
+            }
         }
     }
 
@@ -308,7 +550,9 @@ impl<'a> MqDecoder<'a> {
                 mps
             } else {
                 self.a = qe;
-                if QE_TABLE[state as usize].switch != 0 { self.cx[cx_idx].1 ^= 1; }
+                if QE_TABLE[state as usize].switch != 0 {
+                    self.cx[cx_idx].1 ^= 1;
+                }
                 self.cx[cx_idx].0 = QE_TABLE[state as usize].nlps;
                 1 - mps
             };
@@ -329,7 +573,13 @@ impl<'a> MqDecoder<'a> {
         } else {
             0xFF
         };
-        (self.a, self.c, self.ct, self.pos.min(self.data.len()), cur_byte)
+        (
+            self.a,
+            self.c,
+            self.ct,
+            self.pos.min(self.data.len()),
+            cur_byte,
+        )
     }
 }
 
@@ -344,14 +594,17 @@ impl<'a> MqDecoder<'a> {
 
 /// Significance state for a coefficient.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum SigState { Insignificant = 0, Significant = 1 }
+enum SigState {
+    Insignificant = 0,
+    Significant = 1,
+}
 
 /// Context labels for EBCOT tier-1 (ISO 15444-1 Table D.1).
 mod ctx {
-    pub const ZERO:    usize = 0;   // Uniform context for zero coding pass
-    pub const SIG:     [usize; 9] = [1,2,3,4,5,6,7,8,9]; // significance contexts 1-9
-    pub const SIGN:    [usize; 5] = [10,11,12,13,14]; // sign contexts
-    pub const MAG:     [usize; 3] = [15,16,17]; // mag refinement contexts
+    pub const ZERO: usize = 0; // Uniform context for zero coding pass
+    pub const SIG: [usize; 9] = [1, 2, 3, 4, 5, 6, 7, 8, 9]; // significance contexts 1-9
+    pub const SIGN: [usize; 5] = [10, 11, 12, 13, 14]; // sign contexts
+    pub const MAG: [usize; 3] = [15, 16, 17]; // mag refinement contexts
     pub const CLEANUP: usize = 18; // cleanup pass context
 }
 
@@ -375,7 +628,9 @@ pub fn encode_block(coeffs: &[i32], width: usize, height: usize) -> Vec<u8> {
     if max_mag == 0 {
         // All-zero block — trivial: MQ-encode a single cleanup pass of zeros
         let mut enc = MqEncoder::new();
-        for _ in 0..n { enc.encode(0, ctx::CLEANUP); }
+        for _ in 0..n {
+            enc.encode(0, ctx::CLEANUP);
+        }
         return enc.flush();
     }
     let num_bitplanes = (u32::BITS - max_mag.leading_zeros()) as usize;
@@ -434,12 +689,7 @@ pub fn encode_block(coeffs: &[i32], width: usize, height: usize) -> Vec<u8> {
 }
 
 /// Decode a compressed code-block back to integer DWT coefficients.
-pub fn decode_block(
-    data: &[u8],
-    width: usize,
-    height: usize,
-    num_bitplanes: usize,
-) -> Vec<i32> {
+pub fn decode_block(data: &[u8], width: usize, height: usize, num_bitplanes: usize) -> Vec<i32> {
     decode_block_with_consumed(data, width, height, num_bitplanes).0
 }
 
@@ -454,10 +704,10 @@ pub fn decode_block_with_consumed(
     num_bitplanes: usize,
 ) -> (Vec<i32>, usize) {
     let n = width * height;
-    let mut mags  = vec![0u32; n];
-    let mut signs = vec![0u8;  n];
-    let mut sig   = vec![SigState::Insignificant; n];
-    let mut dec   = MqDecoder::new(data);
+    let mut mags = vec![0u32; n];
+    let mut signs = vec![0u8; n];
+    let mut sig = vec![SigState::Insignificant; n];
+    let mut dec = MqDecoder::new(data);
     let debug_cl_stream = std::env::var("JPEG2000_DEBUG_CL_SIG_STREAM")
         .ok()
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -492,7 +742,9 @@ pub fn decode_block_with_consumed(
             if sig[i] == SigState::Significant && mags[i] >= threshold * 2 {
                 let ctx = mag_refinement_context(&sig, i, width, height, bp, num_bitplanes);
                 let bit = dec.decode(ctx::MAG[ctx]);
-                if bit == 1 { mags[i] |= threshold; }
+                if bit == 1 {
+                    mags[i] |= threshold;
+                }
             }
         }
 
@@ -515,16 +767,15 @@ pub fn decode_block_with_consumed(
         }
     }
 
-    let out = mags.iter().zip(signs.iter())
+    let out = mags
+        .iter()
+        .zip(signs.iter())
         .map(|(&m, &s)| if s == 0 { m as i32 } else { -(m as i32) })
         .collect();
     if debug_cl_stream {
         eprintln!(
             "[cl_sig_stream][legacy] w={} h={} num_bp={} samples={:?}",
-            width,
-            height,
-            num_bitplanes,
-            cl_stream
+            width, height, num_bitplanes, cl_stream
         );
     }
     (out, dec.consumed_bytes())
@@ -594,12 +845,12 @@ pub fn decode_block_standard_j2k_with_probe(
     ll_probe: LlPassProbeConfig,
 ) -> Vec<i32> {
     let n = width * height;
-    let mut mags     = vec![0u32; n];
-    let mut signs    = vec![0u8;  n];
-    let mut sig      = vec![false; n]; // ever been significant?
+    let mut mags = vec![0u32; n];
+    let mut signs = vec![0u8; n];
+    let mut sig = vec![false; n]; // ever been significant?
     let mut mag_refined = vec![false; n];
     let mut sp_visit = vec![false; n]; // visited in SP this pass
-    let mut dec      = MqDecoder::new(data);
+    let mut dec = MqDecoder::new(data);
     dec.init_standard_j2k_contexts();
     let trace = width == 64 && height == 64 && num_bitplanes >= 10;
     // Standard JPEG2000 cleanup run-mode is enabled by default.
@@ -632,7 +883,9 @@ pub fn decode_block_standard_j2k_with_probe(
         let mut cl_sig_decode_attempts = 0usize;
 
         // Reset per-bitplane visited flag.
-        for v in sp_visit.iter_mut() { *v = false; }
+        for v in sp_visit.iter_mut() {
+            *v = false;
+        }
 
         // ── Significance Propagation (SP) ──────────────────────────────────
         if !ll_probe.disable_sp {
@@ -660,7 +913,9 @@ pub fn decode_block_standard_j2k_with_probe(
                 if sig[i] && mags[i] >= threshold * 2 {
                     let ctx = mag_refinement_context_bool(&sig, &mag_refined, i, width, height);
                     let bit = dec.decode(std_ctx::MAG[ctx]);
-                    if bit == 1 { mags[i] |= threshold; }
+                    if bit == 1 {
+                        mags[i] |= threshold;
+                    }
                     mag_refined[i] = true;
                 }
             });
@@ -671,7 +926,7 @@ pub fn decode_block_standard_j2k_with_probe(
             let mut band_row = 0usize;
             while band_row < height {
                 let band_end = (band_row + 4).min(height);
-                let band_h   = band_end - band_row;
+                let band_h = band_end - band_row;
 
                 for c in 0..width {
                     // A pixel needs CL if insignificant AND not visited by SP this bitplane.
@@ -679,13 +934,19 @@ pub fn decode_block_standard_j2k_with_probe(
                         let i = (band_row + j) * width + c;
                         !sig[i] && !sp_visit[i]
                     });
-                    if !any_needs { continue; }
+                    if !any_needs {
+                        continue;
+                    }
 
                     // Run-mode eligible: full band of 4, all pixels need CL, all zero sig-context.
-                    let run_eligible = run_mode_enabled && band_h == 4
+                    let run_eligible = run_mode_enabled
+                        && band_h == 4
                         && (0..4).all(|j| {
                             let i = (band_row + j) * width + c;
-                            !sig[i] && !sp_visit[i] && zero_coding_context_bool(&sig, i, width, height, subband_kind) == 0
+                            !sig[i]
+                                && !sp_visit[i]
+                                && zero_coding_context_bool(&sig, i, width, height, subband_kind)
+                                    == 0
                         });
                     if run_eligible {
                         run_eligible_cols += 1;
@@ -693,7 +954,8 @@ pub fn decode_block_standard_j2k_with_probe(
                     if run_eligible {
                         // Run-mode aggregate decode.
                         if debug_cl_stream && native_symbol_trace_count < debug_cl_stream_max {
-                            let (a_before, c_before, ct_before, pos_before, cur_byte_before) = dec.debug_state();
+                            let (a_before, c_before, ct_before, pos_before, cur_byte_before) =
+                                dec.debug_state();
                             eprintln!(
                                 "[native_entropy_state][before_run_agg] bp={} idx={} ctx={} a=0x{:04X} c=0x{:08X} ct={} pos={} cur=0x{:02X}",
                                 bp,
@@ -709,7 +971,8 @@ pub fn decode_block_standard_j2k_with_probe(
                         }
                         let agg = dec.decode(std_ctx::RUN);
                         if debug_cl_stream && native_symbol_trace_count < debug_cl_stream_max {
-                            let (a_after, c_after, ct_after, pos_after, cur_byte_after) = dec.debug_state();
+                            let (a_after, c_after, ct_after, pos_after, cur_byte_after) =
+                                dec.debug_state();
                             eprintln!(
                                 "[native_entropy_state][after_run_agg] bp={} idx={} ctx={} bit={} a=0x{:04X} c=0x{:08X} ct={} pos={} cur=0x{:02X}",
                                 bp,
@@ -772,7 +1035,8 @@ pub fn decode_block_standard_j2k_with_probe(
                             let i = (band_row + j) * width + c;
                             if !sig[i] && !sp_visit[i] {
                                 cl_eligible_pixels += 1;
-                                let ctx = zero_coding_context_bool(&sig, i, width, height, subband_kind);
+                                let ctx =
+                                    zero_coding_context_bool(&sig, i, width, height, subband_kind);
                                 cl_sig_decode_attempts += 1;
                                 let decode_ctx = ctx;
                                 if debug_cl_stream
@@ -780,7 +1044,13 @@ pub fn decode_block_standard_j2k_with_probe(
                                     && bp >= num_bitplanes.saturating_sub(1)
                                     && i <= 32
                                 {
-                                    let (a_before, c_before, ct_before, pos_before, cur_byte_before) = dec.debug_state();
+                                    let (
+                                        a_before,
+                                        c_before,
+                                        ct_before,
+                                        pos_before,
+                                        cur_byte_before,
+                                    ) = dec.debug_state();
                                     eprintln!(
                                         "[native_entropy_state][before_cleanup_sym] bp={} idx={} ctx={} a=0x{:04X} c=0x{:08X} ct={} pos={} cur=0x{:02X}",
                                         bp,
@@ -800,7 +1070,8 @@ pub fn decode_block_standard_j2k_with_probe(
                                     && bp >= num_bitplanes.saturating_sub(1)
                                     && i <= 32
                                 {
-                                    let (a_after, c_after, ct_after, pos_after, cur_byte_after) = dec.debug_state();
+                                    let (a_after, c_after, ct_after, pos_after, cur_byte_after) =
+                                        dec.debug_state();
                                     eprintln!(
                                         "[native_entropy_state][after_cleanup_sym] bp={} idx={} ctx={} bit={} a=0x{:04X} c=0x{:08X} ct={} pos={} cur=0x{:02X}",
                                         bp,
@@ -815,7 +1086,9 @@ pub fn decode_block_standard_j2k_with_probe(
                                     );
                                     native_symbol_trace_count += 1;
                                 }
-                                if debug_cl_stream && native_symbol_trace_count < debug_cl_stream_max {
+                                if debug_cl_stream
+                                    && native_symbol_trace_count < debug_cl_stream_max
+                                {
                                     eprintln!(
                                         "[native_symbol_trace][cleanup] bp={} idx={} ctx={} bit={} x={} y={} use_rl=0",
                                         bp,
@@ -834,7 +1107,8 @@ pub fn decode_block_standard_j2k_with_probe(
                                     mags[i] |= threshold;
                                     sig[i] = true;
                                     cl_sig_count += 1;
-                                    let (sctx2, flip2) = sign_context_bool(&sig, &signs, i, width, height);
+                                    let (sctx2, flip2) =
+                                        sign_context_bool(&sig, &signs, i, width, height);
                                     signs[i] = dec.decode(sctx2) ^ flip2;
                                 }
                             }
@@ -845,7 +1119,8 @@ pub fn decode_block_standard_j2k_with_probe(
                             let i = (band_row + j) * width + c;
                             if !sig[i] && !sp_visit[i] {
                                 cl_eligible_pixels += 1;
-                                let ctx = zero_coding_context_bool(&sig, i, width, height, subband_kind);
+                                let ctx =
+                                    zero_coding_context_bool(&sig, i, width, height, subband_kind);
                                 cl_sig_decode_attempts += 1;
                                 let decode_ctx = ctx;
                                 if debug_cl_stream
@@ -853,7 +1128,13 @@ pub fn decode_block_standard_j2k_with_probe(
                                     && bp >= num_bitplanes.saturating_sub(1)
                                     && i <= 32
                                 {
-                                    let (a_before, c_before, ct_before, pos_before, cur_byte_before) = dec.debug_state();
+                                    let (
+                                        a_before,
+                                        c_before,
+                                        ct_before,
+                                        pos_before,
+                                        cur_byte_before,
+                                    ) = dec.debug_state();
                                     eprintln!(
                                         "[native_entropy_state][before_cleanup_sym] bp={} idx={} ctx={} a=0x{:04X} c=0x{:08X} ct={} pos={} cur=0x{:02X}",
                                         bp,
@@ -873,7 +1154,8 @@ pub fn decode_block_standard_j2k_with_probe(
                                     && bp >= num_bitplanes.saturating_sub(1)
                                     && i <= 32
                                 {
-                                    let (a_after, c_after, ct_after, pos_after, cur_byte_after) = dec.debug_state();
+                                    let (a_after, c_after, ct_after, pos_after, cur_byte_after) =
+                                        dec.debug_state();
                                     eprintln!(
                                         "[native_entropy_state][after_cleanup_sym] bp={} idx={} ctx={} bit={} a=0x{:04X} c=0x{:08X} ct={} pos={} cur=0x{:02X}",
                                         bp,
@@ -888,7 +1170,9 @@ pub fn decode_block_standard_j2k_with_probe(
                                     );
                                     native_symbol_trace_count += 1;
                                 }
-                                if debug_cl_stream && native_symbol_trace_count < debug_cl_stream_max {
+                                if debug_cl_stream
+                                    && native_symbol_trace_count < debug_cl_stream_max
+                                {
                                     eprintln!(
                                         "[native_symbol_trace][cleanup] bp={} idx={} ctx={} bit={} x={} y={} use_rl=0",
                                         bp,
@@ -907,7 +1191,8 @@ pub fn decode_block_standard_j2k_with_probe(
                                     mags[i] |= threshold;
                                     sig[i] = true;
                                     cl_sig_count += 1;
-                                    let (sctx, flip) = sign_context_bool(&sig, &signs, i, width, height);
+                                    let (sctx, flip) =
+                                        sign_context_bool(&sig, &signs, i, width, height);
                                     signs[i] = dec.decode(sctx) ^ flip;
                                 }
                             }
@@ -932,23 +1217,25 @@ pub fn decode_block_standard_j2k_with_probe(
             );
         }
         if trace && bp >= num_bitplanes - 3 {
-            eprintln!("[decode_block_stdjk] bp={} threshold={} sp_sig={} cl_sig={}", bp, threshold, sp_sig_count, cl_sig_count);
+            eprintln!(
+                "[decode_block_stdjk] bp={} threshold={} sp_sig={} cl_sig={}",
+                bp, threshold, sp_sig_count, cl_sig_count
+            );
         }
     }
 
-    let result: Vec<i32> = mags.iter().zip(signs.iter())
+    let result: Vec<i32> = mags
+        .iter()
+        .zip(signs.iter())
         .map(|(&m, &s)| if s == 0 { m as i32 } else { -(m as i32) })
         .collect();
     if debug_cl_stream {
         eprintln!(
             "[cl_sig_stream][standard] w={} h={} num_bp={} samples={:?}",
-            width,
-            height,
-            num_bitplanes,
-            cl_stream
+            width, height, num_bitplanes, cl_stream
         );
     }
-    
+
     if width == 64 && height == 64 && trace {
         eprintln!("[decode_stdjk_result] coeff[0..8]: {:?}", &result[0..8]);
         eprintln!("[decode_stdjk_result] coeff[64..72]: {:?}", &result[64..72]);
@@ -1011,7 +1298,6 @@ const ZERO_CTX_HH_LOOKUP: [usize; 256] = [
     8, 8, 8, 8, 8, 8,
 ];
 
-
 fn neighbor_significance_bits_bool(sig: &[bool], idx: usize, w: usize, h: usize) -> u8 {
     let r = idx / w;
     let c = idx % w;
@@ -1069,28 +1355,76 @@ fn sign_context_bool(sig: &[bool], signs: &[u8], idx: usize, w: usize, h: usize)
 
     // Horizontal and vertical sign contributions.
     let h_contrib = {
-        let left  = if c > 0     { if sig[r * w + c - 1] { if signs[r * w + c - 1] == 1 { -1i32 } else { 1 } } else { 0 } } else { 0 };
-        let right = if c + 1 < w { if sig[r * w + c + 1] { if signs[r * w + c + 1] == 1 { -1i32 } else { 1 } } else { 0 } } else { 0 };
+        let left = if c > 0 {
+            if sig[r * w + c - 1] {
+                if signs[r * w + c - 1] == 1 {
+                    -1i32
+                } else {
+                    1
+                }
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+        let right = if c + 1 < w {
+            if sig[r * w + c + 1] {
+                if signs[r * w + c + 1] == 1 {
+                    -1i32
+                } else {
+                    1
+                }
+            } else {
+                0
+            }
+        } else {
+            0
+        };
         (left + right).signum()
     };
     let v_contrib = {
-        let up   = if r > 0     { if sig[(r - 1) * w + c] { if signs[(r - 1) * w + c] == 1 { -1i32 } else { 1 } } else { 0 } } else { 0 };
-        let down = if r + 1 < h { if sig[(r + 1) * w + c] { if signs[(r + 1) * w + c] == 1 { -1i32 } else { 1 } } else { 0 } } else { 0 };
+        let up = if r > 0 {
+            if sig[(r - 1) * w + c] {
+                if signs[(r - 1) * w + c] == 1 {
+                    -1i32
+                } else {
+                    1
+                }
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+        let down = if r + 1 < h {
+            if sig[(r + 1) * w + c] {
+                if signs[(r + 1) * w + c] == 1 {
+                    -1i32
+                } else {
+                    1
+                }
+            } else {
+                0
+            }
+        } else {
+            0
+        };
         (up + down).signum()
     };
 
     // Lookup table per ISO 15444-1 Table D.2.
     match (h_contrib, v_contrib) {
-        ( 1,  1) => (std_ctx::SIGN[0], 0),
-        ( 1,  0) => (std_ctx::SIGN[1], 0),
-        ( 1, -1) => (std_ctx::SIGN[2], 0),
-        ( 0,  1) => (std_ctx::SIGN[3], 0),
-        ( 0,  0) => (std_ctx::SIGN[4], 0),
-        ( 0, -1) => (std_ctx::SIGN[3], 1),
-        (-1,  1) => (std_ctx::SIGN[2], 1),
-        (-1,  0) => (std_ctx::SIGN[1], 1),
+        (1, 1) => (std_ctx::SIGN[0], 0),
+        (1, 0) => (std_ctx::SIGN[1], 0),
+        (1, -1) => (std_ctx::SIGN[2], 0),
+        (0, 1) => (std_ctx::SIGN[3], 0),
+        (0, 0) => (std_ctx::SIGN[4], 0),
+        (0, -1) => (std_ctx::SIGN[3], 1),
+        (-1, 1) => (std_ctx::SIGN[2], 1),
+        (-1, 0) => (std_ctx::SIGN[1], 1),
         (-1, -1) => (std_ctx::SIGN[0], 1),
-        _        => (std_ctx::SIGN[4], 0),
+        _ => (std_ctx::SIGN[4], 0),
     }
 }
 
@@ -1117,39 +1451,67 @@ fn neighbours(idx: usize, w: usize, h: usize) -> [Option<usize>; 8] {
     let r = idx / w;
     let c = idx % w;
     [
-        if r > 0           && c > 0     { Some((r-1)*w + c-1) } else { None },
-        if r > 0                        { Some((r-1)*w + c)   } else { None },
-        if r > 0           && c+1 < w   { Some((r-1)*w + c+1) } else { None },
-        if c > 0                        { Some(r*w + c-1)      } else { None },
-        if c+1 < w                      { Some(r*w + c+1)      } else { None },
-        if r+1 < h         && c > 0     { Some((r+1)*w + c-1) } else { None },
-        if r+1 < h                      { Some((r+1)*w + c)   } else { None },
-        if r+1 < h         && c+1 < w   { Some((r+1)*w + c+1) } else { None },
+        if r > 0 && c > 0 {
+            Some((r - 1) * w + c - 1)
+        } else {
+            None
+        },
+        if r > 0 { Some((r - 1) * w + c) } else { None },
+        if r > 0 && c + 1 < w {
+            Some((r - 1) * w + c + 1)
+        } else {
+            None
+        },
+        if c > 0 { Some(r * w + c - 1) } else { None },
+        if c + 1 < w { Some(r * w + c + 1) } else { None },
+        if r + 1 < h && c > 0 {
+            Some((r + 1) * w + c - 1)
+        } else {
+            None
+        },
+        if r + 1 < h {
+            Some((r + 1) * w + c)
+        } else {
+            None
+        },
+        if r + 1 < h && c + 1 < w {
+            Some((r + 1) * w + c + 1)
+        } else {
+            None
+        },
     ]
 }
 
 fn significance_context(sig: &[SigState], idx: usize, w: usize, h: usize) -> usize {
     let nb = neighbours(idx, w, h);
-    let count: usize = nb.iter()
+    let count: usize = nb
+        .iter()
         .filter_map(|&n| n)
         .filter(|&n| sig[n] == SigState::Significant)
         .count();
     count.min(8)
 }
 
-fn sign_context(
-    sig: &[SigState], signs: &[u8], idx: usize, w: usize, h: usize
-) -> (usize, u8) {
+fn sign_context(sig: &[SigState], signs: &[u8], idx: usize, w: usize, h: usize) -> (usize, u8) {
     // Simplified: use uniform sign context 0 with no XOR flip
     (ctx::SIGN[0], 0)
 }
 
 fn mag_refinement_context(
-    sig: &[SigState], idx: usize, w: usize, h: usize, bp: usize, total_bp: usize
+    sig: &[SigState],
+    idx: usize,
+    w: usize,
+    h: usize,
+    bp: usize,
+    total_bp: usize,
 ) -> usize {
-    if bp == total_bp.saturating_sub(1) { 0 }
-    else if significance_context(sig, idx, w, h) > 0 { 1 }
-    else { 2 }
+    if bp == total_bp.saturating_sub(1) {
+        0
+    } else if significance_context(sig, idx, w, h) > 0 {
+        1
+    } else {
+        2
+    }
 }
 
 // ── Quantisation ─────────────────────────────────────────────────────────────
@@ -1161,22 +1523,33 @@ fn mag_refinement_context(
 pub fn quantise(coeffs: &[f64], step_sizes: &[f64]) -> Vec<i32> {
     // For simplicity we use a single global step size (first value)
     let step = step_sizes.first().copied().unwrap_or(1.0).max(1e-10);
-    coeffs.iter().map(|&c| {
-        let q = (c.abs() / step).floor() as i32;
-        if c < 0.0 { -q } else { q }
-    }).collect()
+    coeffs
+        .iter()
+        .map(|&c| {
+            let q = (c.abs() / step).floor() as i32;
+            if c < 0.0 {
+                -q
+            } else {
+                q
+            }
+        })
+        .collect()
 }
 
 /// Dequantise integers back to approximate DWT coefficients.
 pub fn dequantise(quantised: &[i32], step_sizes: &[f64]) -> Vec<f64> {
     let step = step_sizes.first().copied().unwrap_or(1.0);
-    quantised.iter().map(|&q| {
-        if q == 0 { 0.0 }
-        else {
-            let sign = if q < 0 { -1.0 } else { 1.0 };
-            sign * (q.unsigned_abs() as f64 + 0.5) * step
-        }
-    }).collect()
+    quantised
+        .iter()
+        .map(|&q| {
+            if q == 0 {
+                0.0
+            } else {
+                let sign = if q < 0 { -1.0 } else { 1.0 };
+                sign * (q.unsigned_abs() as f64 + 0.5) * step
+            }
+        })
+        .collect()
 }
 
 #[cfg(any())]
@@ -1186,7 +1559,9 @@ mod tests {
     #[test]
     fn mq_encode_decode_zeros() {
         let mut enc = MqEncoder::new();
-        for _ in 0..32 { enc.encode(0, 0); }
+        for _ in 0..32 {
+            enc.encode(0, 0);
+        }
         let bytes = enc.flush();
         assert!(!bytes.is_empty());
         let mut dec = MqDecoder::new(&bytes);
@@ -1200,12 +1575,16 @@ mod tests {
     fn mq_encode_decode_alternating() {
         let symbols: Vec<u8> = (0..64).map(|i| (i % 2) as u8).collect();
         let mut enc = MqEncoder::new();
-        for &s in &symbols { enc.encode(s, 1); }
+        for &s in &symbols {
+            enc.encode(s, 1);
+        }
         let bytes = enc.flush();
         assert!(!bytes.is_empty());
         let mut dec = MqDecoder::new(&bytes);
         let mut decoded = Vec::new();
-        for _ in 0..64 { decoded.push(dec.decode(1)); }
+        for _ in 0..64 {
+            decoded.push(dec.decode(1));
+        }
         assert_eq!(decoded, symbols);
     }
 

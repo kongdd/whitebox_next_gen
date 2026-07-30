@@ -1,20 +1,14 @@
 //! Core `Raster` type — the central data structure for all raster GIS data.
 
+use rayon::prelude::*;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use rayon::prelude::*;
-use wbprojection::{
-    from_proj_string,
-    Crs,
-    CrsTransformPolicy,
-    EpochPolicy,
-    EpochTransformOptions,
-};
+use wbprojection::{from_proj_string, Crs, CrsTransformPolicy, EpochPolicy, EpochTransformOptions};
 use wide::{f64x4, CmpNe};
 
-use crate::error::{Result, RasterError};
-use crate::formats::RasterFormat;
 use crate::crs_info::CrsInfo;
+use crate::error::{RasterError, Result};
+use crate::formats::RasterFormat;
 
 // ─── Data type enum ───────────────────────────────────────────────────────────
 
@@ -115,11 +109,11 @@ impl std::fmt::Display for DataType {
 /// ```
 #[derive(Debug, Clone)]
 pub struct BandView {
-    data:       Vec<f64>,
+    data: Vec<f64>,
     /// Number of rows in the source band.
-    pub rows:   isize,
+    pub rows: isize,
     /// Number of columns in the source band.
-    pub cols:   isize,
+    pub cols: isize,
     /// No-data sentinel value.
     pub nodata: f64,
 }
@@ -139,13 +133,19 @@ impl BandView {
     /// Returns `true` if `v` equals the band's nodata sentinel.
     #[inline]
     pub fn is_nodata(&self, v: f64) -> bool {
-        if self.nodata.is_nan() { v.is_nan() } else { v == self.nodata }
+        if self.nodata.is_nan() {
+            v.is_nan()
+        } else {
+            v == self.nodata
+        }
     }
 
     /// Direct reference to the underlying flat buffer (`row * cols + col` indexing).
     /// Length is `rows as usize * cols as usize`.
     #[inline]
-    pub fn as_slice(&self) -> &[f64] { &self.data }
+    pub fn as_slice(&self) -> &[f64] {
+        &self.data
+    }
 }
 
 // SAFETY: BandView contains only Vec<f64>, isize, and f64 — all Send and Sync.
@@ -258,8 +258,8 @@ impl RasterData {
             v
         }
         match data_type {
-            DataType::U8  => Self::U8(uninit_vec(len)),
-            DataType::I8  => Self::I8(uninit_vec(len)),
+            DataType::U8 => Self::U8(uninit_vec(len)),
+            DataType::I8 => Self::I8(uninit_vec(len)),
             DataType::U16 => Self::U16(uninit_vec(len)),
             DataType::I16 => Self::I16(uninit_vec(len)),
             DataType::U32 => Self::U32(uninit_vec(len)),
@@ -548,15 +548,42 @@ impl RasterData {
         F: Fn(usize) -> f64 + Send + Sync,
     {
         match self {
-            Self::U8(v)  => v.par_iter_mut().enumerate().for_each(|(i, c)| *c = f(i) as u8),
-            Self::I8(v)  => v.par_iter_mut().enumerate().for_each(|(i, c)| *c = f(i) as i8),
-            Self::U16(v) => v.par_iter_mut().enumerate().for_each(|(i, c)| *c = f(i) as u16),
-            Self::I16(v) => v.par_iter_mut().enumerate().for_each(|(i, c)| *c = f(i) as i16),
-            Self::U32(v) => v.par_iter_mut().enumerate().for_each(|(i, c)| *c = f(i) as u32),
-            Self::I32(v) => v.par_iter_mut().enumerate().for_each(|(i, c)| *c = f(i) as i32),
-            Self::U64(v) => v.par_iter_mut().enumerate().for_each(|(i, c)| *c = f(i) as u64),
-            Self::I64(v) => v.par_iter_mut().enumerate().for_each(|(i, c)| *c = f(i) as i64),
-            Self::F32(v) => v.par_iter_mut().enumerate().for_each(|(i, c)| *c = f(i) as f32),
+            Self::U8(v) => v
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(i, c)| *c = f(i) as u8),
+            Self::I8(v) => v
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(i, c)| *c = f(i) as i8),
+            Self::U16(v) => v
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(i, c)| *c = f(i) as u16),
+            Self::I16(v) => v
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(i, c)| *c = f(i) as i16),
+            Self::U32(v) => v
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(i, c)| *c = f(i) as u32),
+            Self::I32(v) => v
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(i, c)| *c = f(i) as i32),
+            Self::U64(v) => v
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(i, c)| *c = f(i) as u64),
+            Self::I64(v) => v
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(i, c)| *c = f(i) as i64),
+            Self::F32(v) => v
+                .par_iter_mut()
+                .enumerate()
+                .for_each(|(i, c)| *c = f(i) as f32),
             Self::F64(v) => v.par_iter_mut().enumerate().for_each(|(i, c)| *c = f(i)),
         }
     }
@@ -618,10 +645,14 @@ impl Extent {
     }
 
     /// Width in spatial units.
-    pub fn width(&self) -> f64 { self.x_max - self.x_min }
+    pub fn width(&self) -> f64 {
+        self.x_max - self.x_min
+    }
 
     /// Height in spatial units.
-    pub fn height(&self) -> f64 { self.y_max - self.y_min }
+    pub fn height(&self) -> f64 {
+        self.y_max - self.y_min
+    }
 }
 
 // ─── Statistics ───────────────────────────────────────────────────────────────
@@ -1034,7 +1065,10 @@ impl Raster {
     pub fn from_data(cfg: RasterConfig, data: Vec<f64>) -> Result<Self> {
         let bands = cfg.bands.max(1);
         if data.len() != cfg.cols * cfg.rows * bands {
-            return Err(RasterError::InvalidDimensions { cols: cfg.cols, rows: cfg.rows });
+            return Err(RasterError::InvalidDimensions {
+                cols: cfg.cols,
+                rows: cfg.rows,
+            });
         }
         let dt = cfg.data_type;
         let mut r = Self::new(cfg);
@@ -1050,7 +1084,10 @@ impl Raster {
     pub fn from_data_native(cfg: RasterConfig, data: RasterData) -> Result<Self> {
         let bands = cfg.bands.max(1);
         if data.len() != cfg.cols * cfg.rows * bands {
-            return Err(RasterError::InvalidDimensions { cols: cfg.cols, rows: cfg.rows });
+            return Err(RasterError::InvalidDimensions {
+                cols: cfg.cols,
+                rows: cfg.rows,
+            });
         }
         if cfg.data_type != data.data_type() {
             return Err(RasterError::Other(format!(
@@ -1108,54 +1145,94 @@ impl Raster {
     }
 
     /// Typed fast-path access to `u8` storage.
-    pub fn data_u8(&self) -> Option<&[u8]> { self.data.as_u8_slice() }
+    pub fn data_u8(&self) -> Option<&[u8]> {
+        self.data.as_u8_slice()
+    }
     /// Typed fast-path mutable access to `u8` storage.
-    pub fn data_u8_mut(&mut self) -> Option<&mut [u8]> { self.data.as_u8_slice_mut() }
+    pub fn data_u8_mut(&mut self) -> Option<&mut [u8]> {
+        self.data.as_u8_slice_mut()
+    }
 
     /// Typed fast-path access to `i8` storage.
-    pub fn data_i8(&self) -> Option<&[i8]> { self.data.as_i8_slice() }
+    pub fn data_i8(&self) -> Option<&[i8]> {
+        self.data.as_i8_slice()
+    }
     /// Typed fast-path mutable access to `i8` storage.
-    pub fn data_i8_mut(&mut self) -> Option<&mut [i8]> { self.data.as_i8_slice_mut() }
+    pub fn data_i8_mut(&mut self) -> Option<&mut [i8]> {
+        self.data.as_i8_slice_mut()
+    }
 
     /// Typed fast-path access to `u16` storage.
-    pub fn data_u16(&self) -> Option<&[u16]> { self.data.as_u16_slice() }
+    pub fn data_u16(&self) -> Option<&[u16]> {
+        self.data.as_u16_slice()
+    }
     /// Typed fast-path mutable access to `u16` storage.
-    pub fn data_u16_mut(&mut self) -> Option<&mut [u16]> { self.data.as_u16_slice_mut() }
+    pub fn data_u16_mut(&mut self) -> Option<&mut [u16]> {
+        self.data.as_u16_slice_mut()
+    }
 
     /// Typed fast-path access to `i16` storage.
-    pub fn data_i16(&self) -> Option<&[i16]> { self.data.as_i16_slice() }
+    pub fn data_i16(&self) -> Option<&[i16]> {
+        self.data.as_i16_slice()
+    }
     /// Typed fast-path mutable access to `i16` storage.
-    pub fn data_i16_mut(&mut self) -> Option<&mut [i16]> { self.data.as_i16_slice_mut() }
+    pub fn data_i16_mut(&mut self) -> Option<&mut [i16]> {
+        self.data.as_i16_slice_mut()
+    }
 
     /// Typed fast-path access to `u32` storage.
-    pub fn data_u32(&self) -> Option<&[u32]> { self.data.as_u32_slice() }
+    pub fn data_u32(&self) -> Option<&[u32]> {
+        self.data.as_u32_slice()
+    }
     /// Typed fast-path mutable access to `u32` storage.
-    pub fn data_u32_mut(&mut self) -> Option<&mut [u32]> { self.data.as_u32_slice_mut() }
+    pub fn data_u32_mut(&mut self) -> Option<&mut [u32]> {
+        self.data.as_u32_slice_mut()
+    }
 
     /// Typed fast-path access to `i32` storage.
-    pub fn data_i32(&self) -> Option<&[i32]> { self.data.as_i32_slice() }
+    pub fn data_i32(&self) -> Option<&[i32]> {
+        self.data.as_i32_slice()
+    }
     /// Typed fast-path mutable access to `i32` storage.
-    pub fn data_i32_mut(&mut self) -> Option<&mut [i32]> { self.data.as_i32_slice_mut() }
+    pub fn data_i32_mut(&mut self) -> Option<&mut [i32]> {
+        self.data.as_i32_slice_mut()
+    }
 
     /// Typed fast-path access to `u64` storage.
-    pub fn data_u64(&self) -> Option<&[u64]> { self.data.as_u64_slice() }
+    pub fn data_u64(&self) -> Option<&[u64]> {
+        self.data.as_u64_slice()
+    }
     /// Typed fast-path mutable access to `u64` storage.
-    pub fn data_u64_mut(&mut self) -> Option<&mut [u64]> { self.data.as_u64_slice_mut() }
+    pub fn data_u64_mut(&mut self) -> Option<&mut [u64]> {
+        self.data.as_u64_slice_mut()
+    }
 
     /// Typed fast-path access to `i64` storage.
-    pub fn data_i64(&self) -> Option<&[i64]> { self.data.as_i64_slice() }
+    pub fn data_i64(&self) -> Option<&[i64]> {
+        self.data.as_i64_slice()
+    }
     /// Typed fast-path mutable access to `i64` storage.
-    pub fn data_i64_mut(&mut self) -> Option<&mut [i64]> { self.data.as_i64_slice_mut() }
+    pub fn data_i64_mut(&mut self) -> Option<&mut [i64]> {
+        self.data.as_i64_slice_mut()
+    }
 
     /// Typed fast-path access to `f32` storage.
-    pub fn data_f32(&self) -> Option<&[f32]> { self.data.as_f32_slice() }
+    pub fn data_f32(&self) -> Option<&[f32]> {
+        self.data.as_f32_slice()
+    }
     /// Typed fast-path mutable access to `f32` storage.
-    pub fn data_f32_mut(&mut self) -> Option<&mut [f32]> { self.data.as_f32_slice_mut() }
+    pub fn data_f32_mut(&mut self) -> Option<&mut [f32]> {
+        self.data.as_f32_slice_mut()
+    }
 
     /// Typed fast-path access to `f64` storage.
-    pub fn data_f64(&self) -> Option<&[f64]> { self.data.as_f64_slice() }
+    pub fn data_f64(&self) -> Option<&[f64]> {
+        self.data.as_f64_slice()
+    }
     /// Typed fast-path mutable access to `f64` storage.
-    pub fn data_f64_mut(&mut self) -> Option<&mut [f64]> { self.data.as_f64_slice_mut() }
+    pub fn data_f64_mut(&mut self) -> Option<&mut [f64]> {
+        self.data.as_f64_slice_mut()
+    }
 
     /// Materialize one band (zero-based) as a [`BandView`].
     ///
@@ -1168,9 +1245,9 @@ impl Raster {
     /// allocation). For all other storage types each cell is converted once.
     pub fn band_view(&self, band: usize) -> BandView {
         BandView {
-            data:   self.band_to_vec_f64(band),
-            rows:   self.rows as isize,
-            cols:   self.cols as isize,
+            data: self.band_to_vec_f64(band),
+            rows: self.rows as isize,
+            cols: self.cols as isize,
             nodata: self.nodata,
         }
     }
@@ -1215,8 +1292,8 @@ impl Raster {
         match &self.data {
             RasterData::F64(v) => v[start..end].to_vec(),
             RasterData::F32(v) => v[start..end].iter().map(|&x| x as f64).collect(),
-            RasterData::U8(v)  => v[start..end].iter().map(|&x| x as f64).collect(),
-            RasterData::I8(v)  => v[start..end].iter().map(|&x| x as f64).collect(),
+            RasterData::U8(v) => v[start..end].iter().map(|&x| x as f64).collect(),
+            RasterData::I8(v) => v[start..end].iter().map(|&x| x as f64).collect(),
             RasterData::U16(v) => v[start..end].iter().map(|&x| x as f64).collect(),
             RasterData::I16(v) => v[start..end].iter().map(|&x| x as f64).collect(),
             RasterData::U32(v) => v[start..end].iter().map(|&x| x as f64).collect(),
@@ -1240,7 +1317,7 @@ impl Raster {
 
     /// Apply a unary math operation to selected bands (or all bands if `target_bands` is `None`).
     ///
-    /// Operates **in-place** on `self`. For floating-point rasters (F32/F64), uses direct typed 
+    /// Operates **in-place** on `self`. For floating-point rasters (F32/F64), uses direct typed
     /// slice access + SIMD-friendly iteration. For integer rasters, falls back to per-band copy-loop.
     ///
     /// If `target_bands` is `None`, operates on the entire flat buffer with fast F32/F64 paths.
@@ -1248,11 +1325,7 @@ impl Raster {
     ///
     /// # Errors
     /// Returns an error if a band index is out of bounds (only when `target_bands` is `Some`).
-    pub fn apply_unary_math<F>(
-        &mut self,
-        f: F,
-        target_bands: Option<Vec<usize>>,
-    ) -> Result<()>
+    pub fn apply_unary_math<F>(&mut self, f: F, target_bands: Option<Vec<usize>>) -> Result<()>
     where
         F: Fn(f64) -> f64 + Send + Sync,
     {
@@ -1267,7 +1340,11 @@ impl Raster {
                     let nodata_f32 = nodata as f32;
                     data.par_iter_mut().for_each(|v| {
                         let zf = *v as f64;
-                        let is_nd = if nodata_is_nan { zf.is_nan() } else { *v == nodata_f32 };
+                        let is_nd = if nodata_is_nan {
+                            zf.is_nan()
+                        } else {
+                            *v == nodata_f32
+                        };
                         if !is_nd {
                             *v = f(zf) as f32;
                         }
@@ -1275,7 +1352,11 @@ impl Raster {
                 // F64 direct access.
                 } else if let Some(data) = self.data.as_f64_slice_mut() {
                     data.par_iter_mut().for_each(|v| {
-                        let is_nd = if nodata_is_nan { v.is_nan() } else { *v == nodata };
+                        let is_nd = if nodata_is_nan {
+                            v.is_nan()
+                        } else {
+                            *v == nodata
+                        };
                         if !is_nd {
                             *v = f(*v);
                         }
@@ -1285,7 +1366,7 @@ impl Raster {
                     let len = self.data.len();
                     for i in 0..len {
                         let z = self.data.get_f64(i);
-                        if nodata_is_nan { 
+                        if nodata_is_nan {
                             if !z.is_nan() {
                                 self.data.set_f64(i, f(z));
                             }
@@ -1310,7 +1391,11 @@ impl Raster {
                     }
                     let mut vals = self.band_slice(band as isize);
                     vals.par_iter_mut().for_each(|v| {
-                        let is_nd = if nodata_is_nan { v.is_nan() } else { *v == nodata };
+                        let is_nd = if nodata_is_nan {
+                            v.is_nan()
+                        } else {
+                            *v == nodata
+                        };
                         if !is_nd {
                             *v = f(*v);
                         }
@@ -1330,11 +1415,7 @@ impl Raster {
     ///
     /// # Errors
     /// Returns an error if rasters have different dimensions.
-    pub fn apply_unary_math_from<F>(
-        &mut self,
-        f: F,
-        src: &Raster,
-    ) -> Result<()>
+    pub fn apply_unary_math_from<F>(&mut self, f: F, src: &Raster) -> Result<()>
     where
         F: Fn(f64) -> f64 + Send + Sync,
     {
@@ -1349,30 +1430,52 @@ impl Raster {
         let nodata_is_nan = nodata.is_nan();
 
         // Fast path: F32 input/output.
-        if let (Some(src_data), Some(dst_data)) = (src.data.as_f32_slice(), self.data.as_f32_slice_mut()) {
+        if let (Some(src_data), Some(dst_data)) =
+            (src.data.as_f32_slice(), self.data.as_f32_slice_mut())
+        {
             let nodata_f32 = nodata as f32;
-            dst_data.par_iter_mut().zip(src_data.par_iter()).for_each(|(out, &z)| {
-                let zf = z as f64;
-                let is_nd = if nodata_is_nan { zf.is_nan() } else { z == nodata_f32 };
-                *out = if is_nd { nodata_f32 } else { f(zf) as f32 };
-            });
+            dst_data
+                .par_iter_mut()
+                .zip(src_data.par_iter())
+                .for_each(|(out, &z)| {
+                    let zf = z as f64;
+                    let is_nd = if nodata_is_nan {
+                        zf.is_nan()
+                    } else {
+                        z == nodata_f32
+                    };
+                    *out = if is_nd { nodata_f32 } else { f(zf) as f32 };
+                });
         // Fast path: F64 input/output.
-        } else if let (Some(src_data), Some(dst_data)) = (src.data.as_f64_slice(), self.data.as_f64_slice_mut()) {
-            dst_data.par_iter_mut().zip(src_data.par_iter()).for_each(|(out, &z)| {
-                let is_nd = if nodata_is_nan { z.is_nan() } else { z == nodata };
-                *out = if is_nd { nodata } else { f(z) };
-            });
+        } else if let (Some(src_data), Some(dst_data)) =
+            (src.data.as_f64_slice(), self.data.as_f64_slice_mut())
+        {
+            dst_data
+                .par_iter_mut()
+                .zip(src_data.par_iter())
+                .for_each(|(out, &z)| {
+                    let is_nd = if nodata_is_nan {
+                        z.is_nan()
+                    } else {
+                        z == nodata
+                    };
+                    *out = if is_nd { nodata } else { f(z) };
+                });
         // Generic fallback for mixed or integer types.
         } else {
             let len = self.data.len();
             for i in 0..len {
                 let z = src.data.get_f64(i);
-                let result = if nodata_is_nan { 
-                    if z.is_nan() { nodata } else { f(z) } 
-                } else if z == nodata { 
-                    nodata 
-                } else { 
-                    f(z) 
+                let result = if nodata_is_nan {
+                    if z.is_nan() {
+                        nodata
+                    } else {
+                        f(z)
+                    }
+                } else if z == nodata {
+                    nodata
+                } else {
+                    f(z)
                 };
                 self.data.set_f64(i, result);
             }
@@ -1392,23 +1495,28 @@ impl Raster {
     ///
     /// # Errors
     /// Returns an error if the raster dimensions do not all match.
-    pub fn apply_binary_math_from<F>(
-        &mut self,
-        f: F,
-        src1: &Raster,
-        src2: &Raster,
-    ) -> Result<()>
+    pub fn apply_binary_math_from<F>(&mut self, f: F, src1: &Raster, src2: &Raster) -> Result<()>
     where
         F: Fn(f64, f64) -> f64 + Send + Sync,
     {
-        if self.rows != src1.rows || self.cols != src1.cols || self.bands != src1.bands
-            || src1.rows != src2.rows || src1.cols != src2.cols || src1.bands != src2.bands
+        if self.rows != src1.rows
+            || self.cols != src1.cols
+            || self.bands != src1.bands
+            || src1.rows != src2.rows
+            || src1.cols != src2.cols
+            || src1.bands != src2.bands
         {
             return Err(RasterError::Other(format!(
                 "raster dimension mismatch: self {}×{}×{}, src1 {}×{}×{}, src2 {}×{}×{}",
-                self.bands, self.rows, self.cols,
-                src1.bands, src1.rows, src1.cols,
-                src2.bands, src2.rows, src2.cols,
+                self.bands,
+                self.rows,
+                self.cols,
+                src1.bands,
+                src1.rows,
+                src1.cols,
+                src2.bands,
+                src2.rows,
+                src2.cols,
             )));
         }
 
@@ -1419,16 +1527,32 @@ impl Raster {
         let nd_out = self.nodata;
 
         let is_nd1 = |v: f32| -> bool {
-            if nd1_is_nan { (v as f64).is_nan() } else { v == nd1 as f32 }
+            if nd1_is_nan {
+                (v as f64).is_nan()
+            } else {
+                v == nd1 as f32
+            }
         };
         let is_nd2 = |v: f32| -> bool {
-            if nd2_is_nan { (v as f64).is_nan() } else { v == nd2 as f32 }
+            if nd2_is_nan {
+                (v as f64).is_nan()
+            } else {
+                v == nd2 as f32
+            }
         };
         let is_nd1_f64 = |v: f64| -> bool {
-            if nd1_is_nan { v.is_nan() } else { v == nd1 }
+            if nd1_is_nan {
+                v.is_nan()
+            } else {
+                v == nd1
+            }
         };
         let is_nd2_f64 = |v: f64| -> bool {
-            if nd2_is_nan { v.is_nan() } else { v == nd2 }
+            if nd2_is_nan {
+                v.is_nan()
+            } else {
+                v == nd2
+            }
         };
 
         // Fast path family: destination + src1 are F32, src2 may be any native storage.
@@ -1480,14 +1604,30 @@ impl Raster {
                     });
                 return Ok(());
             }
-            if let Some(d2) = src2.data.as_u8_slice() { run_f32_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i8_slice() { run_f32_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u16_slice() { run_f32_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i16_slice() { run_f32_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u32_slice() { run_f32_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i32_slice() { run_f32_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u64_slice() { run_f32_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i64_slice() { run_f32_rhs_typed!(d2); }
+            if let Some(d2) = src2.data.as_u8_slice() {
+                run_f32_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i8_slice() {
+                run_f32_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u16_slice() {
+                run_f32_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i16_slice() {
+                run_f32_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u32_slice() {
+                run_f32_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i32_slice() {
+                run_f32_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u64_slice() {
+                run_f32_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i64_slice() {
+                run_f32_rhs_typed!(d2);
+            }
         }
 
         // Fast path family: destination + src1 are F64, src2 may be any native storage.
@@ -1537,14 +1677,30 @@ impl Raster {
                     });
                 return Ok(());
             }
-            if let Some(d2) = src2.data.as_u8_slice() { run_f64_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i8_slice() { run_f64_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u16_slice() { run_f64_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i16_slice() { run_f64_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u32_slice() { run_f64_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i32_slice() { run_f64_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u64_slice() { run_f64_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i64_slice() { run_f64_rhs_typed!(d2); }
+            if let Some(d2) = src2.data.as_u8_slice() {
+                run_f64_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i8_slice() {
+                run_f64_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u16_slice() {
+                run_f64_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i16_slice() {
+                run_f64_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u32_slice() {
+                run_f64_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i32_slice() {
+                run_f64_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u64_slice() {
+                run_f64_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i64_slice() {
+                run_f64_rhs_typed!(d2);
+            }
         }
 
         // Fast path family: destination + src1 are I16, src2 may be any native storage.
@@ -1585,15 +1741,33 @@ impl Raster {
                     });
                 return Ok(());
             }
-            if let Some(d2) = src2.data.as_f64_slice() { run_i16_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u8_slice()  { run_i16_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i8_slice()  { run_i16_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u16_slice() { run_i16_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i16_slice() { run_i16_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u32_slice() { run_i16_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i32_slice() { run_i16_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u64_slice() { run_i16_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i64_slice() { run_i16_rhs_typed!(d2); }
+            if let Some(d2) = src2.data.as_f64_slice() {
+                run_i16_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u8_slice() {
+                run_i16_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i8_slice() {
+                run_i16_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u16_slice() {
+                run_i16_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i16_slice() {
+                run_i16_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u32_slice() {
+                run_i16_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i32_slice() {
+                run_i16_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u64_slice() {
+                run_i16_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i64_slice() {
+                run_i16_rhs_typed!(d2);
+            }
         }
 
         // Fast path family: destination + src1 are U8, src2 may be any native storage.
@@ -1634,15 +1808,33 @@ impl Raster {
                     });
                 return Ok(());
             }
-            if let Some(d2) = src2.data.as_f64_slice() { run_u8_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u8_slice()  { run_u8_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i8_slice()  { run_u8_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u16_slice() { run_u8_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i16_slice() { run_u8_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u32_slice() { run_u8_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i32_slice() { run_u8_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_u64_slice() { run_u8_rhs_typed!(d2); }
-            if let Some(d2) = src2.data.as_i64_slice() { run_u8_rhs_typed!(d2); }
+            if let Some(d2) = src2.data.as_f64_slice() {
+                run_u8_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u8_slice() {
+                run_u8_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i8_slice() {
+                run_u8_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u16_slice() {
+                run_u8_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i16_slice() {
+                run_u8_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u32_slice() {
+                run_u8_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i32_slice() {
+                run_u8_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_u64_slice() {
+                run_u8_rhs_typed!(d2);
+            }
+            if let Some(d2) = src2.data.as_i64_slice() {
+                run_u8_rhs_typed!(d2);
+            }
         }
 
         // Generic parallel fallback for any remaining type combinations
@@ -1652,7 +1844,11 @@ impl Raster {
         self.data.par_fill_with(|i| {
             let z1 = src1.data.get_f64(i);
             let z2 = src2.data.get_f64(i);
-            if is_nd1_f64(z1) || is_nd2_f64(z2) { nd_out } else { f(z1, z2) }
+            if is_nd1_f64(z1) || is_nd2_f64(z2) {
+                nd_out
+            } else {
+                f(z1, z2)
+            }
         });
 
         Ok(())
@@ -1719,7 +1915,11 @@ impl Raster {
     pub fn get_opt(&self, band: isize, row: isize, col: isize) -> Option<f64> {
         let idx = self.index(band, row, col)?;
         let v = self.data.get_f64(idx);
-        if self.is_nodata(v) { None } else { Some(v) }
+        if self.is_nodata(v) {
+            None
+        } else {
+            Some(v)
+        }
     }
 
     /// Get the raw value (including nodata) at signed pixel coordinates `(band, row, col)`.
@@ -2122,9 +2322,7 @@ impl Raster {
                 ))
             })?;
             let dst_crs = Crs::from_epsg(dst_epsg).map_err(|e| {
-                RasterError::Other(format!(
-                    "destination EPSG {dst_epsg} is not supported: {e}"
-                ))
+                RasterError::Other(format!("destination EPSG {dst_epsg} is not supported: {e}"))
             })?;
 
             let ox = reference_grid.x_min;
@@ -2200,9 +2398,7 @@ impl Raster {
                 ))
             })?;
             let dst_crs = Crs::from_epsg(dst_epsg).map_err(|e| {
-                RasterError::Other(format!(
-                    "destination EPSG {dst_epsg} is not supported: {e}"
-                ))
+                RasterError::Other(format!("destination EPSG {dst_epsg} is not supported: {e}"))
             })?;
 
             let ox = reference_grid.x_min;
@@ -2387,24 +2583,25 @@ impl Raster {
         let mut out = Raster::new(cfg);
 
         let out_y_max = out.y_max();
-        let footprint_ring = if options.destination_footprint == DestinationFootprint::SourceBoundary {
-            let ring = transformed_boundary_ring_samples(
-                src_crs,
-                dst_crs,
-                src_extent,
-                samples_per_edge,
-                options.dst_epsg,
-                options.antimeridian_policy,
-                &options.epoch_transform,
-            )?;
-            if ring.len() >= 3 {
-                Some(ring)
+        let footprint_ring =
+            if options.destination_footprint == DestinationFootprint::SourceBoundary {
+                let ring = transformed_boundary_ring_samples(
+                    src_crs,
+                    dst_crs,
+                    src_extent,
+                    samples_per_edge,
+                    options.dst_epsg,
+                    options.antimeridian_policy,
+                    &options.epoch_transform,
+                )?;
+                if ring.len() >= 3 {
+                    Some(ring)
+                } else {
+                    None
+                }
             } else {
                 None
-            }
-        } else {
-            None
-        };
+            };
 
         let total_rows = out.rows;
         let completed_rows = AtomicUsize::new(0);
@@ -2430,12 +2627,24 @@ impl Raster {
                     batch_cols.push(col as usize);
                 }
 
-                let epoch_routing_requested = options.epoch_transform.coordinate_epoch_decimal_year.is_some()
-                    || options.epoch_transform.source_reference_epoch_decimal_year.is_some()
-                    || options.epoch_transform.target_reference_epoch_decimal_year.is_some()
+                let epoch_routing_requested = options
+                    .epoch_transform
+                    .coordinate_epoch_decimal_year
+                    .is_some()
+                    || options
+                        .epoch_transform
+                        .source_reference_epoch_decimal_year
+                        .is_some()
+                    || options
+                        .epoch_transform
+                        .target_reference_epoch_decimal_year
+                        .is_some()
                     || options.epoch_transform.operation_code.is_some()
                     || !options.epoch_transform.prefer_official_operation
-                    || matches!(options.epoch_transform.epoch_policy, EpochPolicy::AllowStaticFallback);
+                    || matches!(
+                        options.epoch_transform.epoch_policy,
+                        EpochPolicy::AllowStaticFallback
+                    );
 
                 if !epoch_routing_requested {
                     // Single batch CRS transform for all eligible pixels in this row.
@@ -2581,48 +2790,24 @@ impl Raster {
                     .sample_lanczos_strict_pixel(band, col_f, row_f)
                     .or_else(|| self.sample_nearest_pixel(band, col_f, row_f)),
             },
-            ResampleMethod::Average => self.sample_window_stat_pixel(
-                band,
-                col_f,
-                row_f,
-                WindowStat::Mean,
-                nodata_policy,
-            ),
-            ResampleMethod::Min => self.sample_window_stat_pixel(
-                band,
-                col_f,
-                row_f,
-                WindowStat::Min,
-                nodata_policy,
-            ),
-            ResampleMethod::Max => self.sample_window_stat_pixel(
-                band,
-                col_f,
-                row_f,
-                WindowStat::Max,
-                nodata_policy,
-            ),
-            ResampleMethod::Mode => self.sample_window_stat_pixel(
-                band,
-                col_f,
-                row_f,
-                WindowStat::Mode,
-                nodata_policy,
-            ),
-            ResampleMethod::Median => self.sample_window_stat_pixel(
-                band,
-                col_f,
-                row_f,
-                WindowStat::Median,
-                nodata_policy,
-            ),
-            ResampleMethod::StdDev => self.sample_window_stat_pixel(
-                band,
-                col_f,
-                row_f,
-                WindowStat::StdDev,
-                nodata_policy,
-            ),
+            ResampleMethod::Average => {
+                self.sample_window_stat_pixel(band, col_f, row_f, WindowStat::Mean, nodata_policy)
+            }
+            ResampleMethod::Min => {
+                self.sample_window_stat_pixel(band, col_f, row_f, WindowStat::Min, nodata_policy)
+            }
+            ResampleMethod::Max => {
+                self.sample_window_stat_pixel(band, col_f, row_f, WindowStat::Max, nodata_policy)
+            }
+            ResampleMethod::Mode => {
+                self.sample_window_stat_pixel(band, col_f, row_f, WindowStat::Mode, nodata_policy)
+            }
+            ResampleMethod::Median => {
+                self.sample_window_stat_pixel(band, col_f, row_f, WindowStat::Median, nodata_policy)
+            }
+            ResampleMethod::StdDev => {
+                self.sample_window_stat_pixel(band, col_f, row_f, WindowStat::StdDev, nodata_policy)
+            }
         }
     }
 
@@ -2725,10 +2910,7 @@ impl Raster {
         let q01 = values[base + self.cols];
         let q11 = values[base + self.cols + 1];
 
-        if self.is_nodata(q00)
-            || self.is_nodata(q10)
-            || self.is_nodata(q01)
-            || self.is_nodata(q11)
+        if self.is_nodata(q00) || self.is_nodata(q10) || self.is_nodata(q01) || self.is_nodata(q11)
         {
             return None;
         }
@@ -2761,10 +2943,7 @@ impl Raster {
         let q01 = values[base + self.cols] as f64;
         let q11 = values[base + self.cols + 1] as f64;
 
-        if self.is_nodata(q00)
-            || self.is_nodata(q10)
-            || self.is_nodata(q01)
-            || self.is_nodata(q11)
+        if self.is_nodata(q00) || self.is_nodata(q10) || self.is_nodata(q01) || self.is_nodata(q11)
         {
             return None;
         }
@@ -2824,10 +3003,7 @@ impl Raster {
         }
         let c1 = col_f.floor() as isize;
         let r1 = row_f.floor() as isize;
-        if c1 - 1 < 0
-            || r1 - 1 < 0
-            || c1 + 2 >= self.cols as isize
-            || r1 + 2 >= self.rows as isize
+        if c1 - 1 < 0 || r1 - 1 < 0 || c1 + 2 >= self.cols as isize || r1 + 2 >= self.rows as isize
         {
             return None;
         }
@@ -2925,10 +3101,7 @@ impl Raster {
 
         let c0 = col_f.floor() as isize;
         let r0 = row_f.floor() as isize;
-        if c0 - 2 < 0
-            || r0 - 2 < 0
-            || c0 + 3 >= self.cols as isize
-            || r0 + 3 >= self.rows as isize
+        if c0 - 2 < 0 || r0 - 2 < 0 || c0 + 3 >= self.cols as isize || r0 + 3 >= self.rows as isize
         {
             return None;
         }
@@ -3335,10 +3508,12 @@ impl Raster {
                 })
                 .collect();
 
-            partials.into_iter().fold(StatsAccumulator::default(), |mut lhs, rhs| {
-                lhs.merge(rhs);
-                lhs
-            })
+            partials
+                .into_iter()
+                .fold(StatsAccumulator::default(), |mut lhs, rhs| {
+                    lhs.merge(rhs);
+                    lhs
+                })
         };
 
         total.to_statistics()
@@ -3434,13 +3609,18 @@ impl Raster {
         }
         let band_stride = self.rows * self.cols;
         let start = band as usize * band_stride + row as usize * self.cols;
-        (start..start + self.cols).map(|i| self.data.get_f64(i)).collect()
+        (start..start + self.cols)
+            .map(|i| self.data.get_f64(i))
+            .collect()
     }
 
     /// Set all values in signed `(band, row)` from an `f64` slice.
     pub fn set_row_slice(&mut self, band: isize, row: isize, values: &[f64]) -> Result<()> {
         if values.len() != self.cols {
-            return Err(RasterError::InvalidDimensions { cols: values.len(), rows: self.rows });
+            return Err(RasterError::InvalidDimensions {
+                cols: values.len(),
+                rows: self.rows,
+            });
         }
         if band < 0 || band >= self.bands as isize || row < 0 || row >= self.rows as isize {
             return Err(RasterError::OutOfBounds {
@@ -3462,18 +3642,21 @@ impl Raster {
 
     /// Iterate over signed `(band, row, col, value)` for all valid cells.
     pub fn iter_valid(&self) -> impl Iterator<Item = (isize, isize, isize, f64)> + '_ {
-        self.data.iter_f64().enumerate().filter_map(move |(idx, v)| {
-            if self.is_nodata(v) {
-                None
-            } else {
-                let band_stride = self.rows * self.cols;
-                let band = idx / band_stride;
-                let rem = idx % band_stride;
-                let row = rem / self.cols;
-                let col = rem % self.cols;
-                Some((band as isize, row as isize, col as isize, v))
-            }
-        })
+        self.data
+            .iter_f64()
+            .enumerate()
+            .filter_map(move |(idx, v)| {
+                if self.is_nodata(v) {
+                    None
+                } else {
+                    let band_stride = self.rows * self.cols;
+                    let band = idx / band_stride;
+                    let rem = idx % band_stride;
+                    let row = rem / self.cols;
+                    let col = rem % self.cols;
+                    Some((band as isize, row as isize, col as isize, v))
+                }
+            })
     }
 
     /// Iterate over signed `(row, col, value)` for all valid cells in one band.
@@ -3520,7 +3703,9 @@ impl Raster {
             });
         }
 
-        Ok(Box::new((0..self.rows).map(move |row| self.row_slice(band, row as isize))))
+        Ok(Box::new(
+            (0..self.rows).map(move |row| self.row_slice(band, row as isize)),
+        ))
     }
 
     /// Traverse mutable native row slices for one band from north to south.
@@ -3704,7 +3889,11 @@ impl Raster {
         let nodata_nan = nd.is_nan();
         for i in 0..self.data.len() {
             let v = self.data.get_f64(i);
-            let is_nd = if nodata_nan { v.is_nan() } else { (v - nd).abs() < 1e-10 * nd.abs().max(1.0) };
+            let is_nd = if nodata_nan {
+                v.is_nan()
+            } else {
+                (v - nd).abs() < 1e-10 * nd.abs().max(1.0)
+            };
             if !is_nd {
                 self.data.set_f64(i, f(v));
             }
@@ -3888,12 +4077,7 @@ impl Raster {
     }
 }
 
-fn maybe_warn_area_of_use_mismatch(
-    src: &Crs,
-    dst: &Crs,
-    src_extent: Extent,
-    enabled: bool,
-) {
+fn maybe_warn_area_of_use_mismatch(src: &Crs, dst: &Crs, src_extent: Extent, enabled: bool) {
     if !enabled {
         return;
     }
@@ -4075,7 +4259,8 @@ fn transformed_extent_from_boundary_samples(
     let mut valid = 0usize;
 
     for (x, y) in points {
-        let Ok((tx, ty)) = transform_xy_with_epoch_options(src_crs, dst_crs, x, y, epoch_transform) else {
+        let Ok((tx, ty)) = transform_xy_with_epoch_options(src_crs, dst_crs, x, y, epoch_transform)
+        else {
             continue;
         };
         if !tx.is_finite() || !ty.is_finite() {
@@ -4097,10 +4282,8 @@ fn transformed_extent_from_boundary_samples(
     }
 
     if dst_epsg == 4326 {
-        if let Some((x0, x1)) = antimeridian_aware_longitude_bounds(
-            &tx_values,
-            antimeridian_policy,
-        ) {
+        if let Some((x0, x1)) = antimeridian_aware_longitude_bounds(&tx_values, antimeridian_policy)
+        {
             tx_min = x0;
             tx_max = x1;
         }
@@ -4127,7 +4310,8 @@ fn transformed_boundary_ring_samples(
     let mut transformed = Vec::with_capacity(ring.len());
 
     for (x, y) in ring {
-        let Ok((tx, ty)) = transform_xy_with_epoch_options(src_crs, dst_crs, x, y, epoch_transform) else {
+        let Ok((tx, ty)) = transform_xy_with_epoch_options(src_crs, dst_crs, x, y, epoch_transform)
+        else {
             continue;
         };
         if tx.is_finite() && ty.is_finite() {
@@ -4173,8 +4357,12 @@ fn transform_xy_with_epoch_options(
     y: f64,
     options: &EpochTransformOptions,
 ) -> Result<(f64, f64)> {
-    options.validate().map_err(|e| RasterError::Other(format!("invalid epoch transform options: {e}")))?;
-    let ctx = options.build_context().map_err(|e| RasterError::Other(format!("invalid epoch transform options: {e}")))?;
+    options
+        .validate()
+        .map_err(|e| RasterError::Other(format!("invalid epoch transform options: {e}")))?;
+    let ctx = options
+        .build_context()
+        .map_err(|e| RasterError::Other(format!("invalid epoch transform options: {e}")))?;
     let epoch_routing_requested = options.coordinate_epoch_decimal_year.is_some()
         || options.source_reference_epoch_decimal_year.is_some()
         || options.target_reference_epoch_decimal_year.is_some()
@@ -4207,7 +4395,9 @@ fn transform_xy_with_epoch_options(
                     "epoch-aware transform failed ({err}); static fallback failed ({fallback_err})"
                 ))
             }),
-        Err(err) => Err(RasterError::Other(format!("epoch-aware transform failed: {err}"))),
+        Err(err) => Err(RasterError::Other(format!(
+            "epoch-aware transform failed: {err}"
+        ))),
     }
 }
 
@@ -4312,8 +4502,8 @@ fn point_in_polygon(x: f64, y: f64, polygon: &[(f64, f64)]) -> bool {
     for i in 0..polygon.len() {
         let (xi, yi) = polygon[i];
         let (xj, yj) = polygon[j];
-        let intersects = (yi > y) != (yj > y)
-            && x < (xj - xi) * (y - yi) / ((yj - yi) + 1e-30) + xi;
+        let intersects =
+            (yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / ((yj - yi) + 1e-30) + xi;
         if intersects {
             inside = !inside;
         }
@@ -4406,7 +4596,13 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     fn make_raster() -> Raster {
-        let cfg = RasterConfig { cols: 4, rows: 3, cell_size: 10.0, nodata: -9999.0, ..Default::default() };
+        let cfg = RasterConfig {
+            cols: 4,
+            rows: 3,
+            cell_size: 10.0,
+            nodata: -9999.0,
+            ..Default::default()
+        };
         let mut r = Raster::new(cfg);
         for row in 0..3 {
             for col in 0..4 {
@@ -4425,13 +4621,14 @@ mod tests {
         ]);
         bytes.resize(0x90, 0);
         bytes[0x80..0x90].copy_from_slice(&[
-            0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04, 0x00,
-            0x05, 0x00, 0x06, 0x00, 0x07, 0x00, 0x08, 0x00,
+            0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04, 0x00, 0x05, 0x00, 0x06, 0x00, 0x07, 0x00,
+            0x08, 0x00,
         ]);
         bytes.extend_from_slice(
             b"\nStructMetadata.0\nGridName=\"GridA\"\nXDim=4\nYDim=2\nUpperLeftPointMtrs=(0,10)\nLowerRightMtrs=(20,0)\nDataFieldName=\"FieldA\"\nDataType=DFNT_INT16\nDimList=(\"YDim\",\"XDim\")\n",
         );
-        file.write_all(&bytes).expect("synthetic HDF4 fixture should be writable");
+        file.write_all(&bytes)
+            .expect("synthetic HDF4 fixture should be writable");
     }
 
     fn write_synthetic_hdf5_contiguous_fixture_header(
@@ -4485,7 +4682,8 @@ mod tests {
         let mut continuation_cursor = CONTINUATION_OFFSET;
         bytes[continuation_cursor..continuation_cursor + 4].copy_from_slice(b"OCHK");
         continuation_cursor += 4;
-        bytes[continuation_cursor..continuation_cursor + 4].copy_from_slice(&[0x08, 0x12, 0x00, 0x00]);
+        bytes[continuation_cursor..continuation_cursor + 4]
+            .copy_from_slice(&[0x08, 0x12, 0x00, 0x00]);
         continuation_cursor += 4;
         bytes[continuation_cursor] = 0x03;
         bytes[continuation_cursor + 1] = 0x01;
@@ -4642,7 +4840,8 @@ mod tests {
         bytes[node_cursor + 5] = 0;
         bytes[node_cursor + 6..node_cursor + 8].copy_from_slice(&(1u16).to_le_bytes());
         node_cursor += 24;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(raw_payload.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(raw_payload.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
@@ -4651,8 +4850,7 @@ mod tests {
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_OFFSET as u64).to_le_bytes());
 
         // Chunk payload bytes.
-        bytes[PAYLOAD_OFFSET..PAYLOAD_OFFSET + raw_payload.len()]
-            .copy_from_slice(&raw_payload);
+        bytes[PAYLOAD_OFFSET..PAYLOAD_OFFSET + raw_payload.len()].copy_from_slice(&raw_payload);
 
         file.write_all(&bytes)
             .expect("synthetic HDF5 chunked fixture should be writable");
@@ -4739,22 +4937,26 @@ mod tests {
         bytes[node_cursor + 6..node_cursor + 8].copy_from_slice(&(2u16).to_le_bytes());
         node_cursor += 24;
 
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_a.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_a.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_A_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(PAYLOAD_A_OFFSET as u64).to_le_bytes());
         node_cursor += 8;
 
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_b.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_b.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(2u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_B_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(PAYLOAD_B_OFFSET as u64).to_le_bytes());
 
         bytes[PAYLOAD_A_OFFSET..PAYLOAD_A_OFFSET + payload_a.len()].copy_from_slice(&payload_a);
         bytes[PAYLOAD_B_OFFSET..PAYLOAD_B_OFFSET + payload_b.len()].copy_from_slice(&payload_b);
@@ -4855,22 +5057,26 @@ mod tests {
         bytes[node_cursor + 6..node_cursor + 8].copy_from_slice(&(2u16).to_le_bytes());
         node_cursor += 24;
 
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_a.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_a.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_A_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(PAYLOAD_A_OFFSET as u64).to_le_bytes());
         node_cursor += 8;
 
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_b.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_b.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(2u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_b_offset as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_b_offset as u64).to_le_bytes());
 
         bytes[PAYLOAD_A_OFFSET..PAYLOAD_A_OFFSET + payload_a.len()].copy_from_slice(&payload_a);
         bytes[payload_b_offset..payload_b_offset + payload_b.len()].copy_from_slice(&payload_b);
@@ -4960,31 +5166,37 @@ mod tests {
         bytes[node_cursor + 5] = 0;
         bytes[node_cursor + 6..node_cursor + 8].copy_from_slice(&(1u16).to_le_bytes());
         bytes[node_cursor + 8..node_cursor + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[node_cursor + 16..node_cursor + 24].copy_from_slice(&(SECOND_LEAF_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor + 16..node_cursor + 24]
+            .copy_from_slice(&(SECOND_LEAF_OFFSET as u64).to_le_bytes());
         node_cursor += 24;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_a.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_a.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_A_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(PAYLOAD_A_OFFSET as u64).to_le_bytes());
 
         let mut node_cursor = SECOND_LEAF_OFFSET;
         bytes[node_cursor..node_cursor + 4].copy_from_slice(b"TREE");
         bytes[node_cursor + 4] = 1;
         bytes[node_cursor + 5] = 0;
         bytes[node_cursor + 6..node_cursor + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[node_cursor + 8..node_cursor + 16].copy_from_slice(&(FIRST_LEAF_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor + 8..node_cursor + 16]
+            .copy_from_slice(&(FIRST_LEAF_OFFSET as u64).to_le_bytes());
         bytes[node_cursor + 16..node_cursor + 24].copy_from_slice(&u64::MAX.to_le_bytes());
         node_cursor += 24;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_b.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_b.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(2u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_B_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(PAYLOAD_B_OFFSET as u64).to_le_bytes());
 
         bytes[PAYLOAD_A_OFFSET..PAYLOAD_A_OFFSET + payload_a.len()].copy_from_slice(&payload_a);
         bytes[PAYLOAD_B_OFFSET..PAYLOAD_B_OFFSET + payload_b.len()].copy_from_slice(&payload_b);
@@ -5065,29 +5277,35 @@ mod tests {
         bytes[cursor] = 3;
         bytes[cursor + 1] = 2;
         bytes[cursor + 2] = 2;
-        bytes[cursor + 3..cursor + 11].copy_from_slice(&(INTERNAL_ROOT_OFFSET as u64).to_le_bytes());
+        bytes[cursor + 3..cursor + 11]
+            .copy_from_slice(&(INTERNAL_ROOT_OFFSET as u64).to_le_bytes());
         bytes[cursor + 11..cursor + 15].copy_from_slice(&(CHUNK_ROWS as u32).to_le_bytes());
         bytes[cursor + 15..cursor + 19].copy_from_slice(&(CHUNK_COLS as u32).to_le_bytes());
 
         bytes[INTERNAL_ROOT_OFFSET..INTERNAL_ROOT_OFFSET + 4].copy_from_slice(b"TREE");
         bytes[INTERNAL_ROOT_OFFSET + 4] = 1;
         bytes[INTERNAL_ROOT_OFFSET + 5] = 1;
-        bytes[INTERNAL_ROOT_OFFSET + 6..INTERNAL_ROOT_OFFSET + 8].copy_from_slice(&(2u16).to_le_bytes());
-        bytes[INTERNAL_ROOT_OFFSET + 8..INTERNAL_ROOT_OFFSET + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[INTERNAL_ROOT_OFFSET + 16..INTERNAL_ROOT_OFFSET + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[INTERNAL_ROOT_OFFSET + 6..INTERNAL_ROOT_OFFSET + 8]
+            .copy_from_slice(&(2u16).to_le_bytes());
+        bytes[INTERNAL_ROOT_OFFSET + 8..INTERNAL_ROOT_OFFSET + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[INTERNAL_ROOT_OFFSET + 16..INTERNAL_ROOT_OFFSET + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
 
         let mut node_cursor = INTERNAL_ROOT_OFFSET + 24;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(2u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(FIRST_LEAF_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(FIRST_LEAF_OFFSET as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(4u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(SECOND_LEAF_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(SECOND_LEAF_OFFSET as u64).to_le_bytes());
 
         let mut node_cursor = FIRST_LEAF_OFFSET;
         bytes[node_cursor..node_cursor + 4].copy_from_slice(b"TREE");
@@ -5097,13 +5315,15 @@ mod tests {
         bytes[node_cursor + 8..node_cursor + 16].copy_from_slice(&u64::MAX.to_le_bytes());
         bytes[node_cursor + 16..node_cursor + 24].copy_from_slice(&u64::MAX.to_le_bytes());
         node_cursor += 24;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_a.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_a.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_A_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(PAYLOAD_A_OFFSET as u64).to_le_bytes());
 
         let mut node_cursor = SECOND_LEAF_OFFSET;
         bytes[node_cursor..node_cursor + 4].copy_from_slice(b"TREE");
@@ -5113,13 +5333,15 @@ mod tests {
         bytes[node_cursor + 8..node_cursor + 16].copy_from_slice(&u64::MAX.to_le_bytes());
         bytes[node_cursor + 16..node_cursor + 24].copy_from_slice(&u64::MAX.to_le_bytes());
         node_cursor += 24;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_b.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_b.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(2u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_B_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(PAYLOAD_B_OFFSET as u64).to_le_bytes());
 
         bytes[PAYLOAD_A_OFFSET..PAYLOAD_A_OFFSET + payload_a.len()].copy_from_slice(&payload_a);
         bytes[PAYLOAD_B_OFFSET..PAYLOAD_B_OFFSET + payload_b.len()].copy_from_slice(&payload_b);
@@ -5225,45 +5447,56 @@ mod tests {
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(2u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(FIRST_INTERNAL_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(FIRST_INTERNAL_OFFSET as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(6u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(SECOND_INTERNAL_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(SECOND_INTERNAL_OFFSET as u64).to_le_bytes());
 
         bytes[FIRST_INTERNAL_OFFSET..FIRST_INTERNAL_OFFSET + 4].copy_from_slice(b"TREE");
         bytes[FIRST_INTERNAL_OFFSET + 4] = 1;
         bytes[FIRST_INTERNAL_OFFSET + 5] = 1;
-        bytes[FIRST_INTERNAL_OFFSET + 6..FIRST_INTERNAL_OFFSET + 8].copy_from_slice(&(2u16).to_le_bytes());
-        bytes[FIRST_INTERNAL_OFFSET + 8..FIRST_INTERNAL_OFFSET + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[FIRST_INTERNAL_OFFSET + 16..FIRST_INTERNAL_OFFSET + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[FIRST_INTERNAL_OFFSET + 6..FIRST_INTERNAL_OFFSET + 8]
+            .copy_from_slice(&(2u16).to_le_bytes());
+        bytes[FIRST_INTERNAL_OFFSET + 8..FIRST_INTERNAL_OFFSET + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[FIRST_INTERNAL_OFFSET + 16..FIRST_INTERNAL_OFFSET + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut node_cursor = FIRST_INTERNAL_OFFSET + 24;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(2u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(FIRST_LEAF_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(FIRST_LEAF_OFFSET as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(4u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(SECOND_LEAF_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(SECOND_LEAF_OFFSET as u64).to_le_bytes());
 
         bytes[SECOND_INTERNAL_OFFSET..SECOND_INTERNAL_OFFSET + 4].copy_from_slice(b"TREE");
         bytes[SECOND_INTERNAL_OFFSET + 4] = 1;
         bytes[SECOND_INTERNAL_OFFSET + 5] = 1;
-        bytes[SECOND_INTERNAL_OFFSET + 6..SECOND_INTERNAL_OFFSET + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[SECOND_INTERNAL_OFFSET + 8..SECOND_INTERNAL_OFFSET + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[SECOND_INTERNAL_OFFSET + 16..SECOND_INTERNAL_OFFSET + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[SECOND_INTERNAL_OFFSET + 6..SECOND_INTERNAL_OFFSET + 8]
+            .copy_from_slice(&(1u16).to_le_bytes());
+        bytes[SECOND_INTERNAL_OFFSET + 8..SECOND_INTERNAL_OFFSET + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[SECOND_INTERNAL_OFFSET + 16..SECOND_INTERNAL_OFFSET + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut node_cursor = SECOND_INTERNAL_OFFSET + 24;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(6u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(THIRD_LEAF_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(THIRD_LEAF_OFFSET as u64).to_le_bytes());
 
         let mut node_cursor = FIRST_LEAF_OFFSET;
         bytes[node_cursor..node_cursor + 4].copy_from_slice(b"TREE");
@@ -5273,13 +5506,15 @@ mod tests {
         bytes[node_cursor + 8..node_cursor + 16].copy_from_slice(&u64::MAX.to_le_bytes());
         bytes[node_cursor + 16..node_cursor + 24].copy_from_slice(&u64::MAX.to_le_bytes());
         node_cursor += 24;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_a.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_a.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_A_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(PAYLOAD_A_OFFSET as u64).to_le_bytes());
 
         let mut node_cursor = SECOND_LEAF_OFFSET;
         bytes[node_cursor..node_cursor + 4].copy_from_slice(b"TREE");
@@ -5289,13 +5524,15 @@ mod tests {
         bytes[node_cursor + 8..node_cursor + 16].copy_from_slice(&u64::MAX.to_le_bytes());
         bytes[node_cursor + 16..node_cursor + 24].copy_from_slice(&u64::MAX.to_le_bytes());
         node_cursor += 24;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_b.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_b.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(2u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_B_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(PAYLOAD_B_OFFSET as u64).to_le_bytes());
 
         let mut node_cursor = THIRD_LEAF_OFFSET;
         bytes[node_cursor..node_cursor + 4].copy_from_slice(b"TREE");
@@ -5305,13 +5542,15 @@ mod tests {
         bytes[node_cursor + 8..node_cursor + 16].copy_from_slice(&u64::MAX.to_le_bytes());
         bytes[node_cursor + 16..node_cursor + 24].copy_from_slice(&u64::MAX.to_le_bytes());
         node_cursor += 24;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(payload_c.len() as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(payload_c.len() as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(4u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(PAYLOAD_C_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(PAYLOAD_C_OFFSET as u64).to_le_bytes());
 
         bytes[PAYLOAD_A_OFFSET..PAYLOAD_A_OFFSET + payload_a.len()].copy_from_slice(&payload_a);
         bytes[PAYLOAD_B_OFFSET..PAYLOAD_B_OFFSET + payload_b.len()].copy_from_slice(&payload_b);
@@ -5473,39 +5712,48 @@ mod tests {
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(2u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(FIRST_INTERNAL_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(FIRST_INTERNAL_OFFSET as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(6u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(SECOND_INTERNAL_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(SECOND_INTERNAL_OFFSET as u64).to_le_bytes());
 
         bytes[FIRST_INTERNAL_OFFSET..FIRST_INTERNAL_OFFSET + 4].copy_from_slice(b"TREE");
         bytes[FIRST_INTERNAL_OFFSET + 4] = 1;
         bytes[FIRST_INTERNAL_OFFSET + 5] = 1;
-        bytes[FIRST_INTERNAL_OFFSET + 6..FIRST_INTERNAL_OFFSET + 8].copy_from_slice(&(2u16).to_le_bytes());
-        bytes[FIRST_INTERNAL_OFFSET + 8..FIRST_INTERNAL_OFFSET + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[FIRST_INTERNAL_OFFSET + 16..FIRST_INTERNAL_OFFSET + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[FIRST_INTERNAL_OFFSET + 6..FIRST_INTERNAL_OFFSET + 8]
+            .copy_from_slice(&(2u16).to_le_bytes());
+        bytes[FIRST_INTERNAL_OFFSET + 8..FIRST_INTERNAL_OFFSET + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[FIRST_INTERNAL_OFFSET + 16..FIRST_INTERNAL_OFFSET + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut node_cursor = FIRST_INTERNAL_OFFSET + 24;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(2u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(FIRST_LEAF_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(FIRST_LEAF_OFFSET as u64).to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         node_cursor += 8;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(4u64).to_le_bytes());
         node_cursor += 8;
-        bytes[node_cursor..node_cursor + 8].copy_from_slice(&(SECOND_LEAF_OFFSET as u64).to_le_bytes());
+        bytes[node_cursor..node_cursor + 8]
+            .copy_from_slice(&(SECOND_LEAF_OFFSET as u64).to_le_bytes());
 
         bytes[FIRST_LEAF_OFFSET..FIRST_LEAF_OFFSET + 4].copy_from_slice(b"TREE");
         bytes[FIRST_LEAF_OFFSET + 4] = 1;
         bytes[FIRST_LEAF_OFFSET + 5] = 0;
         bytes[FIRST_LEAF_OFFSET + 6..FIRST_LEAF_OFFSET + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[FIRST_LEAF_OFFSET + 8..FIRST_LEAF_OFFSET + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[FIRST_LEAF_OFFSET + 16..FIRST_LEAF_OFFSET + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[FIRST_LEAF_OFFSET + 8..FIRST_LEAF_OFFSET + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[FIRST_LEAF_OFFSET + 16..FIRST_LEAF_OFFSET + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         node_cursor = FIRST_LEAF_OFFSET + 24;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         node_cursor += 8;
@@ -5518,9 +5766,12 @@ mod tests {
         bytes[SECOND_LEAF_OFFSET..SECOND_LEAF_OFFSET + 4].copy_from_slice(b"TREE");
         bytes[SECOND_LEAF_OFFSET + 4] = 1;
         bytes[SECOND_LEAF_OFFSET + 5] = 0;
-        bytes[SECOND_LEAF_OFFSET + 6..SECOND_LEAF_OFFSET + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[SECOND_LEAF_OFFSET + 8..SECOND_LEAF_OFFSET + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[SECOND_LEAF_OFFSET + 16..SECOND_LEAF_OFFSET + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[SECOND_LEAF_OFFSET + 6..SECOND_LEAF_OFFSET + 8]
+            .copy_from_slice(&(1u16).to_le_bytes());
+        bytes[SECOND_LEAF_OFFSET + 8..SECOND_LEAF_OFFSET + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[SECOND_LEAF_OFFSET + 16..SECOND_LEAF_OFFSET + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         node_cursor = SECOND_LEAF_OFFSET + 24;
         bytes[node_cursor..node_cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         node_cursor += 8;
@@ -5574,7 +5825,8 @@ mod tests {
         write_synthetic_hdf4_i16_fixture(&mut tmp);
 
         let uri = format!("{}#dataset=/GridA/FieldA", tmp.path().to_string_lossy());
-        let raster = Raster::read(&uri).expect("canonical HDF4 dataset URI should decode to raster");
+        let raster =
+            Raster::read(&uri).expect("canonical HDF4 dataset URI should decode to raster");
 
         assert_eq!(raster.rows, 2);
         assert_eq!(raster.cols, 4);
@@ -5603,7 +5855,10 @@ mod tests {
             .expect("temp file should be created");
         write_synthetic_hdf5_gedi_contiguous_fixture(&mut tmp);
 
-        let uri = format!("{}:///BEAM0000/elev_lowestmode", tmp.path().to_string_lossy());
+        let uri = format!(
+            "{}:///BEAM0000/elev_lowestmode",
+            tmp.path().to_string_lossy()
+        );
         let raster = Raster::read(&uri).expect("HDF5 GEDI URI should materialize to raster");
 
         assert_eq!(raster.rows, 1);
@@ -5623,8 +5878,12 @@ mod tests {
             .expect("temp file should be created");
         write_synthetic_hdf5_gedi_contiguous_fixture(&mut tmp);
 
-        let uri = format!("{}#dataset=/BEAM0000/elev_lowestmode", tmp.path().to_string_lossy());
-        let raster = Raster::read(&uri).expect("canonical HDF5 GEDI URI should materialize to raster");
+        let uri = format!(
+            "{}#dataset=/BEAM0000/elev_lowestmode",
+            tmp.path().to_string_lossy()
+        );
+        let raster =
+            Raster::read(&uri).expect("canonical HDF5 GEDI URI should materialize to raster");
 
         assert_eq!(raster.rows, 1);
         assert_eq!(raster.cols, 89_634);
@@ -5683,7 +5942,10 @@ mod tests {
             .expect("temp file should be created");
         write_synthetic_hdf5_chunked_single_chunk_f32_fixture(&mut tmp);
 
-        let uri = format!("{}#dataset=/ScienceData/NDVI_Chunked", tmp.path().to_string_lossy());
+        let uri = format!(
+            "{}#dataset=/ScienceData/NDVI_Chunked",
+            tmp.path().to_string_lossy()
+        );
         let raster = Raster::read(&uri).expect("chunked single-chunk HDF5 URI should materialize");
 
         assert_eq!(raster.rows, 2);
@@ -5703,7 +5965,10 @@ mod tests {
             .expect("temp file should be created");
         write_synthetic_hdf5_chunked_two_chunk_f32_fixture(&mut tmp);
 
-        let uri = format!("{}#dataset=/ScienceData/NDVI_Chunked_Two", tmp.path().to_string_lossy());
+        let uri = format!(
+            "{}#dataset=/ScienceData/NDVI_Chunked_Two",
+            tmp.path().to_string_lossy()
+        );
         let raster = Raster::read(&uri).expect("chunked two-chunk HDF5 URI should materialize");
 
         assert_eq!(raster.rows, 2);
@@ -5728,8 +5993,8 @@ mod tests {
             "{}#dataset=/ScienceData/NDVI_Chunked_Two_Deflate",
             tmp.path().to_string_lossy()
         );
-        let raster = Raster::read(&uri)
-            .expect("chunked deflate two-chunk HDF5 URI should materialize");
+        let raster =
+            Raster::read(&uri).expect("chunked deflate two-chunk HDF5 URI should materialize");
 
         assert_eq!(raster.rows, 2);
         assert_eq!(raster.cols, 4);
@@ -5848,8 +6113,8 @@ mod tests {
             "{}#dataset=/ScienceData/NDVI_Chunked_MalformedMultiLevelFanout",
             tmp.path().to_string_lossy()
         );
-        let err = Raster::read(&uri)
-            .expect_err("malformed multilevel fanout should fail explicitly");
+        let err =
+            Raster::read(&uri).expect_err("malformed multilevel fanout should fail explicitly");
         let msg = err.to_string();
         assert!(
             msg.contains("B-tree node is missing TREE signature")
@@ -6138,7 +6403,9 @@ mod tests {
         let values = progress_values.lock().unwrap();
         assert!(!values.is_empty());
         assert_eq!(values.len(), out.rows + 1);
-        assert!(values.iter().all(|v| v.is_finite() && *v >= 0.0 && *v <= 1.0));
+        assert!(values
+            .iter()
+            .all(|v| v.is_finite() && *v >= 0.0 && *v <= 1.0));
         assert!((values.last().copied().unwrap() - 1.0).abs() < 1e-12);
     }
 
@@ -6680,7 +6947,10 @@ mod tests {
         assert_eq!(fit_inside.grid_size_policy, GridSizePolicy::FitInside);
 
         let masked = fit_inside.with_destination_footprint(DestinationFootprint::SourceBoundary);
-        assert_eq!(masked.destination_footprint, DestinationFootprint::SourceBoundary);
+        assert_eq!(
+            masked.destination_footprint,
+            DestinationFootprint::SourceBoundary
+        );
     }
 
     #[test]
@@ -6717,11 +6987,7 @@ mod tests {
             nodata: -9999.0,
             ..Default::default()
         };
-        let data = vec![
-            1.0, 2.0, 2.0,
-            3.0, 4.0, 4.0,
-            5.0, 6.0, 6.0,
-        ];
+        let data = vec![1.0, 2.0, 2.0, 3.0, 4.0, 4.0, 5.0, 6.0, 6.0];
         let expected_mean = data.iter().sum::<f64>() / data.len() as f64;
         let expected_stddev = (data
             .iter()
@@ -6912,12 +7178,9 @@ mod tests {
     fn reproject_with_options_rejects_invalid_resolution_controls() {
         let mut r = make_raster();
         r.crs = CrsInfo::from_epsg(4326);
-        let opts = ReprojectOptions::new(3857, ResampleMethod::Nearest)
-            .with_square_resolution(0.0);
+        let opts = ReprojectOptions::new(3857, ResampleMethod::Nearest).with_square_resolution(0.0);
         let err = r.reproject_with_options(&opts).unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("invalid reprojection resolution"));
+        assert!(err.to_string().contains("invalid reprojection resolution"));
     }
 
     #[test]
@@ -6929,7 +7192,9 @@ mod tests {
             nodata: -9999.0,
             ..Default::default()
         };
-        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0, -9999.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
+        let data = vec![
+            1.0, 2.0, 3.0, 4.0, 5.0, -9999.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0,
+        ];
         let mut r = Raster::from_data(cfg, data).unwrap();
 
         let b0 = r.band_slice(0);
@@ -6943,7 +7208,8 @@ mod tests {
         assert_eq!(s0.min, 1.0);
         assert_eq!(s0.max, 5.0);
 
-        r.set_band_slice(1, &[7.0, 8.0, 9.0, 10.0, 11.0, 12.0]).unwrap();
+        r.set_band_slice(1, &[7.0, 8.0, 9.0, 10.0, 11.0, 12.0])
+            .unwrap();
         assert_eq!(r.get_raw(1, 0, 0), Some(7.0));
         assert_eq!(r.get_raw(1, 1, 2), Some(12.0));
     }
@@ -6981,7 +7247,9 @@ mod tests {
             nodata: -9999.0,
             ..Default::default()
         };
-        let data = vec![1.0, 2.0, -9999.0, 4.0, 5.0, 6.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
+        let data = vec![
+            1.0, 2.0, -9999.0, 4.0, 5.0, 6.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0,
+        ];
         let r = Raster::from_data(cfg, data).unwrap();
 
         let valid_b0: Vec<_> = r.iter_valid_band(0).unwrap().collect();

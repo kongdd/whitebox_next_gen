@@ -41,15 +41,18 @@ fn main() -> Result<()> {
 
     let mut z2 = make_raster();
     z2.metadata.push(("zarr_version".into(), "2".into()));
-    z2.metadata.push(("zarr_dimension_separator".into(), "/".into()));
+    z2.metadata
+        .push(("zarr_dimension_separator".into(), "/".into()));
     let z2_path = dir.join("surface_v2.zarr");
     z2.write(z2_path.to_str().unwrap(), RasterFormat::Zarr)?;
     let z2_loaded = Raster::read(z2_path.to_str().unwrap())?;
 
     let mut z3 = make_raster();
     z3.metadata.push(("zarr_version".into(), "3".into()));
-    z3.metadata.push(("zarr_chunk_key_encoding".into(), "default".into()));
-    z3.metadata.push(("zarr_dimension_separator".into(), "/".into()));
+    z3.metadata
+        .push(("zarr_chunk_key_encoding".into(), "default".into()));
+    z3.metadata
+        .push(("zarr_dimension_separator".into(), "/".into()));
     let z3_path = dir.join("surface_v3.zarr");
     z3.write(z3_path.to_str().unwrap(), RasterFormat::Zarr)?;
     let z3_loaded = Raster::read(z3_path.to_str().unwrap())?;

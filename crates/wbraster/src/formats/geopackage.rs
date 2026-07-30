@@ -12,8 +12,8 @@ use std::io::Cursor;
 use std::io::{Read, Write};
 
 use crate::error::{RasterError, Result};
-use crate::raster::{DataType, Raster, RasterConfig};
 use crate::formats::geopackage_sqlite::{Db, SqlVal};
+use crate::raster::{DataType, Raster, RasterConfig};
 
 const DEFAULT_TILE_SIZE: usize = 256;
 const MIN_TILE_SIZE: usize = 16;
@@ -94,21 +94,21 @@ CREATE TABLE wbraster_gpkg_kv_metadata (\
 )";
 
 fn ddl_tile_table(table_name: &str) -> String {
-        format!(
-                "CREATE TABLE {table_name} (\
+    format!(
+        "CREATE TABLE {table_name} (\
     id INTEGER PRIMARY KEY AUTOINCREMENT,\
     zoom_level INTEGER NOT NULL,\
     tile_column INTEGER NOT NULL,\
     tile_row INTEGER NOT NULL,\
     tile_data BLOB NOT NULL\
 )"
-        )
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TileFormat {
-        Png,
-        Jpeg,
+    Png,
+    Jpeg,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,12 +162,12 @@ impl StoredTileEncoding {
 
 #[derive(Debug, Clone)]
 struct GeoPackageWriteOptions {
-        tile_format: TileFormat,
-        tile_format_explicit: bool,
-        tile_encoding: Option<StoredTileEncoding>,
+    tile_format: TileFormat,
+    tile_format_explicit: bool,
+    tile_encoding: Option<StoredTileEncoding>,
     raw_compression: Option<RawTileCompression>,
-        jpeg_quality: u8,
-        max_zoom: usize,
+    jpeg_quality: u8,
+    max_zoom: usize,
     tile_size: usize,
     dataset_name: String,
     base_table_name: String,
@@ -190,11 +190,9 @@ pub fn read(path: &str) -> Result<Raster> {
     let db = Db::from_bytes(data)
         .map_err(|e| RasterError::Other(format!("GeoPackage open failed: {e}")))?;
 
-    if let Some(meta) = read_wbraster_dataset_metadata(
-        &db,
-        preferred_dataset_name_from_env().as_deref(),
-        false,
-    )? {
+    if let Some(meta) =
+        read_wbraster_dataset_metadata(&db, preferred_dataset_name_from_env().as_deref(), false)?
+    {
         return read_wbraster_dataset(&db, &meta);
     }
 
@@ -363,7 +361,9 @@ pub fn write(raster: &Raster, path: &str) -> Result<()> {
                 SqlVal::Text(v.clone()),
             ],
         )
-        .map_err(|e| RasterError::Other(format!("GeoPackage key/value metadata insert failed: {e}")))?;
+        .map_err(|e| {
+            RasterError::Other(format!("GeoPackage key/value metadata insert failed: {e}"))
+        })?;
     }
 
     for band in 0..raster.bands {
@@ -399,7 +399,9 @@ pub fn write(raster: &Raster, path: &str) -> Result<()> {
                 SqlVal::Real(extent.y_max),
             ],
         )
-        .map_err(|e| RasterError::Other(format!("GeoPackage tile_matrix_set insert failed: {e}")))?;
+        .map_err(|e| {
+            RasterError::Other(format!("GeoPackage tile_matrix_set insert failed: {e}"))
+        })?;
 
         let levels = build_pyramid_levels_for_band(raster, band, opts.max_zoom)?;
         for (zoom_level, level) in levels.iter().enumerate() {
@@ -419,7 +421,9 @@ pub fn write(raster: &Raster, path: &str) -> Result<()> {
                     SqlVal::Real(level.pixel_y_size),
                 ],
             )
-            .map_err(|e| RasterError::Other(format!("GeoPackage tile_matrix insert failed: {e}")))?;
+            .map_err(|e| {
+                RasterError::Other(format!("GeoPackage tile_matrix insert failed: {e}"))
+            })?;
 
             for tile_row in 0..matrix_height {
                 for tile_col in 0..matrix_width {
@@ -443,7 +447,9 @@ pub fn write(raster: &Raster, path: &str) -> Result<()> {
                             SqlVal::Blob(tile_data),
                         ],
                     )
-                    .map_err(|e| RasterError::Other(format!("GeoPackage tile insert failed: {e}")))?;
+                    .map_err(|e| {
+                        RasterError::Other(format!("GeoPackage tile insert failed: {e}"))
+                    })?;
                 }
             }
         }
@@ -647,7 +653,11 @@ fn resolve_raw_tile_compression(
     opts.raw_compression.unwrap_or(RawTileCompression::Deflate)
 }
 
-fn build_pyramid_levels_for_band(raster: &Raster, band: usize, max_zoom: usize) -> Result<Vec<LevelGrid>> {
+fn build_pyramid_levels_for_band(
+    raster: &Raster,
+    band: usize,
+    max_zoom: usize,
+) -> Result<Vec<LevelGrid>> {
     let mut level0 = Vec::with_capacity(raster.cols * raster.rows);
     for row in 0..raster.rows {
         for col in 0..raster.cols {
@@ -726,7 +736,12 @@ fn downsample_level(prev: &LevelGrid) -> LevelGrid {
     }
 }
 
-fn extract_level_tile(level: &LevelGrid, tile_col: usize, tile_row: usize, tile_size: usize) -> Vec<f64> {
+fn extract_level_tile(
+    level: &LevelGrid,
+    tile_col: usize,
+    tile_row: usize,
+    tile_size: usize,
+) -> Vec<f64> {
     let mut tile = vec![level.nodata; tile_size * tile_size];
     for y in 0..tile_size {
         let row = tile_row * tile_size + y;
@@ -772,7 +787,11 @@ fn encode_tile_blob(
     }
 }
 
-fn encode_raw_tile(tile: &[f64], data_type: DataType, compression: RawTileCompression) -> Result<Vec<u8>> {
+fn encode_raw_tile(
+    tile: &[f64],
+    data_type: DataType,
+    compression: RawTileCompression,
+) -> Result<Vec<u8>> {
     let mut out = Vec::with_capacity(tile.len() * data_type.size_bytes());
     match data_type {
         DataType::U8 => {
@@ -859,7 +878,11 @@ fn decode_raw_tile_to_f64(
             out.extend(decompressed[..expected_cells].iter().map(|v| *v as f64));
         }
         DataType::I8 => {
-            out.extend(decompressed[..expected_cells].iter().map(|v| (*v as i8) as f64));
+            out.extend(
+                decompressed[..expected_cells]
+                    .iter()
+                    .map(|v| (*v as i8) as f64),
+            );
         }
         DataType::U16 => {
             for chunk in decompressed[..expected_bytes].chunks_exact(2) {
@@ -984,8 +1007,7 @@ fn read_wbraster_dataset_metadata(
 fn validate_dataset_metadata_consistency(candidates: &[DatasetMetadata]) -> Result<()> {
     for (idx, left) in candidates.iter().enumerate() {
         for right in candidates.iter().skip(idx + 1) {
-            if left.dataset_name == right.dataset_name
-                && !dataset_metadata_compatible(left, right)
+            if left.dataset_name == right.dataset_name && !dataset_metadata_compatible(left, right)
             {
                 return Err(RasterError::CorruptData(format!(
                     "conflicting metadata rows for dataset '{}' in wbraster_gpkg_raster_metadata",
@@ -1107,9 +1129,9 @@ fn read_wbraster_dataset(db: &Db, meta: &DatasetMetadata) -> Result<Raster> {
 
     let mut metadata = Vec::new();
     if db.table_meta("wbraster_gpkg_kv_metadata").is_some() {
-        let kv_rows = db
-            .select_all("wbraster_gpkg_kv_metadata")
-            .map_err(|e| RasterError::Other(format!("GeoPackage key/value metadata read failed: {e}")))?;
+        let kv_rows = db.select_all("wbraster_gpkg_kv_metadata").map_err(|e| {
+            RasterError::Other(format!("GeoPackage key/value metadata read failed: {e}"))
+        })?;
         for row in kv_rows {
             if row.first().and_then(SqlVal::as_str) != Some(meta.dataset_name.as_str()) {
                 continue;
@@ -1169,7 +1191,9 @@ fn read_wbraster_dataset(db: &Db, meta: &DatasetMetadata) -> Result<Raster> {
                 StoredTileEncoding::Png | StoredTileEncoding::Jpeg => {
                     let (tile_w, tile_h, tile_px) = decode_tile_to_gray_u8(tile_blob)?;
                     if tile_w != band_matrix.tile_width || tile_h != band_matrix.tile_height {
-                        return Err(RasterError::CorruptData("image tile dimensions do not match tile matrix".into()));
+                        return Err(RasterError::CorruptData(
+                            "image tile dimensions do not match tile matrix".into(),
+                        ));
                     }
                     tile_px.into_iter().map(|v| v as f64).collect()
                 }
@@ -1188,7 +1212,12 @@ fn read_wbraster_dataset(db: &Db, meta: &DatasetMetadata) -> Result<Raster> {
                         continue;
                     }
                     let value = tile_values[y * band_matrix.tile_width + x];
-                    raster.set(band as isize, global_row as isize, global_col as isize, value)?;
+                    raster.set(
+                        band as isize,
+                        global_row as isize,
+                        global_col as isize,
+                        value,
+                    )?;
                 }
             }
         }
@@ -1219,7 +1248,9 @@ fn find_tile_table(db: &Db) -> Result<(String, i64)> {
                 let table_name = row
                     .first()
                     .and_then(SqlVal::as_str)
-                    .ok_or_else(|| RasterError::CorruptData("gpkg_contents.table_name missing".into()))?
+                    .ok_or_else(|| {
+                        RasterError::CorruptData("gpkg_contents.table_name missing".into())
+                    })?
                     .to_owned();
                 let srs_id = row.get(9).and_then(SqlVal::as_i64).unwrap_or(4326);
                 return Ok((table_name, srs_id));
@@ -1230,9 +1261,9 @@ fn find_tile_table(db: &Db) -> Result<(String, i64)> {
     // Last-resort compatibility path: infer the raster table from
     // `gpkg_tile_matrix_set` and resolve SRS from gpkg_contents when possible.
     if db.table_meta("gpkg_tile_matrix_set").is_some() {
-        let rows = db
-            .select_all("gpkg_tile_matrix_set")
-            .map_err(|e| RasterError::Other(format!("GeoPackage tile_matrix_set read failed: {e}")))?;
+        let rows = db.select_all("gpkg_tile_matrix_set").map_err(|e| {
+            RasterError::Other(format!("GeoPackage tile_matrix_set read failed: {e}"))
+        })?;
         if let Some(first_row) = rows.first() {
             if let Some(table_name) = first_row.first().and_then(SqlVal::as_str) {
                 let srs_id = read_srs_id_for_table(db, table_name)
@@ -1292,8 +1323,14 @@ fn read_zoom0_matrix(db: &Db, table_name: &str) -> Result<TileMatrixInfo> {
         let zoom = row.get(1).and_then(SqlVal::as_i64).unwrap_or(0);
         let info = TileMatrixInfo {
             zoom_level: zoom,
-            tile_width: row.get(4).and_then(SqlVal::as_i64).unwrap_or(DEFAULT_TILE_SIZE as i64) as usize,
-            tile_height: row.get(5).and_then(SqlVal::as_i64).unwrap_or(DEFAULT_TILE_SIZE as i64) as usize,
+            tile_width: row
+                .get(4)
+                .and_then(SqlVal::as_i64)
+                .unwrap_or(DEFAULT_TILE_SIZE as i64) as usize,
+            tile_height: row
+                .get(5)
+                .and_then(SqlVal::as_i64)
+                .unwrap_or(DEFAULT_TILE_SIZE as i64) as usize,
             pixel_x_size: row.get(6).and_then(SqlVal::as_f64).unwrap_or(1.0),
             pixel_y_size: row.get(7).and_then(SqlVal::as_f64).unwrap_or(1.0),
         };
@@ -1306,7 +1343,9 @@ fn read_zoom0_matrix(db: &Db, table_name: &str) -> Result<TileMatrixInfo> {
     }
 
     best.ok_or_else(|| {
-        RasterError::CorruptData(format!("gpkg_tile_matrix row not found for table '{table_name}'"))
+        RasterError::CorruptData(format!(
+            "gpkg_tile_matrix row not found for table '{table_name}'"
+        ))
     })
 }
 
@@ -1493,8 +1532,8 @@ fn decode_jpeg_to_gray_u8(bytes: &[u8]) -> Result<(usize, usize, Vec<u8>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use crate::formats::geopackage_sqlite::Db;
+    use tempfile::tempdir;
 
     #[test]
     fn geopackage_roundtrip_single_band_u8() {
@@ -1544,7 +1583,9 @@ mod tests {
             ..Default::default()
         });
 
-        raster.metadata.push(("custom_key".into(), "custom_value".into()));
+        raster
+            .metadata
+            .push(("custom_key".into(), "custom_value".into()));
         for row in 0..raster.rows {
             for col in 0..raster.cols {
                 let v0 = (row as i32 - col as i32) as f64;
@@ -1564,7 +1605,10 @@ mod tests {
         assert_eq!(r2.bands, 2);
         assert_eq!(r2.data_type, DataType::I16);
         assert_eq!(r2.nodata, raster.nodata);
-        assert!(r2.metadata.iter().any(|(k, v)| k == "custom_key" && v == "custom_value"));
+        assert!(r2
+            .metadata
+            .iter()
+            .any(|(k, v)| k == "custom_key" && v == "custom_value"));
         assert_eq!(r2.get(0, 3, 5), raster.get(0, 3, 5));
         assert_eq!(r2.get(1, 3, 5), raster.get(1, 3, 5));
         assert_eq!(r2.get(0, 47, 63), raster.get(0, 47, 63));
@@ -1584,13 +1628,24 @@ mod tests {
             data_type: DataType::U8,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_tile_format".into(), "jpeg".into()));
+        raster
+            .metadata
+            .push(("gpkg_tile_format".into(), "jpeg".into()));
         raster.metadata.push(("gpkg_max_zoom".into(), "2".into()));
-        raster.metadata.push(("gpkg_jpeg_quality".into(), "70".into()));
+        raster
+            .metadata
+            .push(("gpkg_jpeg_quality".into(), "70".into()));
 
         for row in 0..raster.rows {
             for col in 0..raster.cols {
-                raster.set(0, row as isize, col as isize, ((row * 3 + col) % 256) as f64).unwrap();
+                raster
+                    .set(
+                        0,
+                        row as isize,
+                        col as isize,
+                        ((row * 3 + col) % 256) as f64,
+                    )
+                    .unwrap();
             }
         }
 
@@ -1626,11 +1681,15 @@ mod tests {
             data_type: DataType::U8,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_tile_size".into(), "128".into()));
+        raster
+            .metadata
+            .push(("gpkg_tile_size".into(), "128".into()));
 
         for row in 0..raster.rows {
             for col in 0..raster.cols {
-                raster.set(0, row as isize, col as isize, ((row + col) % 256) as f64).unwrap();
+                raster
+                    .set(0, row as isize, col as isize, ((row + col) % 256) as f64)
+                    .unwrap();
             }
         }
 
@@ -1660,13 +1719,22 @@ mod tests {
             data_type: DataType::F32,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_tile_encoding".into(), "raw".into()));
-        raster.metadata.push(("gpkg_raw_compression".into(), "deflate".into()));
+        raster
+            .metadata
+            .push(("gpkg_tile_encoding".into(), "raw".into()));
+        raster
+            .metadata
+            .push(("gpkg_raw_compression".into(), "deflate".into()));
 
         for row in 0..raster.rows {
             for col in 0..raster.cols {
                 raster
-                    .set(0, row as isize, col as isize, ((row as f64) * 0.5) + (col as f64))
+                    .set(
+                        0,
+                        row as isize,
+                        col as isize,
+                        ((row as f64) * 0.5) + (col as f64),
+                    )
                     .unwrap();
             }
         }
@@ -1701,12 +1769,19 @@ mod tests {
             data_type: DataType::F32,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_tile_encoding".into(), "raw".into()));
+        raster
+            .metadata
+            .push(("gpkg_tile_encoding".into(), "raw".into()));
 
         for row in 0..raster.rows {
             for col in 0..raster.cols {
                 raster
-                    .set(0, row as isize, col as isize, ((row as f64) * 1.25) + (col as f64))
+                    .set(
+                        0,
+                        row as isize,
+                        col as isize,
+                        ((row as f64) * 1.25) + (col as f64),
+                    )
                     .unwrap();
             }
         }
@@ -1789,7 +1864,9 @@ mod tests {
             data_type: DataType::F32,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_tile_encoding".into(), "raw".into()));
+        raster
+            .metadata
+            .push(("gpkg_tile_encoding".into(), "raw".into()));
 
         let dir = tempdir().unwrap();
         let path = dir.path().join("extensions.gpkg");
@@ -1800,12 +1877,20 @@ mod tests {
 
         let ext_rows = db.select_all("gpkg_extensions").unwrap();
         assert!(ext_rows.len() >= 2);
-        assert!(ext_rows.iter().any(|r| r.get(2).and_then(SqlVal::as_str) == Some("org.whiteboxgeo.wbraster.raw_tiles")));
-        assert!(ext_rows.iter().any(|r| r.get(2).and_then(SqlVal::as_str) == Some("org.whiteboxgeo.wbraster.metadata")));
+        assert!(ext_rows.iter().any(
+            |r| r.get(2).and_then(SqlVal::as_str) == Some("org.whiteboxgeo.wbraster.raw_tiles")
+        ));
+        assert!(ext_rows.iter().any(
+            |r| r.get(2).and_then(SqlVal::as_str) == Some("org.whiteboxgeo.wbraster.metadata")
+        ));
 
         let contents_rows = db.select_all("gpkg_contents").unwrap();
-        assert!(contents_rows.iter().any(|r| r.first().and_then(SqlVal::as_str) == Some("wbraster_gpkg_raster_metadata")));
-        assert!(contents_rows.iter().any(|r| r.first().and_then(SqlVal::as_str) == Some("wbraster_gpkg_kv_metadata")));
+        assert!(contents_rows
+            .iter()
+            .any(|r| r.first().and_then(SqlVal::as_str) == Some("wbraster_gpkg_raster_metadata")));
+        assert!(contents_rows
+            .iter()
+            .any(|r| r.first().and_then(SqlVal::as_str) == Some("wbraster_gpkg_kv_metadata")));
     }
 
     #[test]
@@ -1821,12 +1906,20 @@ mod tests {
             data_type: DataType::I16,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_dataset_name".into(), "demo_ds".into()));
-        raster.metadata.push(("gpkg_base_table_name".into(), "demo_tiles".into()));
+        raster
+            .metadata
+            .push(("gpkg_dataset_name".into(), "demo_ds".into()));
+        raster
+            .metadata
+            .push(("gpkg_base_table_name".into(), "demo_tiles".into()));
         for row in 0..raster.rows {
             for col in 0..raster.cols {
-                raster.set(0, row as isize, col as isize, (col as i16) as f64).unwrap();
-                raster.set(1, row as isize, col as isize, (row as i16) as f64).unwrap();
+                raster
+                    .set(0, row as isize, col as isize, (col as i16) as f64)
+                    .unwrap();
+                raster
+                    .set(1, row as isize, col as isize, (row as i16) as f64)
+                    .unwrap();
             }
         }
 
@@ -1872,8 +1965,12 @@ mod tests {
             data_type: DataType::F32,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_dataset_name".into(), "alpha".into()));
-        raster.metadata.push(("gpkg_base_table_name".into(), "alpha_tiles".into()));
+        raster
+            .metadata
+            .push(("gpkg_dataset_name".into(), "alpha".into()));
+        raster
+            .metadata
+            .push(("gpkg_base_table_name".into(), "alpha_tiles".into()));
 
         let dir = tempdir().unwrap();
         let path = dir.path().join("choose_named.gpkg");
@@ -1920,8 +2017,12 @@ mod tests {
             data_type: DataType::F32,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_dataset_name".into(), "alpha".into()));
-        raster.metadata.push(("gpkg_base_table_name".into(), "alpha_tiles".into()));
+        raster
+            .metadata
+            .push(("gpkg_dataset_name".into(), "alpha".into()));
+        raster
+            .metadata
+            .push(("gpkg_base_table_name".into(), "alpha_tiles".into()));
 
         let dir = tempdir().unwrap();
         let path = dir.path().join("choose_fallback.gpkg");
@@ -1968,8 +2069,12 @@ mod tests {
             data_type: DataType::F32,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_dataset_name".into(), "dup_ds".into()));
-        raster.metadata.push(("gpkg_base_table_name".into(), "dup_tiles".into()));
+        raster
+            .metadata
+            .push(("gpkg_dataset_name".into(), "dup_ds".into()));
+        raster
+            .metadata
+            .push(("gpkg_base_table_name".into(), "dup_tiles".into()));
 
         let dir = tempdir().unwrap();
         let path = dir.path().join("dup_conflict.gpkg");
@@ -2013,8 +2118,12 @@ mod tests {
             data_type: DataType::F32,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_dataset_name".into(), "alpha".into()));
-        raster.metadata.push(("gpkg_base_table_name".into(), "alpha_tiles".into()));
+        raster
+            .metadata
+            .push(("gpkg_dataset_name".into(), "alpha".into()));
+        raster
+            .metadata
+            .push(("gpkg_base_table_name".into(), "alpha_tiles".into()));
 
         let dir = tempdir().unwrap();
         let path = dir.path().join("list_datasets.gpkg");
@@ -2057,8 +2166,12 @@ mod tests {
             data_type: DataType::F32,
             ..Default::default()
         });
-        raster.metadata.push(("gpkg_dataset_name".into(), "alpha".into()));
-        raster.metadata.push(("gpkg_base_table_name".into(), "alpha_tiles".into()));
+        raster
+            .metadata
+            .push(("gpkg_dataset_name".into(), "alpha".into()));
+        raster
+            .metadata
+            .push(("gpkg_base_table_name".into(), "alpha_tiles".into()));
         raster.set(0, 2, 3, 42.5).unwrap();
 
         let dir = tempdir().unwrap();

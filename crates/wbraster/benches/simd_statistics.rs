@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use wbraster::{
-    CrsInfo, DataType, NodataPolicy, Raster, RasterConfig, ReprojectOptions,
-    ResampleMethod, StatisticsComputationMode,
+    CrsInfo, DataType, NodataPolicy, Raster, RasterConfig, ReprojectOptions, ResampleMethod,
+    StatisticsComputationMode,
 };
 
 fn make_raster(cols: usize, rows: usize) -> Raster {
@@ -43,9 +43,11 @@ fn bench_full_statistics(c: &mut Criterion) {
         StatisticsComputationMode::Scalar,
         StatisticsComputationMode::Simd,
     ] {
-        group.bench_with_input(BenchmarkId::new("mode", format!("{:?}", mode)), &mode, |b, mode| {
-            b.iter(|| black_box(raster.statistics_with_mode(*mode)))
-        });
+        group.bench_with_input(
+            BenchmarkId::new("mode", format!("{:?}", mode)),
+            &mode,
+            |b, mode| b.iter(|| black_box(raster.statistics_with_mode(*mode))),
+        );
     }
 
     group.finish();
@@ -59,9 +61,19 @@ fn bench_band_statistics(c: &mut Criterion) {
         StatisticsComputationMode::Scalar,
         StatisticsComputationMode::Simd,
     ] {
-        group.bench_with_input(BenchmarkId::new("mode", format!("{:?}", mode)), &mode, |b, mode| {
-            b.iter(|| black_box(raster.statistics_band_with_mode(0, *mode).expect("band statistics failed")))
-        });
+        group.bench_with_input(
+            BenchmarkId::new("mode", format!("{:?}", mode)),
+            &mode,
+            |b, mode| {
+                b.iter(|| {
+                    black_box(
+                        raster
+                            .statistics_band_with_mode(0, *mode)
+                            .expect("band statistics failed"),
+                    )
+                })
+            },
+        );
     }
 
     group.finish();
@@ -175,7 +187,11 @@ fn bench_lanczos_sampling(c: &mut Criterion) {
                 let c0 = col_f.floor() as isize;
                 let r0 = row_f.floor() as isize;
 
-                if c0 - 2 < 0 || r0 - 2 < 0 || c0 + 3 >= raster.cols as isize || r0 + 3 >= raster.rows as isize {
+                if c0 - 2 < 0
+                    || r0 - 2 < 0
+                    || c0 + 3 >= raster.cols as isize
+                    || r0 + 3 >= raster.rows as isize
+                {
                     continue;
                 }
 
@@ -262,9 +278,10 @@ fn bench_reproject(c: &mut Criterion) {
                 b.iter(|| {
                     black_box(
                         raster
-                            .reproject_with_options(
-                                &ReprojectOptions::new(32633, ResampleMethod::Bilinear),
-                            )
+                            .reproject_with_options(&ReprojectOptions::new(
+                                32633,
+                                ResampleMethod::Bilinear,
+                            ))
                             .expect("reproject failed"),
                     )
                 });
@@ -279,9 +296,10 @@ fn bench_reproject(c: &mut Criterion) {
                 b.iter(|| {
                     black_box(
                         raster
-                            .reproject_with_options(
-                                &ReprojectOptions::new(23032, ResampleMethod::Bilinear),
-                            )
+                            .reproject_with_options(&ReprojectOptions::new(
+                                23032,
+                                ResampleMethod::Bilinear,
+                            ))
                             .expect("reproject failed"),
                     )
                 });
@@ -292,5 +310,12 @@ fn bench_reproject(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_full_statistics, bench_band_statistics, bench_bilinear_sampling, bench_lanczos_sampling, bench_reproject);
+criterion_group!(
+    benches,
+    bench_full_statistics,
+    bench_band_statistics,
+    bench_bilinear_sampling,
+    bench_lanczos_sampling,
+    bench_reproject
+);
 criterion_main!(benches);

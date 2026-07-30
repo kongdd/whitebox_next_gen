@@ -171,7 +171,11 @@ pub fn write_i32_le(w: &mut impl Write, v: i32) -> io::Result<()> {
 pub fn strip_comment(line: &str) -> &str {
     let line = line.trim();
     // strip // comments
-    let line = if let Some(pos) = line.find("//") { &line[..pos] } else { line };
+    let line = if let Some(pos) = line.find("//") {
+        &line[..pos]
+    } else {
+        line
+    };
     // strip # comments (but not the leading # of values like -9999)
     // Only strip if '#' is preceded by whitespace or is the first char
     let line = if let Some(pos) = line.find('#') {
@@ -260,8 +264,14 @@ mod tests {
 
     #[test]
     fn parse_kv() {
-        assert_eq!(parse_key_value("NCOLS 100"), Some(("ncols".into(), "100".into())));
-        assert_eq!(parse_key_value("cellsize = 0.5"), Some(("cellsize".into(), "0.5".into())));
+        assert_eq!(
+            parse_key_value("NCOLS 100"),
+            Some(("ncols".into(), "100".into()))
+        );
+        assert_eq!(
+            parse_key_value("cellsize = 0.5"),
+            Some(("cellsize".into(), "0.5".into()))
+        );
         assert_eq!(parse_key_value("  # comment  "), None);
         assert_eq!(parse_key_value(""), None);
     }

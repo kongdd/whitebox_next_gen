@@ -37,10 +37,16 @@ fn main() -> Result<()> {
     raster.write(path.to_str().unwrap(), RasterFormat::EsriAscii)?;
 
     let loaded = Raster::read(path.to_str().unwrap())?;
-    println!("Format detected as: {}", wbraster::RasterFormat::detect(path.to_str().unwrap())?.name());
+    println!(
+        "Format detected as: {}",
+        wbraster::RasterFormat::detect(path.to_str().unwrap())?.name()
+    );
     println!("Loaded dims: {} x {}", loaded.cols, loaded.rows);
     println!("Value (row=1,col=1): {}", loaded.get(0, 1, 1));
-    println!("Nodata at (row=1,col=2): {}", loaded.is_nodata(loaded.get(0, 1, 2)));
+    println!(
+        "Nodata at (row=1,col=2): {}",
+        loaded.is_nodata(loaded.get(0, 1, 2))
+    );
     println!("esri_ascii_io example OK");
 
     Ok(())

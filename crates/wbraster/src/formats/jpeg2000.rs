@@ -1,9 +1,9 @@
 //! JPEG 2000 / GeoJP2 adapter for wbraster.
 
 use super::jpeg2000_core as jp2;
+use crate::crs_info::CrsInfo;
 use crate::error::{RasterError, Result};
 use crate::raster::{DataType, Raster, RasterConfig};
-use crate::crs_info::CrsInfo;
 
 /// Default target quality used for JPEG2000 lossy output when no compression
 /// option is provided.
@@ -56,9 +56,9 @@ fn raster_to_chunky_u8_from_packed_rgb(r: &Raster) -> Vec<u8> {
     let mut out = Vec::with_capacity(npix * 3);
     if let Some(buf) = r.data_u32() {
         for &packed in buf.iter().take(npix) {
-            out.push( (packed        & 0xFF) as u8);  // R
-            out.push(((packed >>  8) & 0xFF) as u8);  // G
-            out.push(((packed >> 16) & 0xFF) as u8);  // B
+            out.push((packed & 0xFF) as u8); // R
+            out.push(((packed >> 8) & 0xFF) as u8); // G
+            out.push(((packed >> 16) & 0xFF) as u8); // B
         }
     } else {
         // Fallback: raster backed by a non-native store (memory://f64 etc.)
@@ -66,8 +66,8 @@ fn raster_to_chunky_u8_from_packed_rgb(r: &Raster) -> Vec<u8> {
             let row = p / r.cols;
             let col = p % r.cols;
             let packed = r.get_raw(0, row as isize, col as isize).unwrap_or(0.0) as u32;
-            out.push( (packed        & 0xFF) as u8);
-            out.push(((packed >>  8) & 0xFF) as u8);
+            out.push((packed & 0xFF) as u8);
+            out.push(((packed >> 8) & 0xFF) as u8);
             out.push(((packed >> 16) & 0xFF) as u8);
         }
     }
@@ -170,7 +170,8 @@ pub fn read(path: &str) -> Result<Raster> {
         cell_size_y,
         nodata,
         data_type,
-        crs: crs,        metadata,
+        crs: crs,
+        metadata,
     };
 
     Raster::from_data(cfg, data)
@@ -225,7 +226,11 @@ pub fn write_with_options(raster: &Raster, path: &str, opts: &Jpeg2000WriteOptio
     let width = raster.cols as u32;
     let height = raster.rows as u32;
     let is_packed_rgb = raster_is_packed_rgb(raster);
-    let bands = if is_packed_rgb { 3u16 } else { raster.bands as u16 };
+    let bands = if is_packed_rgb {
+        3u16
+    } else {
+        raster.bands as u16
+    };
 
     let compression = opts
         .compression
@@ -417,6 +422,3 @@ fn write_with_writer(writer: jp2::GeoJp2Writer, path: &str, raster: &Raster) -> 
         ))),
     }
 }
-
-
-

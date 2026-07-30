@@ -13,10 +13,10 @@
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
+use crate::crs_info::CrsInfo;
 use crate::error::{RasterError, Result};
 use crate::io_utils::with_extension;
 use crate::raster::{DataType, Raster, RasterConfig};
-use crate::crs_info::CrsInfo;
 
 const CSF_SIG: &str = "RUU CROSS SYSTEM MAP FORMAT";
 const ADDR_SECOND_HEADER: usize = 64;
@@ -189,12 +189,20 @@ pub fn read(path: &str) -> Result<Raster> {
                 CR_UINT1 => {
                     let raw = bytes[p];
                     p += 1;
-                    if raw == 0xFF { nodata } else { raw as f64 }
+                    if raw == 0xFF {
+                        nodata
+                    } else {
+                        raw as f64
+                    }
                 }
                 CR_INT4 => {
                     let raw = read_i32_at(&bytes, p, little_endian_file)?;
                     p += 4;
-                    if raw == i32::MIN { nodata } else { raw as f64 }
+                    if raw == i32::MIN {
+                        nodata
+                    } else {
+                        raw as f64
+                    }
                 }
                 CR_REAL4 => {
                     let raw_bits = read_u32_at(&bytes, p, little_endian_file)?;
@@ -203,7 +211,11 @@ pub fn read(path: &str) -> Result<Raster> {
                         nodata
                     } else {
                         let f = f32::from_bits(raw_bits);
-                        if f.is_nan() { nodata } else { f as f64 }
+                        if f.is_nan() {
+                            nodata
+                        } else {
+                            f as f64
+                        }
                     }
                 }
                 CR_REAL8 => {
@@ -213,7 +225,11 @@ pub fn read(path: &str) -> Result<Raster> {
                         nodata
                     } else {
                         let f = f64::from_bits(raw_bits);
-                        if f.is_nan() { nodata } else { f }
+                        if f.is_nan() {
+                            nodata
+                        } else {
+                            f
+                        }
                     }
                 }
                 _ => unreachable!(),
@@ -253,7 +269,8 @@ pub fn read(path: &str) -> Result<Raster> {
         cell_size_y: Some(cell_size),
         nodata,
         data_type,
-        crs: crs,        metadata,
+        crs: crs,
+        metadata,
         ..Default::default()
     };
     Raster::from_data(cfg, data)
@@ -614,53 +631,89 @@ fn nodata_for_cell_repr(cell_repr: u16) -> Result<f64> {
 
 fn read_u16(buf: &[u8], off: &mut usize, le: bool) -> Result<u16> {
     if *off + 2 > buf.len() {
-        return Err(RasterError::CorruptData("unexpected EOF reading u16".into()));
+        return Err(RasterError::CorruptData(
+            "unexpected EOF reading u16".into(),
+        ));
     }
     let b: [u8; 2] = buf[*off..*off + 2].try_into().unwrap();
     *off += 2;
-    Ok(if le { u16::from_le_bytes(b) } else { u16::from_be_bytes(b) })
+    Ok(if le {
+        u16::from_le_bytes(b)
+    } else {
+        u16::from_be_bytes(b)
+    })
 }
 
 fn read_u32(buf: &[u8], off: &mut usize, le: bool) -> Result<u32> {
     if *off + 4 > buf.len() {
-        return Err(RasterError::CorruptData("unexpected EOF reading u32".into()));
+        return Err(RasterError::CorruptData(
+            "unexpected EOF reading u32".into(),
+        ));
     }
     let b: [u8; 4] = buf[*off..*off + 4].try_into().unwrap();
     *off += 4;
-    Ok(if le { u32::from_le_bytes(b) } else { u32::from_be_bytes(b) })
+    Ok(if le {
+        u32::from_le_bytes(b)
+    } else {
+        u32::from_be_bytes(b)
+    })
 }
 
 fn read_f64(buf: &[u8], off: &mut usize, le: bool) -> Result<f64> {
     if *off + 8 > buf.len() {
-        return Err(RasterError::CorruptData("unexpected EOF reading f64".into()));
+        return Err(RasterError::CorruptData(
+            "unexpected EOF reading f64".into(),
+        ));
     }
     let b: [u8; 8] = buf[*off..*off + 8].try_into().unwrap();
     *off += 8;
-    Ok(if le { f64::from_le_bytes(b) } else { f64::from_be_bytes(b) })
+    Ok(if le {
+        f64::from_le_bytes(b)
+    } else {
+        f64::from_be_bytes(b)
+    })
 }
 
 fn read_u32_at(buf: &[u8], at: usize, le: bool) -> Result<u32> {
     if at + 4 > buf.len() {
-        return Err(RasterError::CorruptData("unexpected EOF reading u32".into()));
+        return Err(RasterError::CorruptData(
+            "unexpected EOF reading u32".into(),
+        ));
     }
     let b: [u8; 4] = buf[at..at + 4].try_into().unwrap();
-    Ok(if le { u32::from_le_bytes(b) } else { u32::from_be_bytes(b) })
+    Ok(if le {
+        u32::from_le_bytes(b)
+    } else {
+        u32::from_be_bytes(b)
+    })
 }
 
 fn read_u64_at(buf: &[u8], at: usize, le: bool) -> Result<u64> {
     if at + 8 > buf.len() {
-        return Err(RasterError::CorruptData("unexpected EOF reading u64".into()));
+        return Err(RasterError::CorruptData(
+            "unexpected EOF reading u64".into(),
+        ));
     }
     let b: [u8; 8] = buf[at..at + 8].try_into().unwrap();
-    Ok(if le { u64::from_le_bytes(b) } else { u64::from_be_bytes(b) })
+    Ok(if le {
+        u64::from_le_bytes(b)
+    } else {
+        u64::from_be_bytes(b)
+    })
 }
 
 fn read_i32_at(buf: &[u8], at: usize, le: bool) -> Result<i32> {
     if at + 4 > buf.len() {
-        return Err(RasterError::CorruptData("unexpected EOF reading i32".into()));
+        return Err(RasterError::CorruptData(
+            "unexpected EOF reading i32".into(),
+        ));
     }
     let b: [u8; 4] = buf[at..at + 4].try_into().unwrap();
-    Ok(if le { i32::from_le_bytes(b) } else { i32::from_be_bytes(b) })
+    Ok(if le {
+        i32::from_le_bytes(b)
+    } else {
+        i32::from_be_bytes(b)
+    })
 }
 
 #[cfg(test)]

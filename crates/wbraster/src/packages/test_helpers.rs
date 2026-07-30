@@ -10,7 +10,8 @@ pub(crate) fn assert_expected_csv_tokens_present(
     };
 
     let actual_vec: Vec<String> = actual_tokens.into_iter().collect();
-    let actual_upper: BTreeSet<String> = actual_vec.iter().map(|s| s.to_ascii_uppercase()).collect();
+    let actual_upper: BTreeSet<String> =
+        actual_vec.iter().map(|s| s.to_ascii_uppercase()).collect();
 
     for token in expected_csv
         .split(',')

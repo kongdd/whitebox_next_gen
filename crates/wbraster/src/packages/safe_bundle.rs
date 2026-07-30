@@ -125,8 +125,12 @@ pub fn detect_safe_mission(safe_root: impl AsRef<Path>) -> Result<SafeMission> {
 pub fn open_safe_bundle(safe_root: impl AsRef<Path>) -> Result<SafeBundle> {
     let safe_root = safe_root.as_ref();
     match detect_safe_mission(safe_root)? {
-        SafeMission::Sentinel1 => Ok(SafeBundle::Sentinel1(Sentinel1SafePackage::open(safe_root)?)),
-        SafeMission::Sentinel2 => Ok(SafeBundle::Sentinel2(Sentinel2SafePackage::open(safe_root)?)),
+        SafeMission::Sentinel1 => Ok(SafeBundle::Sentinel1(Sentinel1SafePackage::open(
+            safe_root,
+        )?)),
+        SafeMission::Sentinel2 => Ok(SafeBundle::Sentinel2(Sentinel2SafePackage::open(
+            safe_root,
+        )?)),
         SafeMission::Unknown => Err(RasterError::Other(format!(
             "unable to determine SAFE mission type for '{}'",
             safe_root.display()
@@ -167,8 +171,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let safe = tmp.path().join("S1_TEST.SAFE");
         fs::create_dir_all(&safe).expect("create safe root");
-        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>")
-            .expect("write manifest");
+        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>").expect("write manifest");
 
         let mission = detect_safe_mission(&safe).expect("detect mission");
         assert_eq!(mission, SafeMission::Sentinel1);
@@ -179,8 +182,11 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let safe = tmp.path().join("S2A_MSIL2A_TEST.SAFE");
         fs::create_dir_all(&safe).expect("create safe root");
-        fs::write(safe.join("MTD_MSIL2A.xml"), "<n1:Level-2A_User_Product>MSIL2A</n1:Level-2A_User_Product>")
-            .expect("write product xml");
+        fs::write(
+            safe.join("MTD_MSIL2A.xml"),
+            "<n1:Level-2A_User_Product>MSIL2A</n1:Level-2A_User_Product>",
+        )
+        .expect("write product xml");
 
         let bundle = open_safe_bundle(&safe).expect("open safe bundle");
         assert!(
@@ -197,8 +203,7 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let safe = tmp.path().join("S1A_IW_GRD_TEST.SAFE");
         fs::create_dir_all(&safe).expect("create safe root");
-        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>")
-            .expect("write manifest");
+        fs::write(safe.join("manifest.safe"), "<xfdu>Sentinel-1</xfdu>").expect("write manifest");
 
         let measurement_dir = safe.join("measurement");
         fs::create_dir_all(&measurement_dir).expect("create measurement dir");

@@ -111,97 +111,53 @@
 #![allow(clippy::cast_sign_loss)]
 
 pub mod color_math;
+pub mod crs_info;
 pub mod error;
-/// In-process raster memory store for passing rasters between tools without disk I/O.
-pub mod memory_store;
-pub mod raster;
 pub mod formats;
 pub mod io_utils;
-pub mod crs_info;
+/// In-process raster memory store for passing rasters between tools without disk I/O.
+pub mod memory_store;
 pub mod packages;
+pub mod raster;
 
-pub use error::{RasterError, Result};
-pub use raster::{
-	BandView,
-	Raster,
-	RasterConfig,
-	DataType,
-	NoData,
-	Statistics,
-	StatisticsComputationMode,
-	Extent,
-	ResampleMethod,
-	NodataPolicy,
-	AntimeridianPolicy,
-	GridSizePolicy,
-	DestinationFootprint,
-	ReprojectOptions,
-};
-pub use formats::RasterFormat;
-pub use formats::geotiff::{
-	CogWriteOptions,
-	GeoTiffCompression,
-	GeoTiffLayout,
-	GeoTiffWriteOptions,
-};
-pub use formats::jpeg2000::{
-	Jpeg2000ColorSpace,
-	Jpeg2000Compression,
-	Jpeg2000WriteOptions,
-	JPEG2000_DEFAULT_LOSSY_QUALITY_DB,
-};
 pub use color_math::{hsi2value, hsi_to_rgb_norm, rgb_to_hsi_norm, value2hsi, value2i};
 pub use crs_info::CrsInfo;
-pub use packages::safe_bundle::{
-	SafeBundle,
-	SafeMission,
-	detect_safe_mission,
-	open_safe_bundle,
+pub use error::{RasterError, Result};
+pub use formats::geotiff::{
+    CogWriteOptions, GeoTiffCompression, GeoTiffLayout, GeoTiffWriteOptions,
 };
-pub use packages::sensor_bundle::{
-	OpenedSensorBundle,
-	SensorBundle,
-	SensorBundleFamily,
-	detect_sensor_bundle_family,
-	detect_sensor_bundle_family_path,
-	open_sensor_bundle,
-	open_sensor_bundle_path,
+pub use formats::jpeg2000::{
+    Jpeg2000ColorSpace, Jpeg2000Compression, Jpeg2000WriteOptions,
+    JPEG2000_DEFAULT_LOSSY_QUALITY_DB,
 };
-pub use packages::landsat_bundle::{
-	LandsatBundle,
-	LandsatReflectanceCoefficients,
-	LandsatMission,
-	LandsatProcessingLevel,
-	LandsatThermalConstants,
-};
-pub use packages::iceye_bundle::IceyeBundle;
+pub use formats::RasterFormat;
 pub use packages::dimap_bundle::DimapBundle;
+pub use packages::iceye_bundle::IceyeBundle;
+pub use packages::landsat_bundle::{
+    LandsatBundle, LandsatMission, LandsatProcessingLevel, LandsatReflectanceCoefficients,
+    LandsatThermalConstants,
+};
+pub use packages::maxar_worldview_bundle::MaxarWorldViewBundle;
+pub use packages::optical::{
+    DimapBundleProvider, LandsatBundleProvider, ResolvedOpticalBundle, SensorBundleProvider,
+    SensorBundleRegistry, Sentinel2SafeBundleProvider,
+};
+pub use packages::planetscope_bundle::PlanetScopeBundle;
 pub use packages::radarsat2_bundle::Radarsat2Bundle;
 pub use packages::rcm_bundle::RcmBundle;
-pub use packages::maxar_worldview_bundle::MaxarWorldViewBundle;
-pub use packages::planetscope_bundle::PlanetScopeBundle;
+pub use packages::safe_bundle::{detect_safe_mission, open_safe_bundle, SafeBundle, SafeMission};
+pub use packages::sensor_bundle::{
+    detect_sensor_bundle_family, detect_sensor_bundle_family_path, open_sensor_bundle,
+    open_sensor_bundle_path, OpenedSensorBundle, SensorBundle, SensorBundleFamily,
+};
 pub use packages::sentinel1_safe::{
-	Sentinel1CalibrationLut,
-	Sentinel1CalibrationTarget,
-	Sentinel1CalibrationVector,
-	Sentinel1BurstList,
-	Sentinel1Burst,
-	Sentinel1GeolocationGrid,
-	Sentinel1GeolocationGridPoint,
-	Sentinel1NoiseLut,
-	Sentinel1NoiseVector,
-	Sentinel1OrbitVector,
-	Sentinel1SafePackage,
+    Sentinel1Burst, Sentinel1BurstList, Sentinel1CalibrationLut, Sentinel1CalibrationTarget,
+    Sentinel1CalibrationVector, Sentinel1GeolocationGrid, Sentinel1GeolocationGridPoint,
+    Sentinel1NoiseLut, Sentinel1NoiseVector, Sentinel1OrbitVector, Sentinel1SafePackage,
 };
-pub use packages::sentinel2_safe::{
-	Sentinel2ProductLevel,
-	Sentinel2SafePackage,
-};
-pub use packages::optical::{
-	DimapBundleProvider,
-	LandsatBundleProvider,
-	ResolvedOpticalBundle,
-	SensorBundleProvider,
-	SensorBundleRegistry,
-	Sentinel2SafeBundleProvider,
+pub use packages::sentinel2_safe::{Sentinel2ProductLevel, Sentinel2SafePackage};
+pub use raster::{
+    AntimeridianPolicy, BandView, DataType, DestinationFootprint, Extent, GridSizePolicy, NoData,
+    NodataPolicy, Raster, RasterConfig, ReprojectOptions, ResampleMethod, Statistics,
+    StatisticsComputationMode,
 };

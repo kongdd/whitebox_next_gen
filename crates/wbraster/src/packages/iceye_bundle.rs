@@ -103,13 +103,22 @@ impl IceyeBundle {
             product_type = extract_first_text(&xml, &["product_type", "productType"]);
             acquisition_datetime_utc = extract_first_text(
                 &xml,
-                &["acquisition_start_utc", "acquisitionStartUTC", "acquisition_time"],
+                &[
+                    "acquisition_start_utc",
+                    "acquisitionStartUTC",
+                    "acquisition_time",
+                ],
             );
             polarization = extract_first_text(&xml, &["polarization", "polarisation"])
                 .map(|s| s.to_ascii_uppercase());
             acquisition_mode = extract_first_text(
                 &xml,
-                &["acquisition_mode", "acquisitionMode", "imaging_mode", "imagingMode"],
+                &[
+                    "acquisition_mode",
+                    "acquisitionMode",
+                    "imaging_mode",
+                    "imagingMode",
+                ],
             );
             orbit_direction = extract_first_text(
                 &xml,
@@ -123,19 +132,37 @@ impl IceyeBundle {
             .map(|s| s.to_ascii_uppercase());
             incidence_angle_near_deg = extract_first_number(
                 &xml,
-                &["incidence_angle_near", "incidenceAngleNear", "incidenceAngleNearRange"],
+                &[
+                    "incidence_angle_near",
+                    "incidenceAngleNear",
+                    "incidenceAngleNearRange",
+                ],
             );
             incidence_angle_far_deg = extract_first_number(
                 &xml,
-                &["incidence_angle_far", "incidenceAngleFar", "incidenceAngleFarRange"],
+                &[
+                    "incidence_angle_far",
+                    "incidenceAngleFar",
+                    "incidenceAngleFarRange",
+                ],
             );
             pixel_spacing_range_m = extract_first_number(
                 &xml,
-                &["range_spacing", "rangeSpacing", "rangePixelSpacing", "sampledPixelSpacing"],
+                &[
+                    "range_spacing",
+                    "rangeSpacing",
+                    "rangePixelSpacing",
+                    "sampledPixelSpacing",
+                ],
             );
             pixel_spacing_azimuth_m = extract_first_number(
                 &xml,
-                &["azimuth_spacing", "azimuthSpacing", "azimuthPixelSpacing", "sampledLineSpacing"],
+                &[
+                    "azimuth_spacing",
+                    "azimuthSpacing",
+                    "azimuthPixelSpacing",
+                    "sampledLineSpacing",
+                ],
             );
         }
 
@@ -161,11 +188,9 @@ impl IceyeBundle {
                         );
                     }
                     if polarization.is_none() {
-                        polarization = extract_first_json_text(
-                            &json_value,
-                            &["polarization", "polarisation"],
-                        )
-                        .map(|s| s.to_ascii_uppercase());
+                        polarization =
+                            extract_first_json_text(&json_value, &["polarization", "polarisation"])
+                                .map(|s| s.to_ascii_uppercase());
                     }
                     if polarization.is_none() {
                         polarization = extract_first_json_array_text(
@@ -288,9 +313,9 @@ impl IceyeBundle {
 
     /// Read a canonical asset directly as a [`Raster`].
     pub fn read_asset(&self, key: &str) -> Result<Raster> {
-        let p = self.asset_path(key).ok_or_else(|| {
-            RasterError::MissingField(format!("ICEYE asset '{}' not found", key))
-        })?;
+        let p = self
+            .asset_path(key)
+            .ok_or_else(|| RasterError::MissingField(format!("ICEYE asset '{}' not found", key)))?;
         Raster::read(p)
     }
 
@@ -662,8 +687,11 @@ mod tests {
         let root = tmp.path().join("ICEYE_DUP_POL");
         fs::create_dir_all(&root).expect("create root");
 
-        fs::write(root.join("metadata.xml"), "<product><polarization>VV</polarization></product>")
-            .expect("write xml");
+        fs::write(
+            root.join("metadata.xml"),
+            "<product><polarization>VV</polarization></product>",
+        )
+        .expect("write xml");
         fs::write(root.join("ICEYE_SCENE_GRD_VV.tif"), b"").expect("write vv 1");
         fs::write(root.join("ICEYE_SCENE_CAL_VV.tif"), b"").expect("write vv 2");
 
@@ -741,13 +769,13 @@ mod tests {
         );
     }
 
-        #[test]
-        fn parses_metadata_from_json_sidecar_when_xml_missing() {
-                let tmp = tempfile::tempdir().expect("tempdir");
-                let root = tmp.path().join("ICEYE_JSON_ONLY");
-                fs::create_dir_all(&root).expect("create root");
+    #[test]
+    fn parses_metadata_from_json_sidecar_when_xml_missing() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let root = tmp.path().join("ICEYE_JSON_ONLY");
+        fs::create_dir_all(&root).expect("create root");
 
-                let json = r#"
+        let json = r#"
 {
     "datetime": "2025-06-27T11:24:12.843Z",
     "sar:product_type": "SLC-COG",
@@ -761,29 +789,32 @@ mod tests {
     "iceye:incidence_angle_far": 32.05
 }
 "#;
-                fs::write(root.join("metadata.json"), json).expect("write json");
-                fs::write(root.join("ICEYE_TEST_SLC_VV.tif"), b"").expect("write tif");
+        fs::write(root.join("metadata.json"), json).expect("write json");
+        fs::write(root.join("ICEYE_TEST_SLC_VV.tif"), b"").expect("write tif");
 
-                let bundle = IceyeBundle::open(&root).expect("open iceye bundle");
-                assert_eq!(bundle.product_type.as_deref(), Some("SLC-COG"));
-                assert_eq!(bundle.acquisition_datetime_utc.as_deref(), Some("2025-06-27T11:24:12.843Z"));
-                assert_eq!(bundle.acquisition_mode.as_deref(), Some("spotlight"));
-                assert_eq!(bundle.polarization.as_deref(), Some("VV"));
-                assert_eq!(bundle.orbit_direction.as_deref(), Some("DESCENDING"));
-                assert_eq!(bundle.look_direction.as_deref(), Some("RIGHT"));
-                assert_eq!(bundle.pixel_spacing_range_m, Some(0.19));
-                assert_eq!(bundle.pixel_spacing_azimuth_m, Some(0.09));
-                assert_eq!(bundle.incidence_angle_near_deg, Some(31.84));
-                assert_eq!(bundle.incidence_angle_far_deg, Some(32.05));
-        }
+        let bundle = IceyeBundle::open(&root).expect("open iceye bundle");
+        assert_eq!(bundle.product_type.as_deref(), Some("SLC-COG"));
+        assert_eq!(
+            bundle.acquisition_datetime_utc.as_deref(),
+            Some("2025-06-27T11:24:12.843Z")
+        );
+        assert_eq!(bundle.acquisition_mode.as_deref(), Some("spotlight"));
+        assert_eq!(bundle.polarization.as_deref(), Some("VV"));
+        assert_eq!(bundle.orbit_direction.as_deref(), Some("DESCENDING"));
+        assert_eq!(bundle.look_direction.as_deref(), Some("RIGHT"));
+        assert_eq!(bundle.pixel_spacing_range_m, Some(0.19));
+        assert_eq!(bundle.pixel_spacing_azimuth_m, Some(0.09));
+        assert_eq!(bundle.incidence_angle_near_deg, Some(31.84));
+        assert_eq!(bundle.incidence_angle_far_deg, Some(32.05));
+    }
 
-        #[test]
-        fn xml_values_take_precedence_over_json_fallback() {
-                let tmp = tempfile::tempdir().expect("tempdir");
-                let root = tmp.path().join("ICEYE_XML_OVER_JSON");
-                fs::create_dir_all(&root).expect("create root");
+    #[test]
+    fn xml_values_take_precedence_over_json_fallback() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let root = tmp.path().join("ICEYE_XML_OVER_JSON");
+        fs::create_dir_all(&root).expect("create root");
 
-                let xml = r#"
+        let xml = r#"
 <product>
     <product_type>GRD</product_type>
     <acquisition_start_utc>2026-01-01T00:00:00.000Z</acquisition_start_utc>
@@ -791,7 +822,7 @@ mod tests {
     <acquisition_mode>STRIPMAP</acquisition_mode>
 </product>
 "#;
-                let json = r#"
+        let json = r#"
 {
     "sar:product_type": "SLC-COG",
     "datetime": "2025-06-27T11:24:12.843Z",
@@ -800,14 +831,17 @@ mod tests {
 }
 "#;
 
-                fs::write(root.join("metadata.xml"), xml).expect("write xml");
-                fs::write(root.join("metadata.json"), json).expect("write json");
-                fs::write(root.join("ICEYE_TEST_GRD_VH.tif"), b"").expect("write tif");
+        fs::write(root.join("metadata.xml"), xml).expect("write xml");
+        fs::write(root.join("metadata.json"), json).expect("write json");
+        fs::write(root.join("ICEYE_TEST_GRD_VH.tif"), b"").expect("write tif");
 
-                let bundle = IceyeBundle::open(&root).expect("open iceye bundle");
-                assert_eq!(bundle.product_type.as_deref(), Some("GRD"));
-                assert_eq!(bundle.acquisition_datetime_utc.as_deref(), Some("2026-01-01T00:00:00.000Z"));
-                assert_eq!(bundle.polarization.as_deref(), Some("VH"));
-                assert_eq!(bundle.acquisition_mode.as_deref(), Some("STRIPMAP"));
-        }
+        let bundle = IceyeBundle::open(&root).expect("open iceye bundle");
+        assert_eq!(bundle.product_type.as_deref(), Some("GRD"));
+        assert_eq!(
+            bundle.acquisition_datetime_utc.as_deref(),
+            Some("2026-01-01T00:00:00.000Z")
+        );
+        assert_eq!(bundle.polarization.as_deref(), Some("VH"));
+        assert_eq!(bundle.acquisition_mode.as_deref(), Some("STRIPMAP"));
+    }
 }

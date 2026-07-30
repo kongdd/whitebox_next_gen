@@ -15,7 +15,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 use crate::crs_info::CrsInfo;
-use crate::error::{Result, RasterError};
+use crate::error::{RasterError, Result};
 use crate::io_utils::{format_float, parse_key_value, with_extension};
 use crate::raster::{DataType, Raster, RasterConfig};
 
@@ -255,19 +255,23 @@ fn wkt_like(s: &str) -> bool {
 }
 
 fn parse_usize(field: &str, val: &str) -> Result<usize> {
-    val.trim().parse::<usize>().map_err(|_| RasterError::ParseError {
-        field: field.into(),
-        value: val.into(),
-        expected: "positive integer".into(),
-    })
+    val.trim()
+        .parse::<usize>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "positive integer".into(),
+        })
 }
 
 fn parse_f64(field: &str, val: &str) -> Result<f64> {
-    val.trim().parse::<f64>().map_err(|_| RasterError::ParseError {
-        field: field.into(),
-        value: val.into(),
-        expected: "floating-point number".into(),
-    })
+    val.trim()
+        .parse::<f64>()
+        .map_err(|_| RasterError::ParseError {
+            field: field.into(),
+            value: val.into(),
+            expected: "floating-point number".into(),
+        })
 }
 
 #[cfg(test)]

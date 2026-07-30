@@ -53,9 +53,8 @@ pub fn rgb_to_hsi_norm(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
     let bn = b / sum;
 
     let mut h = if rn != gn || rn != bn {
-        ((0.5 * ((rn - gn) + (rn - bn)))
-            / ((rn - gn) * (rn - gn) + (rn - bn) * (gn - bn)).sqrt())
-        .acos()
+        ((0.5 * ((rn - gn) + (rn - bn))) / ((rn - gn) * (rn - gn) + (rn - bn) * (gn - bn)).sqrt())
+            .acos()
     } else {
         0.0
     };
@@ -110,9 +109,21 @@ mod tests {
         let g_out = (packed_out as u32 >> 8) & 0xFF;
         let b_out = (packed_out as u32 >> 16) & 0xFF;
 
-        assert!((r as i32 - r_out as i32).unsigned_abs() <= 2, "R channel off by >{}", 2);
-        assert!((g as i32 - g_out as i32).unsigned_abs() <= 2, "G channel off by >{}", 2);
-        assert!((b as i32 - b_out as i32).unsigned_abs() <= 2, "B channel off by >{}", 2);
+        assert!(
+            (r as i32 - r_out as i32).unsigned_abs() <= 2,
+            "R channel off by >{}",
+            2
+        );
+        assert!(
+            (g as i32 - g_out as i32).unsigned_abs() <= 2,
+            "G channel off by >{}",
+            2
+        );
+        assert!(
+            (b as i32 - b_out as i32).unsigned_abs() <= 2,
+            "B channel off by >{}",
+            2
+        );
     }
 
     #[test]
