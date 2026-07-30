@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-30
+
 ### Changed
 - Added external real-fixture HDF5 URI smoke coverage for multilevel VIIRS
   chunk-tree reads (`VNP21` geolocation latitude/longitude) in
