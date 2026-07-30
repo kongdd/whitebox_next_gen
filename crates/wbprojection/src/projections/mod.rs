@@ -20,38 +20,38 @@ mod eckert_iii;
 mod eckert_iv;
 mod eckert_v;
 mod eckert_vi;
-mod equirectangular;
 mod equal_earth;
+mod equirectangular;
 mod euler;
 mod fahey;
 mod foucaut;
 mod gall_peters;
 mod gall_stereographic;
-mod geographic;
 mod geocentric;
+mod geographic;
 mod geostationary;
 mod gnomonic;
 mod hammer;
 mod hatano;
 mod hobo_dyer;
 mod hotine_oblique_mercator;
-mod lagrange;
 mod kavrayskiy_v;
 mod kavrayskiy_vii;
 mod krovak;
+mod lagrange;
 mod lambert_azimuthal_equal_area;
 mod lambert_conformal_conic;
 mod loximuthal;
+mod mbt_fps;
+mod mbt_s;
+mod mbtfpp;
+mod mbtfpq;
 mod mercator;
 mod miller_cylindrical;
+mod mollweide;
 mod murdoch_i;
 mod murdoch_ii;
 mod murdoch_iii;
-mod mbt_s;
-mod mbt_fps;
-mod mbtfpp;
-mod mbtfpq;
-mod mollweide;
 mod natural_earth;
 mod natural_earth_ii;
 mod nell;
@@ -61,6 +61,7 @@ mod patterson;
 mod perspective_conic;
 mod polar_stereographic;
 mod polyconic;
+mod putnins_p1;
 mod putnins_p2;
 mod putnins_p3;
 mod putnins_p3p;
@@ -69,19 +70,19 @@ mod putnins_p5;
 mod putnins_p5p;
 mod putnins_p6;
 mod putnins_p6p;
-mod putnins_p1;
 mod quartic_authalic;
 mod robinson;
 mod sinusoidal;
 mod stereographic;
 mod times;
 mod tissot;
-mod two_point_equidistant;
 mod tobler_mercator;
 mod transverse_cylindrical_equal_area;
 mod transverse_mercator;
+mod two_point_equidistant;
 mod van_der_grinten;
 mod vertical;
+mod vitkovsky_i;
 mod wagner_i;
 mod wagner_ii;
 mod wagner_iii;
@@ -92,7 +93,6 @@ mod werenskiold_i;
 mod winkel_i;
 mod winkel_ii;
 mod winkel_tripel;
-mod vitkovsky_i;
 
 use crate::datum::Datum;
 use crate::ellipsoid::Ellipsoid;
@@ -541,39 +541,31 @@ impl Projection {
     /// Build a [`Projection`] from the given parameters.
     pub fn new(params: ProjectionParams) -> Result<Self> {
         let inner: Box<dyn ProjectionImpl> = match &params.kind {
-            ProjectionKind::Geographic => Box::new(
-                geographic::GeographicProj::new(&params)?,
-            ),
-            ProjectionKind::Geocentric => Box::new(
-                geocentric::GeocentricProj::new(&params)?,
-            ),
+            ProjectionKind::Geographic => Box::new(geographic::GeographicProj::new(&params)?),
+            ProjectionKind::Geocentric => Box::new(geocentric::GeocentricProj::new(&params)?),
             ProjectionKind::Geostationary {
                 satellite_height,
                 sweep_x,
-            } => Box::new(
-                geostationary::GeostationaryProj::new(&params, *satellite_height, *sweep_x)?,
-            ),
-            ProjectionKind::Vertical => Box::new(
-                vertical::VerticalProj::new(&params)?,
-            ),
-            ProjectionKind::Mercator => Box::new(
-                mercator::MercatorProj::new(&params)?,
-            ),
-            ProjectionKind::WebMercator => Box::new(
-                mercator::WebMercatorProj::new(&params)?,
-            ),
-            ProjectionKind::TransverseMercator => Box::new(
-                transverse_mercator::TransverseMercatorProj::new(&params)?,
-            ),
-            ProjectionKind::TransverseMercatorSouthOrientated => Box::new(
-                axis_oriented::AxisOrientedProj::new(
+            } => Box::new(geostationary::GeostationaryProj::new(
+                &params,
+                *satellite_height,
+                *sweep_x,
+            )?),
+            ProjectionKind::Vertical => Box::new(vertical::VerticalProj::new(&params)?),
+            ProjectionKind::Mercator => Box::new(mercator::MercatorProj::new(&params)?),
+            ProjectionKind::WebMercator => Box::new(mercator::WebMercatorProj::new(&params)?),
+            ProjectionKind::TransverseMercator => {
+                Box::new(transverse_mercator::TransverseMercatorProj::new(&params)?)
+            }
+            ProjectionKind::TransverseMercatorSouthOrientated => {
+                Box::new(axis_oriented::AxisOrientedProj::new(
                     Box::new(transverse_mercator::TransverseMercatorProj::new(&params)?),
                     params.false_easting,
                     params.false_northing,
                     true,
                     true,
-                ),
-            ),
+                ))
+            }
             ProjectionKind::Utm { zone, south } => {
                 let _ = (zone, south); // Already baked into params
                 Box::new(transverse_mercator::TransverseMercatorProj::new(&params)?)
@@ -581,271 +573,170 @@ impl Projection {
             ProjectionKind::LambertConformalConic { lat1, lat2 } => Box::new(
                 lambert_conformal_conic::LccProj::new(&params, *lat1, *lat2)?,
             ),
-            ProjectionKind::AlbersEqualAreaConic { lat1, lat2 } => Box::new(
-                albers::AlbersProj::new(&params, *lat1, *lat2)?,
-            ),
+            ProjectionKind::AlbersEqualAreaConic { lat1, lat2 } => {
+                Box::new(albers::AlbersProj::new(&params, *lat1, *lat2)?)
+            }
             ProjectionKind::AzimuthalEquidistant => Box::new(
                 azimuthal_equidistant::AzimuthalEquidistantProj::new(&params)?,
             ),
-            ProjectionKind::TwoPointEquidistant { lon1, lat1, lon2, lat2 } => Box::new(
-                two_point_equidistant::TwoPointEquidistantProj::new(&params, *lon1, *lat1, *lon2, *lat2)?,
-            ),
-            ProjectionKind::LambertAzimuthalEqualArea => Box::new(
-                lambert_azimuthal_equal_area::LambertAzimuthalEqualAreaProj::new(&params)?,
-            ),
-            ProjectionKind::Krovak => Box::new(
-                krovak::KrovakProj::new(&params)?,
-            ),
+            ProjectionKind::TwoPointEquidistant {
+                lon1,
+                lat1,
+                lon2,
+                lat2,
+            } => Box::new(two_point_equidistant::TwoPointEquidistantProj::new(
+                &params, *lon1, *lat1, *lon2, *lat2,
+            )?),
+            ProjectionKind::LambertAzimuthalEqualArea => {
+                Box::new(lambert_azimuthal_equal_area::LambertAzimuthalEqualAreaProj::new(&params)?)
+            }
+            ProjectionKind::Krovak => Box::new(krovak::KrovakProj::new(&params)?),
             ProjectionKind::HotineObliqueMercator {
                 azimuth,
                 rectified_grid_angle,
-            } => Box::new(
-                hotine_oblique_mercator::HotineObliqueMercatorProj::new(
-                    &params,
-                    *azimuth,
-                    rectified_grid_angle.unwrap_or(*azimuth),
-                )?,
-            ),
-            ProjectionKind::CentralConic { lat1 } => Box::new(
-                central_conic::CentralConicProj::new(&params, *lat1)?,
-            ),
-            ProjectionKind::Lagrange { lat1, w } => Box::new(
-                lagrange::LagrangeProj::new(&params, *lat1, *w)?,
-            ),
-            ProjectionKind::Loximuthal { lat1 } => Box::new(
-                loximuthal::LoximuthalProj::new(&params, *lat1)?,
-            ),
-            ProjectionKind::Euler { lat1, lat2 } => Box::new(
-                euler::EulerProj::new(&params, *lat1, *lat2)?,
-            ),
-            ProjectionKind::Tissot { lat1, lat2 } => Box::new(
-                tissot::TissotProj::new(&params, *lat1, *lat2)?,
-            ),
-            ProjectionKind::MurdochI { lat1, lat2 } => Box::new(
-                murdoch_i::MurdochIProj::new(&params, *lat1, *lat2)?,
-            ),
-            ProjectionKind::MurdochII { lat1, lat2 } => Box::new(
-                murdoch_ii::MurdochIIProj::new(&params, *lat1, *lat2)?,
-            ),
-            ProjectionKind::MurdochIII { lat1, lat2 } => Box::new(
-                murdoch_iii::MurdochIIIProj::new(&params, *lat1, *lat2)?,
-            ),
+            } => Box::new(hotine_oblique_mercator::HotineObliqueMercatorProj::new(
+                &params,
+                *azimuth,
+                rectified_grid_angle.unwrap_or(*azimuth),
+            )?),
+            ProjectionKind::CentralConic { lat1 } => {
+                Box::new(central_conic::CentralConicProj::new(&params, *lat1)?)
+            }
+            ProjectionKind::Lagrange { lat1, w } => {
+                Box::new(lagrange::LagrangeProj::new(&params, *lat1, *w)?)
+            }
+            ProjectionKind::Loximuthal { lat1 } => {
+                Box::new(loximuthal::LoximuthalProj::new(&params, *lat1)?)
+            }
+            ProjectionKind::Euler { lat1, lat2 } => {
+                Box::new(euler::EulerProj::new(&params, *lat1, *lat2)?)
+            }
+            ProjectionKind::Tissot { lat1, lat2 } => {
+                Box::new(tissot::TissotProj::new(&params, *lat1, *lat2)?)
+            }
+            ProjectionKind::MurdochI { lat1, lat2 } => {
+                Box::new(murdoch_i::MurdochIProj::new(&params, *lat1, *lat2)?)
+            }
+            ProjectionKind::MurdochII { lat1, lat2 } => {
+                Box::new(murdoch_ii::MurdochIIProj::new(&params, *lat1, *lat2)?)
+            }
+            ProjectionKind::MurdochIII { lat1, lat2 } => {
+                Box::new(murdoch_iii::MurdochIIIProj::new(&params, *lat1, *lat2)?)
+            }
             ProjectionKind::PerspectiveConic { lat1, lat2 } => Box::new(
                 perspective_conic::PerspectiveConicProj::new(&params, *lat1, *lat2)?,
             ),
-            ProjectionKind::VitkovskyI { lat1, lat2 } => Box::new(
-                vitkovsky_i::VitkovskyIProj::new(&params, *lat1, *lat2)?,
-            ),
-            ProjectionKind::ToblerMercator => Box::new(
-                tobler_mercator::ToblerMercatorProj::new(&params)?,
-            ),
-            ProjectionKind::WinkelII => Box::new(
-                winkel_ii::WinkelIIProj::new(&params)?,
-            ),
-            ProjectionKind::KavrayskiyV => Box::new(
-                kavrayskiy_v::KavrayskiyVProj::new(&params)?,
-            ),
-            ProjectionKind::Stereographic => Box::new(
-                stereographic::StereographicProj::new(&params)?,
-            ),
+            ProjectionKind::VitkovskyI { lat1, lat2 } => {
+                Box::new(vitkovsky_i::VitkovskyIProj::new(&params, *lat1, *lat2)?)
+            }
+            ProjectionKind::ToblerMercator => {
+                Box::new(tobler_mercator::ToblerMercatorProj::new(&params)?)
+            }
+            ProjectionKind::WinkelII => Box::new(winkel_ii::WinkelIIProj::new(&params)?),
+            ProjectionKind::KavrayskiyV => Box::new(kavrayskiy_v::KavrayskiyVProj::new(&params)?),
+            ProjectionKind::Stereographic => {
+                Box::new(stereographic::StereographicProj::new(&params)?)
+            }
             ProjectionKind::PolarStereographic { north, lat_ts } => Box::new(
                 polar_stereographic::PolarStereographicProj::new(&params, *north, *lat_ts)?,
             ),
-            ProjectionKind::ObliqueStereographic => Box::new(
-                stereographic::StereographicProj::new(&params)?,
-            ),
-            ProjectionKind::Orthographic => Box::new(
-                orthographic::OrthographicProj::new(&params)?,
-            ),
-            ProjectionKind::Sinusoidal => Box::new(
-                sinusoidal::SinusoidalProj::new(&params)?,
-            ),
-            ProjectionKind::Mollweide => Box::new(
-                mollweide::MollweideProj::new(&params)?,
-            ),
-            ProjectionKind::MbtFps => Box::new(
-                mbt_fps::MbtFpsProj::new(&params)?,
-            ),
-            ProjectionKind::MbtS => Box::new(
-                mbt_s::MbtSProj::new(&params)?,
-            ),
-            ProjectionKind::Mbtfpp => Box::new(
-                mbtfpp::MbtfppProj::new(&params)?,
-            ),
-            ProjectionKind::Mbtfpq => Box::new(
-                mbtfpq::MbtfpqProj::new(&params)?,
-            ),
-            ProjectionKind::Nell => Box::new(
-                nell::NellProj::new(&params)?,
-            ),
-            ProjectionKind::EqualEarth => Box::new(
-                equal_earth::EqualEarthProj::new(&params)?,
-            ),
-            ProjectionKind::MillerCylindrical => Box::new(
-                miller_cylindrical::MillerCylindricalProj::new(&params)?,
-            ),
-            ProjectionKind::GallStereographic => Box::new(
-                gall_stereographic::GallStereographicProj::new(&params)?,
-            ),
-            ProjectionKind::GallPeters => Box::new(
-                gall_peters::GallPetersProj::new(&params)?,
-            ),
-            ProjectionKind::Behrmann => Box::new(
-                behrmann::BehrmannProj::new(&params)?,
-            ),
-            ProjectionKind::HoboDyer => Box::new(
-                hobo_dyer::HoboDyerProj::new(&params)?,
-            ),
-            ProjectionKind::WagnerI => Box::new(
-                wagner_i::WagnerIProj::new(&params)?,
-            ),
-            ProjectionKind::WagnerII => Box::new(
-                wagner_ii::WagnerIiProj::new(&params)?,
-            ),
-            ProjectionKind::WagnerIII => Box::new(
-                wagner_iii::WagnerIiiProj::new(&params)?,
-            ),
-            ProjectionKind::WagnerIV => Box::new(
-                wagner_iv::WagnerIvProj::new(&params)?,
-            ),
-            ProjectionKind::WagnerV => Box::new(
-                wagner_v::WagnerVProj::new(&params)?,
-            ),
-            ProjectionKind::NaturalEarth => Box::new(
-                natural_earth::NaturalEarthProj::new(&params)?,
-            ),
-            ProjectionKind::NaturalEarthII => Box::new(
-                natural_earth_ii::NaturalEarthIIProj::new(&params)?,
-            ),
-            ProjectionKind::WagnerVI => Box::new(
-                wagner_vi::WagnerViProj::new(&params)?,
-            ),
-            ProjectionKind::EckertVI => Box::new(
-                eckert_vi::EckertViProj::new(&params)?,
-            ),
+            ProjectionKind::ObliqueStereographic => {
+                Box::new(stereographic::StereographicProj::new(&params)?)
+            }
+            ProjectionKind::Orthographic => Box::new(orthographic::OrthographicProj::new(&params)?),
+            ProjectionKind::Sinusoidal => Box::new(sinusoidal::SinusoidalProj::new(&params)?),
+            ProjectionKind::Mollweide => Box::new(mollweide::MollweideProj::new(&params)?),
+            ProjectionKind::MbtFps => Box::new(mbt_fps::MbtFpsProj::new(&params)?),
+            ProjectionKind::MbtS => Box::new(mbt_s::MbtSProj::new(&params)?),
+            ProjectionKind::Mbtfpp => Box::new(mbtfpp::MbtfppProj::new(&params)?),
+            ProjectionKind::Mbtfpq => Box::new(mbtfpq::MbtfpqProj::new(&params)?),
+            ProjectionKind::Nell => Box::new(nell::NellProj::new(&params)?),
+            ProjectionKind::EqualEarth => Box::new(equal_earth::EqualEarthProj::new(&params)?),
+            ProjectionKind::MillerCylindrical => {
+                Box::new(miller_cylindrical::MillerCylindricalProj::new(&params)?)
+            }
+            ProjectionKind::GallStereographic => {
+                Box::new(gall_stereographic::GallStereographicProj::new(&params)?)
+            }
+            ProjectionKind::GallPeters => Box::new(gall_peters::GallPetersProj::new(&params)?),
+            ProjectionKind::Behrmann => Box::new(behrmann::BehrmannProj::new(&params)?),
+            ProjectionKind::HoboDyer => Box::new(hobo_dyer::HoboDyerProj::new(&params)?),
+            ProjectionKind::WagnerI => Box::new(wagner_i::WagnerIProj::new(&params)?),
+            ProjectionKind::WagnerII => Box::new(wagner_ii::WagnerIiProj::new(&params)?),
+            ProjectionKind::WagnerIII => Box::new(wagner_iii::WagnerIiiProj::new(&params)?),
+            ProjectionKind::WagnerIV => Box::new(wagner_iv::WagnerIvProj::new(&params)?),
+            ProjectionKind::WagnerV => Box::new(wagner_v::WagnerVProj::new(&params)?),
+            ProjectionKind::NaturalEarth => {
+                Box::new(natural_earth::NaturalEarthProj::new(&params)?)
+            }
+            ProjectionKind::NaturalEarthII => {
+                Box::new(natural_earth_ii::NaturalEarthIIProj::new(&params)?)
+            }
+            ProjectionKind::WagnerVI => Box::new(wagner_vi::WagnerViProj::new(&params)?),
+            ProjectionKind::EckertVI => Box::new(eckert_vi::EckertViProj::new(&params)?),
             ProjectionKind::TransverseCylindricalEqualArea => Box::new(
-                transverse_cylindrical_equal_area::TransverseCylindricalEqualAreaProj::new(&params)?,
+                transverse_cylindrical_equal_area::TransverseCylindricalEqualAreaProj::new(
+                    &params,
+                )?,
             ),
-            ProjectionKind::Polyconic => Box::new(
-                polyconic::PolyconicProj::new(&params)?,
-            ),
-            ProjectionKind::Cassini => Box::new(
-                cassini::CassiniProj::new(&params)?,
-            ),
-            ProjectionKind::Bonne => Box::new(
-                bonne::BonneProj::new(&params)?,
-            ),
-            ProjectionKind::BonneSouthOrientated => Box::new(
-                axis_oriented::AxisOrientedProj::new(
-                    Box::new(bonne::BonneProj::new(&params)?),
-                    params.false_easting,
-                    params.false_northing,
-                    true,
-                    true,
-                ),
-            ),
-            ProjectionKind::Craster => Box::new(
-                craster::CrasterProj::new(&params)?,
-            ),
-            ProjectionKind::PutninsP4p => Box::new(
-                putnins_p4p::PutninsP4pProj::new(&params)?,
-            ),
-            ProjectionKind::Fahey => Box::new(
-                fahey::FaheyProj::new(&params)?,
-            ),
-            ProjectionKind::Times => Box::new(
-                times::TimesProj::new(&params)?,
-            ),
-            ProjectionKind::Patterson => Box::new(
-                patterson::PattersonProj::new(&params)?,
-            ),
-            ProjectionKind::PutninsP3 => Box::new(
-                putnins_p3::PutninsP3Proj::new(&params)?,
-            ),
-            ProjectionKind::PutninsP3p => Box::new(
-                putnins_p3p::PutninsP3pProj::new(&params)?,
-            ),
-            ProjectionKind::PutninsP5 => Box::new(
-                putnins_p5::PutninsP5Proj::new(&params)?,
-            ),
-            ProjectionKind::PutninsP5p => Box::new(
-                putnins_p5p::PutninsP5pProj::new(&params)?,
-            ),
-            ProjectionKind::PutninsP1 => Box::new(
-                putnins_p1::PutninsP1Proj::new(&params)?,
-            ),
-            ProjectionKind::PutninsP2 => Box::new(
-                putnins_p2::PutninsP2Proj::new(&params)?,
-            ),
-            ProjectionKind::PutninsP6 => Box::new(
-                putnins_p6::PutninsP6Proj::new(&params)?,
-            ),
-            ProjectionKind::PutninsP6p => Box::new(
-                putnins_p6p::PutninsP6pProj::new(&params)?,
-            ),
-            ProjectionKind::QuarticAuthalic => Box::new(
-                quartic_authalic::QuarticAuthalicProj::new(&params)?,
-            ),
-            ProjectionKind::Foucaut => Box::new(
-                foucaut::FoucautProj::new(&params)?,
-            ),
-            ProjectionKind::WinkelI => Box::new(
-                winkel_i::WinkelIProj::new(&params)?,
-            ),
-            ProjectionKind::WerenskioldI => Box::new(
-                werenskiold_i::WerenskioldIProj::new(&params)?,
-            ),
+            ProjectionKind::Polyconic => Box::new(polyconic::PolyconicProj::new(&params)?),
+            ProjectionKind::Cassini => Box::new(cassini::CassiniProj::new(&params)?),
+            ProjectionKind::Bonne => Box::new(bonne::BonneProj::new(&params)?),
+            ProjectionKind::BonneSouthOrientated => Box::new(axis_oriented::AxisOrientedProj::new(
+                Box::new(bonne::BonneProj::new(&params)?),
+                params.false_easting,
+                params.false_northing,
+                true,
+                true,
+            )),
+            ProjectionKind::Craster => Box::new(craster::CrasterProj::new(&params)?),
+            ProjectionKind::PutninsP4p => Box::new(putnins_p4p::PutninsP4pProj::new(&params)?),
+            ProjectionKind::Fahey => Box::new(fahey::FaheyProj::new(&params)?),
+            ProjectionKind::Times => Box::new(times::TimesProj::new(&params)?),
+            ProjectionKind::Patterson => Box::new(patterson::PattersonProj::new(&params)?),
+            ProjectionKind::PutninsP3 => Box::new(putnins_p3::PutninsP3Proj::new(&params)?),
+            ProjectionKind::PutninsP3p => Box::new(putnins_p3p::PutninsP3pProj::new(&params)?),
+            ProjectionKind::PutninsP5 => Box::new(putnins_p5::PutninsP5Proj::new(&params)?),
+            ProjectionKind::PutninsP5p => Box::new(putnins_p5p::PutninsP5pProj::new(&params)?),
+            ProjectionKind::PutninsP1 => Box::new(putnins_p1::PutninsP1Proj::new(&params)?),
+            ProjectionKind::PutninsP2 => Box::new(putnins_p2::PutninsP2Proj::new(&params)?),
+            ProjectionKind::PutninsP6 => Box::new(putnins_p6::PutninsP6Proj::new(&params)?),
+            ProjectionKind::PutninsP6p => Box::new(putnins_p6p::PutninsP6pProj::new(&params)?),
+            ProjectionKind::QuarticAuthalic => {
+                Box::new(quartic_authalic::QuarticAuthalicProj::new(&params)?)
+            }
+            ProjectionKind::Foucaut => Box::new(foucaut::FoucautProj::new(&params)?),
+            ProjectionKind::WinkelI => Box::new(winkel_i::WinkelIProj::new(&params)?),
+            ProjectionKind::WerenskioldI => {
+                Box::new(werenskiold_i::WerenskioldIProj::new(&params)?)
+            }
             ProjectionKind::CylindricalEqualArea { lat_ts } => Box::new(
                 cylindrical_equal_area::CylindricalEqualAreaProj::new(&params, *lat_ts)?,
             ),
-            ProjectionKind::Equirectangular { lat_ts } => Box::new(
-                equirectangular::EquirectangularProj::new(&params, *lat_ts)?,
-            ),
-            ProjectionKind::Robinson => Box::new(
-                robinson::RobinsonProj::new(&params)?,
-            ),
-            ProjectionKind::Gnomonic => Box::new(
-                gnomonic::GnomonicProj::new(&params)?,
-            ),
-            ProjectionKind::Aitoff => Box::new(
-                aitoff::AitoffProj::new(&params)?,
-            ),
-            ProjectionKind::VanDerGrinten => Box::new(
-                van_der_grinten::VanDerGrintenProj::new(&params)?,
-            ),
-            ProjectionKind::WinkelTripel => Box::new(
-                winkel_tripel::WinkelTripelProj::new(&params)?,
-            ),
-            ProjectionKind::Hammer => Box::new(
-                hammer::HammerProj::new(&params)?,
-            ),
-            ProjectionKind::Hatano => Box::new(
-                hatano::HatanoProj::new(&params)?,
-            ),
-            ProjectionKind::EckertI => Box::new(
-                eckert_i::EckertIProj::new(&params)?,
-            ),
-            ProjectionKind::EckertII => Box::new(
-                eckert_ii::EckertIiProj::new(&params)?,
-            ),
-            ProjectionKind::EckertIII => Box::new(
-                eckert_iii::EckertIiiProj::new(&params)?,
-            ),
-            ProjectionKind::EckertIV => Box::new(
-                eckert_iv::EckertIvProj::new(&params)?,
-            ),
-            ProjectionKind::EckertV => Box::new(
-                eckert_v::EckertVProj::new(&params)?,
-            ),
-            ProjectionKind::Collignon => Box::new(
-                collignon::CollignonProj::new(&params)?,
-            ),
-            ProjectionKind::NellHammer => Box::new(
-                nell_hammer::NellHammerProj::new(&params)?,
-            ),
-            ProjectionKind::KavrayskiyVII => Box::new(
-                kavrayskiy_vii::KavrayskiyViiProj::new(&params)?,
-            ),
+            ProjectionKind::Equirectangular { lat_ts } => {
+                Box::new(equirectangular::EquirectangularProj::new(&params, *lat_ts)?)
+            }
+            ProjectionKind::Robinson => Box::new(robinson::RobinsonProj::new(&params)?),
+            ProjectionKind::Gnomonic => Box::new(gnomonic::GnomonicProj::new(&params)?),
+            ProjectionKind::Aitoff => Box::new(aitoff::AitoffProj::new(&params)?),
+            ProjectionKind::VanDerGrinten => {
+                Box::new(van_der_grinten::VanDerGrintenProj::new(&params)?)
+            }
+            ProjectionKind::WinkelTripel => {
+                Box::new(winkel_tripel::WinkelTripelProj::new(&params)?)
+            }
+            ProjectionKind::Hammer => Box::new(hammer::HammerProj::new(&params)?),
+            ProjectionKind::Hatano => Box::new(hatano::HatanoProj::new(&params)?),
+            ProjectionKind::EckertI => Box::new(eckert_i::EckertIProj::new(&params)?),
+            ProjectionKind::EckertII => Box::new(eckert_ii::EckertIiProj::new(&params)?),
+            ProjectionKind::EckertIII => Box::new(eckert_iii::EckertIiiProj::new(&params)?),
+            ProjectionKind::EckertIV => Box::new(eckert_iv::EckertIvProj::new(&params)?),
+            ProjectionKind::EckertV => Box::new(eckert_v::EckertVProj::new(&params)?),
+            ProjectionKind::Collignon => Box::new(collignon::CollignonProj::new(&params)?),
+            ProjectionKind::NellHammer => Box::new(nell_hammer::NellHammerProj::new(&params)?),
+            ProjectionKind::KavrayskiyVII => {
+                Box::new(kavrayskiy_vii::KavrayskiyViiProj::new(&params)?)
+            }
         };
 
         Ok(Projection { params, inner })
@@ -876,7 +767,9 @@ impl Projection {
             ProjectionKind::Mercator => "Mercator",
             ProjectionKind::WebMercator => "Web Mercator",
             ProjectionKind::TransverseMercator => "Transverse Mercator",
-            ProjectionKind::TransverseMercatorSouthOrientated => "Transverse Mercator South Orientated",
+            ProjectionKind::TransverseMercatorSouthOrientated => {
+                "Transverse Mercator South Orientated"
+            }
             ProjectionKind::Utm { zone, south } => {
                 let _ = (zone, south);
                 "UTM"
@@ -903,7 +796,11 @@ impl Projection {
             ProjectionKind::KavrayskiyV => "Kavrayskiy V",
             ProjectionKind::Stereographic => "Stereographic",
             ProjectionKind::PolarStereographic { north, .. } => {
-                if *north { "Polar Stereographic (North)" } else { "Polar Stereographic (South)" }
+                if *north {
+                    "Polar Stereographic (North)"
+                } else {
+                    "Polar Stereographic (South)"
+                }
             }
             ProjectionKind::ObliqueStereographic => "Oblique Stereographic",
             ProjectionKind::Orthographic => "Orthographic",

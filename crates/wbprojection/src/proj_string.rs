@@ -41,7 +41,10 @@ pub struct ParsedProjUnits {
 
 impl Default for ParsedProjUnits {
     fn default() -> Self {
-        ParsedProjUnits { to_meter: 1.0, label: Some("m") }
+        ParsedProjUnits {
+            to_meter: 1.0,
+            label: Some("m"),
+        }
     }
 }
 
@@ -78,7 +81,10 @@ pub(crate) fn parse_proj_string(s: &str) -> Result<ParsedProjString> {
     // ── +init=epsg:XXXX  or  EPSG:XXXX  or bare number ───────────────────────
     if let Some(code) = try_epsg_shortcut(s) {
         let crs = crate::epsg::from_epsg(code)?;
-        return Ok(ParsedProjString { crs, units: ParsedProjUnits::default() });
+        return Ok(ParsedProjString {
+            crs,
+            units: ParsedProjUnits::default(),
+        });
     }
 
     let tokens = tokenize(s);
@@ -89,18 +95,18 @@ pub(crate) fn parse_proj_string(s: &str) -> Result<ParsedProjString> {
 
     // ── common numeric params ─────────────────────────────────────────────────
     let lon0 = parse_angle(&tokens, "lon_0")
-        .or_else(|| parse_angle(&tokens, "lonc"))   // omerc center
+        .or_else(|| parse_angle(&tokens, "lonc")) // omerc center
         .unwrap_or(0.0);
     let lat0 = parse_angle(&tokens, "lat_0").unwrap_or(0.0);
-    let x0   = parse_f64(&tokens, "x_0").unwrap_or(0.0);
-    let y0   = parse_f64(&tokens, "y_0").unwrap_or(0.0);
-    let k0   = parse_f64(&tokens, "k_0")
+    let x0 = parse_f64(&tokens, "x_0").unwrap_or(0.0);
+    let y0 = parse_f64(&tokens, "y_0").unwrap_or(0.0);
+    let k0 = parse_f64(&tokens, "k_0")
         .or_else(|| parse_f64(&tokens, "k"))
         .unwrap_or(1.0);
 
     // Standard parallels / lat of true scale
-    let lat1   = parse_angle(&tokens, "lat_1");
-    let lat2   = parse_angle(&tokens, "lat_2");
+    let lat1 = parse_angle(&tokens, "lat_1");
+    let lat2 = parse_angle(&tokens, "lat_2");
     let lat_ts = parse_angle(&tokens, "lat_ts");
 
     // Units
@@ -149,11 +155,9 @@ pub(crate) fn parse_proj_string(s: &str) -> Result<ParsedProjString> {
         "cea" => ProjectionKind::CylindricalEqualArea {
             lat_ts: lat_ts.unwrap_or(0.0),
         },
-        "eqc" | "eqrect" | "plate_carree" | "equirectangular" => {
-            ProjectionKind::Equirectangular {
-                lat_ts: lat_ts.unwrap_or(0.0),
-            }
-        }
+        "eqc" | "eqrect" | "plate_carree" | "equirectangular" => ProjectionKind::Equirectangular {
+            lat_ts: lat_ts.unwrap_or(0.0),
+        },
 
         // ── UTM (already handled above, but kept for clarity) ────────────────
         // (unreachable in practice after the early return above)
@@ -265,18 +269,27 @@ pub(crate) fn parse_proj_string(s: &str) -> Result<ParsedProjString> {
         "gnom" => ProjectionKind::Gnomonic,
         "tpeqd" => {
             let lon1 = parse_angle(&tokens, "lon_1").unwrap_or(0.0);
-            let ll1  = lat1.unwrap_or(0.0);
+            let ll1 = lat1.unwrap_or(0.0);
             let lon2 = parse_angle(&tokens, "lon_2").unwrap_or(0.0);
-            let ll2  = lat2.unwrap_or(0.0);
-            ProjectionKind::TwoPointEquidistant { lon1, lat1: ll1, lon2, lat2: ll2 }
+            let ll2 = lat2.unwrap_or(0.0);
+            ProjectionKind::TwoPointEquidistant {
+                lon1,
+                lat1: ll1,
+                lon2,
+                lat2: ll2,
+            }
         }
         "geos" => {
             let h = parse_f64(&tokens, "h").unwrap_or(35_786_023.0);
-            let sweep_x = tokens.get("sweep")
+            let sweep_x = tokens
+                .get("sweep")
                 .and_then(|v| v.as_deref())
                 .map(|v| v.eq_ignore_ascii_case("x"))
                 .unwrap_or(false);
-            ProjectionKind::Geostationary { satellite_height: h, sweep_x }
+            ProjectionKind::Geostationary {
+                satellite_height: h,
+                sweep_x,
+            }
         }
 
         // ── Stereographic family ─────────────────────────────────────────────
@@ -446,8 +459,12 @@ fn tokenize(s: &str) -> HashMap<String, Option<String>> {
             continue;
         }
         match token.split_once('=') {
-            Some((k, v)) => { map.insert(k.to_ascii_lowercase(), Some(v.to_string())); }
-            None         => { map.insert(token.to_ascii_lowercase(), None); }
+            Some((k, v)) => {
+                map.insert(k.to_ascii_lowercase(), Some(v.to_string()));
+            }
+            None => {
+                map.insert(token.to_ascii_lowercase(), None);
+            }
         }
     }
     map
@@ -526,23 +543,35 @@ fn resolve_ellipsoid(tokens: &HashMap<String, Option<String>>) -> Result<Ellipso
 /// Map a PROJ `+ellps=` name to an [`Ellipsoid`].
 fn ellps_from_proj_name(name: &str) -> Option<Ellipsoid> {
     match name.to_ascii_lowercase().as_str() {
-        "wgs84" | "wgs_84"                         => Some(Ellipsoid::WGS84.clone()),
-        "wgs72" | "wgs_72"                         => Some(Ellipsoid::from_a_inv_f("WGS 72", 6_378_135.0, 298.26)),
-        "grs80" | "grs1980" | "grs_1980"           => Some(Ellipsoid::GRS80.clone()),
-        "grs67" | "grs1967"                        => Some(Ellipsoid::from_a_inv_f("GRS 67", 6_378_160.0, 298.247_167_427)),
-        "clrk66" | "clrk1866" | "clarke1866"       => Some(Ellipsoid::CLARKE1866.clone()),
-        "clrk80" | "clrk80rgs" | "clarke1880rgs"   => Some(Ellipsoid::CLARKE1880_RGS.clone()),
-        "intl" | "international" | "hayford"       => Some(Ellipsoid::INTERNATIONAL.clone()),
-        "bessel" | "bess_nam"                      => Some(Ellipsoid::BESSEL.clone()),
-        "airy"                                     => Some(Ellipsoid::AIRY1830.clone()),
-        "mod_airy" | "airy_mod"                    => Some(Ellipsoid::AIRY1830_MOD.clone()),
-        "krass" | "krassovsky" | "krassowsky"      => Some(Ellipsoid::KRASSOWSKY1940.clone()),
-        "iau76" | "iau_1976"                       => Some(Ellipsoid::IAU1976.clone()),
-        "evrstss" | "evrst30" | "everest"          => Some(Ellipsoid::EVEREST1830.clone()),
-        "helmert"                                  => Some(Ellipsoid::HELMERT1906.clone()),
-        "sphere"                                   => Some(Ellipsoid::SPHERE.clone()),
-        "ans" => Some(Ellipsoid::from_a_inv_f("Australian National Spheroid", 6_378_160.0, 298.25)),
-        "new_intl" => Some(Ellipsoid::from_a_inv_f("New International 1967", 6_378_157.5, 298.2496)),
+        "wgs84" | "wgs_84" => Some(Ellipsoid::WGS84.clone()),
+        "wgs72" | "wgs_72" => Some(Ellipsoid::from_a_inv_f("WGS 72", 6_378_135.0, 298.26)),
+        "grs80" | "grs1980" | "grs_1980" => Some(Ellipsoid::GRS80.clone()),
+        "grs67" | "grs1967" => Some(Ellipsoid::from_a_inv_f(
+            "GRS 67",
+            6_378_160.0,
+            298.247_167_427,
+        )),
+        "clrk66" | "clrk1866" | "clarke1866" => Some(Ellipsoid::CLARKE1866.clone()),
+        "clrk80" | "clrk80rgs" | "clarke1880rgs" => Some(Ellipsoid::CLARKE1880_RGS.clone()),
+        "intl" | "international" | "hayford" => Some(Ellipsoid::INTERNATIONAL.clone()),
+        "bessel" | "bess_nam" => Some(Ellipsoid::BESSEL.clone()),
+        "airy" => Some(Ellipsoid::AIRY1830.clone()),
+        "mod_airy" | "airy_mod" => Some(Ellipsoid::AIRY1830_MOD.clone()),
+        "krass" | "krassovsky" | "krassowsky" => Some(Ellipsoid::KRASSOWSKY1940.clone()),
+        "iau76" | "iau_1976" => Some(Ellipsoid::IAU1976.clone()),
+        "evrstss" | "evrst30" | "everest" => Some(Ellipsoid::EVEREST1830.clone()),
+        "helmert" => Some(Ellipsoid::HELMERT1906.clone()),
+        "sphere" => Some(Ellipsoid::SPHERE.clone()),
+        "ans" => Some(Ellipsoid::from_a_inv_f(
+            "Australian National Spheroid",
+            6_378_160.0,
+            298.25,
+        )),
+        "new_intl" => Some(Ellipsoid::from_a_inv_f(
+            "New International 1967",
+            6_378_157.5,
+            298.2496,
+        )),
         "grs75" => Some(Ellipsoid::from_a_inv_f("GRS 75", 6_378_140.0, 298.257)),
         "sgs85" => Some(Ellipsoid::from_a_inv_f("SGS 1985", 6_378_136.0, 298.257)),
         _ => None,
@@ -552,20 +581,20 @@ fn ellps_from_proj_name(name: &str) -> Option<Ellipsoid> {
 /// Return the implied ellipsoid for a named PROJ datum.
 fn datum_name_to_ellipsoid(datum: &str) -> Option<Ellipsoid> {
     match datum.to_ascii_lowercase().as_str() {
-        "wgs84"                       => Some(Ellipsoid::WGS84.clone()),
-        "wgs72"                       => Some(Ellipsoid::from_a_inv_f("WGS 72", 6_378_135.0, 298.26)),
+        "wgs84" => Some(Ellipsoid::WGS84.clone()),
+        "wgs72" => Some(Ellipsoid::from_a_inv_f("WGS 72", 6_378_135.0, 298.26)),
         "nad83" | "hpgn" | "nad83_csrs" | "nad83csrs" => Some(Ellipsoid::GRS80.clone()),
-        "nad27"                       => Some(Ellipsoid::CLARKE1866.clone()),
-        "etrs89" | "etrf89"           => Some(Ellipsoid::GRS80.clone()),
-        "gda94"                       => Some(Ellipsoid::GRS80.clone()),
-        "gda2020"                     => Some(Ellipsoid::GRS80.clone()),
-        "nzgd2000" | "nzgd49"        => Some(Ellipsoid::GRS80.clone()),
-        "sirgas2000"                  => Some(Ellipsoid::GRS80.clone()),
-        "ed50" | "european1950"       => Some(Ellipsoid::INTERNATIONAL.clone()),
-        "osgb36"                      => Some(Ellipsoid::AIRY1830.clone()),
-        "jgd2000" | "jgd2011"        => Some(Ellipsoid::GRS80.clone()),
-        "ggrs87" | "greek"            => Some(Ellipsoid::GRS80.clone()),
-        _                             => None,
+        "nad27" => Some(Ellipsoid::CLARKE1866.clone()),
+        "etrs89" | "etrf89" => Some(Ellipsoid::GRS80.clone()),
+        "gda94" => Some(Ellipsoid::GRS80.clone()),
+        "gda2020" => Some(Ellipsoid::GRS80.clone()),
+        "nzgd2000" | "nzgd49" => Some(Ellipsoid::GRS80.clone()),
+        "sirgas2000" => Some(Ellipsoid::GRS80.clone()),
+        "ed50" | "european1950" => Some(Ellipsoid::INTERNATIONAL.clone()),
+        "osgb36" => Some(Ellipsoid::AIRY1830.clone()),
+        "jgd2000" | "jgd2011" => Some(Ellipsoid::GRS80.clone()),
+        "ggrs87" | "greek" => Some(Ellipsoid::GRS80.clone()),
+        _ => None,
     }
 }
 
@@ -587,8 +616,12 @@ fn resolve_datum(tokens: &HashMap<String, Option<String>>, ellipsoid: &Ellipsoid
             .collect();
         if parts.len() >= 7 {
             let hp = HelmertParams {
-                tx: parts[0], ty: parts[1], tz: parts[2],
-                rx: parts[3], ry: parts[4], rz: parts[5],
+                tx: parts[0],
+                ty: parts[1],
+                tz: parts[2],
+                rx: parts[3],
+                ry: parts[4],
+                rz: parts[5],
                 ds: parts[6],
             };
             return Datum {
@@ -600,7 +633,9 @@ fn resolve_datum(tokens: &HashMap<String, Option<String>>, ellipsoid: &Ellipsoid
             return Datum {
                 name: "Custom",
                 ellipsoid: ellipsoid.clone(),
-                transform: DatumTransform::Helmert3(HelmertParams::translation(parts[0], parts[1], parts[2])),
+                transform: DatumTransform::Helmert3(HelmertParams::translation(
+                    parts[0], parts[1], parts[2],
+                )),
             };
         }
     }
@@ -616,16 +651,16 @@ fn resolve_datum(tokens: &HashMap<String, Option<String>>, ellipsoid: &Ellipsoid
 /// Map a PROJ `+datum=` name to a named [`Datum`] constant.
 fn datum_from_proj_name(name: &str) -> Option<Datum> {
     match name.to_ascii_lowercase().as_str() {
-        "wgs84"                        => Some(Datum::WGS84),
-        "nad83" | "hpgn"              => Some(Datum::NAD83),
-        "nad83_csrs" | "nad83csrs"    => Some(Datum::NAD83_CSRS),
-        "nad27"                        => Some(Datum::NAD27),
-        "etrs89" | "etrf89"           => Some(Datum::ETRS89),
-        "gda94"                        => Some(Datum::GDA94),
-        "gda2020"                      => Some(Datum::GDA2020),
-        "sirgas2000"                   => Some(Datum::SIRGAS2000),
-        "nzgd2000"                     => Some(Datum::NZGD2000),
-        _                              => None,
+        "wgs84" => Some(Datum::WGS84),
+        "nad83" | "hpgn" => Some(Datum::NAD83),
+        "nad83_csrs" | "nad83csrs" => Some(Datum::NAD83_CSRS),
+        "nad27" => Some(Datum::NAD27),
+        "etrs89" | "etrf89" => Some(Datum::ETRS89),
+        "gda94" => Some(Datum::GDA94),
+        "gda2020" => Some(Datum::GDA2020),
+        "sirgas2000" => Some(Datum::SIRGAS2000),
+        "nzgd2000" => Some(Datum::NZGD2000),
+        _ => None,
     }
 }
 
@@ -634,19 +669,56 @@ fn datum_from_proj_name(name: &str) -> Option<Datum> {
 fn resolve_units(tokens: &HashMap<String, Option<String>>) -> ParsedProjUnits {
     // +to_meter= takes precedence
     if let Some(tm) = parse_f64(tokens, "to_meter") {
-        return ParsedProjUnits { to_meter: tm, label: None };
+        return ParsedProjUnits {
+            to_meter: tm,
+            label: None,
+        };
     }
-    match tokens.get("units").and_then(|v| v.as_deref()).unwrap_or("m") {
-        "m" | "metre" | "meters" | "meter" => ParsedProjUnits { to_meter: 1.0, label: Some("m") },
-        "ft" | "foot"                       => ParsedProjUnits { to_meter: 0.304_8, label: Some("ft") },
-        "us-ft" | "us_ft" | "surveyfeet"   => ParsedProjUnits { to_meter: 0.304_800_609_601_219, label: Some("us-ft") },
-        "km"                                => ParsedProjUnits { to_meter: 1_000.0, label: Some("km") },
-        "cm"                                => ParsedProjUnits { to_meter: 0.01, label: Some("cm") },
-        "mm"                                => ParsedProjUnits { to_meter: 0.001, label: Some("mm") },
-        "mi" | "mile"                       => ParsedProjUnits { to_meter: 1_609.344, label: Some("mi") },
-        "link"                              => ParsedProjUnits { to_meter: 0.201_168, label: Some("link") },
-        "chain"                             => ParsedProjUnits { to_meter: 20.116_8, label: Some("chain") },
-        _                                   => ParsedProjUnits { to_meter: 1.0, label: Some("m") },
+    match tokens
+        .get("units")
+        .and_then(|v| v.as_deref())
+        .unwrap_or("m")
+    {
+        "m" | "metre" | "meters" | "meter" => ParsedProjUnits {
+            to_meter: 1.0,
+            label: Some("m"),
+        },
+        "ft" | "foot" => ParsedProjUnits {
+            to_meter: 0.304_8,
+            label: Some("ft"),
+        },
+        "us-ft" | "us_ft" | "surveyfeet" => ParsedProjUnits {
+            to_meter: 0.304_800_609_601_219,
+            label: Some("us-ft"),
+        },
+        "km" => ParsedProjUnits {
+            to_meter: 1_000.0,
+            label: Some("km"),
+        },
+        "cm" => ParsedProjUnits {
+            to_meter: 0.01,
+            label: Some("cm"),
+        },
+        "mm" => ParsedProjUnits {
+            to_meter: 0.001,
+            label: Some("mm"),
+        },
+        "mi" | "mile" => ParsedProjUnits {
+            to_meter: 1_609.344,
+            label: Some("mi"),
+        },
+        "link" => ParsedProjUnits {
+            to_meter: 0.201_168,
+            label: Some("link"),
+        },
+        "chain" => ParsedProjUnits {
+            to_meter: 20.116_8,
+            label: Some("chain"),
+        },
+        _ => ParsedProjUnits {
+            to_meter: 1.0,
+            label: Some("m"),
+        },
     }
 }
 
@@ -680,7 +752,10 @@ fn parse_angle_str(s: &str) -> Option<f64> {
         let mut parts = s2.splitn(2, 'd');
         let deg_s = parts.next()?;
         let deg: f64 = deg_s.parse().ok()?;
-        let rest = parts.next().unwrap_or("").trim_end_matches(|c: char| c.is_ascii_alphabetic());
+        let rest = parts
+            .next()
+            .unwrap_or("")
+            .trim_end_matches(|c: char| c.is_ascii_alphabetic());
         let minutes = if let Some((m, _)) = rest.split_once('\'') {
             m.trim().parse::<f64>().unwrap_or(0.0)
         } else if rest.is_empty() {
@@ -696,11 +771,7 @@ fn parse_angle_str(s: &str) -> Option<f64> {
 
 // ─── CRS name builder ─────────────────────────────────────────────────────────
 
-fn build_name(
-    tokens: &HashMap<String, Option<String>>,
-    proj_name: &str,
-    datum: &Datum,
-) -> String {
+fn build_name(tokens: &HashMap<String, Option<String>>, proj_name: &str, datum: &Datum) -> String {
     if let Some(Some(title)) = tokens.get("title") {
         return title.clone();
     }
@@ -782,7 +853,11 @@ mod tests {
     #[test]
     fn test_epsg_shortcut() {
         let crs = parse("+init=epsg:32617");
-        assert!(crs.name.contains("17N") || crs.name.contains("17"), "name={}", crs.name);
+        assert!(
+            crs.name.contains("17N") || crs.name.contains("17"),
+            "name={}",
+            crs.name
+        );
     }
 
     #[test]
@@ -793,7 +868,9 @@ mod tests {
 
     #[test]
     fn test_tmerc() {
-        let crs = parse("+proj=tmerc +lat_0=0 +lon_0=-75 +k=0.9999 +x_0=304800 +y_0=0 +datum=NAD83 +units=m");
+        let crs = parse(
+            "+proj=tmerc +lat_0=0 +lon_0=-75 +k=0.9999 +x_0=304800 +y_0=0 +datum=NAD83 +units=m",
+        );
         let (x, y) = crs.forward(-75.0, 44.0).unwrap();
         assert!((x - 304_800.0).abs() < 2.0, "x={x}");
         assert!(y.is_finite());
@@ -808,10 +885,16 @@ mod tests {
 
     #[test]
     fn test_towgs84_three_param() {
-        let crs = parse("+proj=tmerc +ellps=intl +towgs84=-87,-98,-121,0,0,0,0 +lon_0=0 +k=1 +x_0=0 +y_0=0");
+        let crs = parse(
+            "+proj=tmerc +ellps=intl +towgs84=-87,-98,-121,0,0,0,0 +lon_0=0 +k=1 +x_0=0 +y_0=0",
+        );
         let p = crs.projection.params();
         // Should have International ellipsoid
-        assert!((p.ellipsoid.a - 6_378_388.0).abs() < 10.0, "a={}", p.ellipsoid.a);
+        assert!(
+            (p.ellipsoid.a - 6_378_388.0).abs() < 10.0,
+            "a={}",
+            p.ellipsoid.a
+        );
     }
 
     #[test]
@@ -823,14 +906,19 @@ mod tests {
 
     #[test]
     fn test_units_parsed() {
-        let parsed = parse_proj_string("+proj=tmerc +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=us-ft").unwrap();
+        let parsed =
+            parse_proj_string("+proj=tmerc +lon_0=0 +k=1 +x_0=0 +y_0=0 +datum=WGS84 +units=us-ft")
+                .unwrap();
         assert!((parsed.units.to_meter - 0.304_800_609_601_219).abs() < 1e-12);
     }
 
     #[test]
     fn test_unsupported_proj_error() {
         let err = parse_crs_from_proj_string("+proj=nzmg +datum=nzgd49");
-        assert!(matches!(err, Err(ProjectionError::UnsupportedProjection(_))));
+        assert!(matches!(
+            err,
+            Err(ProjectionError::UnsupportedProjection(_))
+        ));
     }
 
     #[test]

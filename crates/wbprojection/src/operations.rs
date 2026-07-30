@@ -68,43 +68,43 @@ fn registry() -> &'static RwLock<HashMap<u32, CoordinateOperationDef>> {
 
 /// Register or replace a coordinate operation definition.
 pub fn register_coordinate_operation(op: CoordinateOperationDef) -> Result<()> {
-    let mut m = registry().write().map_err(|_| {
-        ProjectionError::DatumError("operation registry lock poisoned".to_string())
-    })?;
+    let mut m = registry()
+        .write()
+        .map_err(|_| ProjectionError::DatumError("operation registry lock poisoned".to_string()))?;
     m.insert(op.operation_code, op);
     Ok(())
 }
 
 /// Remove a coordinate operation definition by code.
 pub fn unregister_coordinate_operation(operation_code: u32) -> Result<bool> {
-    let mut m = registry().write().map_err(|_| {
-        ProjectionError::DatumError("operation registry lock poisoned".to_string())
-    })?;
+    let mut m = registry()
+        .write()
+        .map_err(|_| ProjectionError::DatumError("operation registry lock poisoned".to_string()))?;
     Ok(m.remove(&operation_code).is_some())
 }
 
 /// Clear all runtime operation definitions.
 pub fn clear_coordinate_operations() -> Result<()> {
-    let mut m = registry().write().map_err(|_| {
-        ProjectionError::DatumError("operation registry lock poisoned".to_string())
-    })?;
+    let mut m = registry()
+        .write()
+        .map_err(|_| ProjectionError::DatumError("operation registry lock poisoned".to_string()))?;
     m.clear();
     Ok(())
 }
 
 /// Returns true when an operation code is registered.
 pub fn has_coordinate_operation(operation_code: u32) -> Result<bool> {
-    let m = registry().read().map_err(|_| {
-        ProjectionError::DatumError("operation registry lock poisoned".to_string())
-    })?;
+    let m = registry()
+        .read()
+        .map_err(|_| ProjectionError::DatumError("operation registry lock poisoned".to_string()))?;
     Ok(m.contains_key(&operation_code))
 }
 
 /// Fetch a registered operation definition by code.
 pub fn get_coordinate_operation(operation_code: u32) -> Result<Option<CoordinateOperationDef>> {
-    let m = registry().read().map_err(|_| {
-        ProjectionError::DatumError("operation registry lock poisoned".to_string())
-    })?;
+    let m = registry()
+        .read()
+        .map_err(|_| ProjectionError::DatumError("operation registry lock poisoned".to_string()))?;
     Ok(m.get(&operation_code).cloned())
 }
 

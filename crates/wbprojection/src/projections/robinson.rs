@@ -1,9 +1,9 @@
 //! Robinson pseudocylindrical compromise projection.
 //! Uses lookup table interpolation as originally defined by Robinson (1963).
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::Result;
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 
 /// Robinson table: (PLEN, PDFE) values at 5° latitude intervals 0..90.
 /// PLEN = X interpolation factor, PDFE = Y interpolation factor.

@@ -32,8 +32,16 @@ impl AxisOrientedProj {
     }
 
     fn apply_axis_orientation(&self, x: f64, y: f64) -> (f64, f64) {
-        let xo = if self.flip_x { self.fe - (x - self.fe) } else { x };
-        let yo = if self.flip_y { self.fn_ - (y - self.fn_) } else { y };
+        let xo = if self.flip_x {
+            self.fe - (x - self.fe)
+        } else {
+            x
+        };
+        let yo = if self.flip_y {
+            self.fn_ - (y - self.fn_)
+        } else {
+            y
+        };
         (xo, yo)
     }
 

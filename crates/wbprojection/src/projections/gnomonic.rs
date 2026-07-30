@@ -48,7 +48,8 @@ impl ProjectionImpl for GnomonicProj {
         }
 
         let x = self.a * (cos_lat * sin_dlon) / cos_c + self.fe;
-        let y = self.a * (self.cos_lat0 * sin_lat - self.sin_lat0 * cos_lat * cos_dlon) / cos_c + self.fn_;
+        let y = self.a * (self.cos_lat0 * sin_lat - self.sin_lat0 * cos_lat * cos_dlon) / cos_c
+            + self.fn_;
 
         Ok((x, y))
     }
@@ -67,8 +68,8 @@ impl ProjectionImpl for GnomonicProj {
         let cos_c = c.cos();
 
         let lat = (cos_c * self.sin_lat0 + (y * sin_c * self.cos_lat0) / rho).asin();
-        let lon = self.lon0
-            + (x * sin_c).atan2(rho * self.cos_lat0 * cos_c - y * self.sin_lat0 * sin_c);
+        let lon =
+            self.lon0 + (x * sin_c).atan2(rho * self.cos_lat0 * cos_c - y * self.sin_lat0 * sin_c);
 
         Ok((to_degrees(lon), to_degrees(lat)))
     }

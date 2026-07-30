@@ -4,15 +4,15 @@
 //! - NTv2 binary (`.gsb`) single-subgrid extraction
 //! - NADCON-style ASCII shift pair (`.los`/`.las`) regular grids
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::collections::HashMap;
 use std::sync::{OnceLock, RwLock};
 
 use crate::error::{ProjectionError, Result};
 use crate::grid_shift::{
-    DynamicGridShiftGrid, DynamicGridShiftSample, GridShiftGrid, GridShiftSample,
-    get_dynamic_grid, register_dynamic_grid, register_grid,
+    get_dynamic_grid, register_dynamic_grid, register_grid, DynamicGridShiftGrid,
+    DynamicGridShiftSample, GridShiftGrid, GridShiftSample,
 };
 
 const NTV2_REC_LEN: usize = 16;
@@ -40,7 +40,9 @@ fn read_u32(rec: &[u8], endian: Endian) -> u32 {
 }
 
 fn read_f64(rec: &[u8], endian: Endian) -> f64 {
-    let b = [rec[8], rec[9], rec[10], rec[11], rec[12], rec[13], rec[14], rec[15]];
+    let b = [
+        rec[8], rec[9], rec[10], rec[11], rec[12], rec[13], rec[14], rec[15],
+    ];
     match endian {
         Endian::Le => f64::from_le_bytes(b),
         Endian::Be => f64::from_be_bytes(b),
@@ -80,7 +82,10 @@ fn detect_ntv2_endian(data: &[u8]) -> Result<Endian> {
     }
 }
 
-fn parse_ntv2_fields(recs: &[&[u8]], endian: Endian) -> Result<std::collections::HashMap<String, f64>> {
+fn parse_ntv2_fields(
+    recs: &[&[u8]],
+    endian: Endian,
+) -> Result<std::collections::HashMap<String, f64>> {
     let mut m = std::collections::HashMap::new();
     for rec in recs {
         let key = key_from_record(rec);
@@ -295,7 +300,10 @@ fn dynamic_hierarchy_registry() -> &'static RwLock<HashMap<String, Vec<DynamicHi
     DYNAMIC_HIERARCHY_REGISTRY.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
-fn register_ntv2_hierarchy_entries(dataset_name: &str, entries: Vec<Ntv2HierarchyEntry>) -> Result<()> {
+fn register_ntv2_hierarchy_entries(
+    dataset_name: &str,
+    entries: Vec<Ntv2HierarchyEntry>,
+) -> Result<()> {
     let mut m = hierarchy_registry().write().map_err(|_| {
         ProjectionError::DatumError("NTv2 hierarchy registry lock poisoned".to_string())
     })?;
@@ -303,7 +311,11 @@ fn register_ntv2_hierarchy_entries(dataset_name: &str, entries: Vec<Ntv2Hierarch
     Ok(())
 }
 
-pub(crate) fn resolve_ntv2_hierarchy_grid(dataset_name: &str, lon_deg: f64, lat_deg: f64) -> Result<Option<String>> {
+pub(crate) fn resolve_ntv2_hierarchy_grid(
+    dataset_name: &str,
+    lon_deg: f64,
+    lat_deg: f64,
+) -> Result<Option<String>> {
     let m = hierarchy_registry().read().map_err(|_| {
         ProjectionError::DatumError("NTv2 hierarchy registry lock poisoned".to_string())
     })?;
@@ -315,10 +327,7 @@ pub(crate) fn resolve_ntv2_hierarchy_grid(dataset_name: &str, lon_deg: f64, lat_
     let roots: Vec<usize> = entries
         .iter()
         .enumerate()
-        .filter(|(_, e)| {
-            e.parent_name_norm.is_none()
-                && e.contains(lon_deg, lat_deg)
-        })
+        .filter(|(_, e)| e.parent_name_norm.is_none() && e.contains(lon_deg, lat_deg))
         .map(|(i, _)| i)
         .collect();
 
@@ -586,23 +595,32 @@ fn build_grid_from_descriptor(
 ///
 /// This loads the first subgrid found in the file.
 /// Use [`load_ntv2_gsb_subgrid`] to target a specific subgrid by name.
-pub fn load_ntv2_gsb(path: impl AsRef<Path>, grid_name: impl Into<String>) -> Result<GridShiftGrid> {
+pub fn load_ntv2_gsb(
+    path: impl AsRef<Path>,
+    grid_name: impl Into<String>,
+) -> Result<GridShiftGrid> {
     let data = fs::read(path.as_ref()).map_err(|e| {
-        ProjectionError::DatumError(format!("failed to read NTv2 file '{}': {e}", path.as_ref().display()))
+        ProjectionError::DatumError(format!(
+            "failed to read NTv2 file '{}': {e}",
+            path.as_ref().display()
+        ))
     })?;
 
     let endian = detect_ntv2_endian(&data)?;
     let subgrids = parse_ntv2_subgrids(&data, endian)?;
-    let first = subgrids.first().ok_or_else(|| {
-        ProjectionError::DatumError("NTv2 file contains no subgrids".to_string())
-    })?;
+    let first = subgrids
+        .first()
+        .ok_or_else(|| ProjectionError::DatumError("NTv2 file contains no subgrids".to_string()))?;
     build_grid_from_descriptor(&data, endian, first, grid_name.into())
 }
 
 /// List available NTv2 subgrid names in file order.
 pub fn list_ntv2_subgrids(path: impl AsRef<Path>) -> Result<Vec<String>> {
     let data = fs::read(path.as_ref()).map_err(|e| {
-        ProjectionError::DatumError(format!("failed to read NTv2 file '{}': {e}", path.as_ref().display()))
+        ProjectionError::DatumError(format!(
+            "failed to read NTv2 file '{}': {e}",
+            path.as_ref().display()
+        ))
     })?;
     let endian = detect_ntv2_endian(&data)?;
     let subgrids = parse_ntv2_subgrids(&data, endian)?;
@@ -616,7 +634,10 @@ pub fn load_ntv2_gsb_subgrid(
     subgrid_name: &str,
 ) -> Result<GridShiftGrid> {
     let data = fs::read(path.as_ref()).map_err(|e| {
-        ProjectionError::DatumError(format!("failed to read NTv2 file '{}': {e}", path.as_ref().display()))
+        ProjectionError::DatumError(format!(
+            "failed to read NTv2 file '{}': {e}",
+            path.as_ref().display()
+        ))
     })?;
     let endian = detect_ntv2_endian(&data)?;
     let subgrids = parse_ntv2_subgrids(&data, endian)?;
@@ -625,9 +646,7 @@ pub fn load_ntv2_gsb_subgrid(
         .iter()
         .find(|s| s.name.eq_ignore_ascii_case(subgrid_name))
         .ok_or_else(|| {
-            ProjectionError::DatumError(format!(
-                "NTv2 subgrid '{subgrid_name}' not found"
-            ))
+            ProjectionError::DatumError(format!("NTv2 subgrid '{subgrid_name}' not found"))
         })?;
 
     build_grid_from_descriptor(&data, endian, descriptor, grid_name.into())
@@ -658,7 +677,10 @@ pub fn register_ntv2_gsb_hierarchy(
     dataset_name: &str,
 ) -> Result<Vec<String>> {
     let data = fs::read(path.as_ref()).map_err(|e| {
-        ProjectionError::DatumError(format!("failed to read NTv2 file '{}': {e}", path.as_ref().display()))
+        ProjectionError::DatumError(format!(
+            "failed to read NTv2 file '{}': {e}",
+            path.as_ref().display()
+        ))
     })?;
     let endian = detect_ntv2_endian(&data)?;
     let descriptors = parse_ntv2_subgrids(&data, endian)?;
@@ -707,7 +729,10 @@ pub fn register_ntv2_gsb_hierarchy(
 
 fn parse_nadcon_ascii(path: &Path) -> Result<(usize, usize, f64, f64, f64, f64, Vec<f64>)> {
     let txt = fs::read_to_string(path).map_err(|e| {
-        ProjectionError::DatumError(format!("failed to read NADCON ascii file '{}': {e}", path.display()))
+        ProjectionError::DatumError(format!(
+            "failed to read NADCON ascii file '{}': {e}",
+            path.display()
+        ))
     })?;
 
     let mut lines = txt.lines().filter(|l| !l.trim().is_empty());
@@ -722,19 +747,31 @@ fn parse_nadcon_ascii(path: &Path) -> Result<(usize, usize, f64, f64, f64, f64, 
         ));
     }
 
-    let lon_min: f64 = parts[0].parse().map_err(|_| ProjectionError::DatumError("invalid lon_min".to_string()))?;
-    let lat_min: f64 = parts[1].parse().map_err(|_| ProjectionError::DatumError("invalid lat_min".to_string()))?;
-    let lon_step: f64 = parts[2].parse().map_err(|_| ProjectionError::DatumError("invalid lon_step".to_string()))?;
-    let lat_step: f64 = parts[3].parse().map_err(|_| ProjectionError::DatumError("invalid lat_step".to_string()))?;
-    let width: usize = parts[4].parse().map_err(|_| ProjectionError::DatumError("invalid width".to_string()))?;
-    let height: usize = parts[5].parse().map_err(|_| ProjectionError::DatumError("invalid height".to_string()))?;
+    let lon_min: f64 = parts[0]
+        .parse()
+        .map_err(|_| ProjectionError::DatumError("invalid lon_min".to_string()))?;
+    let lat_min: f64 = parts[1]
+        .parse()
+        .map_err(|_| ProjectionError::DatumError("invalid lat_min".to_string()))?;
+    let lon_step: f64 = parts[2]
+        .parse()
+        .map_err(|_| ProjectionError::DatumError("invalid lon_step".to_string()))?;
+    let lat_step: f64 = parts[3]
+        .parse()
+        .map_err(|_| ProjectionError::DatumError("invalid lat_step".to_string()))?;
+    let width: usize = parts[4]
+        .parse()
+        .map_err(|_| ProjectionError::DatumError("invalid width".to_string()))?;
+    let height: usize = parts[5]
+        .parse()
+        .map_err(|_| ProjectionError::DatumError("invalid height".to_string()))?;
 
     let mut vals = Vec::with_capacity(width * height);
     for l in lines {
         for tok in l.split_whitespace() {
-            let v: f64 = tok
-                .parse()
-                .map_err(|_| ProjectionError::DatumError(format!("invalid numeric value '{tok}'")))?;
+            let v: f64 = tok.parse().map_err(|_| {
+                ProjectionError::DatumError(format!("invalid numeric value '{tok}'"))
+            })?;
             vals.push(v);
         }
     }
@@ -782,14 +819,7 @@ pub fn load_nadcon_ascii_pair(
     }
 
     GridShiftGrid::new(
-        grid_name,
-        lon_min1,
-        lat_min1,
-        lon_step1,
-        lat_step1,
-        w1,
-        h1,
-        samples,
+        grid_name, lon_min1, lat_min1, lon_step1, lat_step1, w1, h1, samples,
     )
 }
 
@@ -845,10 +875,7 @@ pub fn load_dynamic_nadcon_ascii_pair(
         .zip(lat_rate_vals.into_iter())
     {
         samples.push(DynamicGridShiftSample::new(
-            dlon0,
-            dlat0,
-            dlon_rate,
-            dlat_rate,
+            dlon0, dlat0, dlon_rate, dlat_rate,
         ));
     }
 
@@ -898,9 +925,9 @@ pub fn register_nadcon_ascii_pair(
 #[cfg(test)]
 mod tests {
     use super::{
-        DynamicHierarchyItem, list_ntv2_subgrids, load_dynamic_nadcon_ascii_pair,
-        load_nadcon_ascii_pair, load_ntv2_gsb, load_ntv2_gsb_subgrid,
-        register_dynamic_grid_hierarchy, resolve_dynamic_hierarchy_grid_name,
+        list_ntv2_subgrids, load_dynamic_nadcon_ascii_pair, load_nadcon_ascii_pair, load_ntv2_gsb,
+        load_ntv2_gsb_subgrid, register_dynamic_grid_hierarchy,
+        resolve_dynamic_hierarchy_grid_name, DynamicHierarchyItem,
     };
     use crate::register_dynamic_grid;
     use std::fs;
@@ -1126,7 +1153,9 @@ mod tests {
         .unwrap();
 
         // dt = +2 years => dlon = 1 + 2*0.5 = 2 arcsec, dlat = -2 + 2*(-1) = -4 arcsec
-        let (dlon, dlat) = grid.sample_shift_degrees_at_epoch(0.5, 0.5, 2022.0).unwrap();
+        let (dlon, dlat) = grid
+            .sample_shift_degrees_at_epoch(0.5, 0.5, 2022.0)
+            .unwrap();
         assert!((dlon - (2.0 / 3600.0)).abs() < 1e-12);
         assert!((dlat - (-4.0 / 3600.0)).abs() < 1e-12);
 

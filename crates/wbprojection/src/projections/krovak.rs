@@ -77,7 +77,11 @@ impl ProjectionImpl for KrovakProj {
             .powf(self.alpha * self.e / 2.0);
 
         let u = 2.0
-            * ((self.k * (lat / 2.0 + std::f64::consts::FRAC_PI_4).tan().powf(self.alpha) / gfi)
+            * ((self.k
+                * (lat / 2.0 + std::f64::consts::FRAC_PI_4)
+                    .tan()
+                    .powf(self.alpha)
+                / gfi)
                 .atan()
                 - std::f64::consts::FRAC_PI_4);
 
@@ -120,10 +124,9 @@ impl ProjectionImpl for KrovakProj {
         let s = if rho == 0.0 {
             std::f64::consts::FRAC_PI_2
         } else {
-            2.0
-                * ((self.rho0 / rho).powf(1.0 / self.n)
-                    * (S0 / 2.0 + std::f64::consts::FRAC_PI_4).tan())
-                .atan()
+            2.0 * ((self.rho0 / rho).powf(1.0 / self.n)
+                * (S0 / 2.0 + std::f64::consts::FRAC_PI_4).tan())
+            .atan()
                 - std::f64::consts::FRAC_PI_4 * 2.0
         };
 
@@ -136,10 +139,13 @@ impl ProjectionImpl for KrovakProj {
         let inv_alpha = 1.0 / self.alpha;
 
         for _ in 0..MAX_ITER {
-            let ratio = ((1.0 + self.e * fi1.sin()) / (1.0 - self.e * fi1.sin())).powf(self.e / 2.0);
+            let ratio =
+                ((1.0 + self.e * fi1.sin()) / (1.0 - self.e * fi1.sin())).powf(self.e / 2.0);
             let lat = 2.0
                 * ((self.k.powf(-inv_alpha)
-                    * (u / 2.0 + std::f64::consts::FRAC_PI_4).tan().powf(inv_alpha)
+                    * (u / 2.0 + std::f64::consts::FRAC_PI_4)
+                        .tan()
+                        .powf(inv_alpha)
                     * ratio)
                     .atan()
                     - std::f64::consts::FRAC_PI_4);

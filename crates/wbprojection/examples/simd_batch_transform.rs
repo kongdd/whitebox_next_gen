@@ -104,8 +104,14 @@ fn main() {
         let _errors = source.transform_to_batch(&mut coords_100, &target);
     }
     let elapsed_100 = start.elapsed();
-    println!("  100 coords × 1000 iterations: {:.2}ms", elapsed_100.as_secs_f64() * 1000.0);
-    println!("  Per-coordinate: {:.2}μs", (elapsed_100.as_micros() as f64) / (100.0 * 1000.0));
+    println!(
+        "  100 coords × 1000 iterations: {:.2}ms",
+        elapsed_100.as_secs_f64() * 1000.0
+    );
+    println!(
+        "  Per-coordinate: {:.2}μs",
+        (elapsed_100.as_micros() as f64) / (100.0 * 1000.0)
+    );
 
     // Benchmark 3: Current CRS batch wrapper timing (larger batch)
     println!("\nBenchmark 3: Current CRS batch API (1000 coordinates)");
@@ -120,8 +126,14 @@ fn main() {
         let _errors = source.transform_to_batch(&mut coords_1000, &target);
     }
     let elapsed_1000 = start.elapsed();
-    println!("  1000 coords × 100 iterations: {:.2}ms", elapsed_1000.as_secs_f64() * 1000.0);
-    println!("  Per-coordinate: {:.2}μs", (elapsed_1000.as_micros() as f64) / (1000.0 * 100.0));
+    println!(
+        "  1000 coords × 100 iterations: {:.2}ms",
+        elapsed_1000.as_secs_f64() * 1000.0
+    );
+    println!(
+        "  Per-coordinate: {:.2}μs",
+        (elapsed_1000.as_micros() as f64) / (1000.0 * 100.0)
+    );
 
     // Benchmark 4: Current CRS 3D batch wrapper timing
     println!("\nBenchmark 4: Current CRS 3D batch API (100 coordinates)");
@@ -136,8 +148,14 @@ fn main() {
         let _errors = source.transform_to_3d_batch(&mut coords3d_100, &target);
     }
     let elapsed_3d_100 = start.elapsed();
-    println!("  100 coords × 1000 iterations: {:.2}ms", elapsed_3d_100.as_secs_f64() * 1000.0);
-    println!("  Per-coordinate: {:.2}μs", (elapsed_3d_100.as_micros() as f64) / (100.0 * 1000.0));
+    println!(
+        "  100 coords × 1000 iterations: {:.2}ms",
+        elapsed_3d_100.as_secs_f64() * 1000.0
+    );
+    println!(
+        "  Per-coordinate: {:.2}μs",
+        (elapsed_3d_100.as_micros() as f64) / (100.0 * 1000.0)
+    );
 
     println!("\nBenchmark 5: Geocentric CRS 3D batch API (SIMD fast path)");
     let source_geoc = helmert_geocentric(Datum::ED50, "ED50 geocentric benchmark CRS");
@@ -156,8 +174,14 @@ fn main() {
         let _errors = source_geoc.transform_to_3d_batch(&mut geoc_coords, &target_geoc);
     }
     let elapsed_geoc = start.elapsed();
-    println!("  1000 coords × 100 iterations: {:.2}ms", elapsed_geoc.as_secs_f64() * 1000.0);
-    println!("  Per-coordinate: {:.2}μs", (elapsed_geoc.as_micros() as f64) / (1000.0 * 100.0));
+    println!(
+        "  1000 coords × 100 iterations: {:.2}ms",
+        elapsed_geoc.as_secs_f64() * 1000.0
+    );
+    println!(
+        "  Per-coordinate: {:.2}μs",
+        (elapsed_geoc.as_micros() as f64) / (1000.0 * 100.0)
+    );
 
     // Correctness check: verify Helmert scalar and SIMD results align.
     println!("\n=== Correctness Validation ===");
@@ -174,7 +198,13 @@ fn main() {
     );
     for (idx, ((sx, sy, sz), (&vx, &vy, &vz))) in scalar_points
         .iter()
-        .zip(simd_x.iter().zip(simd_y.iter()).zip(simd_z.iter()).map(|((x, y), z)| (x, y, z)))
+        .zip(
+            simd_x
+                .iter()
+                .zip(simd_y.iter())
+                .zip(simd_z.iter())
+                .map(|((x, y), z)| (x, y, z)),
+        )
         .enumerate()
     {
         println!(
@@ -187,11 +217,15 @@ fn main() {
     let mut test_coords = vec![(0.0, 0.0), (10.0, 50.0), (-5.0, 60.0)];
     let original_test = test_coords.clone();
     let _errors = source.transform_to_batch(&mut test_coords, &target);
-    
+
     println!("Sample transformation results:");
-    for (i, ((orig_x, orig_y), (new_x, new_y))) in original_test.iter().zip(test_coords.iter()).enumerate() {
-        println!("  Point {}: ({:.6}, {:.6}) → ({:.1}, {:.1})",
-                 i, orig_x, orig_y, new_x, new_y);
+    for (i, ((orig_x, orig_y), (new_x, new_y))) in
+        original_test.iter().zip(test_coords.iter()).enumerate()
+    {
+        println!(
+            "  Point {}: ({:.6}, {:.6}) → ({:.1}, {:.1})",
+            i, orig_x, orig_y, new_x, new_y
+        );
     }
 
     let mut geoc_test_batch = vec![
@@ -205,7 +239,8 @@ fn main() {
         .map(|&(x, y, z)| source_geoc.transform_to_3d(x, y, z, &target_geoc).unwrap())
         .collect();
     let _ = source_geoc.transform_to_3d_batch(&mut geoc_test_batch, &target_geoc);
-    println!("Geocentric batch path matches scalar: {}",
+    println!(
+        "Geocentric batch path matches scalar: {}",
         geoc_expected
             .iter()
             .zip(geoc_test_batch.iter())

@@ -30,7 +30,7 @@ name = "simd_benchmarks"
 harness = false
 
 [features]
-default = []
+default = ["parallel"]
 serde = ["dep:serde"]
 parallel = ["dep:rayon"]
 

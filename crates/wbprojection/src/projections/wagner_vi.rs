@@ -47,7 +47,11 @@ impl ProjectionImpl for WagnerViProj {
     fn inverse(&self, x: f64, y: f64) -> Result<(f64, f64)> {
         let lat = (y - self.fn_) / self.a;
         let factor = (1.0 - 3.0 * (lat / PI).powi(2)).max(0.0).sqrt();
-        let lon_rel = if factor.abs() < 1e-15 { 0.0 } else { (x - self.fe) / (self.a * factor) };
+        let lon_rel = if factor.abs() < 1e-15 {
+            0.0
+        } else {
+            (x - self.fe) / (self.a * factor)
+        };
         let lon = Self::wrap_lon(self.lon0 + lon_rel);
         Ok((to_degrees(lon), to_degrees(lat)))
     }

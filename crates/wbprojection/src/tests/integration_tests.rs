@@ -1,18 +1,18 @@
 //! Integration tests for wbprojection.
 
-use crate::{
-    Crs, CrsTransformPolicy, Datum, Ellipsoid, GridShiftGrid, GridShiftSample, Projection, ProjectionKind,
-    ProjectionParams, TransformEpochContext, get_grid, has_grid, register_grid,
-    register_ntv2_gsb_hierarchy,
-    resolve_ntv2_hierarchy_grid_name, resolve_ntv2_hierarchy_subgrid, unregister_grid,
-};
 use crate::clear_coordinate_operations;
 use crate::datum::DatumTransform;
 use crate::operations::coordinate_operation_test_guard;
+use crate::{
+    get_grid, has_grid, register_grid, register_ntv2_gsb_hierarchy,
+    resolve_ntv2_hierarchy_grid_name, resolve_ntv2_hierarchy_subgrid, unregister_grid, Crs,
+    CrsTransformPolicy, Datum, Ellipsoid, GridShiftGrid, GridShiftSample, Projection,
+    ProjectionKind, ProjectionParams, TransformEpochContext,
+};
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const TOL_DEGREES: f64 = 1e-8;    // ~1 mm at equator
+const TOL_DEGREES: f64 = 1e-8; // ~1 mm at equator
 const CSRS_CONFORMANCE_TOLERANCE_M: f64 = 0.001;
 
 fn round_trip(proj: &Projection, lon: f64, lat: f64) {
@@ -21,12 +21,18 @@ fn round_trip(proj: &Projection, lon: f64, lat: f64) {
     assert!(
         (lon2 - lon).abs() < TOL_DEGREES,
         "lon round-trip failed: {} → {} → {} (Δ={})",
-        lon, x, lon2, (lon2 - lon).abs()
+        lon,
+        x,
+        lon2,
+        (lon2 - lon).abs()
     );
     assert!(
         (lat2 - lat).abs() < TOL_DEGREES,
         "lat round-trip failed: {} → {} → {} (Δ={})",
-        lat, y, lat2, (lat2 - lat).abs()
+        lat,
+        y,
+        lat2,
+        (lat2 - lat).abs()
     );
 }
 
@@ -161,9 +167,9 @@ fn utm_southern_hemisphere() {
 fn web_mercator_round_trip() {
     let proj = Projection::new(ProjectionParams::web_mercator()).unwrap();
     round_trip(&proj, 0.0, 0.0);
-    round_trip(&proj, 13.4, 52.5);    // Berlin
-    round_trip(&proj, -74.0, 40.7);   // New York
-    round_trip(&proj, 139.7, 35.7);   // Tokyo
+    round_trip(&proj, 13.4, 52.5); // Berlin
+    round_trip(&proj, -74.0, 40.7); // New York
+    round_trip(&proj, 139.7, 35.7); // Tokyo
 }
 
 #[test]
@@ -269,11 +275,9 @@ fn azimuthal_equidistant_round_trip() {
 
 #[test]
 fn stereographic_round_trip() {
-    let proj = Projection::new(
-        ProjectionParams::new(ProjectionKind::Stereographic)
-            .with_lat0(90.0),
-    )
-    .unwrap();
+    let proj =
+        Projection::new(ProjectionParams::new(ProjectionKind::Stereographic).with_lat0(90.0))
+            .unwrap();
     round_trip(&proj, 0.0, 75.0);
     round_trip(&proj, 90.0, 80.0);
 }
@@ -327,9 +331,9 @@ fn mollweide_round_trip() {
 
 #[test]
 fn equirectangular_round_trip() {
-    let proj = Projection::new(
-        ProjectionParams::new(ProjectionKind::Equirectangular { lat_ts: 0.0 }),
-    )
+    let proj = Projection::new(ProjectionParams::new(ProjectionKind::Equirectangular {
+        lat_ts: 0.0,
+    }))
     .unwrap();
     round_trip(&proj, 0.0, 0.0);
     round_trip(&proj, 100.0, -20.0);
@@ -875,8 +879,7 @@ fn foucaut_round_trip() {
 #[test]
 fn loximuthal_round_trip() {
     let proj = Projection::new(
-        ProjectionParams::new(ProjectionKind::Loximuthal { lat1: 40.0 })
-            .with_lon0(0.0),
+        ProjectionParams::new(ProjectionKind::Loximuthal { lat1: 40.0 }).with_lon0(0.0),
     )
     .unwrap();
 
@@ -1163,8 +1166,7 @@ fn kavrayskiy_v_round_trip() {
 #[test]
 fn central_conic_round_trip() {
     let proj = Projection::new(
-        ProjectionParams::new(ProjectionKind::CentralConic { lat1: 35.0 })
-            .with_lon0(0.0),
+        ProjectionParams::new(ProjectionKind::CentralConic { lat1: 35.0 }).with_lon0(0.0),
     )
     .unwrap();
 
@@ -1179,11 +1181,7 @@ fn central_conic_round_trip() {
 #[test]
 fn lagrange_round_trip() {
     let proj = Projection::new(
-        ProjectionParams::new(ProjectionKind::Lagrange {
-            lat1: 20.0,
-            w: 2.0,
-        })
-        .with_lon0(0.0),
+        ProjectionParams::new(ProjectionKind::Lagrange { lat1: 20.0, w: 2.0 }).with_lon0(0.0),
     )
     .unwrap();
 
@@ -1293,7 +1291,10 @@ fn crs_nad27_to_wgs84_has_nonzero_shift_and_round_trip() {
     let dlon = (lon_w - lon0).abs();
     let dlat = (lat_w - lat0).abs();
 
-    assert!(dlon > 1e-5 || dlat > 1e-5, "expected nonzero NAD27→WGS84 shift");
+    assert!(
+        dlon > 1e-5 || dlat > 1e-5,
+        "expected nonzero NAD27→WGS84 shift"
+    );
     assert!((lon_b - lon0).abs() < 1e-7, "lon_b={lon_b}, lon0={lon0}");
     assert!((lat_b - lat0).abs() < 1e-7, "lat_b={lat_b}, lat0={lat0}");
 }
@@ -1309,7 +1310,10 @@ fn crs_ed50_to_wgs84_has_nonzero_shift() {
 
     let dlon = (lon_w - lon0).abs();
     let dlat = (lat_w - lat0).abs();
-    assert!(dlon > 1e-5 || dlat > 1e-5, "expected nonzero ED50→WGS84 shift");
+    assert!(
+        dlon > 1e-5 || dlat > 1e-5,
+        "expected nonzero ED50→WGS84 shift"
+    );
 }
 
 #[test]
@@ -1323,7 +1327,10 @@ fn crs_nad83_to_wgs84_shift_is_small() {
 
     let dlon = (lon_w - lon0).abs();
     let dlat = (lat_w - lat0).abs();
-    assert!(dlon < 0.001 && dlat < 0.001, "unexpectedly large NAD83→WGS84 shift");
+    assert!(
+        dlon < 0.001 && dlat < 0.001,
+        "unexpectedly large NAD83→WGS84 shift"
+    );
 }
 
 #[test]
@@ -1629,8 +1636,14 @@ fn crs_grid_shift_geographic_to_wgs84_and_back() {
     let lat0 = 2.0;
 
     let (lon_w, lat_w) = src.transform_to(lon0, lat0, &dst).unwrap();
-    assert!((lon_w - (lon0 + 1.0 / 3600.0)).abs() < 1e-10, "lon_w={lon_w}");
-    assert!((lat_w - (lat0 - 2.0 / 3600.0)).abs() < 1e-10, "lat_w={lat_w}");
+    assert!(
+        (lon_w - (lon0 + 1.0 / 3600.0)).abs() < 1e-10,
+        "lon_w={lon_w}"
+    );
+    assert!(
+        (lat_w - (lat0 - 2.0 / 3600.0)).abs() < 1e-10,
+        "lat_w={lat_w}"
+    );
 
     let (lon_b, lat_b) = dst.transform_to(lon_w, lat_w, &src).unwrap();
     assert!((lon_b - lon0).abs() < 1e-10, "lon_b={lon_b}");
@@ -1657,10 +1670,18 @@ fn crs_grid_shift_policy_strict_vs_fallback_missing_grid() {
     let dst = Crs::from_epsg(4326).unwrap();
 
     let strict = src.transform_to_with_policy(10.0, 20.0, &dst, CrsTransformPolicy::Strict);
-    assert!(strict.is_err(), "strict mode should error when grid is missing");
+    assert!(
+        strict.is_err(),
+        "strict mode should error when grid is missing"
+    );
 
     let (lon_f, lat_f) = src
-        .transform_to_with_policy(10.0, 20.0, &dst, CrsTransformPolicy::FallbackToIdentityGridShift)
+        .transform_to_with_policy(
+            10.0,
+            20.0,
+            &dst,
+            CrsTransformPolicy::FallbackToIdentityGridShift,
+        )
         .unwrap();
     assert!((lon_f - 10.0).abs() < 1e-12, "lon_f={lon_f}");
     assert!((lat_f - 20.0).abs() < 1e-12, "lat_f={lat_f}");
@@ -1706,7 +1727,12 @@ fn crs_grid_shift_policy_strict_vs_fallback_out_of_extent() {
     assert!(strict.is_err(), "strict mode should error out-of-extent");
 
     let (lon_f, lat_f) = src
-        .transform_to_with_policy(0.0, 0.0, &dst, CrsTransformPolicy::FallbackToIdentityGridShift)
+        .transform_to_with_policy(
+            0.0,
+            0.0,
+            &dst,
+            CrsTransformPolicy::FallbackToIdentityGridShift,
+        )
         .unwrap();
     assert!((lon_f - 0.0).abs() < 1e-12, "lon_f={lon_f}");
     assert!((lat_f - 0.0).abs() < 1e-12, "lat_f={lat_f}");
@@ -1822,20 +1848,37 @@ fn crs_ntv2_hierarchy_selects_smallest_covering_subgrid() {
 
     // Inside child extent -> should use child shift.
     let (lon_c, lat_c) = src.transform_to(0.25, 0.25, &dst).unwrap();
-    assert!((lon_c - (0.25 + 3.0 / 3600.0)).abs() < 1e-10, "lon_c={lon_c}");
-    assert!((lat_c - (0.25 + 4.0 / 3600.0)).abs() < 1e-10, "lat_c={lat_c}");
+    assert!(
+        (lon_c - (0.25 + 3.0 / 3600.0)).abs() < 1e-10,
+        "lon_c={lon_c}"
+    );
+    assert!(
+        (lat_c - (0.25 + 4.0 / 3600.0)).abs() < 1e-10,
+        "lat_c={lat_c}"
+    );
 
     // Inside parent but outside child -> should use parent shift.
     let (lon_p, lat_p) = src.transform_to(0.75, 0.75, &dst).unwrap();
-    assert!((lon_p - (0.75 + 1.0 / 3600.0)).abs() < 1e-10, "lon_p={lon_p}");
-    assert!((lat_p - (0.75 + 1.0 / 3600.0)).abs() < 1e-10, "lat_p={lat_p}");
+    assert!(
+        (lon_p - (0.75 + 1.0 / 3600.0)).abs() < 1e-10,
+        "lon_p={lon_p}"
+    );
+    assert!(
+        (lat_p - (0.75 + 1.0 / 3600.0)).abs() < 1e-10,
+        "lat_p={lat_p}"
+    );
 
     // Outside all extents -> strict errors, fallback returns identity.
     let strict = src.transform_to_with_policy(2.0, 2.0, &dst, CrsTransformPolicy::Strict);
     assert!(strict.is_err());
 
     let (lon_f, lat_f) = src
-        .transform_to_with_policy(2.0, 2.0, &dst, CrsTransformPolicy::FallbackToIdentityGridShift)
+        .transform_to_with_policy(
+            2.0,
+            2.0,
+            &dst,
+            CrsTransformPolicy::FallbackToIdentityGridShift,
+        )
         .unwrap();
     assert!((lon_f - 2.0).abs() < 1e-12, "lon_f={lon_f}");
     assert!((lat_f - 2.0).abs() < 1e-12, "lat_f={lat_f}");
@@ -2094,10 +2137,22 @@ fn crs_transform_trace_reports_selected_source_and_target_grids() {
         width: 2,
         height: 2,
         samples: vec![
-            GridShiftSample { dlon_arcsec: 1.0, dlat_arcsec: 1.0 },
-            GridShiftSample { dlon_arcsec: 1.0, dlat_arcsec: 1.0 },
-            GridShiftSample { dlon_arcsec: 1.0, dlat_arcsec: 1.0 },
-            GridShiftSample { dlon_arcsec: 1.0, dlat_arcsec: 1.0 },
+            GridShiftSample {
+                dlon_arcsec: 1.0,
+                dlat_arcsec: 1.0,
+            },
+            GridShiftSample {
+                dlon_arcsec: 1.0,
+                dlat_arcsec: 1.0,
+            },
+            GridShiftSample {
+                dlon_arcsec: 1.0,
+                dlat_arcsec: 1.0,
+            },
+            GridShiftSample {
+                dlon_arcsec: 1.0,
+                dlat_arcsec: 1.0,
+            },
         ],
     };
     let dst_grid = GridShiftGrid {
@@ -2109,10 +2164,22 @@ fn crs_transform_trace_reports_selected_source_and_target_grids() {
         width: 2,
         height: 2,
         samples: vec![
-            GridShiftSample { dlon_arcsec: 2.0, dlat_arcsec: 2.0 },
-            GridShiftSample { dlon_arcsec: 2.0, dlat_arcsec: 2.0 },
-            GridShiftSample { dlon_arcsec: 2.0, dlat_arcsec: 2.0 },
-            GridShiftSample { dlon_arcsec: 2.0, dlat_arcsec: 2.0 },
+            GridShiftSample {
+                dlon_arcsec: 2.0,
+                dlat_arcsec: 2.0,
+            },
+            GridShiftSample {
+                dlon_arcsec: 2.0,
+                dlat_arcsec: 2.0,
+            },
+            GridShiftSample {
+                dlon_arcsec: 2.0,
+                dlat_arcsec: 2.0,
+            },
+            GridShiftSample {
+                dlon_arcsec: 2.0,
+                dlat_arcsec: 2.0,
+            },
         ],
     };
 

@@ -386,34 +386,34 @@ fn dynamic_registry() -> &'static RwLock<HashMap<String, DynamicGridShiftGrid>> 
 
 /// Register or replace a named grid-shift model.
 pub fn register_grid(grid: GridShiftGrid) -> Result<()> {
-    let mut m = registry().write().map_err(|_| {
-        ProjectionError::DatumError("grid registry lock poisoned".to_string())
-    })?;
+    let mut m = registry()
+        .write()
+        .map_err(|_| ProjectionError::DatumError("grid registry lock poisoned".to_string()))?;
     m.insert(grid.name.clone(), grid);
     Ok(())
 }
 
 /// Remove a named grid-shift model.
 pub fn unregister_grid(name: &str) -> Result<bool> {
-    let mut m = registry().write().map_err(|_| {
-        ProjectionError::DatumError("grid registry lock poisoned".to_string())
-    })?;
+    let mut m = registry()
+        .write()
+        .map_err(|_| ProjectionError::DatumError("grid registry lock poisoned".to_string()))?;
     Ok(m.remove(name).is_some())
 }
 
 /// Returns true if a named grid is currently registered.
 pub fn has_grid(name: &str) -> Result<bool> {
-    let m = registry().read().map_err(|_| {
-        ProjectionError::DatumError("grid registry lock poisoned".to_string())
-    })?;
+    let m = registry()
+        .read()
+        .map_err(|_| ProjectionError::DatumError("grid registry lock poisoned".to_string()))?;
     Ok(m.contains_key(name))
 }
 
 /// Fetch a registered grid by name.
 pub fn get_grid(name: &str) -> Result<Option<GridShiftGrid>> {
-    let m = registry().read().map_err(|_| {
-        ProjectionError::DatumError("grid registry lock poisoned".to_string())
-    })?;
+    let m = registry()
+        .read()
+        .map_err(|_| ProjectionError::DatumError("grid registry lock poisoned".to_string()))?;
     Ok(m.get(name).cloned())
 }
 
@@ -453,8 +453,8 @@ pub fn get_dynamic_grid(name: &str) -> Result<Option<DynamicGridShiftGrid>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        DynamicGridShiftGrid, DynamicGridShiftSample, GridShiftGrid, GridShiftSample,
         get_dynamic_grid, has_dynamic_grid, register_dynamic_grid, unregister_dynamic_grid,
+        DynamicGridShiftGrid, DynamicGridShiftSample, GridShiftGrid, GridShiftSample,
     };
 
     #[test]
@@ -501,7 +501,9 @@ mod tests {
         )
         .unwrap();
 
-        let (dlon_deg, dlat_deg) = grid.sample_shift_degrees_at_epoch(0.5, 0.5, 2020.0).unwrap();
+        let (dlon_deg, dlat_deg) = grid
+            .sample_shift_degrees_at_epoch(0.5, 0.5, 2020.0)
+            .unwrap();
         assert!((dlon_deg - (10.0 / 3600.0)).abs() < 1e-12);
         assert!((dlat_deg - (-20.0 / 3600.0)).abs() < 1e-12);
     }
@@ -527,7 +529,9 @@ mod tests {
         .unwrap();
 
         // dt = +3 years => (6, -12) arcsec
-        let (dlon_deg, dlat_deg) = grid.sample_shift_degrees_at_epoch(0.25, 0.75, 2023.0).unwrap();
+        let (dlon_deg, dlat_deg) = grid
+            .sample_shift_degrees_at_epoch(0.25, 0.75, 2023.0)
+            .unwrap();
         assert!((dlon_deg - (6.0 / 3600.0)).abs() < 1e-12);
         assert!((dlat_deg - (-12.0 / 3600.0)).abs() < 1e-12);
     }

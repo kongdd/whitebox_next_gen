@@ -127,13 +127,15 @@ impl EpochTransformOptions {
     pub fn build_context(&self) -> Result<Option<TransformEpochContext>> {
         self.validate()?;
 
-        Ok(self.coordinate_epoch_decimal_year.map(|coordinate_epoch_decimal_year| {
-            TransformEpochContext::new(
-                coordinate_epoch_decimal_year,
-                self.source_reference_epoch_decimal_year,
-                self.target_reference_epoch_decimal_year,
-            )
-        }))
+        Ok(self
+            .coordinate_epoch_decimal_year
+            .map(|coordinate_epoch_decimal_year| {
+                TransformEpochContext::new(
+                    coordinate_epoch_decimal_year,
+                    self.source_reference_epoch_decimal_year,
+                    self.target_reference_epoch_decimal_year,
+                )
+            }))
     }
 }
 

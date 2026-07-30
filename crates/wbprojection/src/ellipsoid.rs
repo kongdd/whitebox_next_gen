@@ -30,7 +30,15 @@ impl Ellipsoid {
         let e2 = 2.0 * f - f * f;
         let e = e2.sqrt();
         let ep2 = e2 / (1.0 - e2);
-        Ellipsoid { name, a, b, f, e2, e, ep2 }
+        Ellipsoid {
+            name,
+            a,
+            b,
+            f,
+            e2,
+            e,
+            ep2,
+        }
     }
 
     /// Construct a sphere with the given radius.
@@ -89,23 +97,21 @@ impl Ellipsoid {
             "grs67" => Some(Self::from_a_inv_f("GRS 67", 6_378_160.0, 298.247_167_427)),
             "clarke1866" => Some(Self::CLARKE1866.clone()),
             "clarke1880rgs" | "clarke1880" => Some(Self::CLARKE1880_RGS.clone()),
-            "international1924" | "international" | "hayford" => {
-                Some(Self::INTERNATIONAL.clone())
-            }
+            "international1924" | "international" | "hayford" => Some(Self::INTERNATIONAL.clone()),
             "bessel1841" | "bessel" => Some(Self::BESSEL.clone()),
             "airy1830" | "airy" => Some(Self::AIRY1830.clone()),
-            "airy1830modified" | "airy1830mod" | "airymodified" => {
-                Some(Self::AIRY1830_MOD.clone())
-            }
+            "airy1830modified" | "airy1830mod" | "airymodified" => Some(Self::AIRY1830_MOD.clone()),
             "krassowsky1940" | "krassovsky1940" | "krassowsky" | "krassovsky" => {
                 Some(Self::KRASSOWSKY1940.clone())
             }
             "iau1976" | "iau76" => Some(Self::IAU1976.clone()),
             "everest1830" | "everest" => Some(Self::EVEREST1830.clone()),
             "helmert1906" | "helmert" => Some(Self::HELMERT1906.clone()),
-            "australiannationalspheroid" | "ans" => {
-                Some(Self::from_a_inv_f("Australian National Spheroid", 6_378_160.0, 298.25))
-            }
+            "australiannationalspheroid" | "ans" => Some(Self::from_a_inv_f(
+                "Australian National Spheroid",
+                6_378_160.0,
+                298.25,
+            )),
             "fischer1960" | "fischer" => {
                 Some(Self::from_a_inv_f("Fischer 1960", 6_378_166.0, 298.3))
             }
@@ -353,7 +359,10 @@ mod tests {
     fn from_epsg_ellipsoid_resolves_common_codes() {
         assert_eq!(Ellipsoid::from_epsg_ellipsoid(7030).unwrap().name, "WGS 84");
         assert_eq!(Ellipsoid::from_epsg_ellipsoid(7019).unwrap().name, "GRS 80");
-        assert_eq!(Ellipsoid::from_epsg_ellipsoid(7024).unwrap().name, "Krassowsky 1940");
+        assert_eq!(
+            Ellipsoid::from_epsg_ellipsoid(7024).unwrap().name,
+            "Krassowsky 1940"
+        );
         assert!(Ellipsoid::from_epsg_ellipsoid(9999).is_none());
     }
 

@@ -1,26 +1,23 @@
 //! Tests for external authoritative fixture ingestion.
 
 use crate::{
-    csrs_preferred_operation_support_snapshot,
-    europe_phase1_preferred_operation_support_snapshot,
-    preferred_operation_code_for_crs_pair,
-    preferred_operation_code_for_crs_pair_with_policy,
-    preferred_operation_for_crs_pair,
-    preferred_operation_for_crs_pair_with_policy,
-    us_phase1_preferred_operation_support_snapshot,
-    CsrsPreferredOperationStatus,
-    EuropePreferredOperationStatus,
-    OperationMethod,
-    PreferredOperationPolicy,
-    UsPreferredOperationStatus,
-    has_coordinate_operation,
+    csrs_preferred_operation_support_snapshot, europe_phase1_preferred_operation_support_snapshot,
+    has_coordinate_operation, preferred_operation_code_for_crs_pair,
+    preferred_operation_code_for_crs_pair_with_policy, preferred_operation_for_crs_pair,
+    preferred_operation_for_crs_pair_with_policy, us_phase1_preferred_operation_support_snapshot,
+    CsrsPreferredOperationStatus, EuropePreferredOperationStatus, OperationMethod,
+    PreferredOperationPolicy, UsPreferredOperationStatus,
 };
 use std::collections::HashSet;
 
-const NRCAN_TRX_FIXTURE: &str = include_str!("data/authoritative/nrcan_trx_nad83csrs_to_itrf2014_epoch2010_checkpoints.csv");
-const NRCAN_EPOCH_PROPAGATION_FIXTURE: &str = include_str!("data/authoritative/nrcan_nad83csrs_epoch_propagation_2010_to_2020_checkpoints.csv");
-const NRCAN_TRX_CSRS_2002_TO_2010_FIXTURE: &str =
-    include_str!("data/authoritative/nrcan_trx_nad83csrs_epoch_2002_to_2010_guelph_vancouver_sample2.csv");
+const NRCAN_TRX_FIXTURE: &str =
+    include_str!("data/authoritative/nrcan_trx_nad83csrs_to_itrf2014_epoch2010_checkpoints.csv");
+const NRCAN_EPOCH_PROPAGATION_FIXTURE: &str = include_str!(
+    "data/authoritative/nrcan_nad83csrs_epoch_propagation_2010_to_2020_checkpoints.csv"
+);
+const NRCAN_TRX_CSRS_2002_TO_2010_FIXTURE: &str = include_str!(
+    "data/authoritative/nrcan_trx_nad83csrs_epoch_2002_to_2010_guelph_vancouver_sample2.csv"
+);
 const OP10715_CSRS_V3_TO_V8_TEMPLATE: &str =
     include_str!("data/authoritative/op10715_csrs_v3_to_v8_checkpoints_template.csv");
 const CSRS_V4_TO_V8_TEMPLATE: &str =
@@ -508,8 +505,8 @@ fn assert_operation_code_consistency_per_corridor(
 fn assert_operation_codes_are_registered(rows: &[CsrsPairTemplateCheckpoint], region: &str) {
     for row in rows {
         if let Some(code) = row.operation_code {
-            let exists = has_coordinate_operation(code)
-                .expect("operation catalog lookup should not fail");
+            let exists =
+                has_coordinate_operation(code).expect("operation catalog lookup should not fail");
             let us_policy = PreferredOperationPolicy {
                 us_phase1_default_operation_code: Some(code),
                 europe_phase1_default_operation_code: None,
@@ -555,8 +552,8 @@ fn coverage_for_allowlist(
 
 #[test]
 fn nrcan_trx_authoritative_fixture_parses_and_is_well_formed() {
-    let rows = parse_nrcan_trx_fixture(NRCAN_TRX_FIXTURE)
-        .expect("authoritative TRX fixture should parse");
+    let rows =
+        parse_nrcan_trx_fixture(NRCAN_TRX_FIXTURE).expect("authoritative TRX fixture should parse");
 
     assert!(
         rows.len() >= 2,
@@ -565,7 +562,10 @@ fn nrcan_trx_authoritative_fixture_parses_and_is_well_formed() {
     );
 
     for row in &rows {
-        assert!(!row.station.trim().is_empty(), "station name should be non-empty");
+        assert!(
+            !row.station.trim().is_empty(),
+            "station name should be non-empty"
+        );
         assert!((-90.0..=90.0).contains(&row.input_lat_deg));
         assert!((-180.0..=180.0).contains(&row.input_lon_deg));
         assert!((-90.0..=90.0).contains(&row.output_lat_deg));
@@ -578,14 +578,17 @@ fn nrcan_trx_authoritative_fixture_parses_and_is_well_formed() {
             row.vlambda_mm_per_yr,
             row.vh_mm_per_yr,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
     }
 }
 
 #[test]
 fn nrcan_trx_authoritative_fixture_has_expected_station_rows() {
-    let rows = parse_nrcan_trx_fixture(NRCAN_TRX_FIXTURE)
-        .expect("authoritative TRX fixture should parse");
+    let rows =
+        parse_nrcan_trx_fixture(NRCAN_TRX_FIXTURE).expect("authoritative TRX fixture should parse");
 
     let has_vancouver = rows.iter().any(|r| r.station == "vancouver");
     let has_sample2 = rows.iter().any(|r| r.station == "sample2");
@@ -602,7 +605,10 @@ fn nrcan_epoch_propagation_fixture_parses_and_is_well_formed() {
     assert_eq!(rows.len(), 3, "expected 3 authoritative checkpoints");
 
     for row in &rows {
-        assert!(!row.station.trim().is_empty(), "station name should be non-empty");
+        assert!(
+            !row.station.trim().is_empty(),
+            "station name should be non-empty"
+        );
         assert!((-90.0..=90.0).contains(&row.input_lat_deg));
         assert!((0.0..=180.0).contains(&row.input_lon_positive_west_deg));
         assert!((-90.0..=90.0).contains(&row.output_lat_deg));
@@ -617,12 +623,18 @@ fn nrcan_epoch_propagation_fixture_parses_and_is_well_formed() {
             row.vlambda_mm_per_yr,
             row.vh_mm_per_yr,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
 
         let moved_horizontally = (row.output_lat_deg - row.input_lat_deg).abs() > 0.0
             || (row.output_lon_positive_west_deg - row.input_lon_positive_west_deg).abs() > 0.0;
         let moved_vertically = (row.output_h_m - row.input_h_m).abs() > 0.0;
-        assert!(moved_horizontally || moved_vertically, "epoch propagation should change at least one coordinate component");
+        assert!(
+            moved_horizontally || moved_vertically,
+            "epoch propagation should change at least one coordinate component"
+        );
     }
 }
 
@@ -648,11 +660,22 @@ fn nrcan_trx_csrs_2002_to_2010_fixture_parses_and_is_well_formed() {
     assert_eq!(rows.len(), 3, "expected 3 authoritative checkpoints");
 
     for row in &rows {
-        assert!(!row.station.trim().is_empty(), "station name should be non-empty");
+        assert!(
+            !row.station.trim().is_empty(),
+            "station name should be non-empty"
+        );
         assert!((-90.0..=90.0).contains(&row.lat_deg));
         assert!((-180.0..=180.0).contains(&row.lon_deg));
-        let values = [row.h_m, row.vn_mm_per_yr, row.ve_mm_per_yr, row.vh_mm_per_yr];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        let values = [
+            row.h_m,
+            row.vn_mm_per_yr,
+            row.ve_mm_per_yr,
+            row.vh_mm_per_yr,
+        ];
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
     }
 }
 
@@ -695,7 +718,10 @@ fn op10715_csrs_v3_to_v8_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -728,7 +754,10 @@ fn csrs_v4_to_v8_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -761,7 +790,10 @@ fn csrs_v5_to_v8_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -794,7 +826,10 @@ fn csrs_v6_to_v8_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -827,7 +862,10 @@ fn csrs_v7_to_v8_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -860,7 +898,10 @@ fn csrs_v8_to_v4_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -893,7 +934,10 @@ fn csrs_v8_to_v3_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -926,7 +970,10 @@ fn csrs_v8_to_v6_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -959,7 +1006,10 @@ fn csrs_v8_to_v7_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -992,7 +1042,10 @@ fn csrs_v8_to_v5_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -1027,7 +1080,10 @@ fn us_nsrs2007_to_nad83_2011_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -1066,7 +1122,10 @@ fn europe_etrs89_realization_template_fixture_is_parseable() {
             row.output_y_m,
             row.output_z_m,
         ];
-        assert!(values.iter().all(|v| v.is_finite()), "all numeric fields must be finite");
+        assert!(
+            values.iter().all(|v| v.is_finite()),
+            "all numeric fields must be finite"
+        );
         assert!(
             !row.source_reference.is_empty(),
             "source_reference should be non-empty"
@@ -1075,8 +1134,14 @@ fn europe_etrs89_realization_template_fixture_is_parseable() {
         // Filled rows should stay within ETRS89-centered realization corridors.
         let src = crate::from_epsg(row.source_crs_epsg).expect("source EPSG should resolve");
         let dst = crate::from_epsg(row.target_crs_epsg).expect("target EPSG should resolve");
-        assert_eq!(src.datum.name, "ETRS 89", "source datum should be ETRS89 family");
-        assert_eq!(dst.datum.name, "ETRS 89", "target datum should be ETRS89 family");
+        assert_eq!(
+            src.datum.name, "ETRS 89",
+            "source datum should be ETRS89 family"
+        );
+        assert_eq!(
+            dst.datum.name, "ETRS 89",
+            "target datum should be ETRS89 family"
+        );
     }
 }
 
@@ -1127,7 +1192,10 @@ fn europe_etrs89_realization_template_phase1_pairs_are_allowlisted() {
 
     // Phase-1 Europe seed corridors for first authoritative captures.
     // Reverse directions are now allowlisted as active bidirectional corridors.
-    let allowlist: HashSet<(u32, u32)> = EUROPE_PHASE1_ALLOWLISTED_CORRIDORS.iter().copied().collect();
+    let allowlist: HashSet<(u32, u32)> = EUROPE_PHASE1_ALLOWLISTED_CORRIDORS
+        .iter()
+        .copied()
+        .collect();
 
     for row in &rows {
         assert!(
@@ -1315,16 +1383,66 @@ fn phase1_template_population_progress_snapshot() {
 fn csrs_template_fixture_scope_matches_current_corridor_policy() {
     let snapshot = csrs_preferred_operation_support_snapshot();
     let expected_pairs = [
-        ("v3", "v8", CsrsPreferredOperationStatus::Active, Some(10715)),
-        ("v4", "v8", CsrsPreferredOperationStatus::Active, Some(10715)),
-        ("v5", "v8", CsrsPreferredOperationStatus::Active, Some(10715)),
-        ("v6", "v8", CsrsPreferredOperationStatus::Active, Some(10715)),
-        ("v7", "v8", CsrsPreferredOperationStatus::Active, Some(10715)),
-        ("v8", "v3", CsrsPreferredOperationStatus::Active, Some(10715)),
-        ("v8", "v4", CsrsPreferredOperationStatus::Active, Some(10715)),
-        ("v8", "v5", CsrsPreferredOperationStatus::Active, Some(10715)),
-        ("v8", "v6", CsrsPreferredOperationStatus::Active, Some(10715)),
-        ("v8", "v7", CsrsPreferredOperationStatus::Active, Some(10715)),
+        (
+            "v3",
+            "v8",
+            CsrsPreferredOperationStatus::Active,
+            Some(10715),
+        ),
+        (
+            "v4",
+            "v8",
+            CsrsPreferredOperationStatus::Active,
+            Some(10715),
+        ),
+        (
+            "v5",
+            "v8",
+            CsrsPreferredOperationStatus::Active,
+            Some(10715),
+        ),
+        (
+            "v6",
+            "v8",
+            CsrsPreferredOperationStatus::Active,
+            Some(10715),
+        ),
+        (
+            "v7",
+            "v8",
+            CsrsPreferredOperationStatus::Active,
+            Some(10715),
+        ),
+        (
+            "v8",
+            "v3",
+            CsrsPreferredOperationStatus::Active,
+            Some(10715),
+        ),
+        (
+            "v8",
+            "v4",
+            CsrsPreferredOperationStatus::Active,
+            Some(10715),
+        ),
+        (
+            "v8",
+            "v5",
+            CsrsPreferredOperationStatus::Active,
+            Some(10715),
+        ),
+        (
+            "v8",
+            "v6",
+            CsrsPreferredOperationStatus::Active,
+            Some(10715),
+        ),
+        (
+            "v8",
+            "v7",
+            CsrsPreferredOperationStatus::Active,
+            Some(10715),
+        ),
     ];
 
     for (src, dst, expected_status, expected_code) in expected_pairs {
@@ -1487,8 +1605,9 @@ fn europe_phase1_allowlisted_corridors_follow_definition_policy_contract() {
             "Europe allowlisted corridor should remain strict fallback-safe without policy defaults"
         );
 
-        let op = preferred_operation_for_crs_pair_with_policy(src, dst, policy)
-            .expect("Europe allowlisted corridor should build a preferred op under policy defaults");
+        let op = preferred_operation_for_crs_pair_with_policy(src, dst, policy).expect(
+            "Europe allowlisted corridor should build a preferred op under policy defaults",
+        );
         assert_eq!(op.operation_code, 10715);
         assert_eq!(op.source_crs_code, src);
         assert_eq!(op.target_crs_code, dst);
@@ -1499,7 +1618,8 @@ fn europe_phase1_allowlisted_corridors_follow_definition_policy_contract() {
 
 #[test]
 fn us_phase1_allowlisted_template_pairs_exist_in_active_snapshot() {
-    let allowlisted: HashSet<(u32, u32)> = US_PHASE1_ALLOWLISTED_CORRIDORS.iter().copied().collect();
+    let allowlisted: HashSet<(u32, u32)> =
+        US_PHASE1_ALLOWLISTED_CORRIDORS.iter().copied().collect();
 
     let snapshot = us_phase1_preferred_operation_support_snapshot();
     let active_snapshot_pairs: HashSet<(u32, u32)> = snapshot
@@ -1519,7 +1639,10 @@ fn us_phase1_allowlisted_template_pairs_exist_in_active_snapshot() {
 
 #[test]
 fn europe_phase1_allowlisted_template_pairs_exist_in_active_snapshot() {
-    let allowlisted: HashSet<(u32, u32)> = EUROPE_PHASE1_ALLOWLISTED_CORRIDORS.iter().copied().collect();
+    let allowlisted: HashSet<(u32, u32)> = EUROPE_PHASE1_ALLOWLISTED_CORRIDORS
+        .iter()
+        .copied()
+        .collect();
 
     let snapshot = europe_phase1_preferred_operation_support_snapshot();
     let active_snapshot_pairs: HashSet<(u32, u32)> = snapshot
@@ -1618,7 +1741,9 @@ fn europe_phase1_all_active_snapshot_pairs_follow_policy_contract() {
             pair.target_crs_epsg,
             policy,
         )
-        .expect("Europe active snapshot pair should build preferred definition with policy defaults");
+        .expect(
+            "Europe active snapshot pair should build preferred definition with policy defaults",
+        );
         assert_eq!(op.operation_code, 10715);
         assert_eq!(op.source_crs_code, pair.source_crs_epsg);
         assert_eq!(op.target_crs_code, pair.target_crs_epsg);
@@ -1697,8 +1822,14 @@ fn us_phase1_policy_defaults_do_not_apply_outside_active_corridors() {
     ];
 
     for (src, dst) in out_of_scope_pairs {
-        assert_eq!(preferred_operation_code_for_crs_pair_with_policy(src, dst, policy), None);
-        assert_eq!(preferred_operation_for_crs_pair_with_policy(src, dst, policy), None);
+        assert_eq!(
+            preferred_operation_code_for_crs_pair_with_policy(src, dst, policy),
+            None
+        );
+        assert_eq!(
+            preferred_operation_for_crs_pair_with_policy(src, dst, policy),
+            None
+        );
     }
 }
 
@@ -1718,7 +1849,13 @@ fn europe_phase1_policy_defaults_do_not_apply_outside_active_corridors() {
     ];
 
     for (src, dst) in out_of_scope_pairs {
-        assert_eq!(preferred_operation_code_for_crs_pair_with_policy(src, dst, policy), None);
-        assert_eq!(preferred_operation_for_crs_pair_with_policy(src, dst, policy), None);
+        assert_eq!(
+            preferred_operation_code_for_crs_pair_with_policy(src, dst, policy),
+            None
+        );
+        assert_eq!(
+            preferred_operation_for_crs_pair_with_policy(src, dst, policy),
+            None
+        );
     }
 }

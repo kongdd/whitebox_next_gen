@@ -20,7 +20,10 @@ pub struct CompoundCrs {
 impl CompoundCrs {
     /// Construct a custom compound CRS from horizontal and vertical components.
     pub fn new(name: impl Into<String>, horizontal: Crs, vertical: Crs) -> Result<Self> {
-        if matches!(horizontal.projection.params().kind, ProjectionKind::Vertical) {
+        if matches!(
+            horizontal.projection.params().kind,
+            ProjectionKind::Vertical
+        ) {
             return Err(ProjectionError::UnsupportedProjection(
                 "horizontal component cannot be vertical".to_string(),
             ));
@@ -57,7 +60,7 @@ impl CompoundCrs {
         match code {
             5498 => {
                 let horizontal = Crs::from_epsg(4269)?; // NAD83 geographic
-                let vertical = Crs::from_epsg(5703)?;   // NAVD88 height
+                let vertical = Crs::from_epsg(5703)?; // NAVD88 height
                 Ok(Self {
                     name: "NAD83 + NAVD88 height (EPSG:5498)".to_string(),
                     horizontal,
@@ -67,7 +70,7 @@ impl CompoundCrs {
             }
             6649 => {
                 let horizontal = Crs::from_epsg(4617)?; // NAD83(CSRS) geographic
-                let vertical = Crs::from_epsg(6647)?;   // CGVD2013 height
+                let vertical = Crs::from_epsg(6647)?; // CGVD2013 height
                 Ok(Self {
                     name: "NAD83(CSRS) + CGVD2013 height (EPSG:6649)".to_string(),
                     horizontal,
@@ -87,7 +90,7 @@ impl CompoundCrs {
             }
             9253 => {
                 let horizontal = Crs::from_epsg(4283)?; // GDA94 geographic
-                let vertical = Crs::from_epsg(5711)?;   // AHD height
+                let vertical = Crs::from_epsg(5711)?; // AHD height
                 Ok(Self {
                     name: "GDA94 + AHD height (EPSG:9253)".to_string(),
                     horizontal,
@@ -97,7 +100,7 @@ impl CompoundCrs {
             }
             9518 => {
                 let horizontal = Crs::from_epsg(4326)?; // WGS84 geographic
-                let vertical = Crs::from_epsg(3855)?;   // EGM2008 height
+                let vertical = Crs::from_epsg(3855)?; // EGM2008 height
                 Ok(Self {
                     name: "WGS 84 + EGM2008 height (EPSG:9518)".to_string(),
                     horizontal,
@@ -113,7 +116,13 @@ impl CompoundCrs {
     }
 
     /// Transform a 3D point into a target compound CRS.
-    pub fn transform_to(&self, x: f64, y: f64, z: f64, target: &CompoundCrs) -> Result<(f64, f64, f64)> {
+    pub fn transform_to(
+        &self,
+        x: f64,
+        y: f64,
+        z: f64,
+        target: &CompoundCrs,
+    ) -> Result<(f64, f64, f64)> {
         self.transform_to_with_policy(x, y, z, target, CrsTransformPolicy::Strict)
     }
 
@@ -126,16 +135,20 @@ impl CompoundCrs {
         target: &CompoundCrs,
         policy: CrsTransformPolicy,
     ) -> Result<(f64, f64, f64)> {
-        let (x_out, y_out) = self
-            .horizontal
-            .transform_to_with_policy(x, y, &target.horizontal, policy)?;
+        let (x_out, y_out) =
+            self.horizontal
+                .transform_to_with_policy(x, y, &target.horizontal, policy)?;
 
         // Derive lon/lat context from source horizontal component for vertical-model sampling.
         let (lon_deg, lat_deg) = self.horizontal.inverse(x, y)?;
 
-        let (_, _, z_out) = self
-            .vertical
-            .transform_to_3d_with_policy(lon_deg, lat_deg, z, &target.vertical, policy)?;
+        let (_, _, z_out) = self.vertical.transform_to_3d_with_policy(
+            lon_deg,
+            lat_deg,
+            z,
+            &target.vertical,
+            policy,
+        )?;
 
         Ok((x_out, y_out, z_out))
     }

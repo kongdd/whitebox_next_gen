@@ -6,6 +6,24 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+### Changed
+- **`parallel` is now on by default.** The `parallel` feature is included in the crate's `default`
+  feature set, so rayon-backed batch projection methods (`forward_many_par`, `inverse_many_par`,
+  `transform_to_many_par`) are available without any explicit `features = ["parallel"]` declaration
+  by dependents. Consumers that genuinely need a serial build can still opt out with
+  `default-features = false`.
+
+### Fixed
+- **Compound CRS EPSG extraction:** The `extract_epsg_after_marker` function now correctly handles
+  compound coordinate reference systems (COMPD_CS) by searching for the last AUTHORITY["EPSG"]
+  marker within each component's scope (PROJCS or GEOGCS) rather than taking the first match.
+  This ensures that when a compound CRS contains both a projected CRS (PROJCS with EPSG code)
+  and a vertical CRS (VERT_CS with a different EPSG code), the function correctly returns the
+  projected CRS code rather than the vertical datum code. For example, a compound WKT string
+  `COMPD_CS["...",PROJCS[...AUTHORITY["EPSG","32145"],...],VERT_CS[...AUTHORITY["EPSG","5703"]]]`
+  now correctly extracts EPSG:32145 (the horizontal projected CRS) instead of EPSG:5703 (the
+  vertical datum).
+
 ## [0.3.1] - 2026-06-30
 
 ### Fixed

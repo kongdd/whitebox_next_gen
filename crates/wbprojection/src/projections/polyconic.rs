@@ -64,7 +64,10 @@ impl ProjectionImpl for PolyconicProj {
             return Ok((to_degrees(lon), 0.0));
         }
 
-        let mut lat = (y_target + self.lat0).clamp(-std::f64::consts::FRAC_PI_2 + 1e-8, std::f64::consts::FRAC_PI_2 - 1e-8);
+        let mut lat = (y_target + self.lat0).clamp(
+            -std::f64::consts::FRAC_PI_2 + 1e-8,
+            std::f64::consts::FRAC_PI_2 - 1e-8,
+        );
 
         for _ in 0..80 {
             let sin_lat = lat.sin();
@@ -84,7 +87,10 @@ impl ProjectionImpl for PolyconicProj {
             }
 
             let h = 1e-7;
-            let lat_h = (lat + h).clamp(-std::f64::consts::FRAC_PI_2 + 1e-8, std::f64::consts::FRAC_PI_2 - 1e-8);
+            let lat_h = (lat + h).clamp(
+                -std::f64::consts::FRAC_PI_2 + 1e-8,
+                std::f64::consts::FRAC_PI_2 - 1e-8,
+            );
             let sin_h = lat_h.sin();
             let cos_h = lat_h.cos();
             let t_h = (x_target * sin_h / cos_h).clamp(-1.0, 1.0);
@@ -95,7 +101,10 @@ impl ProjectionImpl for PolyconicProj {
                 break;
             }
             let dlat = -f / fp;
-            lat = (lat + dlat.clamp(-0.25, 0.25)).clamp(-std::f64::consts::FRAC_PI_2 + 1e-8, std::f64::consts::FRAC_PI_2 - 1e-8);
+            lat = (lat + dlat.clamp(-0.25, 0.25)).clamp(
+                -std::f64::consts::FRAC_PI_2 + 1e-8,
+                std::f64::consts::FRAC_PI_2 - 1e-8,
+            );
         }
 
         Err(ProjectionError::ConvergenceFailure { iterations: 80 })

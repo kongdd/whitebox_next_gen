@@ -57,7 +57,9 @@ impl ProjectionImpl for TimesProj {
         let s2 = s * s;
         let denom = 0.744_82 - 0.345_88 * s2;
         if denom.abs() < 1e-15 {
-            return Err(ProjectionError::out_of_bounds("Times inverse denominator is zero"));
+            return Err(ProjectionError::out_of_bounds(
+                "Times inverse denominator is zero",
+            ));
         }
 
         let lon_rel = xn / denom;

@@ -1,8 +1,8 @@
 //! Stereographic projection.
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::Result;
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 
 pub(super) struct StereographicProj {
     lon0: f64,
@@ -74,8 +74,8 @@ impl ProjectionImpl for StereographicProj {
             (cos_c * self.sin_chi0 + y * sin_c * self.cos_chi0 / rho).asin()
         };
 
-        let lon = self.lon0 + (x * sin_c)
-            .atan2(rho * self.cos_chi0 * cos_c - y * self.sin_chi0 * sin_c);
+        let lon =
+            self.lon0 + (x * sin_c).atan2(rho * self.cos_chi0 * cos_c - y * self.sin_chi0 * sin_c);
 
         // Iterate conformal lat → geodetic lat
         let e = self.e;

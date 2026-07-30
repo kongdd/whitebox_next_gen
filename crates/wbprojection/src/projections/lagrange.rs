@@ -29,7 +29,10 @@ impl LagrangeProj {
         let phi1 = to_radians(lat1);
         let sin_phi1 = phi1.sin();
         if (sin_phi1.abs() - 1.0).abs() < TOL {
-            return Err(ProjectionError::invalid_param("lat1", "|lat1| must be < 90°"));
+            return Err(ProjectionError::invalid_param(
+                "lat1",
+                "|lat1| must be < 90°",
+            ));
         }
 
         let hw = 0.5 * w;
@@ -79,7 +82,9 @@ impl ProjectionImpl for LagrangeProj {
         lam *= self.rw;
         let c = 0.5 * (v + 1.0 / v) + lam.cos();
         if c < TOL {
-            return Err(ProjectionError::out_of_bounds("Lagrange forward outside domain"));
+            return Err(ProjectionError::out_of_bounds(
+                "Lagrange forward outside domain",
+            ));
         }
 
         let x = 2.0 * lam.sin() / c;
@@ -101,11 +106,12 @@ impl ProjectionImpl for LagrangeProj {
         let y2m = 2.0 - yn;
         let c = y2p * y2m - x2;
         if c.abs() < TOL {
-            return Err(ProjectionError::out_of_bounds("Lagrange inverse outside domain"));
+            return Err(ProjectionError::out_of_bounds(
+                "Lagrange inverse outside domain",
+            ));
         }
 
-        let lat = 2.0
-            * (((y2p * y2p + x2) / (self.a2 * (y2m * y2m + x2))).powf(self.hw)).atan()
+        let lat = 2.0 * (((y2p * y2p + x2) / (self.a2 * (y2m * y2m + x2))).powf(self.hw)).atan()
             - FRAC_PI_2;
         let lon_rel = self.w * (4.0 * xn).atan2(c);
         let lon = Self::wrap_lon(self.lon0 + lon_rel);

@@ -53,7 +53,11 @@ impl ProjectionImpl for PutninsP5Proj {
     fn inverse(&self, x: f64, y: f64) -> Result<(f64, f64)> {
         let lat = (y - self.fn_) / (self.a * C);
         let denom = C * (A - B * (1.0 + D * lat * lat).sqrt());
-        let lon_rel = if denom.abs() < 1e-15 { 0.0 } else { (x - self.fe) / (self.a * denom) };
+        let lon_rel = if denom.abs() < 1e-15 {
+            0.0
+        } else {
+            (x - self.fe) / (self.a * denom)
+        };
         let lon = Self::wrap_lon(self.lon0 + lon_rel);
         Ok((to_degrees(lon), to_degrees(lat)))
     }

@@ -68,7 +68,10 @@ impl ProjectionImpl for NaturalEarthProj {
         for _ in 0..40 {
             let f = Self::d(lat) - y_norm;
             let h = 1e-7;
-            let fp = (Self::d((lat + h).clamp(-std::f64::consts::FRAC_PI_2, std::f64::consts::FRAC_PI_2)) - Self::d(lat)) / h;
+            let fp = (Self::d(
+                (lat + h).clamp(-std::f64::consts::FRAC_PI_2, std::f64::consts::FRAC_PI_2),
+            ) - Self::d(lat))
+                / h;
             if fp.abs() < 1e-15 {
                 break;
             }
@@ -77,7 +80,9 @@ impl ProjectionImpl for NaturalEarthProj {
             if dlat.abs() < 1e-13 {
                 let l = Self::l(lat);
                 if l.abs() < 1e-15 {
-                    return Err(ProjectionError::out_of_bounds("Natural Earth inverse longitude undefined at pole"));
+                    return Err(ProjectionError::out_of_bounds(
+                        "Natural Earth inverse longitude undefined at pole",
+                    ));
                 }
                 let lon_rel = x_norm / l;
                 let lon = Self::wrap_lon(self.lon0 + lon_rel);

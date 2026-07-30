@@ -38,7 +38,9 @@ impl ProjectionImpl for EckertViProj {
         let lon = to_radians(lon_deg);
         let lat = to_radians(lat_deg);
         if !(-FRAC_PI_2..=FRAC_PI_2).contains(&lat) {
-            return Err(ProjectionError::out_of_bounds("latitude outside valid range [-90, 90]"));
+            return Err(ProjectionError::out_of_bounds(
+                "latitude outside valid range [-90, 90]",
+            ));
         }
 
         let lon_rel = Self::wrap_lon(lon - self.lon0);
@@ -71,7 +73,11 @@ impl ProjectionImpl for EckertViProj {
         let lat = sin_lat.asin();
 
         let denom = 1.0 + theta.cos();
-        let lon_rel = if denom.abs() < 1e-15 { 0.0 } else { (x - self.fe) * c / (self.a * denom) };
+        let lon_rel = if denom.abs() < 1e-15 {
+            0.0
+        } else {
+            (x - self.fe) * c / (self.a * denom)
+        };
         let lon = Self::wrap_lon(self.lon0 + lon_rel);
         Ok((to_degrees(lon), to_degrees(lat)))
     }

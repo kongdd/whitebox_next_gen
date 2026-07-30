@@ -54,7 +54,8 @@ impl ProjectionImpl for CassiniProj {
         let a = dlon * cos_lat;
         let m = meridional_arc(self.a, self.e2, lat);
 
-        let x = n * (a - t * a.powi(3) / 6.0 - (8.0 - t + 8.0 * c) * t * a.powi(5) / 120.0) + self.fe;
+        let x =
+            n * (a - t * a.powi(3) / 6.0 - (8.0 - t + 8.0 * c) * t * a.powi(5) / 120.0) + self.fe;
 
         let y = (m - self.m0)
             + n * tan_lat * (a.powi(2) / 2.0 + (5.0 - t + 6.0 * c) * a.powi(4) / 24.0)
@@ -89,7 +90,8 @@ impl ProjectionImpl for CassiniProj {
 
         let lat = phi1 - (n1 * tan_phi1 / r1) * (d * d / 2.0 - (1.0 + 3.0 * t1) * d.powi(4) / 24.0);
 
-        let lon = self.lon0 + (d - t1 * d.powi(3) / 3.0 + (1.0 + 3.0 * t1) * t1 * d.powi(5) / 15.0) / cos_phi1;
+        let lon = self.lon0
+            + (d - t1 * d.powi(3) / 3.0 + (1.0 + 3.0 * t1) * t1 * d.powi(5) / 15.0) / cos_phi1;
 
         Ok((to_degrees(lon), to_degrees(lat)))
     }

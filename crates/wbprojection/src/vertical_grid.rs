@@ -125,7 +125,8 @@ impl VerticalOffsetGrid {
     }
 }
 
-static VERTICAL_GRID_REGISTRY: OnceLock<RwLock<HashMap<String, VerticalOffsetGrid>>> = OnceLock::new();
+static VERTICAL_GRID_REGISTRY: OnceLock<RwLock<HashMap<String, VerticalOffsetGrid>>> =
+    OnceLock::new();
 
 fn registry() -> &'static RwLock<HashMap<String, VerticalOffsetGrid>> {
     VERTICAL_GRID_REGISTRY.get_or_init(|| RwLock::new(HashMap::new()))
@@ -133,34 +134,34 @@ fn registry() -> &'static RwLock<HashMap<String, VerticalOffsetGrid>> {
 
 /// Register or replace a named vertical offset grid.
 pub fn register_vertical_offset_grid(grid: VerticalOffsetGrid) -> Result<()> {
-    let mut m = registry()
-        .write()
-        .map_err(|_| ProjectionError::DatumError("vertical grid registry lock poisoned".to_string()))?;
+    let mut m = registry().write().map_err(|_| {
+        ProjectionError::DatumError("vertical grid registry lock poisoned".to_string())
+    })?;
     m.insert(grid.name.clone(), grid);
     Ok(())
 }
 
 /// Remove a named vertical offset grid.
 pub fn unregister_vertical_offset_grid(name: &str) -> Result<bool> {
-    let mut m = registry()
-        .write()
-        .map_err(|_| ProjectionError::DatumError("vertical grid registry lock poisoned".to_string()))?;
+    let mut m = registry().write().map_err(|_| {
+        ProjectionError::DatumError("vertical grid registry lock poisoned".to_string())
+    })?;
     Ok(m.remove(name).is_some())
 }
 
 /// Returns true if a named vertical offset grid is currently registered.
 pub fn has_vertical_offset_grid(name: &str) -> Result<bool> {
-    let m = registry()
-        .read()
-        .map_err(|_| ProjectionError::DatumError("vertical grid registry lock poisoned".to_string()))?;
+    let m = registry().read().map_err(|_| {
+        ProjectionError::DatumError("vertical grid registry lock poisoned".to_string())
+    })?;
     Ok(m.contains_key(name))
 }
 
 /// Fetch a registered vertical offset grid by name.
 pub fn get_vertical_offset_grid(name: &str) -> Result<Option<VerticalOffsetGrid>> {
-    let m = registry()
-        .read()
-        .map_err(|_| ProjectionError::DatumError("vertical grid registry lock poisoned".to_string()))?;
+    let m = registry().read().map_err(|_| {
+        ProjectionError::DatumError("vertical grid registry lock poisoned".to_string())
+    })?;
     Ok(m.get(name).cloned())
 }
 
@@ -185,7 +186,10 @@ pub fn get_vertical_offset_grid(name: &str) -> Result<Option<VerticalOffsetGrid>
 /// let grid = load_vertical_grid_from_isg(BufReader::new(f), "egm2008").unwrap();
 /// register_vertical_offset_grid(grid).unwrap();
 /// ```
-pub fn load_vertical_grid_from_isg<R: BufRead>(reader: R, name: impl Into<String>) -> Result<VerticalOffsetGrid> {
+pub fn load_vertical_grid_from_isg<R: BufRead>(
+    reader: R,
+    name: impl Into<String>,
+) -> Result<VerticalOffsetGrid> {
     let name = name.into();
     let mut lon_min: Option<f64> = None;
     let mut lat_min: Option<f64> = None;
@@ -201,7 +205,8 @@ pub fn load_vertical_grid_from_isg<R: BufRead>(reader: R, name: impl Into<String
     let mut raw_values: Vec<f64> = Vec::new();
 
     for line_res in reader.lines() {
-        let line = line_res.map_err(|e| ProjectionError::DatumError(format!("ISG read error: {e}")))? ;
+        let line =
+            line_res.map_err(|e| ProjectionError::DatumError(format!("ISG read error: {e}")))?;
         let trimmed = line.trim();
 
         if in_header {
@@ -213,15 +218,33 @@ pub fn load_vertical_grid_from_isg<R: BufRead>(reader: R, name: impl Into<String
                 let key = trimmed[..pos].trim().to_lowercase();
                 let val = trimmed[pos + 1..].trim();
                 match key.as_str() {
-                    "delta_lat" | "lat_step" => { lat_step = val.parse().ok(); }
-                    "delta_lon" | "lon_step" => { lon_step = val.parse().ok(); }
-                    "lat_min" => { lat_min = val.parse().ok(); }
-                    "lat_max" => { lat_max = val.parse().ok(); }
-                    "lon_min" => { lon_min = val.parse().ok(); }
-                    "lon_max" => { lon_max = val.parse().ok(); }
-                    "nrows" => { nrows = val.parse().ok(); }
-                    "ncols" => { ncols = val.parse().ok(); }
-                    "nodata" => { nodata = val.parse().ok(); }
+                    "delta_lat" | "lat_step" => {
+                        lat_step = val.parse().ok();
+                    }
+                    "delta_lon" | "lon_step" => {
+                        lon_step = val.parse().ok();
+                    }
+                    "lat_min" => {
+                        lat_min = val.parse().ok();
+                    }
+                    "lat_max" => {
+                        lat_max = val.parse().ok();
+                    }
+                    "lon_min" => {
+                        lon_min = val.parse().ok();
+                    }
+                    "lon_max" => {
+                        lon_max = val.parse().ok();
+                    }
+                    "nrows" => {
+                        nrows = val.parse().ok();
+                    }
+                    "ncols" => {
+                        ncols = val.parse().ok();
+                    }
+                    "nodata" => {
+                        nodata = val.parse().ok();
+                    }
                     "data_ordering" => {
                         if val.to_lowercase().contains("s-to-n") {
                             north_to_south = false;
@@ -242,18 +265,22 @@ pub fn load_vertical_grid_from_isg<R: BufRead>(reader: R, name: impl Into<String
         }
     }
 
-    let lon_min = lon_min.ok_or_else(|| ProjectionError::DatumError("ISG: missing lon_min".into()))?;
-    let lat_min = lat_min.ok_or_else(|| ProjectionError::DatumError("ISG: missing lat_min".into()))?;
-    let lon_step = lon_step.ok_or_else(|| ProjectionError::DatumError("ISG: missing delta_lon".into()))?;
-    let lat_step = lat_step.ok_or_else(|| ProjectionError::DatumError("ISG: missing delta_lat".into()))?;
+    let lon_min =
+        lon_min.ok_or_else(|| ProjectionError::DatumError("ISG: missing lon_min".into()))?;
+    let lat_min =
+        lat_min.ok_or_else(|| ProjectionError::DatumError("ISG: missing lat_min".into()))?;
+    let lon_step =
+        lon_step.ok_or_else(|| ProjectionError::DatumError("ISG: missing delta_lon".into()))?;
+    let lat_step =
+        lat_step.ok_or_else(|| ProjectionError::DatumError("ISG: missing delta_lat".into()))?;
 
     // Prefer explicit nrows/ncols; fall back to computing from extent + step.
-    let width = ncols.or_else(|| {
-        lon_max.map(|lmax| ((lmax - lon_min) / lon_step).round() as usize + 1)
-    }).ok_or_else(|| ProjectionError::DatumError("ISG: missing ncols or lon_max".into()))?;
-    let height = nrows.or_else(|| {
-        lat_max.map(|lmax| ((lmax - lat_min) / lat_step).round() as usize + 1)
-    }).ok_or_else(|| ProjectionError::DatumError("ISG: missing nrows or lat_max".into()))?;
+    let width = ncols
+        .or_else(|| lon_max.map(|lmax| ((lmax - lon_min) / lon_step).round() as usize + 1))
+        .ok_or_else(|| ProjectionError::DatumError("ISG: missing ncols or lon_max".into()))?;
+    let height = nrows
+        .or_else(|| lat_max.map(|lmax| ((lmax - lat_min) / lat_step).round() as usize + 1))
+        .ok_or_else(|| ProjectionError::DatumError("ISG: missing nrows or lat_max".into()))?;
 
     if raw_values.len() != width * height {
         return Err(ProjectionError::DatumError(format!(
@@ -284,7 +311,9 @@ pub fn load_vertical_grid_from_isg<R: BufRead>(reader: R, name: impl Into<String
         }
     }
 
-    VerticalOffsetGrid::new(name, lon_min, lat_min, lon_step, lat_step, width, height, offsets_m)
+    VerticalOffsetGrid::new(
+        name, lon_min, lat_min, lon_step, lat_step, width, height, offsets_m,
+    )
 }
 
 /// Load a [`VerticalOffsetGrid`] from a simple header + data text format.
@@ -323,7 +352,10 @@ pub fn load_vertical_grid_from_isg<R: BufRead>(reader: R, name: impl Into<String
 /// let grid = load_vertical_grid_from_simple_header_grid(BufReader::new(f), "my_geoid").unwrap();
 /// register_vertical_offset_grid(grid).unwrap();
 /// ```
-pub fn load_vertical_grid_from_simple_header_grid<R: BufRead>(reader: R, name: impl Into<String>) -> Result<VerticalOffsetGrid> {
+pub fn load_vertical_grid_from_simple_header_grid<R: BufRead>(
+    reader: R,
+    name: impl Into<String>,
+) -> Result<VerticalOffsetGrid> {
     let name = name.into();
     let mut lon_min: Option<f64> = None;
     let mut lat_min: Option<f64> = None;
@@ -335,7 +367,8 @@ pub fn load_vertical_grid_from_simple_header_grid<R: BufRead>(reader: R, name: i
     let mut in_header = true;
 
     for line_res in reader.lines() {
-        let line = line_res.map_err(|e| ProjectionError::DatumError(format!("grid read error: {e}")))? ;
+        let line =
+            line_res.map_err(|e| ProjectionError::DatumError(format!("grid read error: {e}")))?;
         let trimmed = line.trim();
 
         if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -347,12 +380,24 @@ pub fn load_vertical_grid_from_simple_header_grid<R: BufRead>(reader: R, name: i
                 let key = trimmed[..pos].trim().to_lowercase();
                 let val = trimmed[pos + 1..].trim();
                 match key.as_str() {
-                    "lon_min" => { lon_min = val.parse().ok(); }
-                    "lat_min" => { lat_min = val.parse().ok(); }
-                    "lon_step" => { lon_step = val.parse().ok(); }
-                    "lat_step" => { lat_step = val.parse().ok(); }
-                    "width"   => { width  = val.parse().ok(); }
-                    "height"  => { height = val.parse().ok(); }
+                    "lon_min" => {
+                        lon_min = val.parse().ok();
+                    }
+                    "lat_min" => {
+                        lat_min = val.parse().ok();
+                    }
+                    "lon_step" => {
+                        lon_step = val.parse().ok();
+                    }
+                    "lat_step" => {
+                        lat_step = val.parse().ok();
+                    }
+                    "width" => {
+                        width = val.parse().ok();
+                    }
+                    "height" => {
+                        height = val.parse().ok();
+                    }
                     _ => {}
                 }
                 continue;
@@ -368,14 +413,22 @@ pub fn load_vertical_grid_from_simple_header_grid<R: BufRead>(reader: R, name: i
         }
     }
 
-    let lon_min = lon_min.ok_or_else(|| ProjectionError::DatumError("simple grid: missing lon_min".into()))?;
-    let lat_min = lat_min.ok_or_else(|| ProjectionError::DatumError("simple grid: missing lat_min".into()))?;
-    let lon_step = lon_step.ok_or_else(|| ProjectionError::DatumError("simple grid: missing lon_step".into()))?;
-    let lat_step = lat_step.ok_or_else(|| ProjectionError::DatumError("simple grid: missing lat_step".into()))?;
-    let width  = width .ok_or_else(|| ProjectionError::DatumError("simple grid: missing width".into()))?;
-    let height = height.ok_or_else(|| ProjectionError::DatumError("simple grid: missing height".into()))?;
+    let lon_min = lon_min
+        .ok_or_else(|| ProjectionError::DatumError("simple grid: missing lon_min".into()))?;
+    let lat_min = lat_min
+        .ok_or_else(|| ProjectionError::DatumError("simple grid: missing lat_min".into()))?;
+    let lon_step = lon_step
+        .ok_or_else(|| ProjectionError::DatumError("simple grid: missing lon_step".into()))?;
+    let lat_step = lat_step
+        .ok_or_else(|| ProjectionError::DatumError("simple grid: missing lat_step".into()))?;
+    let width =
+        width.ok_or_else(|| ProjectionError::DatumError("simple grid: missing width".into()))?;
+    let height =
+        height.ok_or_else(|| ProjectionError::DatumError("simple grid: missing height".into()))?;
 
-    VerticalOffsetGrid::new(name, lon_min, lat_min, lon_step, lat_step, width, height, offsets_m)
+    VerticalOffsetGrid::new(
+        name, lon_min, lat_min, lon_step, lat_step, width, height, offsets_m,
+    )
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -443,7 +496,9 @@ fn parse_gtx(buf: &[u8], endian: GtxEndian, name: &str) -> Result<VerticalOffset
             width
                 .checked_mul(height)
                 .and_then(|n| n.checked_mul(4))
-                .ok_or_else(|| ProjectionError::DatumError("GTX dimensions overflow".to_string()))?,
+                .ok_or_else(|| {
+                    ProjectionError::DatumError("GTX dimensions overflow".to_string())
+                })?,
         )
         .ok_or_else(|| ProjectionError::DatumError("GTX dimensions overflow".to_string()))?;
 
@@ -476,8 +531,16 @@ fn parse_gtx(buf: &[u8], endian: GtxEndian, name: &str) -> Result<VerticalOffset
             let off = 40 + src_idx * 4;
             let v = read_f32_at(buf, off, endian) as f64;
 
-            let dst_row = if dlat > 0.0 { src_row } else { height - 1 - src_row };
-            let dst_col = if dlon > 0.0 { src_col } else { width - 1 - src_col };
+            let dst_row = if dlat > 0.0 {
+                src_row
+            } else {
+                height - 1 - src_row
+            };
+            let dst_col = if dlon > 0.0 {
+                src_col
+            } else {
+                width - 1 - src_col
+            };
             offsets_m[dst_row * width + dst_col] = v;
         }
     }
@@ -498,7 +561,10 @@ fn parse_gtx(buf: &[u8], endian: GtxEndian, name: &str) -> Result<VerticalOffset
 ///
 /// The loader auto-detects little-endian or big-endian encoding, normalizes
 /// to S-to-N / W-to-E internal order, and preserves raw offset values.
-pub fn load_vertical_grid_from_gtx<R: Read>(mut reader: R, name: impl Into<String>) -> Result<VerticalOffsetGrid> {
+pub fn load_vertical_grid_from_gtx<R: Read>(
+    mut reader: R,
+    name: impl Into<String>,
+) -> Result<VerticalOffsetGrid> {
     let name = name.into();
     let mut buf = Vec::new();
     reader
@@ -713,7 +779,8 @@ mod tests {
         ]
         .join("\n");
         let grid =
-            super::load_vertical_grid_from_simple_header_grid(src.as_bytes(), "simple_comments").unwrap();
+            super::load_vertical_grid_from_simple_header_grid(src.as_bytes(), "simple_comments")
+                .unwrap();
         assert!((grid.sample(0.0, 0.0).unwrap() - 0.0).abs() < 1e-9);
         assert!((grid.sample(1.0, 1.0).unwrap() - 3.0).abs() < 1e-9);
     }
@@ -721,15 +788,7 @@ mod tests {
     #[test]
     fn load_gtx_little_endian_with_negative_steps_reorders_axes() {
         // Header starts at NE corner with negative steps.
-        let bytes = make_gtx_bytes_le(
-            1.0,
-            1.0,
-            -1.0,
-            -1.0,
-            2,
-            2,
-            &[4.0, 3.0, 2.0, 1.0],
-        );
+        let bytes = make_gtx_bytes_le(1.0, 1.0, -1.0, -1.0, 2, 2, &[4.0, 3.0, 2.0, 1.0]);
 
         let grid = super::load_vertical_grid_from_gtx(bytes.as_slice(), "gtx_le").unwrap();
         assert!((grid.sample(0.0, 0.0).unwrap() - 1.0).abs() < 1e-9);

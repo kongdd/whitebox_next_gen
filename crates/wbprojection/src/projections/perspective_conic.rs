@@ -30,8 +30,7 @@ impl PerspectiveConicProj {
         if del.abs() < EPS || sig.abs() < EPS {
             return Err(ProjectionError::InvalidParameter {
                 param: "lat1/lat2".to_string(),
-                reason: "Perspective Conic requires |lat1-lat2|>0 and |lat1+lat2|>0"
-                    .to_string(),
+                reason: "Perspective Conic requires |lat1-lat2|>0 and |lat1+lat2|>0".to_string(),
             });
         }
 
@@ -42,8 +41,7 @@ impl PerspectiveConicProj {
         if del0.abs() >= FRAC_PI_2 - EPS {
             return Err(ProjectionError::InvalidParameter {
                 param: "lat0/lat1/lat2".to_string(),
-                reason:
-                    "Perspective Conic requires |lat0 - 0.5*(lat1+lat2)| < 90°".to_string(),
+                reason: "Perspective Conic requires |lat0 - 0.5*(lat1+lat2)| < 90°".to_string(),
             });
         }
         let rho_0 = c2 * (c1 - del0.tan());

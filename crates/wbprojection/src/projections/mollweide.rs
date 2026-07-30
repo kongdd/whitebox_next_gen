@@ -1,8 +1,8 @@
 //! Mollweide equal-area pseudocylindrical projection.
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::Result;
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 use std::f64::consts::PI;
 
 pub(super) struct MollweideProj {
@@ -30,8 +30,8 @@ impl MollweideProj {
         let target = PI * lat.sin();
         let mut theta = lat;
         for _ in 0..50 {
-            let delta = -(2.0 * theta + (2.0 * theta).sin() - target)
-                / (2.0 + 2.0 * (2.0 * theta).cos());
+            let delta =
+                -(2.0 * theta + (2.0 * theta).sin() - target) / (2.0 + 2.0 * (2.0 * theta).cos());
             theta += delta;
             if delta.abs() < 1e-12 {
                 break;

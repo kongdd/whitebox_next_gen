@@ -72,7 +72,11 @@ impl ProjectionImpl for EckertIiProj {
                     "coordinate outside Eckert II inverse domain",
                 ));
             }
-            if t < 0.0 { -FRAC_PI_2 } else { FRAC_PI_2 }
+            if t < 0.0 {
+                -FRAC_PI_2
+            } else {
+                FRAC_PI_2
+            }
         } else {
             t.asin()
         };

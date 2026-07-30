@@ -20,8 +20,7 @@ fn qsfn(e: f64, sinphi: f64) -> f64 {
     }
     let esin = e * sinphi;
     (1.0 - e * e)
-        * (sinphi / (1.0 - esin * esin)
-            - (1.0 / (2.0 * e)) * ((1.0 - esin) / (1.0 + esin)).ln())
+        * (sinphi / (1.0 - esin * esin) - (1.0 / (2.0 * e)) * ((1.0 - esin) / (1.0 + esin)).ln())
 }
 
 fn authalic_lat_inverse(q_target: f64, e: f64) -> f64 {
@@ -102,8 +101,8 @@ impl ProjectionImpl for EqualEarthProj {
         let psi2 = psi * psi;
         let psi6 = psi2 * psi2 * psi2;
 
-        let x_norm = lam * psi.cos()
-            / (M * (A1 + 3.0 * A2 * psi2 + psi6 * (7.0 * A3 + 9.0 * A4 * psi2)));
+        let x_norm =
+            lam * psi.cos() / (M * (A1 + 3.0 * A2 * psi2 + psi6 * (7.0 * A3 + 9.0 * A4 * psi2)));
         let y_norm = psi * (A1 + A2 * psi2 + psi6 * (A3 + A4 * psi2));
 
         let x = self.a * self.rqda * x_norm + self.fe;

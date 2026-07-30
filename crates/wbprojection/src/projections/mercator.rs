@@ -1,17 +1,17 @@
 //! Mercator and Web Mercator projections.
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::{ProjectionError, Result};
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 
 /// Standard Mercator cylindrical conformal projection.
 pub(super) struct MercatorProj {
-    lon0: f64,     // central longitude (radians)
-    a: f64,        // semi-major axis
-    e: f64,        // first eccentricity
-    k0: f64,       // scale factor
-    fe: f64,       // false easting
-    fn_: f64,      // false northing
+    lon0: f64, // central longitude (radians)
+    a: f64,    // semi-major axis
+    e: f64,    // first eccentricity
+    k0: f64,   // scale factor
+    fe: f64,   // false easting
+    fn_: f64,  // false northing
 }
 
 impl MercatorProj {

@@ -23,7 +23,11 @@ pub(super) struct HotineObliqueMercatorProj {
 }
 
 impl HotineObliqueMercatorProj {
-    pub fn new(p: &ProjectionParams, azimuth_deg: f64, rectified_grid_angle_deg: f64) -> Result<Self> {
+    pub fn new(
+        p: &ProjectionParams,
+        azimuth_deg: f64,
+        rectified_grid_angle_deg: f64,
+    ) -> Result<Self> {
         if p.scale <= 0.0 {
             return Err(ProjectionError::invalid_param("scale", "must be positive"));
         }

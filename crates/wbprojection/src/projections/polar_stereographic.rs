@@ -9,9 +9,9 @@
 //! Both variants reduce to the same forward/inverse kernel once `rho_coeff` is
 //! precomputed.
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::Result;
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 
 pub(super) struct PolarStereographicProj {
     /// true = North Pole origin, false = South Pole origin.
@@ -29,8 +29,7 @@ pub(super) struct PolarStereographicProj {
 /// t_north with |φ| internally.
 fn t_north(e: f64, phi: f64) -> f64 {
     let esin = e * phi.sin();
-    (std::f64::consts::FRAC_PI_4 - phi / 2.0).tan()
-        * ((1.0 + esin) / (1.0 - esin)).powf(e / 2.0)
+    (std::f64::consts::FRAC_PI_4 - phi / 2.0).tan() * ((1.0 + esin) / (1.0 - esin)).powf(e / 2.0)
 }
 
 /// m-factor: cos(φ) / sqrt(1 - e² sin²φ), used when deriving k0 from lat_ts.
@@ -149,8 +148,8 @@ impl ProjectionImpl for PolarStereographicProj {
 
 #[cfg(test)]
 mod tests {
-    use crate::projections::{Projection, ProjectionKind, ProjectionParams};
     use crate::ellipsoid::Ellipsoid;
+    use crate::projections::{Projection, ProjectionKind, ProjectionParams};
 
     const TOL_M: f64 = 1e-3; // 1 mm
     const TOL_DEG: f64 = 1e-8;
@@ -159,7 +158,10 @@ mod tests {
     #[test]
     fn ups_north_round_trip() {
         let p = ProjectionParams {
-            kind: ProjectionKind::PolarStereographic { north: true, lat_ts: None },
+            kind: ProjectionKind::PolarStereographic {
+                north: true,
+                lat_ts: None,
+            },
             lon0: 0.0,
             lat0: 90.0,
             false_easting: 2_000_000.0,
@@ -172,8 +174,14 @@ mod tests {
         for &(lon, lat) in &[(0.0_f64, 85.0_f64), (90.0, 80.0), (-45.0, 75.0)] {
             let (x, y) = proj.forward(lon, lat).unwrap();
             let (lon2, lat2) = proj.inverse(x, y).unwrap();
-            assert!((lon2 - lon).abs() < TOL_DEG, "lon round-trip fail: {lon} → {lon2}");
-            assert!((lat2 - lat).abs() < TOL_DEG, "lat round-trip fail: {lat} → {lat2}");
+            assert!(
+                (lon2 - lon).abs() < TOL_DEG,
+                "lon round-trip fail: {lon} → {lon2}"
+            );
+            assert!(
+                (lat2 - lat).abs() < TOL_DEG,
+                "lat round-trip fail: {lat} → {lat2}"
+            );
         }
     }
 
@@ -181,7 +189,10 @@ mod tests {
     #[test]
     fn ups_south_round_trip() {
         let p = ProjectionParams {
-            kind: ProjectionKind::PolarStereographic { north: false, lat_ts: None },
+            kind: ProjectionKind::PolarStereographic {
+                north: false,
+                lat_ts: None,
+            },
             lon0: 0.0,
             lat0: -90.0,
             false_easting: 2_000_000.0,
@@ -194,8 +205,14 @@ mod tests {
         for &(lon, lat) in &[(0.0_f64, -85.0_f64), (90.0, -80.0), (-45.0, -75.0)] {
             let (x, y) = proj.forward(lon, lat).unwrap();
             let (lon2, lat2) = proj.inverse(x, y).unwrap();
-            assert!((lon2 - lon).abs() < TOL_DEG, "lon round-trip fail: {lon} → {lon2}");
-            assert!((lat2 - lat).abs() < TOL_DEG, "lat round-trip fail: {lat} → {lat2}");
+            assert!(
+                (lon2 - lon).abs() < TOL_DEG,
+                "lon round-trip fail: {lon} → {lon2}"
+            );
+            assert!(
+                (lat2 - lat).abs() < TOL_DEG,
+                "lat round-trip fail: {lat} → {lat2}"
+            );
         }
     }
 
@@ -203,7 +220,10 @@ mod tests {
     #[test]
     fn scar_south_pole_round_trip() {
         let p = ProjectionParams {
-            kind: ProjectionKind::PolarStereographic { north: false, lat_ts: Some(-80.0) },
+            kind: ProjectionKind::PolarStereographic {
+                north: false,
+                lat_ts: Some(-80.0),
+            },
             lon0: -165.0,
             lat0: -90.0,
             false_easting: 0.0,
@@ -216,8 +236,14 @@ mod tests {
         for &(lon, lat) in &[(-165.0_f64, -85.0_f64), (-100.0, -80.0), (-170.0, -78.0)] {
             let (x, y) = proj.forward(lon, lat).unwrap();
             let (lon2, lat2) = proj.inverse(x, y).unwrap();
-            assert!((lon2 - lon).abs() < TOL_DEG, "lon round-trip fail: {lon} → {lon2}");
-            assert!((lat2 - lat).abs() < TOL_DEG, "lat round-trip fail: {lat} → {lat2}");
+            assert!(
+                (lon2 - lon).abs() < TOL_DEG,
+                "lon round-trip fail: {lon} → {lon2}"
+            );
+            assert!(
+                (lat2 - lat).abs() < TOL_DEG,
+                "lat round-trip fail: {lat} → {lat2}"
+            );
         }
     }
 
@@ -225,7 +251,10 @@ mod tests {
     #[test]
     fn pole_maps_to_false_origin() {
         let p = ProjectionParams {
-            kind: ProjectionKind::PolarStereographic { north: true, lat_ts: None },
+            kind: ProjectionKind::PolarStereographic {
+                north: true,
+                lat_ts: None,
+            },
             lon0: 0.0,
             lat0: 90.0,
             false_easting: 2_000_000.0,

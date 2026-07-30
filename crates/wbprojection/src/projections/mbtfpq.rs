@@ -52,8 +52,7 @@ impl ProjectionImpl for MbtfpqProj {
         let c = C * phi.sin();
         let mut i = NITER;
         while i > 0 {
-            let th1 = ((0.5 * phi).sin() + phi.sin() - c)
-                / (0.5 * (0.5 * phi).cos() + phi.cos());
+            let th1 = ((0.5 * phi).sin() + phi.sin() - c) / (0.5 * (0.5 * phi).cos() + phi.cos());
             phi -= th1;
             if th1.abs() < EPS {
                 break;

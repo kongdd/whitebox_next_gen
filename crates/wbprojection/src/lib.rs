@@ -157,8 +157,6 @@
 #![deny(missing_docs)]
 #![warn(rust_2018_idioms)]
 
-#[cfg(test)]
-mod tests;
 pub mod compound_crs;
 pub mod crs;
 pub mod datum;
@@ -168,130 +166,68 @@ pub mod error;
 pub mod grid_formats;
 pub mod grid_shift;
 pub mod operations;
-pub mod projections;
 pub(crate) mod proj_string;
+pub mod projections;
+#[cfg(test)]
+mod tests;
 pub mod transform;
 pub mod vertical_grid;
 mod wkt;
 
 pub use compound_crs::CompoundCrs;
 pub use crs::{
-    ConstantVerticalOffsetProvider,
-    Crs,
-    CrsTransformPolicy,
-    CrsTransformTrace,
-    GridVerticalOffsetProvider,
-    VerticalOffsetProvider,
+    ConstantVerticalOffsetProvider, Crs, CrsTransformPolicy, CrsTransformTrace,
+    GridVerticalOffsetProvider, VerticalOffsetProvider,
 };
 pub use datum::{Datum, DatumTransform, HelmertParams, MolodenskyParams};
 pub use ellipsoid::Ellipsoid;
 pub use epsg::{
-    CsrsPreferredOperationPairSupport,
-    CsrsPreferredOperationStatus,
-    CsrsPreferredOperationSupportSnapshot,
-    EuropePreferredOperationPairSupport,
-    EuropePreferredOperationStatus,
-    EuropePreferredOperationSupportSnapshot,
-    CrsBoundingBox,
-    EpsgAliasEntry,
-    EpsgIdentifyCandidate,
-    EpsgIdentifyPolicy,
-    EpsgIdentifyReport,
-    EpsgResolution,
-    EpsgResolutionPolicy,
-    canonical_wkt_for_epsg,
-    clear_runtime_epsg_aliases,
-    crs_to_wkt,
-    csrs_preferred_operation_support_snapshot,
-    europe_phase1_preferred_operation_support_snapshot,
-    epsg_alias_catalog,
-    epsg_from_srs_reference,
-    epsg_from_wkt,
-    compound_from_wkt,
-    from_epsg,
-    from_epsg_with_catalog,
-    from_epsg_with_policy,
-    from_proj_string,
-    identify_epsg_from_crs,
-    identify_epsg_from_crs_report,
-    identify_epsg_from_crs_with_policy,
-    identify_epsg_from_wkt,
-    identify_epsg_from_wkt_report,
-    identify_epsg_from_wkt_with_policy,
-    from_wkt,
-    register_epsg_alias,
-    resolve_epsg_with_catalog,
-    resolve_epsg_with_policy,
-    runtime_epsg_aliases,
-    to_esri_wkt,
-    to_geotiff_info,
-    to_ogc_wkt,
-    us_phase1_preferred_operation_support_snapshot,
-    UsPreferredOperationPairSupport,
-    UsPreferredOperationStatus,
+    canonical_wkt_for_epsg, clear_runtime_epsg_aliases, compound_from_wkt, crs_to_wkt,
+    csrs_preferred_operation_support_snapshot, epsg_alias_catalog, epsg_area_of_use,
+    epsg_from_srs_reference, epsg_from_wkt, europe_phase1_preferred_operation_support_snapshot,
+    from_epsg, from_epsg_with_catalog, from_epsg_with_policy, from_proj_string, from_wkt,
+    identify_epsg_from_crs, identify_epsg_from_crs_report, identify_epsg_from_crs_with_policy,
+    identify_epsg_from_wkt, identify_epsg_from_wkt_report, identify_epsg_from_wkt_with_policy,
+    is_pending_preferred_operation_crs_pair, preferred_operation_code_for_crs_pair,
+    preferred_operation_code_for_crs_pair_with_policy, preferred_operation_for_crs_pair,
+    preferred_operation_for_crs_pair_with_policy, register_epsg_alias, resolve_epsg_with_catalog,
+    resolve_epsg_with_policy, runtime_epsg_aliases, to_esri_wkt, to_geotiff_info, to_ogc_wkt,
+    unregister_epsg_alias, us_phase1_preferred_operation_support_snapshot,
+    vertical_offset_grid_name, CrsBoundingBox, CsrsPreferredOperationPairSupport,
+    CsrsPreferredOperationStatus, CsrsPreferredOperationSupportSnapshot, EpsgAliasEntry,
+    EpsgIdentifyCandidate, EpsgIdentifyPolicy, EpsgIdentifyReport, EpsgResolution,
+    EpsgResolutionPolicy, EuropePreferredOperationPairSupport, EuropePreferredOperationStatus,
+    EuropePreferredOperationSupportSnapshot, PreferredOperationPolicy,
+    UsPreferredOperationPairSupport, UsPreferredOperationStatus,
     UsPreferredOperationSupportSnapshot,
-    unregister_epsg_alias,
-    vertical_offset_grid_name,
-    epsg_area_of_use,
-    is_pending_preferred_operation_crs_pair,
-    preferred_operation_code_for_crs_pair,
-    preferred_operation_code_for_crs_pair_with_policy,
-    preferred_operation_for_crs_pair,
-    preferred_operation_for_crs_pair_with_policy,
-    PreferredOperationPolicy,
 };
-pub use proj_string::{ParsedProjString, ParsedProjUnits};
 pub use error::{ProjectionError, Result};
 pub use grid_formats::{
-    DynamicHierarchyItem, list_ntv2_subgrids, load_dynamic_nadcon_ascii_pair,
-    load_nadcon_ascii_pair, load_ntv2_gsb, load_ntv2_gsb_subgrid,
-    register_dynamic_grid_hierarchy, register_dynamic_nadcon_ascii_pair,
+    list_ntv2_subgrids, load_dynamic_nadcon_ascii_pair, load_nadcon_ascii_pair, load_ntv2_gsb,
+    load_ntv2_gsb_subgrid, register_dynamic_grid_hierarchy, register_dynamic_nadcon_ascii_pair,
     register_nadcon_ascii_pair, register_ntv2_gsb, register_ntv2_gsb_hierarchy,
     register_ntv2_gsb_subgrid, resolve_dynamic_hierarchy_grid_name,
-    resolve_ntv2_hierarchy_grid_name,
-    resolve_ntv2_hierarchy_subgrid,
+    resolve_ntv2_hierarchy_grid_name, resolve_ntv2_hierarchy_subgrid, DynamicHierarchyItem,
 };
 pub use grid_shift::{
-    DynamicGridShiftGrid,
-    DynamicGridShiftSample,
-    get_dynamic_grid,
-    get_grid,
-    has_dynamic_grid,
-    has_grid,
-    register_dynamic_grid,
-    register_grid,
-    unregister_dynamic_grid,
-    unregister_grid,
-    GridShiftGrid,
-    GridShiftSample,
+    get_dynamic_grid, get_grid, has_dynamic_grid, has_grid, register_dynamic_grid, register_grid,
+    unregister_dynamic_grid, unregister_grid, DynamicGridShiftGrid, DynamicGridShiftSample,
+    GridShiftGrid, GridShiftSample,
 };
-pub use projections::{Projection, ProjectionKind, ProjectionParams};
 pub use operations::{
-    CoordinateOperationDef,
+    clear_coordinate_operations, get_coordinate_operation, has_coordinate_operation,
+    register_coordinate_operation, unregister_coordinate_operation, CoordinateOperationDef,
     OperationMethod,
-    clear_coordinate_operations,
-    get_coordinate_operation,
-    has_coordinate_operation,
-    register_coordinate_operation,
-    unregister_coordinate_operation,
 };
+pub use proj_string::{ParsedProjString, ParsedProjUnits};
+pub use projections::{Projection, ProjectionKind, ProjectionParams};
 pub use transform::{
-    CoordTransform,
-    EpochPolicy,
-    EpochTransformOptions,
-    Point2D,
-    Point3D,
-    TransformEpochContext,
+    CoordTransform, EpochPolicy, EpochTransformOptions, Point2D, Point3D, TransformEpochContext,
 };
 pub use vertical_grid::{
-    VerticalOffsetGrid,
-    get_vertical_offset_grid,
-    has_vertical_offset_grid,
-    load_vertical_grid_from_gtx,
-    load_vertical_grid_from_isg,
-    load_vertical_grid_from_simple_header_grid,
-    register_vertical_offset_grid,
-    unregister_vertical_offset_grid,
+    get_vertical_offset_grid, has_vertical_offset_grid, load_vertical_grid_from_gtx,
+    load_vertical_grid_from_isg, load_vertical_grid_from_simple_header_grid,
+    register_vertical_offset_grid, unregister_vertical_offset_grid, VerticalOffsetGrid,
 };
 
 /// Convert degrees to radians.

@@ -1,5 +1,5 @@
-use crate::crs::Crs;
 use crate::compound_crs::CompoundCrs;
+use crate::crs::Crs;
 use crate::datum::{Datum, DatumTransform};
 use crate::ellipsoid::Ellipsoid;
 use crate::error::{ProjectionError, Result};
@@ -30,25 +30,42 @@ impl WktNode {
 
     fn child(&self, names: &[&str]) -> Option<&WktNode> {
         self.values.iter().find_map(|value| match value {
-            WktValue::Node(node) if names.iter().any(|name| normalized(&node.keyword) == normalized(name)) => Some(node),
+            WktValue::Node(node)
+                if names
+                    .iter()
+                    .any(|name| normalized(&node.keyword) == normalized(name)) =>
+            {
+                Some(node)
+            }
             _ => None,
         })
     }
 
     fn direct_child(&self, names: &[&str]) -> Option<&WktNode> {
         self.values.iter().find_map(|value| match value {
-            WktValue::Node(node) if names.iter().any(|name| normalized(&node.keyword) == normalized(name)) => Some(node),
+            WktValue::Node(node)
+                if names
+                    .iter()
+                    .any(|name| normalized(&node.keyword) == normalized(name)) =>
+            {
+                Some(node)
+            }
             _ => None,
         })
     }
 
     fn children<'a>(&'a self, names: &'a [&'a str]) -> impl Iterator<Item = &'a WktNode> + 'a {
         self.values.iter().filter_map(move |value| match value {
-            WktValue::Node(node) if names.iter().any(|name| normalized(&node.keyword) == normalized(name)) => Some(node),
+            WktValue::Node(node)
+                if names
+                    .iter()
+                    .any(|name| normalized(&node.keyword) == normalized(name)) =>
+            {
+                Some(node)
+            }
             _ => None,
         })
     }
-
 }
 
 struct WktParser<'a> {
@@ -344,8 +361,15 @@ fn build_geographic_crs(root: &WktNode) -> Result<Crs> {
     let geodetic_root = if root.child(&["DATUM", "GEODETICDATUM"]).is_some() {
         root
     } else {
-        root.child(&["GEOGCS", "GEOGCRS", "GEODCRS", "GEODETICCRS", "BASEGEOGCRS", "BASEGEODCRS"])
-            .unwrap_or(root)
+        root.child(&[
+            "GEOGCS",
+            "GEOGCRS",
+            "GEODCRS",
+            "GEODETICCRS",
+            "BASEGEOGCRS",
+            "BASEGEODCRS",
+        ])
+        .unwrap_or(root)
     };
     let geodetic = parse_geodetic_context(geodetic_root)?;
     Crs::new(
@@ -367,7 +391,11 @@ fn build_geocentric_crs(root: &WktNode) -> Result<Crs> {
 
 fn build_vertical_crs(root: &WktNode) -> Result<Crs> {
     let name = root.first_text().unwrap_or("Unnamed vertical CRS");
-    Crs::new(name, Datum::WGS84, ProjectionParams::new(ProjectionKind::Vertical))
+    Crs::new(
+        name,
+        Datum::WGS84,
+        ProjectionParams::new(ProjectionKind::Vertical),
+    )
 }
 
 fn build_projected_crs(root: &WktNode) -> Result<Crs> {
@@ -375,7 +403,11 @@ fn build_projected_crs(root: &WktNode) -> Result<Crs> {
 
     let geodetic_node = root
         .child(&["GEOGCS", "BASEGEOGCRS", "GEOGCRS", "BASEGEODCRS", "GEODCRS"])
-        .ok_or_else(|| ProjectionError::UnsupportedProjection("projected WKT missing geographic base CRS".to_string()))?;
+        .ok_or_else(|| {
+            ProjectionError::UnsupportedProjection(
+                "projected WKT missing geographic base CRS".to_string(),
+            )
+        })?;
     let geodetic = parse_geodetic_context(geodetic_node)?;
 
     let projected_unit_factor = projected_length_unit_factor(root).unwrap_or(1.0);
@@ -386,23 +418,34 @@ fn build_projected_crs(root: &WktNode) -> Result<Crs> {
         conversion_node
             .child(&["METHOD"])
             .and_then(WktNode::first_text)
-            .ok_or_else(|| ProjectionError::UnsupportedProjection("WKT2 conversion is missing METHOD".to_string()))?
+            .ok_or_else(|| {
+                ProjectionError::UnsupportedProjection(
+                    "WKT2 conversion is missing METHOD".to_string(),
+                )
+            })?
     } else {
         root.child(&["PROJECTION"])
             .and_then(WktNode::first_text)
-            .ok_or_else(|| ProjectionError::UnsupportedProjection("WKT1 projected CRS is missing PROJECTION".to_string()))?
+            .ok_or_else(|| {
+                ProjectionError::UnsupportedProjection(
+                    "WKT1 projected CRS is missing PROJECTION".to_string(),
+                )
+            })?
     };
 
     let mut parameter_map = HashMap::new();
     let parameter_parent = conversion.unwrap_or(root);
     for parameter in parameter_parent.children(&["PARAMETER"]) {
-        if let Some((key, value)) = parse_parameter(parameter, angular_unit_factor, projected_unit_factor) {
+        if let Some((key, value)) =
+            parse_parameter(parameter, angular_unit_factor, projected_unit_factor)
+        {
             parameter_map.insert(key, value);
         }
     }
 
     let method_key = normalized(method_name);
-    let mut params = build_projection_params(&method_key, &parameter_map, geodetic.prime_meridian_deg)?;
+    let mut params =
+        build_projection_params(&method_key, &parameter_map, geodetic.prime_meridian_deg)?;
     params = params.with_ellipsoid(geodetic.ellipsoid);
     Crs::new(name, geodetic.datum, params)
 }
@@ -416,13 +459,17 @@ struct GeodeticContext {
 }
 
 fn parse_geodetic_context(root: &WktNode) -> Result<GeodeticContext> {
-    let datum_node = root
-        .child(&["DATUM", "GEODETICDATUM"])
-        .ok_or_else(|| ProjectionError::UnsupportedProjection("WKT missing DATUM/GEODETICDATUM".to_string()))?;
+    let datum_node = root.child(&["DATUM", "GEODETICDATUM"]).ok_or_else(|| {
+        ProjectionError::UnsupportedProjection("WKT missing DATUM/GEODETICDATUM".to_string())
+    })?;
     let datum_name = datum_node.first_text().unwrap_or("Custom");
     let ellipsoid_node = datum_node
         .child(&["SPHEROID", "ELLIPSOID"])
-        .ok_or_else(|| ProjectionError::UnsupportedProjection("WKT datum missing SPHEROID/ELLIPSOID".to_string()))?;
+        .ok_or_else(|| {
+            ProjectionError::UnsupportedProjection(
+                "WKT datum missing SPHEROID/ELLIPSOID".to_string(),
+            )
+        })?;
 
     let ellipsoid_name = ellipsoid_node.first_text().unwrap_or("Sphere");
     let semi_major = nth_number(ellipsoid_node, 0).ok_or_else(|| {
@@ -440,7 +487,9 @@ fn parse_geodetic_context(root: &WktNode) -> Result<GeodeticContext> {
     let prime_meridian_deg = root
         .child(&["PRIMEM", "PRIMEMERIDIAN"])
         .and_then(|node| nth_number(node, 0))
-        .map(|value| value * angle_unit_factor_from_node(root).unwrap_or(std::f64::consts::PI / 180.0))
+        .map(|value| {
+            value * angle_unit_factor_from_node(root).unwrap_or(std::f64::consts::PI / 180.0)
+        })
         .map(to_degrees)
         .unwrap_or(0.0);
     let datum = datum_from_name(datum_name, &ellipsoid);
@@ -448,7 +497,8 @@ fn parse_geodetic_context(root: &WktNode) -> Result<GeodeticContext> {
     Ok(GeodeticContext {
         datum,
         ellipsoid,
-        angular_unit_factor: angle_unit_factor_from_node(root).unwrap_or(std::f64::consts::PI / 180.0),
+        angular_unit_factor: angle_unit_factor_from_node(root)
+            .unwrap_or(std::f64::consts::PI / 180.0),
         prime_meridian_deg,
     })
 }
@@ -476,7 +526,12 @@ fn build_projection_params(
     );
     let latitude_of_origin = param(
         params,
-        &["latitudeoforigin", "latitudeofcenter", "projectionlatitude", "latitudeofnaturalorigin"],
+        &[
+            "latitudeoforigin",
+            "latitudeofcenter",
+            "projectionlatitude",
+            "latitudeofnaturalorigin",
+        ],
         0.0,
     );
 
@@ -489,7 +544,9 @@ fn build_projection_params(
         "transversemercatorzonedgridsystem" => ProjectionKind::TransverseMercator,
         "tunisiamininggrid" => ProjectionKind::TransverseMercator,
         "newzealandmapgrid" => ProjectionKind::TransverseMercator,
-        "lambertconformalconic" | "lambertconformalconic1sp" | "lambertconicconformalwestorientated" => {
+        "lambertconformalconic"
+        | "lambertconformalconic1sp"
+        | "lambertconicconformalwestorientated" => {
             let lat1 = param(params, &["standardparallel1"], latitude_of_origin);
             if params.contains_key("standardparallel2") {
                 ProjectionKind::LambertConformalConic {
@@ -497,13 +554,12 @@ fn build_projection_params(
                     lat2: Some(param(params, &["standardparallel2"], lat1)),
                 }
             } else {
-                ProjectionKind::LambertConformalConic {
-                    lat1,
-                    lat2: None,
-                }
+                ProjectionKind::LambertConformalConic { lat1, lat2: None }
             }
         }
-        "lambertconformalconic2sp" | "lambertconformalconic2spbelgium" | "lambertconformalconicspbelgium" => ProjectionKind::LambertConformalConic {
+        "lambertconformalconic2sp"
+        | "lambertconformalconic2spbelgium"
+        | "lambertconformalconicspbelgium" => ProjectionKind::LambertConformalConic {
             lat1: param(params, &["standardparallel1"], latitude_of_origin),
             lat2: Some(param(params, &["standardparallel2"], latitude_of_origin)),
         },
@@ -536,11 +592,19 @@ fn build_projection_params(
         },
         "rectifiedskeworthomorphiccenter" => ProjectionKind::HotineObliqueMercator {
             azimuth: param(params, &["azimuth"], 0.0),
-            rectified_grid_angle: Some(param(params, &["xyplanerotation", "rectifiedgridangle"], param(params, &["azimuth"], 0.0))),
+            rectified_grid_angle: Some(param(
+                params,
+                &["xyplanerotation", "rectifiedgridangle"],
+                param(params, &["azimuth"], 0.0),
+            )),
         },
         "rectifiedskeworthomorphicnaturalorigin" => ProjectionKind::HotineObliqueMercator {
             azimuth: param(params, &["azimuth"], 0.0),
-            rectified_grid_angle: Some(param(params, &["xyplanerotation", "rectifiedgridangle"], param(params, &["azimuth"], 0.0))),
+            rectified_grid_angle: Some(param(
+                params,
+                &["xyplanerotation", "rectifiedgridangle"],
+                param(params, &["azimuth"], 0.0),
+            )),
         },
         "labordeobliquemercator" => ProjectionKind::HotineObliqueMercator {
             azimuth: param(params, &["azimuth"], 0.0),
@@ -595,7 +659,11 @@ fn build_projection_params(
             lat_ts: None,
         },
         "polarstereographicvariantc" => {
-            let lat_ts = param(params, &["latitudeofstandardparallel", "standardparallel1"], -90.0);
+            let lat_ts = param(
+                params,
+                &["latitudeofstandardparallel", "standardparallel1"],
+                -90.0,
+            );
             ProjectionKind::PolarStereographic {
                 north: lat_ts >= 0.0,
                 lat_ts: Some(lat_ts),
@@ -623,12 +691,16 @@ fn build_projection_params(
         "mcbrydethomasflatpolarquartic" => ProjectionKind::Mbtfpq,
         "nell" => ProjectionKind::Nell,
         "equalearth" => ProjectionKind::EqualEarth,
-        "lambertcylindricalequalarea" | "cylindricalequalarea" => ProjectionKind::CylindricalEqualArea {
-            lat_ts: param(params, &["standardparallel1"], 0.0),
-        },
-        "equirectangular" | "eqc" | "equidistantcylindrical" | "platecarree" => ProjectionKind::Equirectangular {
-            lat_ts: param(params, &["standardparallel1"], 0.0),
-        },
+        "lambertcylindricalequalarea" | "cylindricalequalarea" => {
+            ProjectionKind::CylindricalEqualArea {
+                lat_ts: param(params, &["standardparallel1"], 0.0),
+            }
+        }
+        "equirectangular" | "eqc" | "equidistantcylindrical" | "platecarree" => {
+            ProjectionKind::Equirectangular {
+                lat_ts: param(params, &["standardparallel1"], 0.0),
+            }
+        }
         "robinson" => ProjectionKind::Robinson,
         "gnomonic" => ProjectionKind::Gnomonic,
         "aitoff" => ProjectionKind::Aitoff,
@@ -772,7 +844,8 @@ fn parse_parameter(
 }
 
 fn angle_unit_factor_from_node(node: &WktNode) -> Option<f64> {
-    node.direct_child(&["ANGLEUNIT", "UNIT"]).map(|unit| unit_factor(unit, std::f64::consts::PI / 180.0))
+    node.direct_child(&["ANGLEUNIT", "UNIT"])
+        .map(|unit| unit_factor(unit, std::f64::consts::PI / 180.0))
 }
 
 fn projected_length_unit_factor(node: &WktNode) -> Option<f64> {

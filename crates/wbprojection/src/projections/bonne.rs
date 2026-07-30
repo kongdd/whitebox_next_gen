@@ -43,7 +43,9 @@ impl ProjectionImpl for BonneProj {
         let lon = to_radians(lon_deg);
         let lat = to_radians(lat_deg);
         if !(-FRAC_PI_2..=FRAC_PI_2).contains(&lat) {
-            return Err(ProjectionError::out_of_bounds("latitude outside valid range [-90, 90]"));
+            return Err(ProjectionError::out_of_bounds(
+                "latitude outside valid range [-90, 90]",
+            ));
         }
         let lon_rel = Self::wrap_lon(lon - self.lon0);
 

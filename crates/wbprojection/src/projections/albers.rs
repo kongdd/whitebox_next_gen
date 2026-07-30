@@ -1,8 +1,8 @@
 //! Albers Equal-Area Conic projection.
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::{ProjectionError, Result};
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 
 pub(super) struct AlbersProj {
     lon0: f64,
@@ -19,10 +19,9 @@ fn alpha(e2: f64, lat: f64) -> f64 {
     let e = e2.sqrt();
     let sin_lat = lat.sin();
     let esin = e * sin_lat;
-    (1.0 - e2) * (
-        sin_lat / (1.0 - e2 * sin_lat * sin_lat)
-        - (1.0 / (2.0 * e)) * ((1.0 - esin) / (1.0 + esin)).ln()
-    )
+    (1.0 - e2)
+        * (sin_lat / (1.0 - e2 * sin_lat * sin_lat)
+            - (1.0 / (2.0 * e)) * ((1.0 - esin) / (1.0 + esin)).ln())
 }
 
 fn m(e2: f64, lat: f64) -> f64 {
@@ -106,11 +105,10 @@ impl ProjectionImpl for AlbersProj {
                 }
                 let esin = e * sin_phi;
                 let one_minus = 1.0 - e2 * sin_phi * sin_phi;
-                let phi_new = phi + one_minus * one_minus / (2.0 * cos_phi) * (
-                    q / (1.0 - e2)
-                    - sin_phi / one_minus
-                    + (1.0 / (2.0 * e)) * ((1.0 - esin) / (1.0 + esin)).ln()
-                );
+                let phi_new = phi
+                    + one_minus * one_minus / (2.0 * cos_phi)
+                        * (q / (1.0 - e2) - sin_phi / one_minus
+                            + (1.0 / (2.0 * e)) * ((1.0 - esin) / (1.0 + esin)).ln());
                 if (phi_new - phi).abs() < 1e-12 {
                     phi = phi_new;
                     converged = true;

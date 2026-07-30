@@ -1,8 +1,8 @@
 //! Sinusoidal (Sanson-Flamsteed) equal-area pseudocylindrical projection.
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::Result;
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 
 pub(super) struct SinusoidalProj {
     lon0: f64,

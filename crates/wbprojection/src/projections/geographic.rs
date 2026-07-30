@@ -1,7 +1,7 @@
 //! Geographic lon/lat degree pass-through projection.
 
-use crate::error::Result;
 use super::{ProjectionImpl, ProjectionParams};
+use crate::error::Result;
 
 pub(super) struct GeographicProj;
 

@@ -43,7 +43,9 @@ impl ProjectionImpl for PutninsP4pProj {
         let lon = to_radians(lon_deg);
         let lat = to_radians(lat_deg);
         if !(-FRAC_PI_2..=FRAC_PI_2).contains(&lat) {
-            return Err(ProjectionError::out_of_bounds("latitude outside valid range [-90, 90]"));
+            return Err(ProjectionError::out_of_bounds(
+                "latitude outside valid range [-90, 90]",
+            ));
         }
 
         let lon_rel = Self::wrap_lon(lon - self.lon0);
@@ -52,7 +54,9 @@ impl ProjectionImpl for PutninsP4pProj {
         let phi2 = phi1 / 3.0;
         let c = phi2.cos();
         if c.abs() < 1e-15 {
-            return Err(ProjectionError::out_of_bounds("Putnins P4' forward undefined at pole"));
+            return Err(ProjectionError::out_of_bounds(
+                "Putnins P4' forward undefined at pole",
+            ));
         }
         x /= c;
         let y = C_Y * phi2.sin();
@@ -67,14 +71,18 @@ impl ProjectionImpl for PutninsP4pProj {
         let mut phi = (yn / C_Y).clamp(-1.0, 1.0).asin();
         let c = phi.cos();
         if c.abs() < 1e-15 {
-            return Err(ProjectionError::out_of_bounds("Putnins P4' inverse undefined at pole"));
+            return Err(ProjectionError::out_of_bounds(
+                "Putnins P4' inverse undefined at pole",
+            ));
         }
 
         let mut lon_rel = xn * c / C_X;
         phi *= 3.0;
         let c3 = phi.cos();
         if c3.abs() < 1e-15 {
-            return Err(ProjectionError::out_of_bounds("Putnins P4' inverse undefined at pole"));
+            return Err(ProjectionError::out_of_bounds(
+                "Putnins P4' inverse undefined at pole",
+            ));
         }
         lon_rel /= c3;
         let lat = (RS1 * phi.sin()).clamp(-1.0, 1.0).asin();

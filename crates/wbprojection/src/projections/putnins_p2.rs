@@ -78,7 +78,9 @@ impl ProjectionImpl for PutninsP2Proj {
         let mut phi = (yn / C_Y).clamp(-1.0, 1.0).asin();
         let c = phi.cos();
         let lon_rel = xn / (C_X * (c - 0.5));
-        phi = ((phi + phi.sin() * (c - 1.0)) / C_P).clamp(-1.0, 1.0).asin();
+        phi = ((phi + phi.sin() * (c - 1.0)) / C_P)
+            .clamp(-1.0, 1.0)
+            .asin();
 
         let lon = Self::wrap_lon(self.lon0 + lon_rel);
         Ok((to_degrees(lon), to_degrees(phi)))

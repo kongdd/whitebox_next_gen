@@ -140,42 +140,60 @@ fn bench_crs_batch_api(c: &mut Criterion) {
 
     for &len in &[100usize, 1000usize] {
         let original = make_geocentric_coords(len);
-        group.bench_with_input(BenchmarkId::new("transform_to_3d_scalar_loop_geocentric", len), &len, |b, _| {
-            b.iter(|| {
-                let transformed: Vec<(f64, f64, f64)> = original
-                    .iter()
-                    .map(|&(x, y, z)| source_geoc.transform_to_3d(x, y, z, &target_geoc).unwrap())
-                    .collect();
-                black_box(transformed)
-            })
-        });
-        group.bench_with_input(BenchmarkId::new("transform_to_3d_batch_geocentric", len), &len, |b, _| {
-            b.iter(|| {
-                let mut coords = original.clone();
-                black_box(source_geoc.transform_to_3d_batch(&mut coords, &target_geoc));
-                black_box(coords)
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("transform_to_3d_scalar_loop_geocentric", len),
+            &len,
+            |b, _| {
+                b.iter(|| {
+                    let transformed: Vec<(f64, f64, f64)> = original
+                        .iter()
+                        .map(|&(x, y, z)| {
+                            source_geoc.transform_to_3d(x, y, z, &target_geoc).unwrap()
+                        })
+                        .collect();
+                    black_box(transformed)
+                })
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("transform_to_3d_batch_geocentric", len),
+            &len,
+            |b, _| {
+                b.iter(|| {
+                    let mut coords = original.clone();
+                    black_box(source_geoc.transform_to_3d_batch(&mut coords, &target_geoc));
+                    black_box(coords)
+                })
+            },
+        );
     }
 
     for &len in &[100usize, 1000usize] {
         let original = make_geographic_coords(len);
-        group.bench_with_input(BenchmarkId::new("transform_to_scalar_loop_geographic", len), &len, |b, _| {
-            b.iter(|| {
-                let transformed: Vec<(f64, f64)> = original
-                    .iter()
-                    .map(|&(x, y)| source_geo.transform_to(x, y, &target_geo).unwrap())
-                    .collect();
-                black_box(transformed)
-            })
-        });
-        group.bench_with_input(BenchmarkId::new("transform_to_batch_geographic", len), &len, |b, _| {
-            b.iter(|| {
-                let mut coords = original.clone();
-                black_box(source_geo.transform_to_batch(&mut coords, &target_geo));
-                black_box(coords)
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("transform_to_scalar_loop_geographic", len),
+            &len,
+            |b, _| {
+                b.iter(|| {
+                    let transformed: Vec<(f64, f64)> = original
+                        .iter()
+                        .map(|&(x, y)| source_geo.transform_to(x, y, &target_geo).unwrap())
+                        .collect();
+                    black_box(transformed)
+                })
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("transform_to_batch_geographic", len),
+            &len,
+            |b, _| {
+                b.iter(|| {
+                    let mut coords = original.clone();
+                    black_box(source_geo.transform_to_batch(&mut coords, &target_geo));
+                    black_box(coords)
+                })
+            },
+        );
     }
 
     // Projected CRS batch fast path: ED50 UTM 32N → WGS84 UTM 32N (cross-datum Helmert)
@@ -189,22 +207,30 @@ fn bench_crs_batch_api(c: &mut Criterion) {
 
     for &len in &[100usize, 1000usize] {
         let original = make_projected_coords(len);
-        group.bench_with_input(BenchmarkId::new("transform_to_scalar_loop_projected", len), &len, |b, _| {
-            b.iter(|| {
-                let transformed: Vec<(f64, f64)> = original
-                    .iter()
-                    .map(|&(x, y)| source_proj.transform_to(x, y, &target_proj).unwrap())
-                    .collect();
-                black_box(transformed)
-            })
-        });
-        group.bench_with_input(BenchmarkId::new("transform_to_batch_projected", len), &len, |b, _| {
-            b.iter(|| {
-                let mut coords = original.clone();
-                black_box(source_proj.transform_to_batch(&mut coords, &target_proj));
-                black_box(coords)
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("transform_to_scalar_loop_projected", len),
+            &len,
+            |b, _| {
+                b.iter(|| {
+                    let transformed: Vec<(f64, f64)> = original
+                        .iter()
+                        .map(|&(x, y)| source_proj.transform_to(x, y, &target_proj).unwrap())
+                        .collect();
+                    black_box(transformed)
+                })
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("transform_to_batch_projected", len),
+            &len,
+            |b, _| {
+                b.iter(|| {
+                    let mut coords = original.clone();
+                    black_box(source_proj.transform_to_batch(&mut coords, &target_proj));
+                    black_box(coords)
+                })
+            },
+        );
     }
 
     group.finish();

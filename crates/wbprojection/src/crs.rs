@@ -3,19 +3,18 @@
 //! A [`Crs`] combines a datum with a projection and allows transforming
 //! coordinates between different CRSes through WGS84 as a pivot datum.
 
+use crate::datum::{ecef_to_geodetic, geodetic_to_ecef};
 use crate::datum::{Datum, DatumTransformPolicy};
 use crate::epsg::EpsgResolutionPolicy;
 use crate::error::{ProjectionError, Result};
 use crate::operations::get_coordinate_operation;
-use crate::projections::{Projection, ProjectionParams, ProjectionKind};
-use crate::{
-    PreferredOperationPolicy,
-    preferred_operation_for_crs_pair_with_policy,
-    register_coordinate_operation,
-};
-use crate::datum::{ecef_to_geodetic, geodetic_to_ecef};
+use crate::projections::{Projection, ProjectionKind, ProjectionParams};
 use crate::transform::TransformEpochContext;
 use crate::vertical_grid::get_vertical_offset_grid;
+use crate::{
+    preferred_operation_for_crs_pair_with_policy, register_coordinate_operation,
+    PreferredOperationPolicy,
+};
 use crate::{to_degrees, to_radians};
 
 fn epsg_code_from_crs_name(name: &str) -> Option<u32> {
@@ -99,13 +98,7 @@ pub struct CrsTransformTrace {
 /// - `target_to_ellipsoidal_m`: subtract from ellipsoidal height to obtain target height.
 pub trait VerticalOffsetProvider {
     /// Return `(source_to_ellipsoidal_m, target_to_ellipsoidal_m)` for the given point.
-    fn offsets(
-        &self,
-        x: f64,
-        y: f64,
-        source: &Crs,
-        target: &Crs,
-    ) -> Result<(f64, f64)>;
+    fn offsets(&self, x: f64, y: f64, source: &Crs, target: &Crs) -> Result<(f64, f64)>;
 }
 
 /// Fixed vertical-offset provider.
@@ -130,13 +123,7 @@ impl ConstantVerticalOffsetProvider {
 }
 
 impl VerticalOffsetProvider for ConstantVerticalOffsetProvider {
-    fn offsets(
-        &self,
-        _x: f64,
-        _y: f64,
-        _source: &Crs,
-        _target: &Crs,
-    ) -> Result<(f64, f64)> {
+    fn offsets(&self, _x: f64, _y: f64, _source: &Crs, _target: &Crs) -> Result<(f64, f64)> {
         Ok((self.source_to_ellipsoidal_m, self.target_to_ellipsoidal_m))
     }
 }
@@ -145,13 +132,7 @@ impl<F> VerticalOffsetProvider for F
 where
     F: Fn(f64, f64, &Crs, &Crs) -> Result<(f64, f64)>,
 {
-    fn offsets(
-        &self,
-        x: f64,
-        y: f64,
-        source: &Crs,
-        target: &Crs,
-    ) -> Result<(f64, f64)> {
+    fn offsets(&self, x: f64, y: f64, source: &Crs, target: &Crs) -> Result<(f64, f64)> {
         self(x, y, source, target)
     }
 }
@@ -183,8 +164,10 @@ impl GridVerticalOffsetProvider {
         source: &Crs,
         target: &Crs,
     ) -> Result<(f64, f64)> {
-        let source_is_vertical = matches!(source.projection.params().kind, ProjectionKind::Vertical);
-        let target_is_vertical = matches!(target.projection.params().kind, ProjectionKind::Vertical);
+        let source_is_vertical =
+            matches!(source.projection.params().kind, ProjectionKind::Vertical);
+        let target_is_vertical =
+            matches!(target.projection.params().kind, ProjectionKind::Vertical);
 
         let horizontal_context = if !source_is_vertical {
             source
@@ -211,13 +194,7 @@ impl GridVerticalOffsetProvider {
 }
 
 impl VerticalOffsetProvider for GridVerticalOffsetProvider {
-    fn offsets(
-        &self,
-        x: f64,
-        y: f64,
-        source: &Crs,
-        target: &Crs,
-    ) -> Result<(f64, f64)> {
+    fn offsets(&self, x: f64, y: f64, source: &Crs, target: &Crs) -> Result<(f64, f64)> {
         let (lon_deg, lat_deg) = Self::resolve_horizontal_lon_lat(x, y, source, target)?;
 
         let source_grid = get_vertical_offset_grid(&self.source_grid)?.ok_or_else(|| {
@@ -340,9 +317,9 @@ impl Crs {
         // Fallback: derive from projection kind.
         use crate::projections::ProjectionKind;
         match self.projection.params().kind {
-            ProjectionKind::Geographic => Some(crate::epsg::CrsBoundingBox::new(
-                -180.0, -90.0, 180.0, 90.0,
-            )),
+            ProjectionKind::Geographic => {
+                Some(crate::epsg::CrsBoundingBox::new(-180.0, -90.0, 180.0, 90.0))
+            }
             _ => None,
         }
     }
@@ -534,13 +511,7 @@ impl Crs {
                 preferred_operation_for_crs_pair_with_policy(src, dst, preferred_op_policy)
             {
                 register_coordinate_operation(op_def.clone())?;
-                return self.transform_to_with_operation(
-                    x,
-                    y,
-                    target,
-                    op_def.operation_code,
-                    ctx,
-                );
+                return self.transform_to_with_operation(x, y, target, op_def.operation_code, ctx);
             }
         }
 
@@ -555,7 +526,10 @@ impl Crs {
     /// Results are returned in the same order as `points`. Each entry is
     /// `Ok((x, y))` on success or an error if a particular point failed.
     pub fn forward_many(&self, points: &[(f64, f64)]) -> Vec<Result<(f64, f64)>> {
-        points.iter().map(|&(lon, lat)| self.forward(lon, lat)).collect()
+        points
+            .iter()
+            .map(|&(lon, lat)| self.forward(lon, lat))
+            .collect()
     }
 
     /// Inverse-project a batch of (x, y) pairs to geographic (lon, lat) in degrees.
@@ -568,8 +542,15 @@ impl Crs {
     /// Transform a batch of (x, y) points from this CRS into `target`.
     ///
     /// Results are returned in the same order as `points`.
-    pub fn transform_to_many(&self, points: &[(f64, f64)], target: &Crs) -> Vec<Result<(f64, f64)>> {
-        points.iter().map(|&(x, y)| self.transform_to(x, y, target)).collect()
+    pub fn transform_to_many(
+        &self,
+        points: &[(f64, f64)],
+        target: &Crs,
+    ) -> Vec<Result<(f64, f64)>> {
+        points
+            .iter()
+            .map(|&(x, y)| self.transform_to(x, y, target))
+            .collect()
     }
 
     /// Forward-project a batch of (lon, lat) pairs in parallel using Rayon.
@@ -579,7 +560,10 @@ impl Crs {
     #[cfg(feature = "parallel")]
     pub fn forward_many_par(&self, points: &[(f64, f64)]) -> Vec<Result<(f64, f64)>> {
         use rayon::prelude::*;
-        points.par_iter().map(|&(lon, lat)| self.forward(lon, lat)).collect()
+        points
+            .par_iter()
+            .map(|&(lon, lat)| self.forward(lon, lat))
+            .collect()
     }
 
     /// Inverse-project a batch of (x, y) pairs in parallel using Rayon.
@@ -588,7 +572,10 @@ impl Crs {
     #[cfg(feature = "parallel")]
     pub fn inverse_many_par(&self, points: &[(f64, f64)]) -> Vec<Result<(f64, f64)>> {
         use rayon::prelude::*;
-        points.par_iter().map(|&(x, y)| self.inverse(x, y)).collect()
+        points
+            .par_iter()
+            .map(|&(x, y)| self.inverse(x, y))
+            .collect()
     }
 
     /// Transform a batch of (x, y) points from this CRS into `target` in parallel
@@ -596,9 +583,16 @@ impl Crs {
     ///
     /// Requires the `parallel` crate feature.
     #[cfg(feature = "parallel")]
-    pub fn transform_to_many_par(&self, points: &[(f64, f64)], target: &Crs) -> Vec<Result<(f64, f64)>> {
+    pub fn transform_to_many_par(
+        &self,
+        points: &[(f64, f64)],
+        target: &Crs,
+    ) -> Vec<Result<(f64, f64)>> {
         use rayon::prelude::*;
-        points.par_iter().map(|&(x, y)| self.transform_to(x, y, target)).collect()
+        points
+            .par_iter()
+            .map(|&(x, y)| self.transform_to(x, y, target))
+            .collect()
     }
 
     /// Transform a 3D point from this CRS into the target CRS.
@@ -778,14 +772,18 @@ impl Crs {
         policy: CrsTransformPolicy,
     ) -> Result<(f64, f64, f64)> {
         let source_is_vertical = matches!(self.projection.params().kind, ProjectionKind::Vertical);
-        let target_is_vertical = matches!(target.projection.params().kind, ProjectionKind::Vertical);
-        let source_is_geocentric = matches!(self.projection.params().kind, ProjectionKind::Geocentric);
-        let target_is_geocentric = matches!(target.projection.params().kind, ProjectionKind::Geocentric);
+        let target_is_vertical =
+            matches!(target.projection.params().kind, ProjectionKind::Vertical);
+        let source_is_geocentric =
+            matches!(self.projection.params().kind, ProjectionKind::Geocentric);
+        let target_is_geocentric =
+            matches!(target.projection.params().kind, ProjectionKind::Geocentric);
 
-        if (source_is_vertical && target_is_geocentric) || (source_is_geocentric && target_is_vertical) {
+        if (source_is_vertical && target_is_geocentric)
+            || (source_is_geocentric && target_is_vertical)
+        {
             return Err(crate::error::ProjectionError::UnsupportedProjection(
-                "vertical CRS cannot preserve horizontal context with geocentric CRS"
-                    .to_string(),
+                "vertical CRS cannot preserve horizontal context with geocentric CRS".to_string(),
             ));
         }
 
@@ -871,7 +869,9 @@ impl Crs {
     }
 
     /// Policy-enabled variant of [`Crs::transform_to_3d_preserve_horizontal_with_provider`].
-    pub fn transform_to_3d_preserve_horizontal_with_provider_and_policy<P: VerticalOffsetProvider>(
+    pub fn transform_to_3d_preserve_horizontal_with_provider_and_policy<
+        P: VerticalOffsetProvider,
+    >(
         &self,
         x: f64,
         y: f64,
@@ -922,7 +922,8 @@ impl Crs {
         };
 
         let source_is_vertical = matches!(self.projection.params().kind, ProjectionKind::Vertical);
-        let target_is_vertical = matches!(target.projection.params().kind, ProjectionKind::Vertical);
+        let target_is_vertical =
+            matches!(target.projection.params().kind, ProjectionKind::Vertical);
 
         // Default strict behavior for vertical CRS: keep mixed-mode transformations explicit
         // via `transform_to_3d_preserve_horizontal` to avoid accidental ambiguity.
@@ -957,9 +958,7 @@ impl Crs {
 
         // Step 1: source CRS coordinates -> source datum geodetic (radians + height)
         let (src_lat_rad, src_lon_rad, src_h) = match self.projection.params().kind {
-            ProjectionKind::Geocentric => {
-                ecef_to_geodetic(x, y, z, &self.datum.ellipsoid)
-            }
+            ProjectionKind::Geocentric => ecef_to_geodetic(x, y, z, &self.datum.ellipsoid),
             _ => {
                 let (lon_deg, lat_deg) = self.projection.inverse(x, y)?;
                 (to_radians(lat_deg), to_radians(lon_deg), z)
@@ -994,9 +993,12 @@ impl Crs {
                 datum_policy,
                 ctx,
             )?,
-            None => self
-                .datum
-                .to_wgs84_geodetic_with_policy(src_lat_rad, src_lon_rad, src_h, datum_policy)?,
+            None => self.datum.to_wgs84_geodetic_with_policy(
+                src_lat_rad,
+                src_lon_rad,
+                src_h,
+                datum_policy,
+            )?,
         };
 
         // Step 3: WGS84 geodetic -> target datum geodetic
@@ -1008,14 +1010,22 @@ impl Crs {
                 datum_policy,
                 ctx,
             )?,
-            None => target
-                .datum
-                .from_wgs84_geodetic_with_policy(wgs_lat, wgs_lon, wgs_h, datum_policy)?,
+            None => target.datum.from_wgs84_geodetic_with_policy(
+                wgs_lat,
+                wgs_lon,
+                wgs_h,
+                datum_policy,
+            )?,
         };
 
         // Step 4: target datum geodetic -> target CRS coordinates
         match target.projection.params().kind {
-            ProjectionKind::Geocentric => Ok(geodetic_to_ecef(dst_lat, dst_lon, dst_h, &target.datum.ellipsoid)),
+            ProjectionKind::Geocentric => Ok(geodetic_to_ecef(
+                dst_lat,
+                dst_lon,
+                dst_h,
+                &target.datum.ellipsoid,
+            )),
             _ => {
                 let (out_x, out_y) = target
                     .projection
@@ -1082,20 +1092,18 @@ impl Crs {
         }
 
         // Step 2: source datum geodetic → WGS84 geodetic
-        let src_trace = self
-            .datum
-            .to_wgs84_geodetic_with_policy_and_trace(lat, lon, 0.0, datum_policy, ctx)?;
+        let src_trace =
+            self.datum
+                .to_wgs84_geodetic_with_policy_and_trace(lat, lon, 0.0, datum_policy, ctx)?;
 
         // Step 3: WGS84 geodetic → target datum geodetic
-        let dst_trace = target
-            .datum
-            .from_wgs84_geodetic_with_policy_and_trace(
-                src_trace.lat_rad,
-                src_trace.lon_rad,
-                src_trace.h,
-                datum_policy,
-                ctx,
-            )?;
+        let dst_trace = target.datum.from_wgs84_geodetic_with_policy_and_trace(
+            src_trace.lat_rad,
+            src_trace.lon_rad,
+            src_trace.h,
+            datum_policy,
+            ctx,
+        )?;
 
         // Step 4: forward project in target CRS
         let (out_x, out_y) = target
@@ -1150,15 +1158,13 @@ impl Crs {
 
         coords
             .iter_mut()
-            .map(|(x, y)| {
-                match self.transform_to(*x, *y, target) {
-                    Ok((new_x, new_y)) => {
-                        *x = new_x;
-                        *y = new_y;
-                        None
-                    }
-                    Err(e) => Some(Err(e)),
+            .map(|(x, y)| match self.transform_to(*x, *y, target) {
+                Ok((new_x, new_y)) => {
+                    *x = new_x;
+                    *y = new_y;
+                    None
                 }
+                Err(e) => Some(Err(e)),
             })
             .collect()
     }
@@ -1273,12 +1279,10 @@ impl Crs {
                 let (lon_deg, lat_deg) = self.projection.inverse(cx, cy)?;
                 let lon_rad = to_radians(lon_deg);
                 let lat_rad = to_radians(lat_deg);
-                let (xe, ye, ze) =
-                    geodetic_to_ecef(lat_rad, lon_rad, 0.0, &self.datum.ellipsoid);
+                let (xe, ye, ze) = geodetic_to_ecef(lat_rad, lon_rad, 0.0, &self.datum.ellipsoid);
                 let (xw, yw, zw) = self.datum.to_wgs84_ecef(xe, ye, ze)?;
                 let (xt, yt, zt) = target.datum.from_wgs84_ecef(xw, yw, zw)?;
-                let (dst_lat, dst_lon, _h) =
-                    ecef_to_geodetic(xt, yt, zt, &target.datum.ellipsoid);
+                let (dst_lat, dst_lon, _h) = ecef_to_geodetic(xt, yt, zt, &target.datum.ellipsoid);
                 target
                     .projection
                     .forward(to_degrees(dst_lon), to_degrees(dst_lat))
@@ -1335,12 +1339,8 @@ impl Crs {
                 .expect("batch geographic fast path prechecked");
 
             for lane in 0..4 {
-                let (lat_rad, lon_rad, _h) = ecef_to_geodetic(
-                    xt[lane],
-                    yt[lane],
-                    zt[lane],
-                    &target.datum.ellipsoid,
-                );
+                let (lat_rad, lon_rad, _h) =
+                    ecef_to_geodetic(xt[lane], yt[lane], zt[lane], &target.datum.ellipsoid);
                 chunk[lane] = (to_degrees(lon_rad), to_degrees(lat_rad));
             }
         }
@@ -1376,16 +1376,14 @@ impl Crs {
 
         coords
             .iter_mut()
-            .map(|(x, y, z)| {
-                match self.transform_to_3d(*x, *y, *z, target) {
-                    Ok((new_x, new_y, new_z)) => {
-                        *x = new_x;
-                        *y = new_y;
-                        *z = new_z;
-                        None
-                    }
-                    Err(e) => Some(Err(e)),
+            .map(|(x, y, z)| match self.transform_to_3d(*x, *y, *z, target) {
+                Ok((new_x, new_y, new_z)) => {
+                    *x = new_x;
+                    *y = new_y;
+                    *z = new_z;
+                    None
                 }
+                Err(e) => Some(Err(e)),
             })
             .collect()
     }
@@ -1451,18 +1449,15 @@ impl std::fmt::Debug for Crs {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::datum::DatumTransform;
     use crate::operations::coordinate_operation_test_guard;
     use crate::{
-        CoordinateOperationDef,
-        Datum, DynamicGridShiftGrid, DynamicGridShiftSample, Ellipsoid, Projection,
-        OperationMethod,
-        PreferredOperationPolicy,
-        ProjectionParams, TransformEpochContext, clear_coordinate_operations,
-        preferred_operation_code_for_crs_pair,
-        register_coordinate_operation, register_dynamic_grid, unregister_dynamic_grid,
-        unregister_coordinate_operation,
+        clear_coordinate_operations, preferred_operation_code_for_crs_pair,
+        register_coordinate_operation, register_dynamic_grid, unregister_coordinate_operation,
+        unregister_dynamic_grid, CoordinateOperationDef, Datum, DynamicGridShiftGrid,
+        DynamicGridShiftSample, Ellipsoid, OperationMethod, PreferredOperationPolicy, Projection,
+        ProjectionParams, TransformEpochContext,
     };
-    use crate::datum::DatumTransform;
 
     fn wgs84_geocentric() -> Crs {
         Crs {
@@ -1562,7 +1557,10 @@ mod tests {
 
         let mut batched = original.clone();
         let batch_results = source.transform_to_batch(&mut batched, &target);
-        assert!(batch_results.iter().all(Option::is_none), "unexpected transform errors");
+        assert!(
+            batch_results.iter().all(Option::is_none),
+            "unexpected transform errors"
+        );
 
         for (expected, actual) in original
             .iter()
@@ -1595,7 +1593,10 @@ mod tests {
         ];
         let mut batched2 = original2.clone();
         let batch_results2 = src2.transform_to_batch(&mut batched2, &dst2);
-        assert!(batch_results2.iter().all(Option::is_none), "same-datum errors");
+        assert!(
+            batch_results2.iter().all(Option::is_none),
+            "same-datum errors"
+        );
         for (expected, actual) in original2
             .iter()
             .map(|&(x, y)| src2.transform_to(x, y, &dst2).unwrap())
@@ -1671,9 +1672,9 @@ mod tests {
         };
 
         let err = src.transform_to(0.5, 0.5, &dst).unwrap_err();
-        assert!(
-            format!("{err}").to_ascii_lowercase().contains("requires transformepochcontext")
-        );
+        assert!(format!("{err}")
+            .to_ascii_lowercase()
+            .contains("requires transformepochcontext"));
 
         let _ = unregister_dynamic_grid("CRS_DYN_GRID");
     }
@@ -1712,9 +1713,7 @@ mod tests {
         };
 
         let ctx = TransformEpochContext::at_epoch(2022.0); // dt=+2 => dlon +2", dlat -4"
-        let (lon_out, lat_out) = src
-            .transform_to_with_context(0.5, 0.5, &dst, ctx)
-            .unwrap();
+        let (lon_out, lat_out) = src.transform_to_with_context(0.5, 0.5, &dst, ctx).unwrap();
 
         let dlon_sec = (lon_out - 0.5) * 3600.0;
         let dlat_sec = (lat_out - 0.5) * 3600.0;
@@ -1730,9 +1729,12 @@ mod tests {
 
         let src = Crs::from_epsg(4326).unwrap();
         let dst = Crs::from_epsg(3857).unwrap();
-        register_coordinate_operation(
-            CoordinateOperationDef::new(999001, 4326, 3857, OperationMethod::DatumPipeline),
-        )
+        register_coordinate_operation(CoordinateOperationDef::new(
+            999001,
+            4326,
+            3857,
+            OperationMethod::DatumPipeline,
+        ))
         .unwrap();
 
         let via_op = src
@@ -1752,26 +1754,30 @@ mod tests {
 
         let src = Crs::from_epsg(4326).unwrap();
         let dst = Crs::from_epsg(3857).unwrap();
-        register_coordinate_operation(
-            CoordinateOperationDef::new(999002, 4258, 3857, OperationMethod::DatumPipeline),
-        )
+        register_coordinate_operation(CoordinateOperationDef::new(
+            999002,
+            4258,
+            3857,
+            OperationMethod::DatumPipeline,
+        ))
         .unwrap();
 
         let err = src
             .transform_to_with_operation(10.0, 45.0, &dst, 999002, None)
             .unwrap_err();
-        assert!(
-            format!("{err}")
-                .to_ascii_lowercase()
-                .contains("source crs mismatch")
-        );
+        assert!(format!("{err}")
+            .to_ascii_lowercase()
+            .contains("source crs mismatch"));
 
         let _ = unregister_coordinate_operation(999002);
     }
 
     #[test]
     fn preferred_operation_mapping_exists_for_csrs_v3_to_v8_pair() {
-        assert_eq!(preferred_operation_code_for_crs_pair(22317, 22817), Some(10715));
+        assert_eq!(
+            preferred_operation_code_for_crs_pair(22317, 22817),
+            Some(10715)
+        );
         assert_eq!(preferred_operation_code_for_crs_pair(22318, 22817), None);
     }
 
@@ -1866,7 +1872,9 @@ mod tests {
         let via_pref = src
             .transform_to_3d_with_preferred_operation(500_000.0, 5_500_000.0, 50.0, &dst, None)
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 50.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 50.0, &dst)
+            .unwrap();
 
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
@@ -1884,7 +1892,9 @@ mod tests {
         let via_pref = src
             .transform_to_3d_with_preferred_operation(500_000.0, 5_500_000.0, 10.0, &dst, None)
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 10.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 10.0, &dst)
+            .unwrap();
 
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
@@ -1918,7 +1928,9 @@ mod tests {
         let via_pref = src
             .transform_to_3d_with_preferred_operation(500_000.0, 5_500_000.0, 42.0, &dst, None)
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst)
+            .unwrap();
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
         assert!((via_pref.2 - base.2).abs() < 1e-9);
@@ -1998,7 +2010,9 @@ mod tests {
                 policy,
             )
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst)
+            .unwrap();
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
         assert!((via_pref.2 - base.2).abs() < 1e-9);
@@ -2026,7 +2040,9 @@ mod tests {
                 policy,
             )
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst)
+            .unwrap();
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
         assert!((via_pref.2 - base.2).abs() < 1e-9);
@@ -2059,7 +2075,8 @@ mod tests {
     }
 
     #[test]
-    fn transform_to_3d_with_preferred_operation_and_policy_supports_reverse_europe_corridor_defaults() {
+    fn transform_to_3d_with_preferred_operation_and_policy_supports_reverse_europe_corridor_defaults(
+    ) {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 
@@ -2080,14 +2097,17 @@ mod tests {
                 policy,
             )
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst)
+            .unwrap();
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
         assert!((via_pref.2 - base.2).abs() < 1e-9);
     }
 
     #[test]
-    fn transform_to_3d_with_preferred_operation_and_policy_supports_reverse_us_secondary_seed_defaults() {
+    fn transform_to_3d_with_preferred_operation_and_policy_supports_reverse_us_secondary_seed_defaults(
+    ) {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 
@@ -2108,7 +2128,9 @@ mod tests {
                 policy,
             )
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst)
+            .unwrap();
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
         assert!((via_pref.2 - base.2).abs() < 1e-9);
@@ -2167,7 +2189,8 @@ mod tests {
     }
 
     #[test]
-    fn transform_to_3d_with_preferred_operation_and_policy_falls_back_for_europe_when_default_unset() {
+    fn transform_to_3d_with_preferred_operation_and_policy_falls_back_for_europe_when_default_unset(
+    ) {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 
@@ -2188,7 +2211,9 @@ mod tests {
                 policy,
             )
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst)
+            .unwrap();
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
         assert!((via_pref.2 - base.2).abs() < 1e-9);
@@ -2242,14 +2267,17 @@ mod tests {
                 policy,
             )
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst)
+            .unwrap();
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
         assert!((via_pref.2 - base.2).abs() < 1e-9);
     }
 
     #[test]
-    fn transform_to_3d_with_preferred_operation_and_policy_falls_back_for_reverse_us_secondary_seed_when_default_unset() {
+    fn transform_to_3d_with_preferred_operation_and_policy_falls_back_for_reverse_us_secondary_seed_when_default_unset(
+    ) {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 
@@ -2270,14 +2298,17 @@ mod tests {
                 policy,
             )
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst)
+            .unwrap();
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
         assert!((via_pref.2 - base.2).abs() < 1e-9);
     }
 
     #[test]
-    fn transform_to_with_preferred_operation_and_policy_falls_back_for_reverse_europe_broad_when_default_unset() {
+    fn transform_to_with_preferred_operation_and_policy_falls_back_for_reverse_europe_broad_when_default_unset(
+    ) {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 
@@ -2380,7 +2411,8 @@ mod tests {
     }
 
     #[test]
-    fn transform_to_3d_with_preferred_operation_matches_explicit_default_policy_for_reverse_us_secondary_seed() {
+    fn transform_to_3d_with_preferred_operation_matches_explicit_default_policy_for_reverse_us_secondary_seed(
+    ) {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 
@@ -2433,7 +2465,8 @@ mod tests {
     }
 
     #[test]
-    fn transform_to_3d_with_preferred_operation_and_policy_does_not_apply_europe_default_out_of_scope() {
+    fn transform_to_3d_with_preferred_operation_and_policy_does_not_apply_europe_default_out_of_scope(
+    ) {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 
@@ -2454,14 +2487,17 @@ mod tests {
                 policy,
             )
             .unwrap();
-        let base = src.transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst).unwrap();
+        let base = src
+            .transform_to_3d(500_000.0, 5_500_000.0, 42.0, &dst)
+            .unwrap();
         assert!((via_pref.0 - base.0).abs() < 1e-9);
         assert!((via_pref.1 - base.1).abs() < 1e-9);
         assert!((via_pref.2 - base.2).abs() < 1e-9);
     }
 
     #[test]
-    fn transform_to_with_preferred_operation_and_policy_us_allowlisted_matrix_behaves_as_expected() {
+    fn transform_to_with_preferred_operation_and_policy_us_allowlisted_matrix_behaves_as_expected()
+    {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 
@@ -2509,7 +2545,8 @@ mod tests {
     }
 
     #[test]
-    fn transform_to_with_preferred_operation_and_policy_europe_allowlisted_matrix_behaves_as_expected() {
+    fn transform_to_with_preferred_operation_and_policy_europe_allowlisted_matrix_behaves_as_expected(
+    ) {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 
@@ -2558,7 +2595,8 @@ mod tests {
     }
 
     #[test]
-    fn transform_to_3d_with_preferred_operation_and_policy_us_allowlisted_matrix_behaves_as_expected() {
+    fn transform_to_3d_with_preferred_operation_and_policy_us_allowlisted_matrix_behaves_as_expected(
+    ) {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 
@@ -2612,7 +2650,8 @@ mod tests {
     }
 
     #[test]
-    fn transform_to_3d_with_preferred_operation_and_policy_europe_allowlisted_matrix_behaves_as_expected() {
+    fn transform_to_3d_with_preferred_operation_and_policy_europe_allowlisted_matrix_behaves_as_expected(
+    ) {
         let _guard = coordinate_operation_test_guard();
         clear_coordinate_operations().unwrap();
 

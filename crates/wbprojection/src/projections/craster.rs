@@ -57,7 +57,11 @@ impl ProjectionImpl for CrasterProj {
 
         let lat = (3.0 * (yn * RYM).clamp(-1.0, 1.0).asin()).clamp(-FRAC_PI_2, FRAC_PI_2);
         let denom = 2.0 * (2.0 * lat * THIRD).cos() - 1.0;
-        let lon_rel = if denom.abs() < 1e-15 { 0.0 } else { xn * RXM / denom };
+        let lon_rel = if denom.abs() < 1e-15 {
+            0.0
+        } else {
+            xn * RXM / denom
+        };
         let lon = Self::wrap_lon(self.lon0 + lon_rel);
 
         Ok((to_degrees(lon), to_degrees(lat)))

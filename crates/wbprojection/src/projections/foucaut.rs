@@ -68,7 +68,11 @@ impl ProjectionImpl for FoucautProj {
         let mut yn = (y - self.fn_) / self.a;
 
         yn /= self.c_y;
-        let mut lat = if self.tan_mode { yn.atan() } else { yn.clamp(-1.0, 1.0).asin() };
+        let mut lat = if self.tan_mode {
+            yn.atan()
+        } else {
+            yn.clamp(-1.0, 1.0).asin()
+        };
         let c = lat.cos();
         lat /= self.c_p;
         let mut lon_rel = xn / (self.c_x * lat.cos());

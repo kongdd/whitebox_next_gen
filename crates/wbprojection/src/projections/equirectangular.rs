@@ -1,8 +1,8 @@
 //! Equirectangular (Plate Carrée) projection.
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::Result;
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 
 pub(super) struct EquirectangularProj {
     lon0: f64,

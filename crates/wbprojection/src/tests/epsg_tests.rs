@@ -1,50 +1,23 @@
 //! Tests for the EPSG registry.
 
-use crate::{
-    CompoundCrs,
-    ConstantVerticalOffsetProvider,
-    Crs,
-    CrsTransformPolicy,
-    EpsgResolutionPolicy,
-    EpsgIdentifyPolicy,
-    GridVerticalOffsetProvider,
-    VerticalOffsetGrid,
-    clear_runtime_epsg_aliases,
-    is_pending_preferred_operation_crs_pair,
-    epsg_alias_catalog,
-    epsg_from_srs_reference,
-    epsg_from_wkt,
-    identify_epsg_from_wkt_report,
-    identify_epsg_from_wkt_with_policy,
-    compound_from_wkt,
-    csrs_preferred_operation_support_snapshot,
-    from_epsg,
-    from_epsg_with_catalog,
-    from_epsg_with_policy,
-    from_wkt,
-    register_vertical_offset_grid,
-    register_epsg_alias,
-    resolve_epsg_with_catalog,
-    resolve_epsg_with_policy,
-    runtime_epsg_aliases,
-    to_esri_wkt,
-    to_ogc_wkt,
-    to_geotiff_info,
-    preferred_operation_code_for_crs_pair,
-    preferred_operation_code_for_crs_pair_with_policy,
-    preferred_operation_for_crs_pair,
-    preferred_operation_for_crs_pair_with_policy,
-    PreferredOperationPolicy,
-    CsrsPreferredOperationStatus,
-    EuropePreferredOperationStatus,
-    europe_phase1_preferred_operation_support_snapshot,
-    unregister_vertical_offset_grid,
-    unregister_epsg_alias,
-    us_phase1_preferred_operation_support_snapshot,
-    UsPreferredOperationStatus,
-    vertical_offset_grid_name,
-};
 use crate::epsg::{epsg_info, known_epsg_codes};
+use crate::{
+    clear_runtime_epsg_aliases, compound_from_wkt, csrs_preferred_operation_support_snapshot,
+    epsg_alias_catalog, epsg_from_srs_reference, epsg_from_wkt,
+    europe_phase1_preferred_operation_support_snapshot, from_epsg, from_epsg_with_catalog,
+    from_epsg_with_policy, from_wkt, identify_epsg_from_wkt_report,
+    identify_epsg_from_wkt_with_policy, is_pending_preferred_operation_crs_pair,
+    preferred_operation_code_for_crs_pair, preferred_operation_code_for_crs_pair_with_policy,
+    preferred_operation_for_crs_pair, preferred_operation_for_crs_pair_with_policy,
+    register_epsg_alias, register_vertical_offset_grid, resolve_epsg_with_catalog,
+    resolve_epsg_with_policy, runtime_epsg_aliases, to_esri_wkt, to_geotiff_info, to_ogc_wkt,
+    unregister_epsg_alias, unregister_vertical_offset_grid,
+    us_phase1_preferred_operation_support_snapshot, vertical_offset_grid_name, CompoundCrs,
+    ConstantVerticalOffsetProvider, Crs, CrsTransformPolicy, CsrsPreferredOperationStatus,
+    EpsgIdentifyPolicy, EpsgResolutionPolicy, EuropePreferredOperationStatus,
+    GridVerticalOffsetProvider, PreferredOperationPolicy, UsPreferredOperationStatus,
+    VerticalOffsetGrid,
+};
 use std::fs;
 use std::sync::{Mutex, OnceLock};
 
@@ -104,7 +77,10 @@ fn epsg_fourth_batch_datums_are_mapped() {
 
 #[test]
 fn epsg_fifth_batch_datums_are_mapped() {
-    assert_eq!(Crs::from_epsg(6915).unwrap().datum.name, "South East Island 1943");
+    assert_eq!(
+        Crs::from_epsg(6915).unwrap().datum.name,
+        "South East Island 1943"
+    );
     assert_eq!(Crs::from_epsg(6927).unwrap().datum.name, "SVY21");
     assert_eq!(Crs::from_epsg(6956).unwrap().datum.name, "VN-2000");
     assert_eq!(Crs::from_epsg(6957).unwrap().datum.name, "VN-2000");
@@ -116,13 +92,22 @@ fn epsg_4000_parity_block_codes_are_mapped() {
     assert_eq!(Crs::from_epsg(4001).unwrap().datum.name, "D_Airy_1830");
     assert_eq!(Crs::from_epsg(4019).unwrap().datum.name, "D_GRS_1980");
     assert_eq!(Crs::from_epsg(4035).unwrap().datum.name, "D_Sphere");
-    assert_eq!(Crs::from_epsg(4046).unwrap().datum.name, "D_Reseau_Geodesique_de_la_RDC_2005");
+    assert_eq!(
+        Crs::from_epsg(4046).unwrap().datum.name,
+        "D_Reseau_Geodesique_de_la_RDC_2005"
+    );
 
     // Projected definitions
     assert_eq!(Crs::from_epsg(4026).unwrap().datum.name, "D_MOLDREF99");
     assert_eq!(Crs::from_epsg(4037).unwrap().datum.name, "D_WGS_1984");
-    assert_eq!(Crs::from_epsg(4048).unwrap().datum.name, "D_Reseau_Geodesique_de_la_RDC_2005");
-    assert_eq!(Crs::from_epsg(4063).unwrap().datum.name, "D_Reseau_Geodesique_de_la_RDC_2005");
+    assert_eq!(
+        Crs::from_epsg(4048).unwrap().datum.name,
+        "D_Reseau_Geodesique_de_la_RDC_2005"
+    );
+    assert_eq!(
+        Crs::from_epsg(4063).unwrap().datum.name,
+        "D_Reseau_Geodesique_de_la_RDC_2005"
+    );
 }
 
 #[test]
@@ -131,7 +116,10 @@ fn epsg_step2_then_step1_parity_blocks_are_mapped() {
     assert!(Crs::from_epsg(2391).unwrap().name.contains("Finland"));
     assert!(Crs::from_epsg(2422).unwrap().name.contains("Beijing"));
     assert!(Crs::from_epsg(2867).unwrap().name.contains("NAD_1983_HARN"));
-    assert!(Crs::from_epsg(2954).unwrap().name.contains("Prince_Edward_Island"));
+    assert!(Crs::from_epsg(2954)
+        .unwrap()
+        .name
+        .contains("Prince_Edward_Island"));
 
     // Step 1 block representatives: 4120-4147, 4149-4151, 4153-4166, 4168-4176, 4178-4185
     assert!(Crs::from_epsg(4120).unwrap().name.contains("Greek"));
@@ -532,7 +520,9 @@ fn epsg_generated_metadata_is_specific() {
     assert!(info.name.contains("UTM") || info.name.contains("TM") || info.name.contains("Lambert"));
 
     let info = epsg_info(21028).unwrap();
-    assert!(info.name.contains("TM") || info.name.contains("Transverse") || info.name.contains("Gauss"));
+    assert!(
+        info.name.contains("TM") || info.name.contains("Transverse") || info.name.contains("Gauss")
+    );
 
     let info = epsg_info(5361).unwrap();
     assert!(info.name.contains("TM") || info.name.contains("UTM") || info.name.contains("Lambert"));
@@ -541,9 +531,7 @@ fn epsg_generated_metadata_is_specific() {
     assert!(info.name.contains("TM") || info.name.contains("UTM") || info.name.contains("Lambert"));
 
     let info = epsg_info(23240).unwrap();
-    assert!(
-        info.name.contains("TM") || info.name.contains("UTM") || info.name.contains("Gauss")
-    );
+    assert!(info.name.contains("TM") || info.name.contains("UTM") || info.name.contains("Gauss"));
 
     let info = epsg_info(2000).unwrap();
     assert!(!info.name.is_empty());
@@ -669,7 +657,9 @@ fn crs_transform_to_3d_supports_geocentric_round_trip() {
     let lat = -35.0;
     let h = 125.0;
 
-    let (x, y, z) = geographic.transform_to_3d(lon, lat, h, &geocentric).unwrap();
+    let (x, y, z) = geographic
+        .transform_to_3d(lon, lat, h, &geocentric)
+        .unwrap();
     let (lon2, lat2, h2) = geocentric.transform_to_3d(x, y, z, &geographic).unwrap();
 
     assert!((lon2 - lon).abs() < 1e-8);
@@ -850,9 +840,8 @@ fn crs_transform_to_3d_preserve_horizontal_with_provider_adjusts_z() {
     let vertical = Crs::from_epsg(7841).unwrap();
     let projected = Crs::from_epsg(7846).unwrap();
 
-    let provider = |_: f64, _: f64, _: &Crs, _: &Crs| -> crate::Result<(f64, f64)> {
-        Ok((30.0, 10.0))
-    };
+    let provider =
+        |_: f64, _: f64, _: &Crs, _: &Crs| -> crate::Result<(f64, f64)> { Ok((30.0, 10.0)) };
 
     let (x2, y2, z2) = projected
         .transform_to_3d_preserve_horizontal_with_provider(
@@ -875,7 +864,9 @@ fn crs_transform_to_3d_preserve_horizontal_with_provider_propagates_provider_err
     let projected = Crs::from_epsg(7846).unwrap();
 
     let provider = |_: f64, _: f64, _: &Crs, _: &Crs| -> crate::Result<(f64, f64)> {
-        Err(crate::ProjectionError::DatumError("provider failed".to_string()))
+        Err(crate::ProjectionError::DatumError(
+            "provider failed".to_string(),
+        ))
     };
 
     let out = projected.transform_to_3d_preserve_horizontal_with_provider(
@@ -953,7 +944,9 @@ fn crs_transform_to_3d_preserve_horizontal_with_grid_provider_adjusts_z() {
     let provider = GridVerticalOffsetProvider::new(source_grid_name, target_grid_name);
 
     let (_x2, _y2, z2) = geographic
-        .transform_to_3d_preserve_horizontal_with_provider(147.0, -35.0, 100.0, &vertical, &provider)
+        .transform_to_3d_preserve_horizontal_with_provider(
+            147.0, -35.0, 100.0, &vertical, &provider,
+        )
         .unwrap();
 
     assert!((z2 - 120.0).abs() < TOL);
@@ -1014,21 +1007,26 @@ fn epsg_policy_fallback_reports_error_if_fallback_code_unsupported() {
 
 #[test]
 fn crs_from_epsg_with_policy_mirrors_module_api() {
-    let crs = Crs::from_epsg_with_policy(9999999, EpsgResolutionPolicy::FallbackToWebMercator)
-        .unwrap();
+    let crs =
+        Crs::from_epsg_with_policy(9999999, EpsgResolutionPolicy::FallbackToWebMercator).unwrap();
     assert!(crs.name.contains("Mercator"));
 }
 
 #[test]
 fn epsg_alias_catalog_contains_legacy_webmercator_codes() {
     let entries = epsg_alias_catalog();
-    assert!(entries.iter().any(|e| e.source_code == 900913 && e.target_epsg == 3857));
-    assert!(entries.iter().any(|e| e.source_code == 102100 && e.target_epsg == 3857));
+    assert!(entries
+        .iter()
+        .any(|e| e.source_code == 900913 && e.target_epsg == 3857));
+    assert!(entries
+        .iter()
+        .any(|e| e.source_code == 102100 && e.target_epsg == 3857));
 }
 
 #[test]
 fn epsg_catalog_resolver_maps_legacy_alias_before_fallback() {
-    let resolved = resolve_epsg_with_catalog(900913, EpsgResolutionPolicy::FallbackToWgs84).unwrap();
+    let resolved =
+        resolve_epsg_with_catalog(900913, EpsgResolutionPolicy::FallbackToWgs84).unwrap();
     assert_eq!(resolved.resolved_code, 3857);
     assert!(resolved.used_alias_catalog);
     assert!(!resolved.used_fallback);
@@ -1174,8 +1172,8 @@ fn epsg_26918_nad83_utm18n() {
 #[test]
 fn epsg_nad83_2011_utm_block_roundtrip() {
     let checks = [
-        (6328u32, 170.5, 52.0), // zone 59N
-        (6329u32, 176.5, 54.0), // zone 60N
+        (6328u32, 170.5, 52.0),  // zone 59N
+        (6329u32, 176.5, 54.0),  // zone 60N
         (6330u32, -177.0, 58.0), // zone 1N
         (6348u32, -69.0, 43.0),  // zone 19N
     ];
@@ -1193,9 +1191,9 @@ fn epsg_nad83_2011_utm_block_roundtrip() {
 #[test]
 fn epsg_csrs_utm_active_and_realization_codes_roundtrip() {
     let checks = [
-        (2961u32, -63.0, 47.0),  // NAD83(CSRS) zone 20N
-        (3154u32, -141.0, 64.0), // NAD83(CSRS) zone 7N
-        (9713u32, -39.0, 8.5),   // NAD83(CSRS) zone 24N
+        (2961u32, -63.0, 47.0),   // NAD83(CSRS) zone 20N
+        (3154u32, -141.0, 64.0),  // NAD83(CSRS) zone 7N
+        (9713u32, -39.0, 8.5),    // NAD83(CSRS) zone 24N
         (22207u32, -141.0, 64.0), // NAD83(CSRS)v2 zone 7N
         (22222u32, -45.0, 72.0),  // NAD83(CSRS)v2 zone 22N
         (22521u32, -57.0, 47.0),  // NAD83(CSRS)v5 zone 21N
@@ -1229,14 +1227,38 @@ fn epsg_preferred_operation_csrs_v3_v8_same_zone_maps_to_10715() {
     assert_eq!(preferred_operation_code_for_crs_pair(22317, 22818), None);
     assert_eq!(preferred_operation_code_for_crs_pair(22322, 22821), None);
     assert_eq!(preferred_operation_code_for_crs_pair(22306, 22806), None);
-    assert_eq!(preferred_operation_code_for_crs_pair(22323, 22823), Some(10715));
-    assert_eq!(preferred_operation_code_for_crs_pair(22324, 22824), Some(10715));
-    assert_eq!(preferred_operation_code_for_crs_pair(22417, 22817), Some(10715));
-    assert_eq!(preferred_operation_code_for_crs_pair(22617, 22817), Some(10715));
-    assert_eq!(preferred_operation_code_for_crs_pair(22717, 22817), Some(10715));
-    assert_eq!(preferred_operation_code_for_crs_pair(22317, 22717), Some(10715));
-    assert_eq!(preferred_operation_code_for_crs_pair(22521, 22821), Some(10715));
-    assert_eq!(preferred_operation_code_for_crs_pair(22321, 22521), Some(10715));
+    assert_eq!(
+        preferred_operation_code_for_crs_pair(22323, 22823),
+        Some(10715)
+    );
+    assert_eq!(
+        preferred_operation_code_for_crs_pair(22324, 22824),
+        Some(10715)
+    );
+    assert_eq!(
+        preferred_operation_code_for_crs_pair(22417, 22817),
+        Some(10715)
+    );
+    assert_eq!(
+        preferred_operation_code_for_crs_pair(22617, 22817),
+        Some(10715)
+    );
+    assert_eq!(
+        preferred_operation_code_for_crs_pair(22717, 22817),
+        Some(10715)
+    );
+    assert_eq!(
+        preferred_operation_code_for_crs_pair(22317, 22717),
+        Some(10715)
+    );
+    assert_eq!(
+        preferred_operation_code_for_crs_pair(22521, 22821),
+        Some(10715)
+    );
+    assert_eq!(
+        preferred_operation_code_for_crs_pair(22321, 22521),
+        Some(10715)
+    );
     assert_eq!(preferred_operation_code_for_crs_pair(4326, 3857), None);
 }
 
@@ -1261,7 +1283,9 @@ fn epsg_preferred_operation_csrs_v4_v8_same_zone_maps_to_10715() {
 
 #[test]
 fn epsg_preferred_operation_csrs_activation_scaffold_tracks_v2_to_v8_families() {
-    let realization_bases = [22200u32, 22300u32, 22400u32, 22500u32, 22600u32, 22700u32, 22800u32];
+    let realization_bases = [
+        22200u32, 22300u32, 22400u32, 22500u32, 22600u32, 22700u32, 22800u32,
+    ];
     let zone = 17u32;
 
     for src_base in realization_bases {
@@ -1271,9 +1295,16 @@ fn epsg_preferred_operation_csrs_activation_scaffold_tracks_v2_to_v8_families() 
             let got = preferred_operation_code_for_crs_pair(src, dst);
 
             if src_base != dst_base {
-                assert_eq!(got, Some(10715), "expected active scaffold mapping for {src}->{dst}");
+                assert_eq!(
+                    got,
+                    Some(10715),
+                    "expected active scaffold mapping for {src}->{dst}"
+                );
             } else {
-                assert_eq!(got, None, "expected no preferred-op no-op mapping for {src}->{dst}");
+                assert_eq!(
+                    got, None,
+                    "expected no preferred-op no-op mapping for {src}->{dst}"
+                );
             }
         }
     }
@@ -1368,49 +1399,68 @@ fn epsg_csrs_v5_utm_codes_build_and_roundtrip() {
 #[test]
 fn epsg_csrs_registry_families_resolve_globally() {
     let csrs_geographic_codes = [
-        4617u32, 4954, 4955,
-        8230, 8231, 8232,
-        8233, 8235, 8237,
-        8238, 8239, 8240,
-        8242, 8244, 8246,
-        8247, 8248, 8249,
-        8250, 8251, 8252,
-        8253, 8254, 8255,
-        10413, 10414,
+        4617u32, 4954, 4955, 8230, 8231, 8232, 8233, 8235, 8237, 8238, 8239, 8240, 8242, 8244,
+        8246, 8247, 8248, 8249, 8250, 8251, 8252, 8253, 8254, 8255, 10413, 10414,
     ];
 
     for code in csrs_geographic_codes {
-        assert!(from_epsg(code).is_ok(), "CSRS geographic EPSG:{code} should resolve");
+        assert!(
+            from_epsg(code).is_ok(),
+            "CSRS geographic EPSG:{code} should resolve"
+        );
     }
 
     for code in [
-        2955u32, 2956, 2957, 2958, 2959, 2960, 2961, 2962,
-        3154, 3155, 3156, 3157, 3158, 3159, 3160,
-        3761, 9709, 9713,
+        2955u32, 2956, 2957, 2958, 2959, 2960, 2961, 2962, 3154, 3155, 3156, 3157, 3158, 3159,
+        3160, 3761, 9709, 9713,
     ] {
-        assert!(from_epsg(code).is_ok(), "CSRS v1 UTM EPSG:{code} should resolve");
+        assert!(
+            from_epsg(code).is_ok(),
+            "CSRS v1 UTM EPSG:{code} should resolve"
+        );
     }
 
     for code in 22207u32..=22222 {
-        assert!(from_epsg(code).is_ok(), "CSRS v2 UTM EPSG:{code} should resolve");
+        assert!(
+            from_epsg(code).is_ok(),
+            "CSRS v2 UTM EPSG:{code} should resolve"
+        );
     }
     for code in 22307u32..=22324 {
-        assert!(from_epsg(code).is_ok(), "CSRS v3 UTM EPSG:{code} should resolve");
+        assert!(
+            from_epsg(code).is_ok(),
+            "CSRS v3 UTM EPSG:{code} should resolve"
+        );
     }
     for code in 22407u32..=22424 {
-        assert!(from_epsg(code).is_ok(), "CSRS v4 UTM EPSG:{code} should resolve");
+        assert!(
+            from_epsg(code).is_ok(),
+            "CSRS v4 UTM EPSG:{code} should resolve"
+        );
     }
     for code in 22507u32..=22524 {
-        assert!(from_epsg(code).is_ok(), "CSRS v5 UTM EPSG:{code} should resolve");
+        assert!(
+            from_epsg(code).is_ok(),
+            "CSRS v5 UTM EPSG:{code} should resolve"
+        );
     }
     for code in 22607u32..=22624 {
-        assert!(from_epsg(code).is_ok(), "CSRS v6 UTM EPSG:{code} should resolve");
+        assert!(
+            from_epsg(code).is_ok(),
+            "CSRS v6 UTM EPSG:{code} should resolve"
+        );
     }
     for code in 22707u32..=22724 {
-        assert!(from_epsg(code).is_ok(), "CSRS v7 UTM EPSG:{code} should resolve");
+        assert!(
+            from_epsg(code).is_ok(),
+            "CSRS v7 UTM EPSG:{code} should resolve"
+        );
     }
     for code in 22807u32..=22824 {
-        assert!(from_epsg(code).is_ok(), "CSRS v8 UTM EPSG:{code} should resolve");
+        assert!(
+            from_epsg(code).is_ok(),
+            "CSRS v8 UTM EPSG:{code} should resolve"
+        );
     }
 }
 
@@ -1461,7 +1511,10 @@ fn epsg_us_phase1_support_snapshot_tracks_active_seed_corridors() {
     }
 
     assert!(
-        snapshot.pairs.iter().all(|p| p.status == UsPreferredOperationStatus::Active),
+        snapshot
+            .pairs
+            .iter()
+            .all(|p| p.status == UsPreferredOperationStatus::Active),
         "all US phase-1 pairs should be active in broad rollout mode"
     );
 }
@@ -1616,7 +1669,10 @@ fn epsg_preferred_operation_definition_with_policy_builds_dynamic_grid_shift_op(
     assert_eq!(reverse_europe.operation_code, 10715);
     assert_eq!(reverse_europe.source_crs_code, 3035);
     assert_eq!(reverse_europe.target_crs_code, 25801);
-    assert_eq!(reverse_europe.method, crate::OperationMethod::DynamicGridShift);
+    assert_eq!(
+        reverse_europe.method,
+        crate::OperationMethod::DynamicGridShift
+    );
     assert!(reverse_europe.preferred);
 }
 
@@ -1624,10 +1680,22 @@ fn epsg_preferred_operation_definition_with_policy_builds_dynamic_grid_shift_op(
 fn epsg_preferred_operation_definition_with_policy_falls_back_without_defaults() {
     let policy = PreferredOperationPolicy::default();
 
-    assert_eq!(preferred_operation_for_crs_pair_with_policy(3582, 6487, policy), None);
-    assert_eq!(preferred_operation_for_crs_pair_with_policy(25832, 3035, policy), None);
-    assert_eq!(preferred_operation_for_crs_pair_with_policy(6568, 3600, policy), None);
-    assert_eq!(preferred_operation_for_crs_pair_with_policy(3035, 25801, policy), None);
+    assert_eq!(
+        preferred_operation_for_crs_pair_with_policy(3582, 6487, policy),
+        None
+    );
+    assert_eq!(
+        preferred_operation_for_crs_pair_with_policy(25832, 3035, policy),
+        None
+    );
+    assert_eq!(
+        preferred_operation_for_crs_pair_with_policy(6568, 3600, policy),
+        None
+    );
+    assert_eq!(
+        preferred_operation_for_crs_pair_with_policy(3035, 25801, policy),
+        None
+    );
 }
 
 #[test]
@@ -1855,12 +1923,12 @@ fn epsg_2227_california_zone3_ftus_roundtrip() {
 #[test]
 fn epsg_spcs83_national_meter_new_codes_roundtrip() {
     let cases = [
-        (26929u32, -85.5, 32.5),   // Alabama East (TM)
-        (26931u32, -134.2, 57.2),  // Alaska zone 1 (Oblique Mercator)
-        (26953u32, -105.2, 40.0),  // Colorado North (LCC)
-        (26961u32, -155.2, 19.5),  // Hawaii zone 1 (TM)
-        (26991u32, -93.5, 47.8),   // Minnesota North (LCC)
-        (26998u32, -94.1, 38.5),   // Missouri West (TM)
+        (26929u32, -85.5, 32.5),  // Alabama East (TM)
+        (26931u32, -134.2, 57.2), // Alaska zone 1 (Oblique Mercator)
+        (26953u32, -105.2, 40.0), // Colorado North (LCC)
+        (26961u32, -155.2, 19.5), // Hawaii zone 1 (TM)
+        (26991u32, -93.5, 47.8),  // Minnesota North (LCC)
+        (26998u32, -94.1, 38.5),  // Missouri West (TM)
     ];
 
     for (code, lon_in, lat_in) in cases {
@@ -1875,12 +1943,12 @@ fn epsg_spcs83_national_meter_new_codes_roundtrip() {
 #[test]
 fn epsg_spcs83_harn_national_meter_codes_roundtrip() {
     let cases = [
-        (2759u32, -85.5, 32.5),   // Alabama East (TM)
-        (2772u32, -105.2, 40.0),  // Colorado North (LCC)
-        (2824u32, -74.7, 40.2),   // New Jersey (TM)
-        (2838u32, -122.0, 45.5),  // Oregon North (LCC)
-        (2852u32, -72.6, 44.0),   // Vermont (TM)
-        (2866u32, -66.3, 18.3),   // Puerto Rico and Virgin Is. (LCC)
+        (2759u32, -85.5, 32.5),  // Alabama East (TM)
+        (2772u32, -105.2, 40.0), // Colorado North (LCC)
+        (2824u32, -74.7, 40.2),  // New Jersey (TM)
+        (2838u32, -122.0, 45.5), // Oregon North (LCC)
+        (2852u32, -72.6, 44.0),  // Vermont (TM)
+        (2866u32, -66.3, 18.3),  // Puerto Rico and Virgin Is. (LCC)
     ];
 
     for (code, lon_in, lat_in) in cases {
@@ -1895,13 +1963,13 @@ fn epsg_spcs83_harn_national_meter_codes_roundtrip() {
 #[test]
 fn epsg_spcs83_nsrs2007_codes_roundtrip() {
     let cases = [
-        (3465u32, -85.5, 32.5),   // Alabama East (TM)
-        (3468u32, -134.2, 57.2),  // Alaska zone 1 (Oblique Mercator)
-        (3477u32, -176.2, 51.7),  // Alaska zone 10 (LCC)
-        (3501u32, -105.2, 39.8),  // Colorado Central (LCC)
-        (3502u32, -105.2, 39.8),  // Colorado Central (ftUS)
-        (3511u32, -80.9, 27.3),   // Florida East (TM)
-        (3552u32, -91.2, 29.8),   // Louisiana South (LCC)
+        (3465u32, -85.5, 32.5),  // Alabama East (TM)
+        (3468u32, -134.2, 57.2), // Alaska zone 1 (Oblique Mercator)
+        (3477u32, -176.2, 51.7), // Alaska zone 10 (LCC)
+        (3501u32, -105.2, 39.8), // Colorado Central (LCC)
+        (3502u32, -105.2, 39.8), // Colorado Central (ftUS)
+        (3511u32, -80.9, 27.3),  // Florida East (TM)
+        (3552u32, -91.2, 29.8),  // Louisiana South (LCC)
     ];
 
     for (code, lon_in, lat_in) in cases {
@@ -1916,13 +1984,13 @@ fn epsg_spcs83_nsrs2007_codes_roundtrip() {
 #[test]
 fn epsg_spcs83_nad83_2011_codes_roundtrip() {
     let cases = [
-        (6355u32, -85.5, 32.5),    // Alabama East (TM, m)
-        (6393u32, -150.0, 64.0),   // Alaska Albers (m)
-        (6394u32, -133.7, 57.2),   // Alaska zone 1 (Oblique Mercator, m)
-        (6429u32, -105.2, 40.0),   // Colorado North (LCC, m)
-        (6405u32, -111.9, 33.5),   // Arizona Central (TM, ft)
-        (6430u32, -105.2, 40.0),   // Colorado North (LCC, ftUS)
-        (6494u32, -84.8, 44.5),    // Michigan Central (LCC, ft)
+        (6355u32, -85.5, 32.5),  // Alabama East (TM, m)
+        (6393u32, -150.0, 64.0), // Alaska Albers (m)
+        (6394u32, -133.7, 57.2), // Alaska zone 1 (Oblique Mercator, m)
+        (6429u32, -105.2, 40.0), // Colorado North (LCC, m)
+        (6405u32, -111.9, 33.5), // Arizona Central (TM, ft)
+        (6430u32, -105.2, 40.0), // Colorado North (LCC, ftUS)
+        (6494u32, -84.8, 44.5),  // Michigan Central (LCC, ft)
     ];
 
     for (code, lon_in, lat_in) in cases {
@@ -1938,7 +2006,7 @@ fn epsg_spcs83_nad83_2011_codes_roundtrip() {
 #[test]
 fn epsg_us_and_europe_epoch_aware_anchor_codes_roundtrip() {
     let us_cases = [
-        (3582u32, -77.0, 38.3),   // NAD83(NSRS2007) Maryland
+        (3582u32, -77.0, 38.3),              // NAD83(NSRS2007) Maryland
         (3600u32, -90.33333333333333, 29.5), // NAD83(NSRS2007) Mississippi West
     ];
 
@@ -3296,12 +3364,30 @@ fn epsg_6957_vn2000_tm3_zone482_roundtrip() {
 #[test]
 fn epsg_ingcs_25_code_batch_roundtrip() {
     let checks: &[(u32, f64, f64)] = &[
-        (7257, -84.9, 40.7), (7259, -85.0, 41.0), (7261, -85.8, 39.2), (7263, -87.2, 40.6),
-        (7265, -85.3, 40.2), (7267, -86.4, 39.8), (7269, -86.2, 39.2), (7271, -86.6, 40.6),
-        (7273, -86.3, 40.7), (7275, -85.5, 38.3), (7277, -87.1, 39.3), (7279, -86.5, 40.3),
-        (7281, -86.4, 38.3), (7283, -87.0, 38.6), (7285, -84.8, 38.8), (7287, -85.6, 39.3),
-        (7289, -84.9, 41.4), (7291, -86.8, 38.3), (7293, -85.7, 40.8), (7295, -84.9, 39.4),
-        (7297, -87.2, 40.1), (7299, -86.2, 41.0), (7301, -87.5, 38.3), (7303, -85.6, 40.5),
+        (7257, -84.9, 40.7),
+        (7259, -85.0, 41.0),
+        (7261, -85.8, 39.2),
+        (7263, -87.2, 40.6),
+        (7265, -85.3, 40.2),
+        (7267, -86.4, 39.8),
+        (7269, -86.2, 39.2),
+        (7271, -86.6, 40.6),
+        (7273, -86.3, 40.7),
+        (7275, -85.5, 38.3),
+        (7277, -87.1, 39.3),
+        (7279, -86.5, 40.3),
+        (7281, -86.4, 38.3),
+        (7283, -87.0, 38.6),
+        (7285, -84.8, 38.8),
+        (7287, -85.6, 39.3),
+        (7289, -84.9, 41.4),
+        (7291, -86.8, 38.3),
+        (7293, -85.7, 40.8),
+        (7295, -84.9, 39.4),
+        (7297, -87.2, 40.1),
+        (7299, -86.2, 41.0),
+        (7301, -87.5, 38.3),
+        (7303, -85.6, 40.5),
         (7305, -85.9, 40.1),
     ];
     for (code, lon_in, lat_in) in checks {
@@ -3316,12 +3402,30 @@ fn epsg_ingcs_25_code_batch_roundtrip() {
 #[test]
 fn epsg_ingcs_second_25_code_batch_roundtrip() {
     let checks: &[(u32, f64, f64)] = &[
-        (7307, -85.8, 39.9), (7309, -86.1, 38.2), (7311, -85.4, 39.9), (7313, -86.1, 40.5),
-        (7315, -85.5, 40.9), (7317, -86.0, 38.9), (7319, -87.0, 41.1), (7321, -85.0, 40.4),
-        (7323, -85.4, 38.7), (7325, -85.7, 39.0), (7327, -86.1, 39.6), (7329, -87.4, 38.6),
-        (7331, -85.5, 41.5), (7333, -87.4, 41.1), (7335, -86.8, 41.2), (7337, -86.5, 39.2),
-        (7339, -86.9, 39.8), (7341, -86.9, 39.3), (7343, -87.3, 39.8), (7345, -86.7, 38.0),
-        (7347, -87.3, 38.1), (7349, -87.9, 38.0), (7351, -85.0, 40.0), (7353, -85.3, 39.1),
+        (7307, -85.8, 39.9),
+        (7309, -86.1, 38.2),
+        (7311, -85.4, 39.9),
+        (7313, -86.1, 40.5),
+        (7315, -85.5, 40.9),
+        (7317, -86.0, 38.9),
+        (7319, -87.0, 41.1),
+        (7321, -85.0, 40.4),
+        (7323, -85.4, 38.7),
+        (7325, -85.7, 39.0),
+        (7327, -86.1, 39.6),
+        (7329, -87.4, 38.6),
+        (7331, -85.5, 41.5),
+        (7333, -87.4, 41.1),
+        (7335, -86.8, 41.2),
+        (7337, -86.5, 39.2),
+        (7339, -86.9, 39.8),
+        (7341, -86.9, 39.3),
+        (7343, -87.3, 39.8),
+        (7345, -86.7, 38.0),
+        (7347, -87.3, 38.1),
+        (7349, -87.9, 38.0),
+        (7351, -85.0, 40.0),
+        (7353, -85.3, 39.1),
         (7355, -85.9, 39.5),
     ];
     for (code, lon_in, lat_in) in checks {
@@ -3336,12 +3440,30 @@ fn epsg_ingcs_second_25_code_batch_roundtrip() {
 #[test]
 fn epsg_iarcs_rmtcrs_sfcs13_25_code_batch_roundtrip() {
     let checks: &[(u32, f64, f64)] = &[
-        (7057, -95.1, 43.3), (7058, -92.6, 43.3), (7059, -91.0, 40.4), (7060, -94.7, 42.7),
-        (7061, -92.1, 42.8), (7062, -95.6, 40.4), (7063, -94.5, 40.4), (7064, -93.6, 40.4),
-        (7065, -92.7, 40.4), (7066, -91.5, 41.9), (7067, -90.4, 40.4), (7068, -93.6, 41.0),
-        (7069, -91.8, 40.4), (7070, -91.1, 40.4), (7109, -112.4, 48.6), (7110, -112.4, 48.1),
-        (7111, -110.9, 48.6), (7112, -108.4, 48.6), (7113, -105.4, 48.4), (7114, -105.4, 48.4),
-        (7115, -107.6, 44.9), (7116, -111.1, 46.4), (7117, -108.3, 45.9), (7118, -108.2, 42.8),
+        (7057, -95.1, 43.3),
+        (7058, -92.6, 43.3),
+        (7059, -91.0, 40.4),
+        (7060, -94.7, 42.7),
+        (7061, -92.1, 42.8),
+        (7062, -95.6, 40.4),
+        (7063, -94.5, 40.4),
+        (7064, -93.6, 40.4),
+        (7065, -92.7, 40.4),
+        (7066, -91.5, 41.9),
+        (7067, -90.4, 40.4),
+        (7068, -93.6, 41.0),
+        (7069, -91.8, 40.4),
+        (7070, -91.1, 40.4),
+        (7109, -112.4, 48.6),
+        (7110, -112.4, 48.1),
+        (7111, -110.9, 48.6),
+        (7112, -108.4, 48.6),
+        (7113, -105.4, 48.4),
+        (7114, -105.4, 48.4),
+        (7115, -107.6, 44.9),
+        (7116, -111.1, 46.4),
+        (7117, -108.3, 45.9),
+        (7118, -108.2, 42.8),
         (7131, -122.3, 37.8),
     ];
     for (code, lon_in, lat_in) in checks {
@@ -3356,12 +3478,30 @@ fn epsg_iarcs_rmtcrs_sfcs13_25_code_batch_roundtrip() {
 #[test]
 fn epsg_ingcs_ftus_25_code_batch_roundtrip() {
     let checks: &[(u32, f64, f64)] = &[
-        (7258, -84.9, 40.7), (7260, -85.0, 41.0), (7262, -85.8, 39.2), (7264, -87.2, 40.6),
-        (7266, -85.3, 40.2), (7268, -86.4, 39.8), (7270, -86.2, 39.2), (7272, -86.6, 40.6),
-        (7274, -86.3, 40.7), (7276, -85.5, 38.3), (7278, -87.1, 39.3), (7280, -86.5, 40.3),
-        (7282, -86.4, 38.3), (7284, -87.0, 38.6), (7286, -84.8, 38.8), (7288, -85.6, 39.3),
-        (7290, -84.9, 41.4), (7292, -86.8, 38.3), (7294, -85.7, 40.8), (7296, -84.9, 39.4),
-        (7298, -87.2, 40.1), (7300, -86.2, 41.0), (7302, -87.5, 38.3), (7304, -85.6, 40.5),
+        (7258, -84.9, 40.7),
+        (7260, -85.0, 41.0),
+        (7262, -85.8, 39.2),
+        (7264, -87.2, 40.6),
+        (7266, -85.3, 40.2),
+        (7268, -86.4, 39.8),
+        (7270, -86.2, 39.2),
+        (7272, -86.6, 40.6),
+        (7274, -86.3, 40.7),
+        (7276, -85.5, 38.3),
+        (7278, -87.1, 39.3),
+        (7280, -86.5, 40.3),
+        (7282, -86.4, 38.3),
+        (7284, -87.0, 38.6),
+        (7286, -84.8, 38.8),
+        (7288, -85.6, 39.3),
+        (7290, -84.9, 41.4),
+        (7292, -86.8, 38.3),
+        (7294, -85.7, 40.8),
+        (7296, -84.9, 39.4),
+        (7298, -87.2, 40.1),
+        (7300, -86.2, 41.0),
+        (7302, -87.5, 38.3),
+        (7304, -85.6, 40.5),
         (7306, -85.9, 40.1),
     ];
     for (code, lon_in, lat_in) in checks {
@@ -3534,12 +3674,8 @@ fn epsg_new_beijing_cm_and_ntm_next_25_code_batch_roundtrip() {
 #[test]
 fn epsg_nad83_csrs_realizations_next_25_code_batch_roundtrip() {
     let codes = [
-        4954u32, 4955,
-        8230, 8231, 8232, 8233, 8235, 8237,
-        8238, 8239, 8240, 8242, 8244, 8246,
-        8247, 8248, 8249, 8250, 8251, 8252,
-        8253, 8254, 8255,
-        10413, 10414,
+        4954u32, 4955, 8230, 8231, 8232, 8233, 8235, 8237, 8238, 8239, 8240, 8242, 8244, 8246,
+        8247, 8248, 8249, 8250, 8251, 8252, 8253, 8254, 8255, 10413, 10414,
     ];
 
     for code in codes {
@@ -3615,9 +3751,7 @@ fn epsg_pulkovo_1995_gk_cm_block_roundtrip() {
 #[test]
 fn epsg_adjusted_pulkovo_gk_extensions_roundtrip() {
     let three_degree = [
-        3329u32, 3330, 3331, 3332,
-        4417, 4434,
-        5670, 5671, 5672, 5673, 5674, 5675,
+        3329u32, 3330, 3331, 3332, 4417, 4434, 5670, 5671, 5672, 5673, 5674, 5675,
     ];
     for code in three_degree {
         let zone = match code {
@@ -3676,49 +3810,49 @@ fn epsg_info_returns_none_for_unknown() {
 #[test]
 fn known_codes_include_utm_and_named() {
     let codes = known_epsg_codes();
-    assert!(codes.contains(&32632));  // UTM 32N
-    assert!(codes.contains(&32661));  // UPS North
-    assert!(codes.contains(&32761));  // UPS South
-    assert!(codes.contains(&3857));   // Web Mercator
-    assert!(codes.contains(&4087));   // World Equidistant Cylindrical
-    assert!(codes.contains(&5070));   // CONUS Albers
-    assert!(codes.contains(&2163));   // US National Atlas Equal Area
-    assert!(codes.contains(&27700));  // British National Grid
-    assert!(codes.contains(&2157));   // Irish TM
-    assert!(codes.contains(&29903));  // Irish Grid
-    assert!(codes.contains(&3006));   // SWEREF99 TM
-    assert!(codes.contains(&3032));   // Australian Antarctic Polar Stereographic
-    assert!(codes.contains(&31370));  // Belgian Lambert 72
-    assert!(codes.contains(&5514));   // S-JTSK / Krovak East North
-    assert!(codes.contains(&6931));   // NSIDC EASE-Grid 2.0 North
-    assert!(codes.contains(&6932));   // NSIDC EASE-Grid 2.0 South
-    assert!(codes.contains(&6933));   // NSIDC EASE-Grid 2.0 Global
-    assert!(codes.contains(&3410));   // NSIDC EASE-Grid Global
-    assert!(codes.contains(&3400));   // Alberta 10-TM Forest
-    assert!(codes.contains(&3401));   // Alberta 10-TM Resource
-    assert!(codes.contains(&3402));   // Alberta 10-TM CSRS Forest
-    assert!(codes.contains(&3403));   // Alberta 10-TM
-    assert!(codes.contains(&3405));   // VN-2000 UTM zone 48N
-    assert!(codes.contains(&3406));   // VN-2000 UTM zone 49N
-    assert!(codes.contains(&3408));   // NSIDC EASE-Grid North
-    assert!(codes.contains(&3409));   // NSIDC EASE-Grid South
-    assert!(codes.contains(&3571));   // North Pole LAEA Bering Sea
-    assert!(codes.contains(&3572));   // North Pole LAEA Alaska
-    assert!(codes.contains(&3573));   // North Pole LAEA Canada
-    assert!(codes.contains(&3574));   // North Pole LAEA Atlantic
-    assert!(codes.contains(&3576));   // North Pole LAEA Russia
-    assert!(codes.contains(&3578));   // Yukon Albers
-    assert!(codes.contains(&3579));   // Yukon Albers CSRS
-    assert!(codes.contains(&3832));   // PDC Mercator
-    assert!(codes.contains(&3833));   // Pulkovo GK zone 2
-    assert!(codes.contains(&3834));   // Pulkovo83 GK zone 2
-    assert!(codes.contains(&3835));   // Pulkovo83 GK zone 3
-    assert!(codes.contains(&3836));   // Pulkovo83 GK zone 4
-    assert!(codes.contains(&3837));   // Pulkovo58 3deg GK zone 3
-    assert!(codes.contains(&3838));   // Pulkovo58 3deg GK zone 4
-    assert!(codes.contains(&3839));   // Pulkovo58 3deg GK zone 9
-    assert!(codes.contains(&3840));   // Pulkovo58 3deg GK zone 10
-    assert!(codes.contains(&3841));   // Pulkovo83 3deg GK zone 6
+    assert!(codes.contains(&32632)); // UTM 32N
+    assert!(codes.contains(&32661)); // UPS North
+    assert!(codes.contains(&32761)); // UPS South
+    assert!(codes.contains(&3857)); // Web Mercator
+    assert!(codes.contains(&4087)); // World Equidistant Cylindrical
+    assert!(codes.contains(&5070)); // CONUS Albers
+    assert!(codes.contains(&2163)); // US National Atlas Equal Area
+    assert!(codes.contains(&27700)); // British National Grid
+    assert!(codes.contains(&2157)); // Irish TM
+    assert!(codes.contains(&29903)); // Irish Grid
+    assert!(codes.contains(&3006)); // SWEREF99 TM
+    assert!(codes.contains(&3032)); // Australian Antarctic Polar Stereographic
+    assert!(codes.contains(&31370)); // Belgian Lambert 72
+    assert!(codes.contains(&5514)); // S-JTSK / Krovak East North
+    assert!(codes.contains(&6931)); // NSIDC EASE-Grid 2.0 North
+    assert!(codes.contains(&6932)); // NSIDC EASE-Grid 2.0 South
+    assert!(codes.contains(&6933)); // NSIDC EASE-Grid 2.0 Global
+    assert!(codes.contains(&3410)); // NSIDC EASE-Grid Global
+    assert!(codes.contains(&3400)); // Alberta 10-TM Forest
+    assert!(codes.contains(&3401)); // Alberta 10-TM Resource
+    assert!(codes.contains(&3402)); // Alberta 10-TM CSRS Forest
+    assert!(codes.contains(&3403)); // Alberta 10-TM
+    assert!(codes.contains(&3405)); // VN-2000 UTM zone 48N
+    assert!(codes.contains(&3406)); // VN-2000 UTM zone 49N
+    assert!(codes.contains(&3408)); // NSIDC EASE-Grid North
+    assert!(codes.contains(&3409)); // NSIDC EASE-Grid South
+    assert!(codes.contains(&3571)); // North Pole LAEA Bering Sea
+    assert!(codes.contains(&3572)); // North Pole LAEA Alaska
+    assert!(codes.contains(&3573)); // North Pole LAEA Canada
+    assert!(codes.contains(&3574)); // North Pole LAEA Atlantic
+    assert!(codes.contains(&3576)); // North Pole LAEA Russia
+    assert!(codes.contains(&3578)); // Yukon Albers
+    assert!(codes.contains(&3579)); // Yukon Albers CSRS
+    assert!(codes.contains(&3832)); // PDC Mercator
+    assert!(codes.contains(&3833)); // Pulkovo GK zone 2
+    assert!(codes.contains(&3834)); // Pulkovo83 GK zone 2
+    assert!(codes.contains(&3835)); // Pulkovo83 GK zone 3
+    assert!(codes.contains(&3836)); // Pulkovo83 GK zone 4
+    assert!(codes.contains(&3837)); // Pulkovo58 3deg GK zone 3
+    assert!(codes.contains(&3838)); // Pulkovo58 3deg GK zone 4
+    assert!(codes.contains(&3839)); // Pulkovo58 3deg GK zone 9
+    assert!(codes.contains(&3840)); // Pulkovo58 3deg GK zone 10
+    assert!(codes.contains(&3841)); // Pulkovo83 3deg GK zone 6
     for code in 2463u32..=2491 {
         assert!(codes.contains(&code), "missing EPSG:{code}");
     }
@@ -3729,125 +3863,126 @@ fn known_codes_include_utm_and_named() {
         assert!(codes.contains(&code), "missing EPSG:{code}");
     }
     for code in [
-        3329u32, 3330, 3331, 3332, 3333, 3334, 3335,
-        4417, 4434,
-        5631, 5663, 5664, 5665,
-        5670, 5671, 5672, 5673, 5674, 5675,
+        3329u32, 3330, 3331, 3332, 3333, 3334, 3335, 4417, 4434, 5631, 5663, 5664, 5665, 5670,
+        5671, 5672, 5673, 5674, 5675,
     ] {
         assert!(codes.contains(&code), "missing EPSG:{code}");
     }
-    assert!(codes.contains(&3845));   // SWEREF99 RT90 7.5 gon V emulation
-    assert!(codes.contains(&3846));   // SWEREF99 RT90 5 gon V emulation
-    assert!(codes.contains(&3847));   // SWEREF99 RT90 2.5 gon V emulation
-    assert!(codes.contains(&3848));   // SWEREF99 RT90 0 gon emulation
-    assert!(codes.contains(&3849));   // SWEREF99 RT90 2.5 gon O emulation
-    assert!(codes.contains(&3850));   // SWEREF99 RT90 5 gon O emulation
-    assert!(codes.contains(&3976));   // NSIDC Sea Ice Polar Stereographic South
-    assert!(codes.contains(&3986));   // Katanga Gauss A
-    assert!(codes.contains(&3987));   // Katanga Gauss B
-    assert!(codes.contains(&3988));   // Katanga Gauss C
-    assert!(codes.contains(&3989));   // Katanga Gauss D
-    assert!(codes.contains(&3997));   // Dubai Local TM
-    assert!(codes.contains(&3994));   // Mercator 41
-    assert!(codes.contains(&3991));   // Puerto Rico CS27
-    assert!(codes.contains(&3992));   // Puerto Rico / St. Croix
-    assert!(codes.contains(&3996));   // IBCAO Polar Stereographic
-    assert!(codes.contains(&8857));   // Equal Earth Greenwich
-    assert!(codes.contains(&54008));  // World Sinusoidal (ESRI)
-    assert!(codes.contains(&54009));  // World Mollweide (ESRI)
-    assert!(codes.contains(&54030));  // World Robinson (ESRI)
-    assert!(codes.contains(&6672));   // JGD2011 Japan Plane CS IV
-    assert!(codes.contains(&6673));   // JGD2011 Japan Plane CS V
-    assert!(codes.contains(&6674));   // JGD2011 Japan Plane CS VI
-    assert!(codes.contains(&6675));   // JGD2011 Japan Plane CS VII
-    assert!(codes.contains(&6676));   // JGD2011 Japan Plane CS VIII
-    assert!(codes.contains(&6677));   // JGD2011 Japan Plane CS IX
-    assert!(codes.contains(&6678));   // JGD2011 Japan Plane CS X
-    assert!(codes.contains(&6679));   // JGD2011 Japan Plane CS XI
-    assert!(codes.contains(&6680));   // JGD2011 Japan Plane CS XII
-    assert!(codes.contains(&6681));   // JGD2011 Japan Plane CS XIII
-    assert!(codes.contains(&6682));   // JGD2011 Japan Plane CS XIV
-    assert!(codes.contains(&6683));   // JGD2011 Japan Plane CS XV
-    assert!(codes.contains(&6684));   // JGD2011 Japan Plane CS XVI
-    assert!(codes.contains(&6685));   // JGD2011 Japan Plane CS XVII
-    assert!(codes.contains(&6686));   // JGD2011 Japan Plane CS XVIII
-    assert!(codes.contains(&6687));   // JGD2011 Japan Plane CS XIX
-    assert!(codes.contains(&6688));   // JGD2011 UTM zone 51N
-    assert!(codes.contains(&6689));   // JGD2011 UTM zone 52N
-    assert!(codes.contains(&6690));   // JGD2011 UTM zone 53N
-    assert!(codes.contains(&6691));   // JGD2011 UTM zone 54N
-    assert!(codes.contains(&6692));   // JGD2011 UTM zone 55N
-    assert!(codes.contains(&6707));   // RDN2008 UTM zone 32N
-    assert!(codes.contains(&6708));   // RDN2008 UTM zone 33N
-    assert!(codes.contains(&6709));   // RDN2008 UTM zone 34N
-    assert!(codes.contains(&6732));   // GDA94 MGA zone 41
-    assert!(codes.contains(&6733));   // GDA94 MGA zone 42
-    assert!(codes.contains(&6734));   // GDA94 MGA zone 43
-    assert!(codes.contains(&6735));   // GDA94 MGA zone 44
-    assert!(codes.contains(&6736));   // GDA94 MGA zone 46
-    assert!(codes.contains(&6737));   // GDA94 MGA zone 47
-    assert!(codes.contains(&6738));   // GDA94 MGA zone 59
-    assert!(codes.contains(&6784));   // Oregon Baker (CORS96, m)
-    assert!(codes.contains(&6786));   // Oregon Baker (2011, m)
-    assert!(codes.contains(&6788));   // Oregon Bend-Klamath Falls (CORS96, m)
-    assert!(codes.contains(&6790));   // Oregon Bend-Klamath Falls (2011, m)
-    assert!(codes.contains(&6800));   // Oregon Canyonville-Grants Pass (CORS96, m)
-    assert!(codes.contains(&6802));   // Oregon Canyonville-Grants Pass (2011, m)
-    assert!(codes.contains(&6812));   // Oregon Cottage Grove-Canyonville (CORS96, m)
-    assert!(codes.contains(&6814));   // Oregon Cottage Grove-Canyonville (2011, m)
-    assert!(codes.contains(&6816));   // Oregon Dufur-Madras (CORS96, m)
-    assert!(codes.contains(&6818));   // Oregon Dufur-Madras (2011, m)
-    assert!(codes.contains(&6820));   // Oregon Eugene (CORS96, m)
-    assert!(codes.contains(&6822));   // Oregon Eugene (2011, m)
-    assert!(codes.contains(&6824));   // Oregon Grants Pass-Ashland (CORS96, m)
-    assert!(codes.contains(&6826));   // Oregon Grants Pass-Ashland (2011, m)
-    assert!(codes.contains(&6828));   // Oregon Gresham-Warm Springs (CORS96, m)
-    assert!(codes.contains(&6830));   // Oregon Gresham-Warm Springs (2011, m)
-    assert!(codes.contains(&6832));   // Oregon La Grande (CORS96, m)
-    assert!(codes.contains(&6834));   // Oregon La Grande (2011, m)
-    assert!(codes.contains(&6836));   // Oregon Ontario (CORS96, m)
-    assert!(codes.contains(&6838));   // Oregon Ontario (2011, m)
-    assert!(codes.contains(&6844));   // Oregon Pendleton (CORS96, m)
-    assert!(codes.contains(&6846));   // Oregon Pendleton (2011, m)
-    assert!(codes.contains(&6848));   // Oregon Pendleton-La Grande (CORS96, m)
-    assert!(codes.contains(&6850));   // Oregon Pendleton-La Grande (2011, m)
-    assert!(codes.contains(&6856));   // Oregon Salem (CORS96, m)
-    assert!(codes.contains(&6858));   // Oregon Salem (2011, m)
-    assert!(codes.contains(&6860));   // Oregon Santiam Pass (CORS96, m)
-    assert!(codes.contains(&6862));   // Oregon Santiam Pass (2011, m)
-    assert!(codes.contains(&6870));   // ETRS89 / Albania TM 2010
-    assert!(codes.contains(&6875));   // RDN2008 / Italy zone (N-E)
-    assert!(codes.contains(&6876));   // RDN2008 / Zone 12 (N-E)
-    assert!(codes.contains(&6915));   // South East Island 1943 / UTM zone 40N
-    assert!(codes.contains(&6927));   // SVY21 / Singapore TM
-    assert!(codes.contains(&6956));   // VN-2000 / TM-3 zone 481
-    assert!(codes.contains(&6957));   // VN-2000 / TM-3 zone 482
-    for code in [7257u32, 7259, 7261, 7263, 7265, 7267, 7269, 7271, 7273, 7275,
-                 7277, 7279, 7281, 7283, 7285, 7287, 7289, 7291, 7293, 7295,
-                 7297, 7299, 7301, 7303, 7305, 7307, 7309, 7311, 7313, 7315,
-                 7317, 7319, 7321, 7323, 7325, 7327, 7329, 7331, 7333, 7335,
-                 7337, 7339, 7341, 7343, 7345, 7347, 7349, 7351, 7353, 7355] {
+    assert!(codes.contains(&3845)); // SWEREF99 RT90 7.5 gon V emulation
+    assert!(codes.contains(&3846)); // SWEREF99 RT90 5 gon V emulation
+    assert!(codes.contains(&3847)); // SWEREF99 RT90 2.5 gon V emulation
+    assert!(codes.contains(&3848)); // SWEREF99 RT90 0 gon emulation
+    assert!(codes.contains(&3849)); // SWEREF99 RT90 2.5 gon O emulation
+    assert!(codes.contains(&3850)); // SWEREF99 RT90 5 gon O emulation
+    assert!(codes.contains(&3976)); // NSIDC Sea Ice Polar Stereographic South
+    assert!(codes.contains(&3986)); // Katanga Gauss A
+    assert!(codes.contains(&3987)); // Katanga Gauss B
+    assert!(codes.contains(&3988)); // Katanga Gauss C
+    assert!(codes.contains(&3989)); // Katanga Gauss D
+    assert!(codes.contains(&3997)); // Dubai Local TM
+    assert!(codes.contains(&3994)); // Mercator 41
+    assert!(codes.contains(&3991)); // Puerto Rico CS27
+    assert!(codes.contains(&3992)); // Puerto Rico / St. Croix
+    assert!(codes.contains(&3996)); // IBCAO Polar Stereographic
+    assert!(codes.contains(&8857)); // Equal Earth Greenwich
+    assert!(codes.contains(&54008)); // World Sinusoidal (ESRI)
+    assert!(codes.contains(&54009)); // World Mollweide (ESRI)
+    assert!(codes.contains(&54030)); // World Robinson (ESRI)
+    assert!(codes.contains(&6672)); // JGD2011 Japan Plane CS IV
+    assert!(codes.contains(&6673)); // JGD2011 Japan Plane CS V
+    assert!(codes.contains(&6674)); // JGD2011 Japan Plane CS VI
+    assert!(codes.contains(&6675)); // JGD2011 Japan Plane CS VII
+    assert!(codes.contains(&6676)); // JGD2011 Japan Plane CS VIII
+    assert!(codes.contains(&6677)); // JGD2011 Japan Plane CS IX
+    assert!(codes.contains(&6678)); // JGD2011 Japan Plane CS X
+    assert!(codes.contains(&6679)); // JGD2011 Japan Plane CS XI
+    assert!(codes.contains(&6680)); // JGD2011 Japan Plane CS XII
+    assert!(codes.contains(&6681)); // JGD2011 Japan Plane CS XIII
+    assert!(codes.contains(&6682)); // JGD2011 Japan Plane CS XIV
+    assert!(codes.contains(&6683)); // JGD2011 Japan Plane CS XV
+    assert!(codes.contains(&6684)); // JGD2011 Japan Plane CS XVI
+    assert!(codes.contains(&6685)); // JGD2011 Japan Plane CS XVII
+    assert!(codes.contains(&6686)); // JGD2011 Japan Plane CS XVIII
+    assert!(codes.contains(&6687)); // JGD2011 Japan Plane CS XIX
+    assert!(codes.contains(&6688)); // JGD2011 UTM zone 51N
+    assert!(codes.contains(&6689)); // JGD2011 UTM zone 52N
+    assert!(codes.contains(&6690)); // JGD2011 UTM zone 53N
+    assert!(codes.contains(&6691)); // JGD2011 UTM zone 54N
+    assert!(codes.contains(&6692)); // JGD2011 UTM zone 55N
+    assert!(codes.contains(&6707)); // RDN2008 UTM zone 32N
+    assert!(codes.contains(&6708)); // RDN2008 UTM zone 33N
+    assert!(codes.contains(&6709)); // RDN2008 UTM zone 34N
+    assert!(codes.contains(&6732)); // GDA94 MGA zone 41
+    assert!(codes.contains(&6733)); // GDA94 MGA zone 42
+    assert!(codes.contains(&6734)); // GDA94 MGA zone 43
+    assert!(codes.contains(&6735)); // GDA94 MGA zone 44
+    assert!(codes.contains(&6736)); // GDA94 MGA zone 46
+    assert!(codes.contains(&6737)); // GDA94 MGA zone 47
+    assert!(codes.contains(&6738)); // GDA94 MGA zone 59
+    assert!(codes.contains(&6784)); // Oregon Baker (CORS96, m)
+    assert!(codes.contains(&6786)); // Oregon Baker (2011, m)
+    assert!(codes.contains(&6788)); // Oregon Bend-Klamath Falls (CORS96, m)
+    assert!(codes.contains(&6790)); // Oregon Bend-Klamath Falls (2011, m)
+    assert!(codes.contains(&6800)); // Oregon Canyonville-Grants Pass (CORS96, m)
+    assert!(codes.contains(&6802)); // Oregon Canyonville-Grants Pass (2011, m)
+    assert!(codes.contains(&6812)); // Oregon Cottage Grove-Canyonville (CORS96, m)
+    assert!(codes.contains(&6814)); // Oregon Cottage Grove-Canyonville (2011, m)
+    assert!(codes.contains(&6816)); // Oregon Dufur-Madras (CORS96, m)
+    assert!(codes.contains(&6818)); // Oregon Dufur-Madras (2011, m)
+    assert!(codes.contains(&6820)); // Oregon Eugene (CORS96, m)
+    assert!(codes.contains(&6822)); // Oregon Eugene (2011, m)
+    assert!(codes.contains(&6824)); // Oregon Grants Pass-Ashland (CORS96, m)
+    assert!(codes.contains(&6826)); // Oregon Grants Pass-Ashland (2011, m)
+    assert!(codes.contains(&6828)); // Oregon Gresham-Warm Springs (CORS96, m)
+    assert!(codes.contains(&6830)); // Oregon Gresham-Warm Springs (2011, m)
+    assert!(codes.contains(&6832)); // Oregon La Grande (CORS96, m)
+    assert!(codes.contains(&6834)); // Oregon La Grande (2011, m)
+    assert!(codes.contains(&6836)); // Oregon Ontario (CORS96, m)
+    assert!(codes.contains(&6838)); // Oregon Ontario (2011, m)
+    assert!(codes.contains(&6844)); // Oregon Pendleton (CORS96, m)
+    assert!(codes.contains(&6846)); // Oregon Pendleton (2011, m)
+    assert!(codes.contains(&6848)); // Oregon Pendleton-La Grande (CORS96, m)
+    assert!(codes.contains(&6850)); // Oregon Pendleton-La Grande (2011, m)
+    assert!(codes.contains(&6856)); // Oregon Salem (CORS96, m)
+    assert!(codes.contains(&6858)); // Oregon Salem (2011, m)
+    assert!(codes.contains(&6860)); // Oregon Santiam Pass (CORS96, m)
+    assert!(codes.contains(&6862)); // Oregon Santiam Pass (2011, m)
+    assert!(codes.contains(&6870)); // ETRS89 / Albania TM 2010
+    assert!(codes.contains(&6875)); // RDN2008 / Italy zone (N-E)
+    assert!(codes.contains(&6876)); // RDN2008 / Zone 12 (N-E)
+    assert!(codes.contains(&6915)); // South East Island 1943 / UTM zone 40N
+    assert!(codes.contains(&6927)); // SVY21 / Singapore TM
+    assert!(codes.contains(&6956)); // VN-2000 / TM-3 zone 481
+    assert!(codes.contains(&6957)); // VN-2000 / TM-3 zone 482
+    for code in [
+        7257u32, 7259, 7261, 7263, 7265, 7267, 7269, 7271, 7273, 7275, 7277, 7279, 7281, 7283,
+        7285, 7287, 7289, 7291, 7293, 7295, 7297, 7299, 7301, 7303, 7305, 7307, 7309, 7311, 7313,
+        7315, 7317, 7319, 7321, 7323, 7325, 7327, 7329, 7331, 7333, 7335, 7337, 7339, 7341, 7343,
+        7345, 7347, 7349, 7351, 7353, 7355,
+    ] {
         assert!(codes.contains(&code));
     }
-    for code in [7258u32, 7260, 7262, 7264, 7266, 7268, 7270, 7272, 7274, 7276,
-                 7278, 7280, 7282, 7284, 7286, 7288, 7290, 7292, 7294, 7296,
-                 7298, 7300, 7302, 7304, 7306] {
+    for code in [
+        7258u32, 7260, 7262, 7264, 7266, 7268, 7270, 7272, 7274, 7276, 7278, 7280, 7282, 7284,
+        7286, 7288, 7290, 7292, 7294, 7296, 7298, 7300, 7302, 7304, 7306,
+    ] {
         assert!(codes.contains(&code));
     }
-    for code in [7057u32, 7058, 7059, 7060, 7061, 7062, 7063, 7064, 7065, 7066,
-                 7067, 7068, 7069, 7070, 7109, 7110, 7111, 7112, 7113, 7114,
-                 7115, 7116, 7117, 7118, 7131] {
+    for code in [
+        7057u32, 7058, 7059, 7060, 7061, 7062, 7063, 7064, 7065, 7066, 7067, 7068, 7069, 7070,
+        7109, 7110, 7111, 7112, 7113, 7114, 7115, 7116, 7117, 7118, 7131,
+    ] {
         assert!(codes.contains(&code));
     }
-    assert!(codes.contains(&4490));   // CGCS2000 geographic
-    assert!(codes.contains(&4674));   // SIRGAS 2000 geographic
-    assert!(codes.contains(&5396));   // SIRGAS 2000 UTM zone 26S
-    assert!(codes.contains(&6210));   // SIRGAS 2000 UTM zone 23N
-    assert!(codes.contains(&6211));   // SIRGAS 2000 UTM zone 24N
+    assert!(codes.contains(&4490)); // CGCS2000 geographic
+    assert!(codes.contains(&4674)); // SIRGAS 2000 geographic
+    assert!(codes.contains(&5396)); // SIRGAS 2000 UTM zone 26S
+    assert!(codes.contains(&6210)); // SIRGAS 2000 UTM zone 23N
+    assert!(codes.contains(&6211)); // SIRGAS 2000 UTM zone 24N
     for code in 31965u32..=31985 {
         assert!(codes.contains(&code), "missing EPSG:{code}");
     }
-    assert!(codes.contains(&5463));   // SAD69 UTM zone 17N
+    assert!(codes.contains(&5463)); // SAD69 UTM zone 17N
     for code in 29168u32..=29172 {
         assert!(codes.contains(&code), "missing EPSG:{code}");
     }
@@ -3860,7 +3995,7 @@ fn known_codes_include_utm_and_named() {
     for code in 24877u32..=24882 {
         assert!(codes.contains(&code), "missing EPSG:{code}");
     }
-    assert!(codes.contains(&7844));   // GDA2020 geographic
+    assert!(codes.contains(&7844)); // GDA2020 geographic
     for code in 4491u32..=4512 {
         assert!(codes.contains(&code));
     }
@@ -3879,8 +4014,8 @@ fn known_codes_include_utm_and_named() {
     for code in 4601u32..=4605 {
         assert!(codes.contains(&code));
     }
-    assert!(codes.contains(&4610));   // Xian 1980 geographic
-    assert!(codes.contains(&4612));   // JGD2000 geographic
+    assert!(codes.contains(&4610)); // Xian 1980 geographic
+    assert!(codes.contains(&4612)); // JGD2000 geographic
     for code in 4652u32..=4656 {
         assert!(codes.contains(&code));
     }
@@ -3895,9 +4030,9 @@ fn known_codes_include_utm_and_named() {
     for code in 4855u32..=4867 {
         assert!(codes.contains(&code));
     }
-    assert!(codes.contains(&3577));   // Australian Albers
-    assert!(codes.contains(&3575));   // North Pole LAEA Europe
-    assert!(codes.contains(&2227));   // California zone 3 (ftUS)
+    assert!(codes.contains(&3577)); // Australian Albers
+    assert!(codes.contains(&3575)); // North Pole LAEA Europe
+    assert!(codes.contains(&2227)); // California zone 3 (ftUS)
     for code in 26929u32..=26998 {
         if code == 26947 {
             continue;
@@ -3920,38 +4055,36 @@ fn known_codes_include_utm_and_named() {
         }
         assert!(codes.contains(&code), "missing EPSG:{code}");
     }
-    assert!(codes.contains(&4326));   // WGS84
-    assert!(codes.contains(&2958));   // NAD83(CSRS) / UTM zone 17N - Projected
-    for code in [4954u32, 4955,
-                 8230, 8231, 8232, 8233, 8235, 8237,
-                 8238, 8239, 8240, 8242, 8244, 8246,
-                 8247, 8248, 8249, 8250, 8251, 8252,
-                 8253, 8254, 8255,
-                 10413, 10414] {
+    assert!(codes.contains(&4326)); // WGS84
+    assert!(codes.contains(&2958)); // NAD83(CSRS) / UTM zone 17N - Projected
+    for code in [
+        4954u32, 4955, 8230, 8231, 8232, 8233, 8235, 8237, 8238, 8239, 8240, 8242, 8244, 8246,
+        8247, 8248, 8249, 8250, 8251, 8252, 8253, 8254, 8255, 10413, 10414,
+    ] {
         assert!(codes.contains(&code));
     }
     for code in 5105u32..=5129 {
         assert!(codes.contains(&code));
     }
-    assert!(codes.contains(&2443));   // JGD2000 Japan Plane CS I
-    assert!(codes.contains(&2444));   // JGD2000 Japan Plane CS II
-    assert!(codes.contains(&2445));   // JGD2000 Japan Plane CS III
-    assert!(codes.contains(&2446));   // JGD2000 Japan Plane CS IV
-    assert!(codes.contains(&2447));   // JGD2000 Japan Plane CS V
-    assert!(codes.contains(&2448));   // JGD2000 Japan Plane CS VI
-    assert!(codes.contains(&2449));   // JGD2000 Japan Plane CS VII
-    assert!(codes.contains(&2450));   // JGD2000 Japan Plane CS VIII
-    assert!(codes.contains(&2451));   // JGD2000 Japan Plane CS IX
-    assert!(codes.contains(&2452));   // JGD2000 Japan Plane CS X
-    assert!(codes.contains(&2453));   // JGD2000 Japan Plane CS XI
-    assert!(codes.contains(&2454));   // JGD2000 Japan Plane CS XII
-    assert!(codes.contains(&2455));   // JGD2000 Japan Plane CS XIII
-    assert!(codes.contains(&2456));   // JGD2000 Japan Plane CS XIV
-    assert!(codes.contains(&2457));   // JGD2000 Japan Plane CS XV
-    assert!(codes.contains(&2458));   // JGD2000 Japan Plane CS XVI
-    assert!(codes.contains(&2459));   // JGD2000 Japan Plane CS XVII
-    assert!(codes.contains(&2460));   // JGD2000 Japan Plane CS XVIII
-    assert!(codes.contains(&2461));   // JGD2000 Japan Plane CS XIX
+    assert!(codes.contains(&2443)); // JGD2000 Japan Plane CS I
+    assert!(codes.contains(&2444)); // JGD2000 Japan Plane CS II
+    assert!(codes.contains(&2445)); // JGD2000 Japan Plane CS III
+    assert!(codes.contains(&2446)); // JGD2000 Japan Plane CS IV
+    assert!(codes.contains(&2447)); // JGD2000 Japan Plane CS V
+    assert!(codes.contains(&2448)); // JGD2000 Japan Plane CS VI
+    assert!(codes.contains(&2449)); // JGD2000 Japan Plane CS VII
+    assert!(codes.contains(&2450)); // JGD2000 Japan Plane CS VIII
+    assert!(codes.contains(&2451)); // JGD2000 Japan Plane CS IX
+    assert!(codes.contains(&2452)); // JGD2000 Japan Plane CS X
+    assert!(codes.contains(&2453)); // JGD2000 Japan Plane CS XI
+    assert!(codes.contains(&2454)); // JGD2000 Japan Plane CS XII
+    assert!(codes.contains(&2455)); // JGD2000 Japan Plane CS XIII
+    assert!(codes.contains(&2456)); // JGD2000 Japan Plane CS XIV
+    assert!(codes.contains(&2457)); // JGD2000 Japan Plane CS XV
+    assert!(codes.contains(&2458)); // JGD2000 Japan Plane CS XVI
+    assert!(codes.contains(&2459)); // JGD2000 Japan Plane CS XVII
+    assert!(codes.contains(&2460)); // JGD2000 Japan Plane CS XVIII
+    assert!(codes.contains(&2461)); // JGD2000 Japan Plane CS XIX
     assert!(codes.len() > 150);
 }
 
@@ -3988,7 +4121,10 @@ fn top_level_from_wkt_resolves_epsg_authority() {
 
 #[test]
 fn wkt_import_extracts_epsg_from_wkt2_and_srs_references() {
-    assert_eq!(epsg_from_wkt("GEOGCRS[\"WGS 84\",ID[\"EPSG\",4326]]"), Some(4326));
+    assert_eq!(
+        epsg_from_wkt("GEOGCRS[\"WGS 84\",ID[\"EPSG\",4326]]"),
+        Some(4326)
+    );
     assert_eq!(epsg_from_srs_reference("EPSG:3857"), Some(3857));
     assert_eq!(
         epsg_from_srs_reference("urn:ogc:def:crs:EPSG::32633"),
@@ -4052,8 +4188,7 @@ fn identify_wkt_report_marks_legacy_csrs_utm_case_as_ambiguous() {
 
 #[test]
 fn identify_wkt_all_manifests_in_corpus_match_expected() {
-    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src/tests/data/wkt_corpus");
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/tests/data/wkt_corpus");
 
     let mut manifests = fs::read_dir(&base)
         .expect("failed to read wkt corpus dir")
@@ -4068,7 +4203,10 @@ fn identify_wkt_all_manifests_in_corpus_match_expected() {
         .collect::<Vec<_>>();
 
     manifests.sort();
-    assert!(!manifests.is_empty(), "expected at least one manifest.csv in corpus");
+    assert!(
+        !manifests.is_empty(),
+        "expected at least one manifest.csv in corpus"
+    );
 
     for manifest in manifests {
         let manifest_name = manifest
@@ -4080,11 +4218,9 @@ fn identify_wkt_all_manifests_in_corpus_match_expected() {
 }
 
 fn assert_manifest_matches_expected(manifest_file: &str) {
-    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src/tests/data/wkt_corpus");
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/tests/data/wkt_corpus");
     let manifest_path = base.join(manifest_file);
-    let manifest = fs::read_to_string(&manifest_path)
-        .expect("failed to read WKT corpus manifest");
+    let manifest = fs::read_to_string(&manifest_path).expect("failed to read WKT corpus manifest");
 
     for (line_no, line) in manifest.lines().enumerate() {
         if line_no == 0 || line.trim().is_empty() {
@@ -4101,11 +4237,19 @@ fn assert_manifest_matches_expected(manifest_file: &str) {
         let file = cols[1].trim();
         let expected_lenient = {
             let t = cols[2].trim();
-            if t.is_empty() { None } else { Some(t.parse::<u32>().unwrap()) }
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.parse::<u32>().unwrap())
+            }
         };
         let expected_strict = {
             let t = cols[3].trim();
-            if t.is_empty() { None } else { Some(t.parse::<u32>().unwrap()) }
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.parse::<u32>().unwrap())
+            }
         };
 
         let wkt = fs::read_to_string(base.join(file))
@@ -4117,14 +4261,12 @@ fn assert_manifest_matches_expected(manifest_file: &str) {
         assert_eq!(
             got_lenient, expected_lenient,
             "lenient mismatch for corpus case {} in {}",
-            name,
-            manifest_file
+            name, manifest_file
         );
         assert_eq!(
             got_strict, expected_strict,
             "strict mismatch for corpus case {} in {}",
-            name,
-            manifest_file
+            name, manifest_file
         );
     }
 }
@@ -4310,7 +4452,10 @@ fn compound_from_wkt_rejects_missing_vertical_component() {
     );
 
     let err = compound_from_wkt(wkt).unwrap_err();
-    assert!(matches!(err, crate::ProjectionError::UnsupportedProjection(_)));
+    assert!(matches!(
+        err,
+        crate::ProjectionError::UnsupportedProjection(_)
+    ));
 }
 
 #[test]
@@ -4333,7 +4478,10 @@ fn compound_from_wkt_rejects_non_vertical_second_component() {
     );
 
     let err = compound_from_wkt(wkt).unwrap_err();
-    assert!(matches!(err, crate::ProjectionError::UnsupportedProjection(_)));
+    assert!(matches!(
+        err,
+        crate::ProjectionError::UnsupportedProjection(_)
+    ));
 }
 
 #[test]
@@ -4402,7 +4550,10 @@ fn compound_from_wkt_rejects_nested_ambiguous_components() {
     );
 
     let err = compound_from_wkt(wkt).unwrap_err();
-    assert!(matches!(err, crate::ProjectionError::UnsupportedProjection(_)));
+    assert!(matches!(
+        err,
+        crate::ProjectionError::UnsupportedProjection(_)
+    ));
 }
 
 #[test]
@@ -4463,7 +4614,10 @@ fn compound_from_wkt_structure_matrix() {
             ));
         } else {
             assert!(
-                matches!(result, Err(crate::ProjectionError::UnsupportedProjection(_))),
+                matches!(
+                    result,
+                    Err(crate::ProjectionError::UnsupportedProjection(_))
+                ),
                 "expected unsupported compound structure for {wkt}"
             );
         }
@@ -4579,8 +4733,12 @@ fn two_point_equidistant_wkt_method_name_is_stable() {
     .unwrap();
     let (proj_name, params) = crate::epsg::ogc_projection_params(crs.projection.params());
     assert_eq!(proj_name, "Two_Point_Equidistant");
-    assert!(params.iter().any(|(name, value)| *name == "longitude_of_1st_point" && (*value - -10.0).abs() < TOL));
-    assert!(params.iter().any(|(name, value)| *name == "latitude_of_2nd_point" && (*value - 50.0).abs() < TOL));
+    assert!(params
+        .iter()
+        .any(|(name, value)| *name == "longitude_of_1st_point" && (*value - -10.0).abs() < TOL));
+    assert!(params
+        .iter()
+        .any(|(name, value)| *name == "latitude_of_2nd_point" && (*value - 50.0).abs() < TOL));
 }
 
 #[test]
@@ -4629,44 +4787,28 @@ fn vertical_offset_grid_name_maps_expected_codes() {
 #[test]
 fn newly_added_epsg_workflows_batches_resolve() {
     for code in [
-        2040_u32, 2041_u32, 2042_u32, 2043_u32,
-        2057_u32, 2059_u32, 2060_u32, 2061_u32,
-        2063_u32, 2064_u32, 2067_u32,
-        2068_u32, 2069_u32, 2070_u32, 2071_u32, 2072_u32, 2073_u32, 2074_u32,
-        2075_u32, 2076_u32, 2077_u32, 2078_u32, 2079_u32, 2080_u32,
-        2085_u32, 2086_u32,
-        2087_u32, 2088_u32, 2089_u32, 2090_u32, 2091_u32, 2092_u32,
-        2093_u32, 2094_u32, 2095_u32, 2096_u32, 2097_u32, 2098_u32,
-        2105_u32, 2106_u32, 2107_u32, 2108_u32, 2109_u32, 2110_u32,
-        2111_u32, 2112_u32, 2113_u32, 2114_u32, 2115_u32, 2116_u32,
-        2117_u32, 2118_u32, 2119_u32, 2120_u32, 2121_u32, 2122_u32,
-        2123_u32, 2124_u32, 2125_u32, 2126_u32, 2127_u32, 2128_u32,
-        2129_u32, 2130_u32, 2131_u32, 2132_u32, 2133_u32, 2134_u32,
-        2135_u32,
-        2136_u32, 2137_u32, 2138_u32,
-        2148_u32, 2149_u32, 2150_u32, 2151_u32, 2152_u32,
-        2153_u32, 2158_u32, 2159_u32, 2160_u32, 2161_u32, 2162_u32,
-        2164_u32, 2165_u32, 2166_u32, 2167_u32, 2168_u32, 2169_u32, 2170_u32,
-        2172_u32, 2173_u32, 2174_u32, 2175_u32,
-        2188_u32, 2189_u32, 2190_u32, 2191_u32, 2192_u32,
-        2195_u32, 2196_u32, 2197_u32, 2198_u32,
-        2205_u32, 2206_u32, 2207_u32, 2208_u32, 2209_u32,
-        2210_u32, 2211_u32, 2212_u32, 2213_u32,
-        2200_u32, 2201_u32, 2202_u32, 2203_u32, 2204_u32,
-        2214_u32, 2215_u32, 2216_u32, 2217_u32, 2219_u32, 2220_u32,
-        2222_u32, 2223_u32, 2224_u32, 2225_u32, 2226_u32, 2228_u32,
-        2252_u32, 2253_u32, 2254_u32, 2255_u32, 2256_u32, 2257_u32,
-        2258_u32, 2259_u32, 2260_u32, 2261_u32, 2262_u32, 2264_u32,
-        2265_u32, 2266_u32, 2267_u32, 2268_u32, 2269_u32, 2270_u32,
-        2271_u32, 2274_u32, 2275_u32, 2276_u32, 2277_u32, 2278_u32,
-        2279_u32, 2280_u32, 2281_u32, 2282_u32,
-        2287_u32, 2288_u32, 2289_u32, 2290_u32, 2291_u32, 2292_u32,
-        2294_u32, 2295_u32, 2308_u32, 2309_u32, 2310_u32, 2311_u32,
-        2312_u32, 2313_u32, 2314_u32,
-        2315_u32, 2316_u32, 2317_u32, 2318_u32, 2319_u32, 2320_u32,
-        2321_u32, 2322_u32, 2323_u32, 2324_u32, 2325_u32,
-        2327_u32, 2328_u32, 2329_u32, 2330_u32, 2331_u32, 2332_u32, 2333_u32,
-        2397_u32, 2398_u32, 2399_u32,
+        2040_u32, 2041_u32, 2042_u32, 2043_u32, 2057_u32, 2059_u32, 2060_u32, 2061_u32, 2063_u32,
+        2064_u32, 2067_u32, 2068_u32, 2069_u32, 2070_u32, 2071_u32, 2072_u32, 2073_u32, 2074_u32,
+        2075_u32, 2076_u32, 2077_u32, 2078_u32, 2079_u32, 2080_u32, 2085_u32, 2086_u32, 2087_u32,
+        2088_u32, 2089_u32, 2090_u32, 2091_u32, 2092_u32, 2093_u32, 2094_u32, 2095_u32, 2096_u32,
+        2097_u32, 2098_u32, 2105_u32, 2106_u32, 2107_u32, 2108_u32, 2109_u32, 2110_u32, 2111_u32,
+        2112_u32, 2113_u32, 2114_u32, 2115_u32, 2116_u32, 2117_u32, 2118_u32, 2119_u32, 2120_u32,
+        2121_u32, 2122_u32, 2123_u32, 2124_u32, 2125_u32, 2126_u32, 2127_u32, 2128_u32, 2129_u32,
+        2130_u32, 2131_u32, 2132_u32, 2133_u32, 2134_u32, 2135_u32, 2136_u32, 2137_u32, 2138_u32,
+        2148_u32, 2149_u32, 2150_u32, 2151_u32, 2152_u32, 2153_u32, 2158_u32, 2159_u32, 2160_u32,
+        2161_u32, 2162_u32, 2164_u32, 2165_u32, 2166_u32, 2167_u32, 2168_u32, 2169_u32, 2170_u32,
+        2172_u32, 2173_u32, 2174_u32, 2175_u32, 2188_u32, 2189_u32, 2190_u32, 2191_u32, 2192_u32,
+        2195_u32, 2196_u32, 2197_u32, 2198_u32, 2205_u32, 2206_u32, 2207_u32, 2208_u32, 2209_u32,
+        2210_u32, 2211_u32, 2212_u32, 2213_u32, 2200_u32, 2201_u32, 2202_u32, 2203_u32, 2204_u32,
+        2214_u32, 2215_u32, 2216_u32, 2217_u32, 2219_u32, 2220_u32, 2222_u32, 2223_u32, 2224_u32,
+        2225_u32, 2226_u32, 2228_u32, 2252_u32, 2253_u32, 2254_u32, 2255_u32, 2256_u32, 2257_u32,
+        2258_u32, 2259_u32, 2260_u32, 2261_u32, 2262_u32, 2264_u32, 2265_u32, 2266_u32, 2267_u32,
+        2268_u32, 2269_u32, 2270_u32, 2271_u32, 2274_u32, 2275_u32, 2276_u32, 2277_u32, 2278_u32,
+        2279_u32, 2280_u32, 2281_u32, 2282_u32, 2287_u32, 2288_u32, 2289_u32, 2290_u32, 2291_u32,
+        2292_u32, 2294_u32, 2295_u32, 2308_u32, 2309_u32, 2310_u32, 2311_u32, 2312_u32, 2313_u32,
+        2314_u32, 2315_u32, 2316_u32, 2317_u32, 2318_u32, 2319_u32, 2320_u32, 2321_u32, 2322_u32,
+        2323_u32, 2324_u32, 2325_u32, 2327_u32, 2328_u32, 2329_u32, 2330_u32, 2331_u32, 2332_u32,
+        2333_u32, 2397_u32, 2398_u32, 2399_u32,
     ] {
         assert!(from_epsg(code).is_ok(), "EPSG:{code} should resolve");
     }
@@ -4699,4 +4841,3 @@ fn known_epsg_codes_have_wkt() {
         assert!(to_ogc_wkt(code).is_ok(), "OGC WKT failed for EPSG:{code}");
     }
 }
-

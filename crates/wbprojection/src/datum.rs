@@ -6,8 +6,8 @@
 
 use crate::ellipsoid::Ellipsoid;
 use crate::error::{ProjectionError, Result};
-use crate::grid_shift::{get_dynamic_grid, get_grid};
 use crate::grid_formats::{resolve_dynamic_hierarchy_grid_name, resolve_ntv2_hierarchy_grid};
+use crate::grid_shift::{get_dynamic_grid, get_grid};
 use crate::transform::TransformEpochContext;
 use wide::f64x4;
 
@@ -130,9 +130,9 @@ fn molodensky_shift(
     df: f64,
     src: &Ellipsoid,
 ) -> (f64, f64, f64) {
-    let a   = src.a;
-    let e2  = src.e2;
-    let b   = src.b;
+    let a = src.a;
+    let e2 = src.e2;
+    let b = src.b;
 
     let sin_lat = lat_rad.sin();
     let cos_lat = lat_rad.cos();
@@ -140,19 +140,17 @@ fn molodensky_shift(
     let cos_lon = lon_rad.cos();
     let sin2_lat = sin_lat * sin_lat;
 
-    let w2  = 1.0 - e2 * sin2_lat;
-    let w   = w2.sqrt();
-    let n   = a / w;                         // prime-vertical radius
-    let m   = a * (1.0 - e2) / (w2 * w);    // meridian radius
+    let w2 = 1.0 - e2 * sin2_lat;
+    let w = w2.sqrt();
+    let n = a / w; // prime-vertical radius
+    let m = a * (1.0 - e2) / (w2 * w); // meridian radius
 
     // Δlatitude (radians)
-    let d_lat = (
-        -dx * sin_lat * cos_lon
-        - dy * sin_lat * sin_lon
+    let d_lat = (-dx * sin_lat * cos_lon - dy * sin_lat * sin_lon
         + dz * cos_lat
         + da * (n * e2 * sin_lat * cos_lat) / a
-        + df * (m * (a / b) + n * (b / a)) * sin_lat * cos_lat
-    ) / (m + h);
+        + df * (m * (a / b) + n * (b / a)) * sin_lat * cos_lat)
+        / (m + h);
 
     // Δlongitude (radians)
     let d_lon = if cos_lat.abs() < 1.0e-12 {
@@ -162,11 +160,7 @@ fn molodensky_shift(
     };
 
     // Δheight (metres)
-    let d_h =
-        dx * cos_lat * cos_lon
-        + dy * cos_lat * sin_lon
-        + dz * sin_lat
-        - da * (a / n)
+    let d_h = dx * cos_lat * cos_lon + dy * cos_lat * sin_lon + dz * sin_lat - da * (a / n)
         + df * (b / a) * n * sin2_lat;
 
     (lat_rad + d_lat, lon_rad + d_lon, h + d_h)
@@ -201,7 +195,15 @@ pub struct HelmertParams {
 impl HelmertParams {
     /// 3-parameter translation (Molodensky-style).
     pub fn translation(tx: f64, ty: f64, tz: f64) -> Self {
-        HelmertParams { tx, ty, tz, rx: 0.0, ry: 0.0, rz: 0.0, ds: 0.0 }
+        HelmertParams {
+            tx,
+            ty,
+            tz,
+            rx: 0.0,
+            ry: 0.0,
+            rz: 0.0,
+            ds: 0.0,
+        }
     }
 
     /// Apply this Helmert transform to ECEF coordinates, returning WGS84 ECEF.
@@ -240,7 +242,12 @@ impl HelmertParams {
     /// Apply this Helmert transform to a batch of 4 ECEF coordinate tuples using SIMD.
     /// Input: 4 tuples of (x, y, z) packed in arrays x4, y4, z4.
     /// Returns: 4 tuples of transformed (x, y, z) in arrays.
-    pub fn apply_simd_batch4(&self, x4: &[f64; 4], y4: &[f64; 4], z4: &[f64; 4]) -> ([f64; 4], [f64; 4], [f64; 4]) {
+    pub fn apply_simd_batch4(
+        &self,
+        x4: &[f64; 4],
+        y4: &[f64; 4],
+        z4: &[f64; 4],
+    ) -> ([f64; 4], [f64; 4], [f64; 4]) {
         const ARCSEC_TO_RAD: f64 = std::f64::consts::PI / (180.0 * 3600.0);
         let rx = self.rx * ARCSEC_TO_RAD;
         let ry = self.ry * ARCSEC_TO_RAD;
@@ -265,11 +272,20 @@ impl HelmertParams {
         let yw_v = ty_v + scale_v * (neg_rz_v * x_v + y_v + rx_v * z_v);
         let zw_v = tz_v + scale_v * (ry_v * x_v + neg_rx_v * y_v + z_v);
 
-        (<[f64; 4]>::from(xw_v), <[f64; 4]>::from(yw_v), <[f64; 4]>::from(zw_v))
+        (
+            <[f64; 4]>::from(xw_v),
+            <[f64; 4]>::from(yw_v),
+            <[f64; 4]>::from(zw_v),
+        )
     }
 
     /// Apply the inverse Helmert transform to a batch of 4 ECEF coordinate tuples using SIMD.
-    pub fn apply_inverse_simd_batch4(&self, x4: &[f64; 4], y4: &[f64; 4], z4: &[f64; 4]) -> ([f64; 4], [f64; 4], [f64; 4]) {
+    pub fn apply_inverse_simd_batch4(
+        &self,
+        x4: &[f64; 4],
+        y4: &[f64; 4],
+        z4: &[f64; 4],
+    ) -> ([f64; 4], [f64; 4], [f64; 4]) {
         const ARCSEC_TO_RAD: f64 = std::f64::consts::PI / (180.0 * 3600.0);
         let rx = -self.rx * ARCSEC_TO_RAD;
         let ry = -self.ry * ARCSEC_TO_RAD;
@@ -294,12 +310,21 @@ impl HelmertParams {
         let yd_v = ty_v + scale_v * (neg_rz_v * x_v + y_v + rx_v * z_v);
         let zd_v = tz_v + scale_v * (ry_v * x_v + neg_rx_v * y_v + z_v);
 
-        (<[f64; 4]>::from(xd_v), <[f64; 4]>::from(yd_v), <[f64; 4]>::from(zd_v))
+        (
+            <[f64; 4]>::from(xd_v),
+            <[f64; 4]>::from(yd_v),
+            <[f64; 4]>::from(zd_v),
+        )
     }
 }
 
 /// Convert geodetic (lat, lon, height) to ECEF Cartesian (X, Y, Z).
-pub fn geodetic_to_ecef(lat_rad: f64, lon_rad: f64, h: f64, ellipsoid: &Ellipsoid) -> (f64, f64, f64) {
+pub fn geodetic_to_ecef(
+    lat_rad: f64,
+    lon_rad: f64,
+    h: f64,
+    ellipsoid: &Ellipsoid,
+) -> (f64, f64, f64) {
     let n = ellipsoid.normal_radius(lat_rad);
     let cos_lat = lat_rad.cos();
     let sin_lat = lat_rad.sin();
@@ -323,8 +348,7 @@ pub fn ecef_to_geodetic(x: f64, y: f64, z: f64, ellipsoid: &Ellipsoid) -> (f64, 
     let p = (x * x + y * y).sqrt();
     let theta = (z * a).atan2(p * b);
 
-    let lat = (z + ep2 * b * theta.sin().powi(3))
-        .atan2(p - e2 * a * theta.cos().powi(3));
+    let lat = (z + ep2 * b * theta.sin().powi(3)).atan2(p - e2 * a * theta.cos().powi(3));
 
     let n = ellipsoid.normal_radius(lat);
     let h = if lat.cos().abs() > 1e-10 {
@@ -441,7 +465,11 @@ impl Datum {
         let (dlon_deg, dlat_deg) =
             grid.sample_shift_degrees_at_epoch(lon_deg, lat_deg, coordinate_epoch_decimal_year)?;
 
-        Ok(((lat_deg + dlat_deg).to_radians(), (lon_deg + dlon_deg).to_radians(), h))
+        Ok((
+            (lat_deg + dlat_deg).to_radians(),
+            (lon_deg + dlon_deg).to_radians(),
+            h,
+        ))
     }
 
     fn apply_dynamic_grid_shift_from_wgs84(
@@ -465,8 +493,11 @@ impl Datum {
         let mut src_lat = target_lat;
 
         for _ in 0..8 {
-            let (dlon_deg, dlat_deg) =
-                grid.sample_shift_degrees_at_epoch(src_lon, src_lat, coordinate_epoch_decimal_year)?;
+            let (dlon_deg, dlat_deg) = grid.sample_shift_degrees_at_epoch(
+                src_lon,
+                src_lat,
+                coordinate_epoch_decimal_year,
+            )?;
             let pred_lon = src_lon + dlon_deg;
             let pred_lat = src_lat + dlat_deg;
             src_lon += target_lon - pred_lon;
@@ -484,7 +515,8 @@ impl Datum {
         h: f64,
         policy: DatumTransformPolicy,
     ) -> Result<(f64, f64, f64)> {
-        let trace = self.to_wgs84_geodetic_with_policy_and_trace(lat_rad, lon_rad, h, policy, None)?;
+        let trace =
+            self.to_wgs84_geodetic_with_policy_and_trace(lat_rad, lon_rad, h, policy, None)?;
         Ok((trace.lat_rad, trace.lon_rad, trace.h))
     }
 
@@ -497,13 +529,8 @@ impl Datum {
         policy: DatumTransformPolicy,
         ctx: TransformEpochContext,
     ) -> Result<(f64, f64, f64)> {
-        let trace = self.to_wgs84_geodetic_with_policy_and_trace(
-            lat_rad,
-            lon_rad,
-            h,
-            policy,
-            Some(ctx),
-        )?;
+        let trace =
+            self.to_wgs84_geodetic_with_policy_and_trace(lat_rad, lon_rad, h, policy, Some(ctx))?;
         Ok((trace.lat_rad, trace.lon_rad, trace.h))
     }
 
@@ -537,11 +564,22 @@ impl Datum {
                 let da = Ellipsoid::WGS84.a - self.ellipsoid.a;
                 let df = Ellipsoid::WGS84.f - self.ellipsoid.f;
                 let (lat, lon, hgt) = molodensky_shift(
-                    lat_rad, lon_rad, h,
-                    params.dx, params.dy, params.dz,
-                    da, df, &self.ellipsoid,
+                    lat_rad,
+                    lon_rad,
+                    h,
+                    params.dx,
+                    params.dy,
+                    params.dz,
+                    da,
+                    df,
+                    &self.ellipsoid,
                 );
-                Ok(DatumGeodeticTrace { lat_rad: lat, lon_rad: lon, h: hgt, selected_grid: None })
+                Ok(DatumGeodeticTrace {
+                    lat_rad: lat,
+                    lon_rad: lon,
+                    h: hgt,
+                    selected_grid: None,
+                })
             }
             DatumTransform::Ntv2Hierarchy { dataset_name } => {
                 let lon_deg = lon_rad.to_degrees();
@@ -691,13 +729,8 @@ impl Datum {
         policy: DatumTransformPolicy,
         ctx: TransformEpochContext,
     ) -> Result<(f64, f64, f64)> {
-        let trace = self.from_wgs84_geodetic_with_policy_and_trace(
-            lat_rad,
-            lon_rad,
-            h,
-            policy,
-            Some(ctx),
-        )?;
+        let trace =
+            self.from_wgs84_geodetic_with_policy_and_trace(lat_rad, lon_rad, h, policy, Some(ctx))?;
         Ok((trace.lat_rad, trace.lon_rad, trace.h))
     }
 
@@ -732,11 +765,22 @@ impl Datum {
                 let da = self.ellipsoid.a - Ellipsoid::WGS84.a; // -(WGS84 - src)
                 let df = self.ellipsoid.f - Ellipsoid::WGS84.f;
                 let (lat, lon, hgt) = molodensky_shift(
-                    lat_rad, lon_rad, h,
-                    -params.dx, -params.dy, -params.dz,
-                    da, df, &Ellipsoid::WGS84,
+                    lat_rad,
+                    lon_rad,
+                    h,
+                    -params.dx,
+                    -params.dy,
+                    -params.dz,
+                    da,
+                    df,
+                    &Ellipsoid::WGS84,
                 );
-                Ok(DatumGeodeticTrace { lat_rad: lat, lon_rad: lon, h: hgt, selected_grid: None })
+                Ok(DatumGeodeticTrace {
+                    lat_rad: lat,
+                    lon_rad: lon,
+                    h: hgt,
+                    selected_grid: None,
+                })
             }
             DatumTransform::Ntv2Hierarchy { dataset_name } => {
                 let lon_deg = lon_rad.to_degrees();
@@ -865,12 +909,7 @@ impl Datum {
     }
 
     /// Transform geodetic coordinates from this datum to WGS84.
-    pub fn to_wgs84_geodetic(
-        &self,
-        lat_rad: f64,
-        lon_rad: f64,
-        h: f64,
-    ) -> Result<(f64, f64, f64)> {
+    pub fn to_wgs84_geodetic(&self, lat_rad: f64, lon_rad: f64, h: f64) -> Result<(f64, f64, f64)> {
         self.to_wgs84_geodetic_with_policy(lat_rad, lon_rad, h, DatumTransformPolicy::Strict)
     }
 
@@ -898,11 +937,15 @@ impl Datum {
                 Ok(geodetic_to_ecef(lat2, lon2, h2, &Ellipsoid::WGS84))
             }
             DatumTransform::GridShift { grid_name }
-            | DatumTransform::Ntv2Hierarchy { dataset_name: grid_name }
+            | DatumTransform::Ntv2Hierarchy {
+                dataset_name: grid_name,
+            }
             | DatumTransform::DynamicGridShift { grid_name }
-            | DatumTransform::DynamicNtv2Hierarchy { dataset_name: grid_name } => Err(ProjectionError::DatumError(
-                format!("grid-shift transform '{grid_name}' not implemented"),
-            )),
+            | DatumTransform::DynamicNtv2Hierarchy {
+                dataset_name: grid_name,
+            } => Err(ProjectionError::DatumError(format!(
+                "grid-shift transform '{grid_name}' not implemented"
+            ))),
         }
     }
 
@@ -929,11 +972,9 @@ impl Datum {
             DatumTransform::Helmert3(params) | DatumTransform::Helmert7(params) => {
                 Ok(params.apply_simd_batch4(x4, y4, z4))
             }
-            DatumTransform::Molodensky(_) => {
-                Err(ProjectionError::DatumError(
-                    "Molodensky batch SIMD path not implemented; use scalar geodetic path".into(),
-                ))
-            }
+            DatumTransform::Molodensky(_) => Err(ProjectionError::DatumError(
+                "Molodensky batch SIMD path not implemented; use scalar geodetic path".into(),
+            )),
             DatumTransform::GridShift { grid_name }
             | DatumTransform::Ntv2Hierarchy {
                 dataset_name: grid_name,
@@ -961,11 +1002,15 @@ impl Datum {
                 Ok(geodetic_to_ecef(lat2, lon2, h2, &self.ellipsoid))
             }
             DatumTransform::GridShift { grid_name }
-            | DatumTransform::Ntv2Hierarchy { dataset_name: grid_name }
+            | DatumTransform::Ntv2Hierarchy {
+                dataset_name: grid_name,
+            }
             | DatumTransform::DynamicGridShift { grid_name }
-            | DatumTransform::DynamicNtv2Hierarchy { dataset_name: grid_name } => Err(ProjectionError::DatumError(
-                format!("grid-shift transform '{grid_name}' not implemented"),
-            )),
+            | DatumTransform::DynamicNtv2Hierarchy {
+                dataset_name: grid_name,
+            } => Err(ProjectionError::DatumError(format!(
+                "grid-shift transform '{grid_name}' not implemented"
+            ))),
         }
     }
 
@@ -980,11 +1025,9 @@ impl Datum {
             DatumTransform::Helmert3(params) | DatumTransform::Helmert7(params) => {
                 Ok(params.apply_inverse_simd_batch4(x4, y4, z4))
             }
-            DatumTransform::Molodensky(_) => {
-                Err(ProjectionError::DatumError(
-                    "Molodensky batch SIMD path not implemented; use scalar geodetic path".into(),
-                ))
-            }
+            DatumTransform::Molodensky(_) => Err(ProjectionError::DatumError(
+                "Molodensky batch SIMD path not implemented; use scalar geodetic path".into(),
+            )),
             DatumTransform::GridShift { grid_name }
             | DatumTransform::Ntv2Hierarchy {
                 dataset_name: grid_name,
@@ -1010,8 +1053,12 @@ impl Datum {
         name: "NAD 83",
         ellipsoid: Ellipsoid::GRS80,
         transform: DatumTransform::Helmert7(HelmertParams {
-            tx: 0.9956, ty: -1.9013, tz: -0.5215,
-            rx: 0.025915, ry: 0.009426, rz: 0.011599,
+            tx: 0.9956,
+            ty: -1.9013,
+            tz: -0.5215,
+            rx: 0.025915,
+            ry: 0.009426,
+            rz: 0.011599,
             ds: -0.00062,
         }),
     };
@@ -1054,8 +1101,12 @@ impl Datum {
         name: "NAD 27",
         ellipsoid: Ellipsoid::CLARKE1866,
         transform: DatumTransform::Helmert3(HelmertParams {
-            tx: -8.0, ty: 160.0, tz: 176.0,
-            rx: 0.0, ry: 0.0, rz: 0.0,
+            tx: -8.0,
+            ty: 160.0,
+            tz: 176.0,
+            rx: 0.0,
+            ry: 0.0,
+            rz: 0.0,
             ds: 0.0,
         }),
     };
@@ -1072,8 +1123,12 @@ impl Datum {
         name: "ED 50",
         ellipsoid: Ellipsoid::INTERNATIONAL,
         transform: DatumTransform::Helmert3(HelmertParams {
-            tx: -87.0, ty: -98.0, tz: -121.0,
-            rx: 0.0, ry: 0.0, rz: 0.0,
+            tx: -87.0,
+            ty: -98.0,
+            tz: -121.0,
+            rx: 0.0,
+            ry: 0.0,
+            rz: 0.0,
             ds: 0.0,
         }),
     };
@@ -1524,8 +1579,11 @@ impl std::fmt::Display for Datum {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{register_dynamic_grid, unregister_dynamic_grid, DynamicGridShiftGrid, DynamicGridShiftSample};
     use crate::transform::TransformEpochContext;
+    use crate::{
+        register_dynamic_grid, unregister_dynamic_grid, DynamicGridShiftGrid,
+        DynamicGridShiftSample,
+    };
     use std::f64::consts::PI;
 
     fn deg(d: f64) -> f64 {
@@ -1582,11 +1640,11 @@ mod tests {
 
         let d_lat = (trace_inv.lat_rad - lat_src).abs();
         let d_lon = (trace_inv.lon_rad - lon_src).abs();
-        let d_h   = (trace_inv.h - h_src).abs();
+        let d_h = (trace_inv.h - h_src).abs();
 
         assert!(d_lat < 1.0e-8, "round-trip Δlat = {d_lat} rad");
         assert!(d_lon < 1.0e-8, "round-trip Δlon = {d_lon} rad");
-        assert!(d_h   < 1.0e-2, "round-trip Δh = {d_h} m");
+        assert!(d_h < 1.0e-2, "round-trip Δh = {d_h} m");
     }
 
     // --------------------------------------------------------
@@ -1688,8 +1746,14 @@ mod tests {
         let (xw, yw, zw) = ed50_mol.to_wgs84_ecef(x, y, z).unwrap();
         let (lat2, lon2, h2) = ecef_to_geodetic(xw, yw, zw, &Ellipsoid::WGS84);
 
-        assert!((lat2 - geo.lat_rad).abs() < 1.0e-10, "ECEF vs geodetic lat mismatch");
-        assert!((lon2 - geo.lon_rad).abs() < 1.0e-10, "ECEF vs geodetic lon mismatch");
+        assert!(
+            (lat2 - geo.lat_rad).abs() < 1.0e-10,
+            "ECEF vs geodetic lat mismatch"
+        );
+        assert!(
+            (lon2 - geo.lon_rad).abs() < 1.0e-10,
+            "ECEF vs geodetic lon mismatch"
+        );
         assert!((h2 - geo.h).abs() < 1.0e-4, "ECEF vs geodetic h mismatch");
     }
 
@@ -1721,9 +1785,9 @@ mod tests {
             .to_wgs84_geodetic_with_policy(deg(0.5), deg(0.5), 0.0, DatumTransformPolicy::Strict)
             .unwrap_err();
 
-        assert!(
-            format!("{err}").to_ascii_lowercase().contains("requires transformepochcontext")
-        );
+        assert!(format!("{err}")
+            .to_ascii_lowercase()
+            .contains("requires transformepochcontext"));
 
         let _ = unregister_dynamic_grid("DYN_DATUM_TEST");
     }

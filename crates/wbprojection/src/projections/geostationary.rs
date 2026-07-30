@@ -79,7 +79,8 @@ impl ProjectionImpl for GeostationaryProj {
         let ty = y_ang.tan();
 
         let c = (1.0 + tx * tx) * (1.0 + ty * ty);
-        let disc = self.h_total * self.h_total - c * (self.h_total * self.h_total - self.a * self.a);
+        let disc =
+            self.h_total * self.h_total - c * (self.h_total * self.h_total - self.a * self.a);
         if disc < 0.0 {
             return Err(ProjectionError::out_of_bounds(
                 "projected point is outside geostationary domain",

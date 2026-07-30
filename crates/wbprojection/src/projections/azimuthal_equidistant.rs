@@ -1,9 +1,9 @@
 //! Azimuthal Equidistant projection.
 //! Distances and directions are correct from the center point.
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::Result;
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 
 pub(super) struct AzimuthalEquidistantProj {
     lon0: f64,
@@ -53,7 +53,8 @@ impl ProjectionImpl for AzimuthalEquidistantProj {
         };
 
         let x = self.a * k * cos_lat * dlon.sin() + self.fe;
-        let y = self.a * k * (self.cos_lat0 * sin_lat - self.sin_lat0 * cos_lat * dlon.cos()) + self.fn_;
+        let y = self.a * k * (self.cos_lat0 * sin_lat - self.sin_lat0 * cos_lat * dlon.cos())
+            + self.fn_;
         Ok((x, y))
     }
 
@@ -69,8 +70,8 @@ impl ProjectionImpl for AzimuthalEquidistantProj {
         }
 
         let lat = (c.cos() * self.sin_lat0 + y * c.sin() * self.cos_lat0 / rho).asin();
-        let lon = self.lon0 + (x * c.sin())
-            .atan2(rho * self.cos_lat0 * c.cos() - y * self.sin_lat0 * c.sin());
+        let lon = self.lon0
+            + (x * c.sin()).atan2(rho * self.cos_lat0 * c.cos() - y * self.sin_lat0 * c.sin());
 
         Ok((to_degrees(lon), to_degrees(lat)))
     }

@@ -45,7 +45,8 @@ impl ProjectionImpl for LambertAzimuthalEqualAreaProj {
         let k = (2.0 / denom).sqrt();
 
         let x = self.a * k * cos_lat * dlon.sin() + self.fe;
-        let y = self.a * k * (self.cos_lat0 * sin_lat - self.sin_lat0 * cos_lat * cos_dlon) + self.fn_;
+        let y =
+            self.a * k * (self.cos_lat0 * sin_lat - self.sin_lat0 * cos_lat * cos_dlon) + self.fn_;
         Ok((x, y))
     }
 
@@ -63,8 +64,8 @@ impl ProjectionImpl for LambertAzimuthalEqualAreaProj {
         let cos_c = c.cos();
 
         let lat = (cos_c * self.sin_lat0 + y * sin_c * self.cos_lat0 / rho).asin();
-        let lon = self.lon0 + (x * sin_c)
-            .atan2(rho * self.cos_lat0 * cos_c - y * self.sin_lat0 * sin_c);
+        let lon =
+            self.lon0 + (x * sin_c).atan2(rho * self.cos_lat0 * cos_c - y * self.sin_lat0 * sin_c);
 
         Ok((to_degrees(lon), to_degrees(lat)))
     }

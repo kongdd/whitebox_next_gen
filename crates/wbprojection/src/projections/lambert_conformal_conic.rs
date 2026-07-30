@@ -1,16 +1,16 @@
 //! Lambert Conformal Conic projection (1SP and 2SP variants).
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::{ProjectionError, Result};
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 use std::f64::consts::{FRAC_PI_2, FRAC_PI_4};
 
 pub(super) struct LccProj {
     lon0: f64,
     a: f64,
     e: f64,
-    n: f64,   // cone constant
-    f: f64,   // series constant
+    n: f64,    // cone constant
+    f: f64,    // series constant
     rho0: f64, // ρ at lat0
     fe: f64,
     fn_: f64,
@@ -97,8 +97,8 @@ impl ProjectionImpl for LccProj {
         let e = self.e;
         for _ in 0..20 {
             let esin = e * phi.sin();
-            let phi_new = FRAC_PI_2
-                - 2.0 * (t * ((1.0 - esin) / (1.0 + esin)).powf(e / 2.0)).atan();
+            let phi_new =
+                FRAC_PI_2 - 2.0 * (t * ((1.0 - esin) / (1.0 + esin)).powf(e / 2.0)).atan();
             if (phi_new - phi).abs() < 1e-12 {
                 phi = phi_new;
                 break;

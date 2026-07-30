@@ -1,8 +1,8 @@
 //! Orthographic projection – globe view from infinity.
 
+use super::{ProjectionImpl, ProjectionParams};
 use crate::error::{ProjectionError, Result};
 use crate::{to_degrees, to_radians};
-use super::{ProjectionImpl, ProjectionParams};
 
 pub(super) struct OrthographicProj {
     lon0: f64,
@@ -44,7 +44,8 @@ impl ProjectionImpl for OrthographicProj {
         }
 
         let x = self.a * lat.cos() * dlon.sin() + self.fe;
-        let y = self.a * (self.cos_lat0 * lat.sin() - self.sin_lat0 * lat.cos() * dlon.cos()) + self.fn_;
+        let y = self.a * (self.cos_lat0 * lat.sin() - self.sin_lat0 * lat.cos() * dlon.cos())
+            + self.fn_;
         Ok((x, y))
     }
 
@@ -54,7 +55,9 @@ impl ProjectionImpl for OrthographicProj {
         let rho = (x * x + y * y).sqrt();
 
         if rho > self.a {
-            return Err(ProjectionError::out_of_bounds("point outside orthographic projection bounds"));
+            return Err(ProjectionError::out_of_bounds(
+                "point outside orthographic projection bounds",
+            ));
         }
 
         let c = (rho / self.a).asin();
@@ -70,8 +73,7 @@ impl ProjectionImpl for OrthographicProj {
         let lon = if rho < 1e-12 {
             self.lon0
         } else {
-            self.lon0 + (x * sin_c)
-                .atan2(rho * self.cos_lat0 * cos_c - y * self.sin_lat0 * sin_c)
+            self.lon0 + (x * sin_c).atan2(rho * self.cos_lat0 * cos_c - y * self.sin_lat0 * sin_c)
         };
 
         Ok((to_degrees(lon), to_degrees(lat)))

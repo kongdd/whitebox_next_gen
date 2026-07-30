@@ -22,8 +22,7 @@ fn qsfn(e: f64, sinphi: f64) -> f64 {
     }
     let esin = e * sinphi;
     (1.0 - e * e)
-        * (sinphi / (1.0 - esin * esin)
-            - (1.0 / (2.0 * e)) * ((1.0 - esin) / (1.0 + esin)).ln())
+        * (sinphi / (1.0 - esin * esin) - (1.0 / (2.0 * e)) * ((1.0 - esin) / (1.0 + esin)).ln())
 }
 
 impl CylindricalEqualAreaProj {

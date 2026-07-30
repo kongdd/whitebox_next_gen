@@ -157,7 +157,10 @@ fn add(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
 fn normalize(v: [f64; 3]) -> Result<[f64; 3]> {
     let n = dot(v, v).sqrt();
     if n <= 1e-15 {
-        return Err(ProjectionError::invalid_param("TwoPointEquidistant", "degenerate basis"));
+        return Err(ProjectionError::invalid_param(
+            "TwoPointEquidistant",
+            "degenerate basis",
+        ));
     }
     Ok([v[0] / n, v[1] / n, v[2] / n])
 }
@@ -168,14 +171,12 @@ mod tests {
 
     #[test]
     fn round_trip_two_point_equidistant() {
-        let proj = Projection::new(
-            ProjectionParams::new(ProjectionKind::TwoPointEquidistant {
-                lon1: -10.0,
-                lat1: 40.0,
-                lon2: 20.0,
-                lat2: 50.0,
-            }),
-        )
+        let proj = Projection::new(ProjectionParams::new(ProjectionKind::TwoPointEquidistant {
+            lon1: -10.0,
+            lat1: 40.0,
+            lon2: 20.0,
+            lat2: 50.0,
+        }))
         .unwrap();
 
         let (x, y) = proj.forward(5.0, 45.0).unwrap();
