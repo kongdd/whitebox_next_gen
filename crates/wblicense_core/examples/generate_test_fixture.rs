@@ -1,10 +1,10 @@
 use base64::Engine;
 use ed25519_dalek::{Signer, SigningKey};
 use std::collections::BTreeSet;
+use wbcore::LicenseTier;
 use wblicense_core::{
     EntitlementCapabilitiesDoc, EntitlementDocument, SignedEntitlement, ENTITLEMENT_SCHEMA_VERSION,
 };
-use wbcore::LicenseTier;
 
 fn main() {
     let signing_key = SigningKey::from_bytes(&[7u8; 32]);
@@ -34,7 +34,8 @@ fn main() {
     let payload_bytes = serde_json::to_vec(&payload).unwrap();
     let sig = signing_key.sign(&payload_bytes);
     let signature_b64url = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(sig.to_bytes());
-    let public_key_b64url = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(verifying_key.to_bytes());
+    let public_key_b64url =
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(verifying_key.to_bytes());
 
     let signed = SignedEntitlement {
         alg: "EdDSA".to_string(),

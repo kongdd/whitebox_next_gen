@@ -8,7 +8,9 @@ pub struct ToolRegistry {
 
 impl ToolRegistry {
     pub fn new() -> Self {
-        Self { tools: BTreeMap::new() }
+        Self {
+            tools: BTreeMap::new(),
+        }
     }
 
     pub fn register(&mut self, tool: Box<dyn Tool>) {
@@ -24,8 +26,16 @@ impl ToolRegistry {
         self.tools.values().map(|t| t.manifest()).collect()
     }
 
-    pub fn run(&self, id: &str, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let tool = self.tools.get(id).ok_or_else(|| ToolError::NotFound(id.to_string()))?;
+    pub fn run(
+        &self,
+        id: &str,
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
+        let tool = self
+            .tools
+            .get(id)
+            .ok_or_else(|| ToolError::NotFound(id.to_string()))?;
         let meta = tool.metadata();
         if !ctx.capabilities.has_tool_access(meta.id, meta.license_tier) {
             return Err(ToolError::LicenseDenied(meta.id.to_string()));
@@ -44,7 +54,12 @@ impl ToolRuntimeRegistry for ToolRegistry {
         self.manifests()
     }
 
-    fn run_tool(&self, id: &str, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_tool(
+        &self,
+        id: &str,
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         self.run(id, args, ctx)
     }
 }

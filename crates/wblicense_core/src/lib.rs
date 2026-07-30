@@ -86,7 +86,8 @@ impl VerificationKeyStore {
         let key_array: [u8; 32] = key_bytes
             .try_into()
             .map_err(|_| LicenseError::InvalidSignatureEncoding)?;
-        let key = VerifyingKey::from_bytes(&key_array).map_err(|_| LicenseError::InvalidSignature)?;
+        let key =
+            VerifyingKey::from_bytes(&key_array).map_err(|_| LicenseError::InvalidSignature)?;
         self.insert(kid, key);
         Ok(())
     }
@@ -136,7 +137,11 @@ fn platform_config_dir() -> Option<PathBuf> {
         std::env::var("XDG_CONFIG_HOME")
             .ok()
             .map(PathBuf::from)
-            .or_else(|| std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".config")))
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|h| PathBuf::from(h).join(".config"))
+            })
     }
 }
 
@@ -197,7 +202,9 @@ impl LocalLicenseState {
     /// for full re-verification when coming back online.
     pub fn is_still_valid(&self, now_unix: u64) -> bool {
         match &self.active_entitlement {
-            Some(e) => now_unix >= e.payload.not_before_unix && now_unix <= e.payload.expires_at_unix,
+            Some(e) => {
+                now_unix >= e.payload.not_before_unix && now_unix <= e.payload.expires_at_unix
+            }
             None => false,
         }
     }
@@ -221,7 +228,9 @@ impl LocalLicenseState {
 
 fn validate_entitlement_payload(payload: &EntitlementDocument) -> Result<(), LicenseError> {
     if payload.schema_version != ENTITLEMENT_SCHEMA_VERSION {
-        return Err(LicenseError::UnsupportedSchemaVersion(payload.schema_version));
+        return Err(LicenseError::UnsupportedSchemaVersion(
+            payload.schema_version,
+        ));
     }
 
     if payload.entitlement_id.trim().is_empty() {
@@ -284,13 +293,14 @@ pub fn verify_signed_entitlement(
         .get(&signed.kid)
         .ok_or_else(|| LicenseError::UnknownKeyId(signed.kid.clone()))?;
 
-    let payload_bytes = serde_json::to_vec(&signed.payload)
-        .map_err(|_| LicenseError::InvalidSignature)?;
+    let payload_bytes =
+        serde_json::to_vec(&signed.payload).map_err(|_| LicenseError::InvalidSignature)?;
 
     let sig_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(&signed.signature_b64url)
         .map_err(|_| LicenseError::InvalidSignatureEncoding)?;
-    let signature = Signature::from_slice(&sig_bytes).map_err(|_| LicenseError::InvalidSignature)?;
+    let signature =
+        Signature::from_slice(&sig_bytes).map_err(|_| LicenseError::InvalidSignature)?;
 
     verifying_key
         .verify(&payload_bytes, &signature)
@@ -340,7 +350,12 @@ impl EntitlementCapabilities {
             .unwrap_or(verified.signed.payload.tier);
         Self {
             max_tier,
-            allowed_tool_ids: verified.signed.payload.capabilities.allowed_tool_ids.clone(),
+            allowed_tool_ids: verified
+                .signed
+                .payload
+                .capabilities
+                .allowed_tool_ids
+                .clone(),
             expires_at_unix: verified.signed.payload.expires_at_unix,
             now_unix,
         }
@@ -410,7 +425,8 @@ mod tests {
 
         let payload_bytes = serde_json::to_vec(&payload).unwrap();
         let sig = signing_key.sign(&payload_bytes);
-        let signature_b64url = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(sig.to_bytes());
+        let signature_b64url =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(sig.to_bytes());
 
         let signed = SignedEntitlement {
             alg: "EdDSA".to_string(),
@@ -471,7 +487,8 @@ mod tests {
         };
         let payload_bytes = serde_json::to_vec(&payload).unwrap();
         let sig = signing_key.sign(&payload_bytes);
-        let signature_b64url = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(sig.to_bytes());
+        let signature_b64url =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(sig.to_bytes());
 
         let signed = SignedEntitlement {
             alg: "EdDSA".to_string(),
@@ -490,16 +507,24 @@ mod tests {
     #[test]
     fn verifies_json_envelope() {
         let now = 1_700_000_000;
-        let verified = verify_signed_entitlement_json(VALID_SIGNED_ENTITLEMENT_JSON, &fixture_key_store(), now)
-            .unwrap();
+        let verified = verify_signed_entitlement_json(
+            VALID_SIGNED_ENTITLEMENT_JSON,
+            &fixture_key_store(),
+            now,
+        )
+        .unwrap();
         assert_eq!(verified.signed.payload.product, "whitebox_next_gen");
     }
 
     #[test]
     fn rejects_tampered_fixture_envelope() {
         let now = 1_700_000_000;
-        let err = verify_signed_entitlement_json(TAMPERED_SIGNED_ENTITLEMENT_JSON, &fixture_key_store(), now)
-            .unwrap_err();
+        let err = verify_signed_entitlement_json(
+            TAMPERED_SIGNED_ENTITLEMENT_JSON,
+            &fixture_key_store(),
+            now,
+        )
+        .unwrap_err();
         assert!(matches!(err, LicenseError::InvalidSignature));
     }
 
@@ -608,7 +633,9 @@ mod tests {
 
 /// Write a license state JSON value to the default path, creating parent directories as needed.
 /// Returns the path written to on success.
-pub fn write_license_state_json(state: &serde_json::Value) -> Result<std::path::PathBuf, LicenseError> {
+pub fn write_license_state_json(
+    state: &serde_json::Value,
+) -> Result<std::path::PathBuf, LicenseError> {
     let path = std::env::var("WBW_LICENSE_STATE_PATH")
         .ok()
         .filter(|s| !s.trim().is_empty())
@@ -617,16 +644,31 @@ pub fn write_license_state_json(state: &serde_json::Value) -> Result<std::path::
             std::env::var("HOME")
                 .or_else(|_| std::env::var("USERPROFILE"))
                 .ok()
-                .map(|home| std::path::PathBuf::from(home).join(".whitebox").join("wbw_ng_license_state.json"))
+                .map(|home| {
+                    std::path::PathBuf::from(home)
+                        .join(".whitebox")
+                        .join("wbw_ng_license_state.json")
+                })
         })
-        .ok_or_else(|| LicenseError::LicenseStateIo("Could not determine license state path".to_string()))?;
+        .ok_or_else(|| {
+            LicenseError::LicenseStateIo("Could not determine license state path".to_string())
+        })?;
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| LicenseError::LicenseStateIo(format!("failed to create license state directory '{}': {e}", parent.display())))?;
+        std::fs::create_dir_all(parent).map_err(|e| {
+            LicenseError::LicenseStateIo(format!(
+                "failed to create license state directory '{}': {e}",
+                parent.display()
+            ))
+        })?;
     }
-    let text = serde_json::to_string_pretty(state)
-        .map_err(|e| LicenseError::LicenseStateIo(format!("failed to serialize license state: {e}")))?;
-    std::fs::write(&path, text)
-        .map_err(|e| LicenseError::LicenseStateIo(format!("failed to write license state '{}': {e}", path.display())))?;
+    let text = serde_json::to_string_pretty(state).map_err(|e| {
+        LicenseError::LicenseStateIo(format!("failed to serialize license state: {e}"))
+    })?;
+    std::fs::write(&path, text).map_err(|e| {
+        LicenseError::LicenseStateIo(format!(
+            "failed to write license state '{}': {e}",
+            path.display()
+        ))
+    })?;
     Ok(path)
 }
