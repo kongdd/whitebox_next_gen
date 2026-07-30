@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-30
+
 ### Performance
 - **Major speedup for `OrdinaryKriging` and `SimpleKriging`**: The kriging system matrix A (n+1 × n+1) is now built and LU-factored once in `new()` rather than rebuilt and re-factored from scratch for every prediction point. Each `predict()` call now only constructs the n+1 RHS vector b and performs a triangular solve — O(n²) per prediction instead of O(n³). For the standard meuse dataset (155 points, 27,300 grid cells at 20m), this is a theoretical ~155× reduction in factorization work, bringing actual kriging interpolation time from ~9s to well under 1s. `SimpleKriging`, `UniversalKriging` (which delegates to `OrdinaryKriging`), and all wbtools that use these engines benefit automatically. `SpaceTimeKriging` and `LocalOrdinaryKriging` are unchanged because their system matrix varies per-prediction by design.
 - Removed the now-unused `solve_regularized_cholesky()` and `solve_svd()` fallback methods from `OrdinaryKriging`. The LU decomposition used for pre-factoring is robust enough for all well-posed kriging systems.

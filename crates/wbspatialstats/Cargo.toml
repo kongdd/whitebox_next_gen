@@ -1,6 +1,6 @@
 [package]
 name = "wbspatialstats"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 authors = ["John Lindsay", "Whitebox Geospatial Inc."]
 description = "Unified spatial statistics library: kriging, spatial autocorrelation, spatial regression, point process analysis"
