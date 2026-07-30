@@ -6,46 +6,43 @@ pub use improved_ground_point_filter::ImprovedGroundPointFilterTool;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::f64::consts::PI;
-use std::path::{Path, PathBuf};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::time::Instant;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Instant;
 
+use evalexpr::{
+    build_operator_tree, Context, ContextWithMutableVariables, DefaultNumericTypes, HashMapContext,
+    Value as EvalValue,
+};
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
 use nalgebra::{linalg::SymmetricEigen, Matrix3, Vector3};
-use evalexpr::{build_operator_tree, Context, ContextWithMutableVariables, DefaultNumericTypes, HashMapContext, Value as EvalValue};
-use rand::{RngExt, SeedableRng};
 use rand::seq::IndexedRandom;
+use rand::{RngExt, SeedableRng};
 use rayon::prelude::*;
 use rayon::ThreadPoolBuilder;
 use serde_json::{json, Value};
-use wide::f64x4;
 use wbcore::{
-    parse_optional_output_path,
-    parse_raster_path_value,
-    parse_vector_path_arg,
+    parse_optional_output_path, parse_raster_path_value, parse_vector_path_arg, LicenseTier,
+    PercentCoalescer, Tool, ToolArgs, ToolCategory, ToolContext, ToolError, ToolMetadata,
+    ToolParamSchema, ToolParamSpec, ToolRunResult, ToolVectorGeometry,
     IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH,
-    LicenseTier,
-    PercentCoalescer,
-    Tool,
-    ToolArgs,
-    ToolCategory,
-    ToolContext,
-    ToolError,
-    ToolMetadata,
-    ToolParamSchema,
-    ToolParamSpec,
-    ToolRunResult,
-    ToolVectorGeometry,
 };
-use wblidar::las::LasReader;
 use wblidar::las::vlr::{find_epsg, find_ogc_wkt, GEOKEY_DIRECTORY_RECORD_ID};
-use wblidar::{memory_store as lidar_memory_store, Crs as LidarCrs, LidarFormat, PointCloud, PointReader, PointRecord, Rgb16};
+use wblidar::las::LasReader;
+use wblidar::{
+    memory_store as lidar_memory_store, Crs as LidarCrs, LidarFormat, PointCloud, PointReader,
+    PointRecord, Rgb16,
+};
 use wbraster::{CrsInfo, DataType, Raster, RasterConfig, RasterFormat};
+use wbtopology::{
+    delaunay_triangulation, delaunay_triangulation_fast, Coord as TopoCoord, DistanceMetric,
+    FixedRadiusSearch2D, PreparedSibsonInterpolator,
+};
 use wbvector::memory_store as vector_memory_store;
-use wbtopology::{delaunay_triangulation, delaunay_triangulation_fast, Coord as TopoCoord, DistanceMetric, FixedRadiusSearch2D, PreparedSibsonInterpolator};
+use wide::f64x4;
 
 use crate::memory_store;
 
@@ -134,14 +131,20 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("output_directory", ToolParamSchema::string()),
         ])),
         "las_to_ascii" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Table),
             ),
         ])),
         "las_to_shapefile" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -151,23 +154,44 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("output_multipoint", ToolParamSchema::bool()),
         ])),
         "lidar_info" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
-            ("output", ToolParamSchema::output(wbcore::ToolDatasetSchema::File)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
+            (
+                "output",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
+            ),
             ("show_point_density", ToolParamSchema::bool()),
             ("show_vlrs", ToolParamSchema::bool()),
             ("show_geokeys", ToolParamSchema::bool()),
         ])),
         "lidar_histogram" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
-            ("output", ToolParamSchema::output(wbcore::ToolDatasetSchema::File)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
+            (
+                "output",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
+            ),
             (
                 "parameter",
-                ToolParamSchema::enum_values(&["elevation", "intensity", "scan_angle", "class", "time"]),
+                ToolParamSchema::enum_values(&[
+                    "elevation",
+                    "intensity",
+                    "scan_angle",
+                    "class",
+                    "time",
+                ]),
             ),
             ("clip_percent", ToolParamSchema::scalar_float()),
         ])),
         "lidar_point_stats" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("resolution", ToolParamSchema::scalar_float()),
             ("num_points", ToolParamSchema::bool()),
             ("num_pulses", ToolParamSchema::bool()),
@@ -178,16 +202,25 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("output_directory", ToolParamSchema::string()),
         ])),
         "lidar_point_return_analysis" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("create_output", ToolParamSchema::bool()),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Lidar),
             ),
-            ("report", ToolParamSchema::output(wbcore::ToolDatasetSchema::File)),
+            (
+                "report",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
+            ),
         ])),
         "lidar_hex_bin" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("width", ToolParamSchema::scalar_float()),
             ("orientation", ToolParamSchema::enum_values(&["h", "v"])),
             (
@@ -198,7 +231,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "lidar_tile_footprint" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -208,7 +244,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("output_hulls", ToolParamSchema::bool()),
         ])),
         "lidar_contour" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -220,30 +259,48 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("smooth", ToolParamSchema::scalar_float()),
             (
                 "interpolation_parameter",
-                ToolParamSchema::enum_values(&["elevation", "intensity", "scan_angle", "time", "user_data"]),
+                ToolParamSchema::enum_values(&[
+                    "elevation",
+                    "intensity",
+                    "scan_angle",
+                    "time",
+                    "user_data",
+                ]),
             ),
-            ("returns", ToolParamSchema::enum_values(&["all", "first", "last"])),
+            (
+                "returns",
+                ToolParamSchema::enum_values(&["all", "first", "last"]),
+            ),
             ("excluded_classes", ToolParamSchema::string()),
             ("min_elev", ToolParamSchema::scalar_float()),
             ("max_elev", ToolParamSchema::scalar_float()),
             ("max_triangle_edge_length", ToolParamSchema::scalar_float()),
         ])),
         "lidar_construct_vector_tin" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
                     geometry: ToolVectorGeometry::Polygon,
                 }),
             ),
-            ("returns", ToolParamSchema::enum_values(&["all", "first", "last"])),
+            (
+                "returns",
+                ToolParamSchema::enum_values(&["all", "first", "last"]),
+            ),
             ("excluded_classes", ToolParamSchema::string()),
             ("min_elev", ToolParamSchema::scalar_float()),
             ("max_elev", ToolParamSchema::scalar_float()),
             ("max_triangle_edge_length", ToolParamSchema::scalar_float()),
         ])),
         "lidar_colourize" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("image", ToolParamSchema::input_raster()),
             (
                 "output",
@@ -251,7 +308,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "colourize_based_on_class" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("intensity_blending_amount", ToolParamSchema::scalar_float()),
             ("clr_str", ToolParamSchema::string()),
             ("use_unique_clrs_for_buildings", ToolParamSchema::bool()),
@@ -262,7 +322,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "colourize_based_on_point_returns" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("intensity_blending_amount", ToolParamSchema::scalar_float()),
             ("only_ret_colour", ToolParamSchema::string()),
             ("first_ret_colour", ToolParamSchema::string()),
@@ -284,7 +347,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "lidar_shift" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("x_shift", ToolParamSchema::scalar_float()),
             ("y_shift", ToolParamSchema::scalar_float()),
             ("z_shift", ToolParamSchema::scalar_float()),
@@ -294,7 +360,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "lidar_tile" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("tile_width", ToolParamSchema::scalar_float()),
             ("tile_height", ToolParamSchema::scalar_float()),
             ("origin_x", ToolParamSchema::scalar_float()),
@@ -304,7 +373,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("output_directory", ToolParamSchema::string()),
         ])),
         "split_lidar" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "split_criterion",
                 ToolParamSchema::enum_values(&[
@@ -325,7 +397,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("output_directory", ToolParamSchema::string()),
         ])),
         "lidar_thin" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("resolution", ToolParamSchema::scalar_float()),
             (
                 "method",
@@ -342,7 +417,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "lidar_thin_high_density" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("density", ToolParamSchema::scalar_float()),
             ("resolution", ToolParamSchema::scalar_float()),
             ("save_filtered", ToolParamSchema::bool()),
@@ -356,7 +434,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "sort_lidar" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("sort_criteria", ToolParamSchema::string()),
             (
                 "output",
@@ -364,7 +445,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "remove_duplicates" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("include_z", ToolParamSchema::bool()),
             (
                 "output",
@@ -372,7 +456,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "recover_flightline_info" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("max_time_diff", ToolParamSchema::scalar_float()),
             ("pt_src_id", ToolParamSchema::bool()),
             ("user_data", ToolParamSchema::bool()),
@@ -383,14 +470,20 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "find_flightline_edge_points" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Lidar),
             ),
         ])),
         "classify_buildings_in_lidar" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "buildings",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Polygon),
@@ -401,7 +494,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "classify_lidar" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("search_radius", ToolParamSchema::scalar_float()),
             ("grd_threshold", ToolParamSchema::scalar_float()),
             ("oto_threshold", ToolParamSchema::scalar_float()),
@@ -415,7 +511,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "classify_overlap_points" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("resolution", ToolParamSchema::scalar_float()),
             ("overlap_criterion", ToolParamSchema::string()),
             ("filter", ToolParamSchema::bool()),
@@ -425,7 +524,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "clip_lidar_to_polygon" | "erase_polygon_from_lidar" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "polygons",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Polygon),
@@ -437,14 +539,20 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
         ])),
         "filter_lidar" | "modify_lidar" => Some(param_schema_map(&[
             ("statement", ToolParamSchema::string()),
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Lidar),
             ),
         ])),
         "filter_lidar_by_percentile" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("percentile", ToolParamSchema::scalar_float()),
             ("block_size", ToolParamSchema::scalar_float()),
             (
@@ -453,9 +561,15 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "filter_lidar_by_reference_surface" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("ref_surface", ToolParamSchema::input_raster()),
-            ("query", ToolParamSchema::enum_values(&["within", "<", "<=", ">", ">="])),
+            (
+                "query",
+                ToolParamSchema::enum_values(&["within", "<", "<=", ">", ">="]),
+            ),
             ("threshold", ToolParamSchema::scalar_float()),
             ("classify", ToolParamSchema::bool()),
             ("true_class_value", ToolParamSchema::scalar_integer()),
@@ -467,7 +581,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "filter_lidar_classes" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("excluded_classes", ToolParamSchema::string()),
             (
                 "output",
@@ -475,14 +592,20 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "filter_lidar_noise" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Lidar),
             ),
         ])),
         "filter_lidar_scan_angles" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("threshold", ToolParamSchema::scalar_float()),
             (
                 "output",
@@ -490,19 +613,28 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "flightline_overlap" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("resolution", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "height_above_ground" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Lidar),
             ),
         ])),
         "individual_tree_detection" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("min_search_radius", ToolParamSchema::scalar_float()),
             ("min_height", ToolParamSchema::scalar_float()),
             ("max_search_radius", ToolParamSchema::scalar_float()),
@@ -515,96 +647,123 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
                 }),
             ),
         ])),
-        "individual_tree_segmentation" | "lidar_segmentation" | "lidar_segmentation_based_filter" => {
-            Some(param_schema_map(&[
-                ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
-                ("only_use_veg", ToolParamSchema::bool()),
-                ("veg_classes", ToolParamSchema::string()),
-                ("min_height", ToolParamSchema::scalar_float()),
-                ("max_height", ToolParamSchema::scalar_float()),
-                ("bandwidth_min", ToolParamSchema::scalar_float()),
-                ("bandwidth_max", ToolParamSchema::scalar_float()),
-                ("adaptive_bandwidth", ToolParamSchema::bool()),
-                ("adaptive_neighbors", ToolParamSchema::scalar_integer()),
-                ("adaptive_sector_count", ToolParamSchema::scalar_integer()),
-                ("grid_acceleration", ToolParamSchema::bool()),
-                ("grid_cell_size", ToolParamSchema::scalar_float()),
-                ("grid_refine_exact", ToolParamSchema::bool()),
-                ("grid_refine_iterations", ToolParamSchema::scalar_integer()),
-                ("tile_size", ToolParamSchema::scalar_float()),
-                ("tile_overlap", ToolParamSchema::scalar_float()),
-                ("vertical_bandwidth", ToolParamSchema::scalar_float()),
-                ("max_iterations", ToolParamSchema::scalar_integer()),
-                ("convergence_tol", ToolParamSchema::scalar_float()),
-                ("min_cluster_points", ToolParamSchema::scalar_integer()),
-                ("mode_merge_dist", ToolParamSchema::scalar_float()),
-                ("threads", ToolParamSchema::scalar_integer()),
-                ("simd", ToolParamSchema::bool()),
-                ("output_id_mode", ToolParamSchema::string()),
-                ("output_sidecar_csv", ToolParamSchema::bool()),
-                ("seed", ToolParamSchema::scalar_integer()),
-                ("search_radius", ToolParamSchema::scalar_float()),
-                ("num_iterations", ToolParamSchema::scalar_integer()),
-                ("num_samples", ToolParamSchema::scalar_integer()),
-                ("inlier_threshold", ToolParamSchema::scalar_float()),
-                ("acceptable_model_size", ToolParamSchema::scalar_integer()),
-                ("max_planar_slope", ToolParamSchema::scalar_float()),
-                ("norm_diff_threshold", ToolParamSchema::scalar_float()),
-                ("max_z_diff", ToolParamSchema::scalar_float()),
-                ("classes", ToolParamSchema::bool()),
-                ("ground", ToolParamSchema::bool()),
-                ("classify_points", ToolParamSchema::bool()),
-                (
-                    "output",
-                    ToolParamSchema::output(wbcore::ToolDatasetSchema::Lidar),
-                ),
-            ]))
-        },
-        "lidar_block_maximum" | "lidar_block_minimum" | "lidar_digital_surface_model"
-        | "lidar_nearest_neighbour_gridding" | "lidar_idw_interpolation"
-        | "lidar_point_density" | "lidar_radial_basis_function_interpolation"
-        | "lidar_sibson_interpolation" | "lidar_tin_gridding" => {
-            Some(param_schema_map(&[
-                ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
-                ("resolution", ToolParamSchema::scalar_float()),
-                ("search_radius", ToolParamSchema::scalar_float()),
-                ("weight", ToolParamSchema::scalar_float()),
-                ("num_points", ToolParamSchema::scalar_integer()),
-                ("interpolation_parameter", ToolParamSchema::string()),
-                ("returns_included", ToolParamSchema::enum_values(&["all", "first", "last"])),
-                ("excluded_classes", ToolParamSchema::string()),
-                ("min_elev", ToolParamSchema::scalar_float()),
-                ("max_elev", ToolParamSchema::scalar_float()),
-                ("min_points", ToolParamSchema::scalar_integer()),
-                (
-                    "func_type",
-                    ToolParamSchema::enum_values(&[
-                        "thinplatespline",
-                        "polyharmonic",
-                        "gaussian",
-                        "multiquadric",
-                        "inversemultiquadric",
-                    ]),
-                ),
-                (
-                    "poly_order",
-                    ToolParamSchema::enum_values(&["none", "constant", "quadratic"]),
-                ),
-                ("max_triangle_edge_length", ToolParamSchema::scalar_float()),
-                ("triangulation_backend", ToolParamSchema::enum_values(&["auto", "delaunator", "wbtopology"])),
-                ("triangulation_auto_threshold", ToolParamSchema::scalar_integer()),
-                ("triangulation_epsilon", ToolParamSchema::scalar_float()),
-                ("triangulation_thin_cell_size", ToolParamSchema::scalar_float()),
-                (
-                    "triangulation_thin_method",
-                    ToolParamSchema::enum_values(&["nearest_center", "min_value", "max_value"]),
-                ),
-                ("output", ToolParamSchema::output_raster()),
-            ]))
-        },
+        "individual_tree_segmentation"
+        | "lidar_segmentation"
+        | "lidar_segmentation_based_filter" => Some(param_schema_map(&[
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
+            ("only_use_veg", ToolParamSchema::bool()),
+            ("veg_classes", ToolParamSchema::string()),
+            ("min_height", ToolParamSchema::scalar_float()),
+            ("max_height", ToolParamSchema::scalar_float()),
+            ("bandwidth_min", ToolParamSchema::scalar_float()),
+            ("bandwidth_max", ToolParamSchema::scalar_float()),
+            ("adaptive_bandwidth", ToolParamSchema::bool()),
+            ("adaptive_neighbors", ToolParamSchema::scalar_integer()),
+            ("adaptive_sector_count", ToolParamSchema::scalar_integer()),
+            ("grid_acceleration", ToolParamSchema::bool()),
+            ("grid_cell_size", ToolParamSchema::scalar_float()),
+            ("grid_refine_exact", ToolParamSchema::bool()),
+            ("grid_refine_iterations", ToolParamSchema::scalar_integer()),
+            ("tile_size", ToolParamSchema::scalar_float()),
+            ("tile_overlap", ToolParamSchema::scalar_float()),
+            ("vertical_bandwidth", ToolParamSchema::scalar_float()),
+            ("max_iterations", ToolParamSchema::scalar_integer()),
+            ("convergence_tol", ToolParamSchema::scalar_float()),
+            ("min_cluster_points", ToolParamSchema::scalar_integer()),
+            ("mode_merge_dist", ToolParamSchema::scalar_float()),
+            ("threads", ToolParamSchema::scalar_integer()),
+            ("simd", ToolParamSchema::bool()),
+            ("output_id_mode", ToolParamSchema::string()),
+            ("output_sidecar_csv", ToolParamSchema::bool()),
+            ("seed", ToolParamSchema::scalar_integer()),
+            ("search_radius", ToolParamSchema::scalar_float()),
+            ("num_iterations", ToolParamSchema::scalar_integer()),
+            ("num_samples", ToolParamSchema::scalar_integer()),
+            ("inlier_threshold", ToolParamSchema::scalar_float()),
+            ("acceptable_model_size", ToolParamSchema::scalar_integer()),
+            ("max_planar_slope", ToolParamSchema::scalar_float()),
+            ("norm_diff_threshold", ToolParamSchema::scalar_float()),
+            ("max_z_diff", ToolParamSchema::scalar_float()),
+            ("classes", ToolParamSchema::bool()),
+            ("ground", ToolParamSchema::bool()),
+            ("classify_points", ToolParamSchema::bool()),
+            (
+                "output",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::Lidar),
+            ),
+        ])),
+        "lidar_block_maximum"
+        | "lidar_block_minimum"
+        | "lidar_digital_surface_model"
+        | "lidar_nearest_neighbour_gridding"
+        | "lidar_idw_interpolation"
+        | "lidar_point_density"
+        | "lidar_radial_basis_function_interpolation"
+        | "lidar_sibson_interpolation"
+        | "lidar_tin_gridding" => Some(param_schema_map(&[
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
+            ("resolution", ToolParamSchema::scalar_float()),
+            ("search_radius", ToolParamSchema::scalar_float()),
+            ("weight", ToolParamSchema::scalar_float()),
+            ("num_points", ToolParamSchema::scalar_integer()),
+            ("interpolation_parameter", ToolParamSchema::string()),
+            (
+                "returns_included",
+                ToolParamSchema::enum_values(&["all", "first", "last"]),
+            ),
+            ("excluded_classes", ToolParamSchema::string()),
+            ("min_elev", ToolParamSchema::scalar_float()),
+            ("max_elev", ToolParamSchema::scalar_float()),
+            ("min_points", ToolParamSchema::scalar_integer()),
+            (
+                "func_type",
+                ToolParamSchema::enum_values(&[
+                    "thinplatespline",
+                    "polyharmonic",
+                    "gaussian",
+                    "multiquadric",
+                    "inversemultiquadric",
+                ]),
+            ),
+            (
+                "poly_order",
+                ToolParamSchema::enum_values(&["none", "constant", "quadratic"]),
+            ),
+            ("max_triangle_edge_length", ToolParamSchema::scalar_float()),
+            (
+                "triangulation_backend",
+                ToolParamSchema::enum_values(&["auto", "delaunator", "wbtopology"]),
+            ),
+            (
+                "triangulation_auto_threshold",
+                ToolParamSchema::scalar_integer(),
+            ),
+            ("triangulation_epsilon", ToolParamSchema::scalar_float()),
+            (
+                "triangulation_thin_cell_size",
+                ToolParamSchema::scalar_float(),
+            ),
+            (
+                "triangulation_thin_method",
+                ToolParamSchema::enum_values(&["nearest_center", "min_value", "max_value"]),
+            ),
+            ("output", ToolParamSchema::output_raster()),
+        ])),
         "lidar_classify_subset" => Some(param_schema_map(&[
-            ("base", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
-            ("subset", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "base",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
+            (
+                "subset",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("subset_class_value", ToolParamSchema::scalar_integer()),
             ("nonsubset_class_value", ToolParamSchema::scalar_integer()),
             ("tolerance", ToolParamSchema::scalar_float()),
@@ -614,13 +773,22 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "lidar_eigenvalue_features" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("num_neighbours", ToolParamSchema::scalar_integer()),
             ("search_radius", ToolParamSchema::scalar_float()),
-            ("output", ToolParamSchema::output(wbcore::ToolDatasetSchema::File)),
+            (
+                "output",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
+            ),
         ])),
         "lidar_elevation_slice" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("minz", ToolParamSchema::scalar_float()),
             ("maxz", ToolParamSchema::scalar_float()),
             ("classify", ToolParamSchema::bool()),
@@ -632,7 +800,10 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "lidar_ground_point_filter" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("search_radius", ToolParamSchema::scalar_float()),
             ("min_neighbours", ToolParamSchema::scalar_integer()),
             ("slope_threshold", ToolParamSchema::scalar_float()),
@@ -645,9 +816,16 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Lidar),
             ),
         ])),
-        "lidar_hillshade" | "lidar_tophat_transform" | "normal_vectors" | "normalize_lidar"
-        | "lidar_remove_outliers" | "lidar_ransac_planes" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+        "lidar_hillshade"
+        | "lidar_tophat_transform"
+        | "normal_vectors"
+        | "normalize_lidar"
+        | "lidar_remove_outliers"
+        | "lidar_ransac_planes" => Some(param_schema_map(&[
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("dtm", ToolParamSchema::input_raster()),
             ("no_negatives", ToolParamSchema::bool()),
             ("search_radius", ToolParamSchema::scalar_float()),
@@ -669,9 +847,18 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "lidar_kappa" => Some(param_schema_map(&[
-            ("input1", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
-            ("input2", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
-            ("report", ToolParamSchema::output(wbcore::ToolDatasetSchema::File)),
+            (
+                "input1",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
+            (
+                "input2",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
+            (
+                "report",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
+            ),
             ("resolution", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
             ("output_class_accuracy", ToolParamSchema::bool()),
@@ -708,13 +895,28 @@ pub fn lidar_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "improved_ground_point_filter" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar)),
+            (
+                "input",
+                ToolParamSchema::input(wbcore::ToolDatasetSchema::Lidar),
+            ),
             ("block_size", ToolParamSchema::scalar_float()),
             ("max_building_size", ToolParamSchema::scalar_float()),
             ("slope_threshold", ToolParamSchema::scalar_float()),
             ("elev_threshold", ToolParamSchema::scalar_float()),
             ("classify", ToolParamSchema::bool()),
             ("preserve_classes", ToolParamSchema::bool()),
+            (
+                "output",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::Lidar),
+            ),
+        ])),
+        "assign_projection_lidar" => Some(param_schema_map(&[
+            ("input", ToolParamSchema::input_lidar()),
+            ("epsg", ToolParamSchema::scalar_integer()),
+        ])),
+        "reproject_lidar" => Some(param_schema_map(&[
+            ("input", ToolParamSchema::input_lidar()),
+            ("epsg", ToolParamSchema::scalar_integer()),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Lidar),
@@ -749,31 +951,32 @@ fn is_valid_lidar_extension(path: &Path) -> bool {
 fn find_lidar_files() -> Result<Vec<PathBuf>, ToolError> {
     let cwd = std::env::current_dir()
         .map_err(|e| ToolError::Execution(format!("failed getting current directory: {e}")))?;
-    
+
     let mut files = Vec::new();
-    
+
     // Scan directory (non-recursive for now)
     for entry in fs::read_dir(&cwd)
-        .map_err(|e| ToolError::Execution(format!("failed reading directory: {e}")))? 
+        .map_err(|e| ToolError::Execution(format!("failed reading directory: {e}")))?
     {
         let entry = entry
             .map_err(|e| ToolError::Execution(format!("failed reading directory entry: {e}")))?;
         let path = entry.path();
-        
+
         if path.is_file() && is_valid_lidar_extension(&path) {
             files.push(path);
         }
     }
-    
+
     // Sort for deterministic processing
     files.sort();
-    
+
     if files.is_empty() {
         return Err(ToolError::Execution(
-            "no LiDAR files (*.las, *.laz, *.copc.las, *.ply, *.e57) found in current directory".to_string(),
+            "no LiDAR files (*.las, *.laz, *.copc.las, *.ply, *.e57) found in current directory"
+                .to_string(),
         ));
     }
-    
+
     Ok(files)
 }
 
@@ -787,7 +990,7 @@ fn generate_batch_output_path(input_path: &Path, tool_suffix: &str) -> PathBuf {
     } else {
         stem.to_string()
     };
-    
+
     let parent = input_path.parent().unwrap_or_else(|| Path::new("."));
     let filename = format!("{}_{}.tif", stem_clean, tool_suffix);
     parent.join(filename)
@@ -805,7 +1008,11 @@ fn generate_batch_lidar_output_path(input_path: &Path, tool_suffix: &str) -> Pat
     };
 
     let parent = input_path.parent().unwrap_or_else(|| Path::new("."));
-    let file_name = input_path.file_name().unwrap_or_default().to_string_lossy().to_ascii_lowercase();
+    let file_name = input_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_ascii_lowercase();
     let ext = if file_name.ends_with(".copc.las") {
         "las".to_string()
     } else {
@@ -882,7 +1089,11 @@ fn parse_lidar_path_arg_optional(args: &ToolArgs) -> Result<Option<String>, Tool
     Ok(None)
 }
 
-fn parse_required_lidar_path_alias(args: &ToolArgs, names: &[&str], label: &str) -> Result<String, ToolError> {
+fn parse_required_lidar_path_alias(
+    args: &ToolArgs,
+    names: &[&str],
+    label: &str,
+) -> Result<String, ToolError> {
     for name in names {
         if let Some(value) = args.get(*name) {
             return parse_lidar_path_value(value, name);
@@ -891,7 +1102,11 @@ fn parse_required_lidar_path_alias(args: &ToolArgs, names: &[&str], label: &str)
     Err(ToolError::Validation(format!("{label} is required")))
 }
 
-fn parse_required_vector_path_alias(args: &ToolArgs, names: &[&str], label: &str) -> Result<String, ToolError> {
+fn parse_required_vector_path_alias(
+    args: &ToolArgs,
+    names: &[&str],
+    label: &str,
+) -> Result<String, ToolError> {
     for name in names {
         if args.get(*name).is_some() {
             return parse_vector_path_arg(args, name);
@@ -914,7 +1129,11 @@ fn ring_to_xy(ring: &wbvector::Ring) -> Vec<(f64, f64)> {
     ring.0.iter().map(|c| (c.x, c.y)).collect()
 }
 
-fn push_polygon(exterior: &wbvector::Ring, interiors: &[wbvector::Ring], out: &mut Vec<PreparedPolygon>) {
+fn push_polygon(
+    exterior: &wbvector::Ring,
+    interiors: &[wbvector::Ring],
+    out: &mut Vec<PreparedPolygon>,
+) {
     let ext = ring_to_xy(exterior);
     if ext.len() < 3 {
         return;
@@ -942,7 +1161,10 @@ fn push_polygon(exterior: &wbvector::Ring, interiors: &[wbvector::Ring], out: &m
 
 fn collect_polygons_from_geometry(geom: &wbvector::Geometry, out: &mut Vec<PreparedPolygon>) {
     match geom {
-        wbvector::Geometry::Polygon { exterior, interiors } => push_polygon(exterior, interiors, out),
+        wbvector::Geometry::Polygon {
+            exterior,
+            interiors,
+        } => push_polygon(exterior, interiors, out),
         wbvector::Geometry::MultiPolygon(polys) => {
             for (exterior, interiors) in polys {
                 push_polygon(exterior, interiors, out);
@@ -1001,7 +1223,9 @@ fn point_in_prepared_polygon(x: f64, y: f64, poly: &PreparedPolygon) -> bool {
 }
 
 fn point_in_any_prepared_polygon(x: f64, y: f64, polys: &[PreparedPolygon]) -> bool {
-    polys.iter().any(|poly| point_in_prepared_polygon(x, y, poly))
+    polys
+        .iter()
+        .any(|poly| point_in_prepared_polygon(x, y, poly))
 }
 
 fn parse_batch_neighbor_inputs(args: &ToolArgs) -> Result<Vec<String>, ToolError> {
@@ -1075,7 +1299,10 @@ enum TriangulationThinMethod {
 fn parse_triangulation_thin_method(
     value: Option<&str>,
 ) -> Result<TriangulationThinMethod, ToolError> {
-    let method = value.unwrap_or("nearest_center").trim().to_ascii_lowercase();
+    let method = value
+        .unwrap_or("nearest_center")
+        .trim()
+        .to_ascii_lowercase();
     match method.as_str() {
         "nearest_center" | "nearestcentre" | "nearest_center_point" => {
             Ok(TriangulationThinMethod::NearestCenter)
@@ -1129,9 +1356,7 @@ fn thin_triangulation_samples(
                 let center_x = (col as f64 + 0.5) * cell_size;
                 let center_y = (row as f64 + 0.5) * cell_size;
                 let distance_sq = (sample.0 - center_x).powi(2) + (sample.1 - center_y).powi(2);
-                let entry = selected
-                    .entry((col, row))
-                    .or_insert((distance_sq, sample));
+                let entry = selected.entry((col, row)).or_insert((distance_sq, sample));
                 if distance_sq < entry.0
                     || (distance_sq == entry.0 && sample_lexicographic_lt(sample, entry.1))
                 {
@@ -1149,7 +1374,9 @@ fn thin_triangulation_samples(
                     (sample.1 * inv_cell_size).floor() as i64,
                 );
                 let entry = selected.entry(key).or_insert(sample);
-                if sample.2 < entry.2 || (sample.2 == entry.2 && sample_lexicographic_lt(sample, *entry)) {
+                if sample.2 < entry.2
+                    || (sample.2 == entry.2 && sample_lexicographic_lt(sample, *entry))
+                {
                     *entry = sample;
                 }
             }
@@ -1164,7 +1391,9 @@ fn thin_triangulation_samples(
                     (sample.1 * inv_cell_size).floor() as i64,
                 );
                 let entry = selected.entry(key).or_insert(sample);
-                if sample.2 > entry.2 || (sample.2 == entry.2 && sample_lexicographic_lt(sample, *entry)) {
+                if sample.2 > entry.2
+                    || (sample.2 == entry.2 && sample_lexicographic_lt(sample, *entry))
+                {
                     *entry = sample;
                 }
             }
@@ -1193,15 +1422,25 @@ fn color8_to_rgb16(r: u8, g: u8, b: u8) -> Rgb16 {
 fn parse_rgb_spec(spec: &str) -> Result<Rgb16, ToolError> {
     let s = spec.trim();
     if s.is_empty() {
-        return Err(ToolError::Validation("colour specification cannot be empty".to_string()));
+        return Err(ToolError::Validation(
+            "colour specification cannot be empty".to_string(),
+        ));
     }
 
-    if let Some(hex) = s.strip_prefix('#').or_else(|| s.strip_prefix("0x")).or_else(|| s.strip_prefix("0X")) {
+    if let Some(hex) = s
+        .strip_prefix('#')
+        .or_else(|| s.strip_prefix("0x"))
+        .or_else(|| s.strip_prefix("0X"))
+    {
         if hex.len() != 6 {
-            return Err(ToolError::Validation(format!("invalid hex colour '{}': expected 6 hex digits", s)));
+            return Err(ToolError::Validation(format!(
+                "invalid hex colour '{}': expected 6 hex digits",
+                s
+            )));
         }
-        let v = u32::from_str_radix(hex, 16)
-            .map_err(|_| ToolError::Validation(format!("invalid hex colour '{}': expected 6 hex digits", s)))?;
+        let v = u32::from_str_radix(hex, 16).map_err(|_| {
+            ToolError::Validation(format!("invalid hex colour '{}': expected 6 hex digits", s))
+        })?;
         let r = ((v >> 16) & 0xFF) as u8;
         let g = ((v >> 8) & 0xFF) as u8;
         let b = (v & 0xFF) as u8;
@@ -1211,7 +1450,10 @@ fn parse_rgb_spec(spec: &str) -> Result<Rgb16, ToolError> {
     let cleaned = s.replace('(', "").replace(')', "").replace(' ', "");
     let parts: Vec<&str> = cleaned.split(',').filter(|p| !p.is_empty()).collect();
     if parts.len() != 3 {
-        return Err(ToolError::Validation(format!("invalid rgb colour '{}': expected (r,g,b)", s)));
+        return Err(ToolError::Validation(format!(
+            "invalid rgb colour '{}': expected (r,g,b)",
+            s
+        )));
     }
     let r = parts[0]
         .parse::<u16>()
@@ -1273,10 +1515,7 @@ fn parse_returns_mode(args: &ToolArgs) -> ReturnsMode {
             _ => ReturnsMode::All,
         };
     }
-    let text = raw
-        .and_then(Value::as_str)
-        .unwrap_or("all")
-        .to_lowercase();
+    let text = raw.and_then(Value::as_str).unwrap_or("all").to_lowercase();
     if text.contains("first") {
         ReturnsMode::First
     } else if text.contains("last") {
@@ -1317,11 +1556,44 @@ fn parse_excluded_classes(args: &ToolArgs) -> Result<[bool; 256], ToolError> {
             if t.is_empty() {
                 continue;
             }
+            // Check if token contains a range (e.g., "3-17")
+            if t.contains('-') && !t.starts_with('-') {
+                let parts: Vec<&str> = t.splitn(2, '-').collect();
+                if parts.len() == 2 {
+                    let start_str = parts[0].trim();
+                    let end_str = parts[1].trim();
+
+                    let start: u64 = start_str.parse().map_err(|_| {
+                        ToolError::Validation(format!(
+                            "failed parsing range start '{}' as integer",
+                            start_str
+                        ))
+                    })?;
+                    let end: u64 = end_str.parse().map_err(|_| {
+                        ToolError::Validation(format!(
+                            "failed parsing range end '{}' as integer",
+                            end_str
+                        ))
+                    })?;
+
+                    if start > end {
+                        return Err(ToolError::Validation(format!(
+                            "invalid class range: {} > {}",
+                            start, end
+                        )));
+                    }
+
+                    for class_u64 in start..=end {
+                        if class_u64 < 256 {
+                            include[class_u64 as usize] = false;
+                        }
+                    }
+                    continue;
+                }
+            }
+
             let class_u64: u64 = t.parse().map_err(|_| {
-                ToolError::Validation(format!(
-                    "failed parsing excluded class '{}' as integer",
-                    t
-                ))
+                ToolError::Validation(format!("failed parsing excluded class '{}' as integer", t))
             })?;
             if class_u64 < 256 {
                 include[class_u64 as usize] = false;
@@ -1704,7 +1976,8 @@ fn estimate_adaptive_bandwidth_for_seed(
         radial_distances.push(dist);
 
         if (zs[idx] - sz).abs() <= dz_limit {
-            let mut sector = (((dy.atan2(dx) + PI) / (2.0 * PI)) * (sector_count as f64)).floor() as usize;
+            let mut sector =
+                (((dy.atan2(dx) + PI) / (2.0 * PI)) * (sector_count as f64)).floor() as usize;
             if sector >= sector_count {
                 sector = sector_count - 1;
             }
@@ -1867,7 +2140,11 @@ fn parse_optional_lidar_output_path(args: &ToolArgs) -> Result<Option<PathBuf>, 
     Ok(Some(path))
 }
 
-fn parse_required_raster_path_alias(args: &ToolArgs, names: &[&str], label: &str) -> Result<String, ToolError> {
+fn parse_required_raster_path_alias(
+    args: &ToolArgs,
+    names: &[&str],
+    label: &str,
+) -> Result<String, ToolError> {
     for name in names {
         if let Some(value) = args.get(*name) {
             return parse_raster_path_value(value, name);
@@ -1879,15 +2156,20 @@ fn parse_required_raster_path_alias(args: &ToolArgs, names: &[&str], label: &str
 fn load_raster_path_or_memory(path: &str, label: &str) -> Result<Raster, ToolError> {
     if memory_store::raster_is_memory_path(path) {
         let id = memory_store::raster_path_to_id(path).ok_or_else(|| {
-            ToolError::Validation(format!("invalid in-memory raster path for '{}': {}", label, path))
+            ToolError::Validation(format!(
+                "invalid in-memory raster path for '{}': {}",
+                label, path
+            ))
         })?;
         return memory_store::get_raster_by_id(id).ok_or_else(|| {
-            ToolError::Validation(format!("unknown in-memory raster id for '{}': {}", label, id))
+            ToolError::Validation(format!(
+                "unknown in-memory raster id for '{}': {}",
+                label, id
+            ))
         });
     }
-    Raster::read(Path::new(path)).map_err(|e| {
-        ToolError::Execution(format!("failed reading {} '{}': {e}", label, path))
-    })
+    Raster::read(Path::new(path))
+        .map_err(|e| ToolError::Execution(format!("failed reading {} '{}': {e}", label, path)))
 }
 
 fn parse_lidar_inputs_arg(args: &ToolArgs) -> Result<Vec<String>, ToolError> {
@@ -1898,7 +2180,9 @@ fn parse_lidar_inputs_arg(args: &ToolArgs) -> Result<Vec<String>, ToolError> {
         return Err(ToolError::Validation("inputs must be an array".to_string()));
     };
     if arr.is_empty() {
-        return Err(ToolError::Validation("inputs must not be empty".to_string()));
+        return Err(ToolError::Validation(
+            "inputs must not be empty".to_string(),
+        ));
     }
     let mut out = Vec::with_capacity(arr.len());
     for (i, item) in arr.iter().enumerate() {
@@ -1913,20 +2197,26 @@ fn parse_ascii_inputs_arg(args: &ToolArgs) -> Result<Vec<String>, ToolError> {
         .get("inputs")
         .or_else(|| args.get("input_ascii_files"))
         .ok_or_else(|| ToolError::Validation("inputs is required".to_string()))?;
-    let arr = value
-        .as_array()
-        .ok_or_else(|| ToolError::Validation("inputs must be an array of path strings".to_string()))?;
+    let arr = value.as_array().ok_or_else(|| {
+        ToolError::Validation("inputs must be an array of path strings".to_string())
+    })?;
     if arr.is_empty() {
-        return Err(ToolError::Validation("inputs must not be empty".to_string()));
+        return Err(ToolError::Validation(
+            "inputs must not be empty".to_string(),
+        ));
     }
     let mut out = Vec::with_capacity(arr.len());
     for (i, item) in arr.iter().enumerate() {
         let Some(path) = item.as_str() else {
-            return Err(ToolError::Validation(format!("inputs[{i}] must be a path string")));
+            return Err(ToolError::Validation(format!(
+                "inputs[{i}] must be a path string"
+            )));
         };
         let trimmed = path.trim();
         if trimmed.is_empty() {
-            return Err(ToolError::Validation(format!("inputs[{i}] must not be empty")));
+            return Err(ToolError::Validation(format!(
+                "inputs[{i}] must not be empty"
+            )));
         }
         out.push(trimmed.to_string());
     }
@@ -2025,7 +2315,10 @@ fn parse_ascii_pattern(pattern: &str) -> Result<AsciiPatternSpec, ToolError> {
 
 fn split_ascii_line(line: &str) -> Vec<&str> {
     if line.contains(',') {
-        line.split(',').map(str::trim).filter(|s| !s.is_empty()).collect()
+        line.split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect()
     } else {
         line.split_whitespace().collect()
     }
@@ -2085,8 +2378,9 @@ fn derived_ascii_output_from_lidar(input: &Path) -> PathBuf {
 fn write_point_cloud_as_csv(cloud: &PointCloud, output_path: &Path) -> Result<(), ToolError> {
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+            fs::create_dir_all(parent).map_err(|e| {
+                ToolError::Execution(format!("failed creating output directory: {e}"))
+            })?;
         }
     }
 
@@ -2105,11 +2399,17 @@ fn write_point_cloud_as_csv(cloud: &PointCloud, output_path: &Path) -> Result<()
         writeln!(writer, "X,Y,Z,INTENSITY,CLASS,RETURN,NUM_RETURN,SCAN_ANGLE")
             .map_err(|e| ToolError::Execution(format!("failed writing csv header: {e}")))?;
     } else if !has_rgb && has_time {
-        writeln!(writer, "X,Y,Z,INTENSITY,CLASS,RETURN,NUM_RETURN,SCAN_ANGLE,TIME")
-            .map_err(|e| ToolError::Execution(format!("failed writing csv header: {e}")))?;
+        writeln!(
+            writer,
+            "X,Y,Z,INTENSITY,CLASS,RETURN,NUM_RETURN,SCAN_ANGLE,TIME"
+        )
+        .map_err(|e| ToolError::Execution(format!("failed writing csv header: {e}")))?;
     } else if has_rgb && !has_time {
-        writeln!(writer, "X,Y,Z,INTENSITY,CLASS,RETURN,NUM_RETURN,SCAN_ANGLE,RED,GREEN,BLUE")
-            .map_err(|e| ToolError::Execution(format!("failed writing csv header: {e}")))?;
+        writeln!(
+            writer,
+            "X,Y,Z,INTENSITY,CLASS,RETURN,NUM_RETURN,SCAN_ANGLE,RED,GREEN,BLUE"
+        )
+        .map_err(|e| ToolError::Execution(format!("failed writing csv header: {e}")))?;
     } else {
         writeln!(
             writer,
@@ -2266,7 +2566,9 @@ struct Plane {
 }
 
 impl Plane {
-    fn zero() -> Self { Self::default() }
+    fn zero() -> Self {
+        Self::default()
+    }
 
     fn from_points(points: &[Vector3<f64>]) -> Self {
         let Some((normal, centroid)) = plane_normal_and_centroid(points) else {
@@ -2306,7 +2608,6 @@ impl Plane {
         }
         (na.dot(&nb) / (ma * mb)).clamp(-1.0, 1.0).acos()
     }
-
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2345,7 +2646,9 @@ fn plane_normal_and_centroid(points: &[Vector3<f64>]) -> Option<(Vector3<f64>, V
     if points.len() < 3 {
         return None;
     }
-    let centroid = points.iter().fold(Vector3::new(0.0, 0.0, 0.0), |acc, p| acc + *p)
+    let centroid = points
+        .iter()
+        .fold(Vector3::new(0.0, 0.0, 0.0), |acc, p| acc + *p)
         / points.len() as f64;
 
     let mut xx = 0.0;
@@ -2379,7 +2682,9 @@ fn neighborhood_pca(points: &[Vector3<f64>], center: Vector3<f64>) -> Option<Nei
     if points.len() < 8 {
         return None;
     }
-    let centroid = points.iter().fold(Vector3::new(0.0, 0.0, 0.0), |acc, p| acc + *p)
+    let centroid = points
+        .iter()
+        .fold(Vector3::new(0.0, 0.0, 0.0), |acc, p| acc + *p)
         / points.len() as f64;
     let mut xx = 0.0;
     let mut xy = 0.0;
@@ -2421,9 +2726,8 @@ fn neighborhood_pca(points: &[Vector3<f64>], center: Vector3<f64>) -> Option<Nei
 }
 
 fn rgb_from_unit_normal(normal: Vector3<f64>) -> Rgb16 {
-    let encode = |v: f64| -> u16 {
-        (((v.clamp(-1.0, 1.0) + 1.0) * 0.5 * 255.0).round() as u16) * 257
-    };
+    let encode =
+        |v: f64| -> u16 { (((v.clamp(-1.0, 1.0) + 1.0) * 0.5 * 255.0).round() as u16) * 257 };
     Rgb16 {
         red: encode(normal.x),
         green: encode(normal.y),
@@ -2570,7 +2874,10 @@ fn build_filter_context(
         ("scan_direction", EvalValue::from(p.scan_direction_flag)),
         ("is_flightline_edge", EvalValue::from(p.edge_of_flight_line)),
         ("user_data", EvalValue::from_int(i64::from(p.user_data))),
-        ("point_source_id", EvalValue::from_int(i64::from(p.point_source_id))),
+        (
+            "point_source_id",
+            EvalValue::from_int(i64::from(p.point_source_id)),
+        ),
         ("scanner_channel", EvalValue::from_int(scanner_channel)),
         ("time", EvalValue::from_float(time)),
         ("red", EvalValue::from_int(red as i64)),
@@ -2610,7 +2917,9 @@ fn parse_modify_statements(text: &str) -> Result<Vec<String>, ToolError> {
         .map(str::to_string)
         .collect();
     if parts.is_empty() {
-        return Err(ToolError::Validation("statement must be non-empty".to_string()));
+        return Err(ToolError::Validation(
+            "statement must be non-empty".to_string(),
+        ));
     }
     Ok(parts)
 }
@@ -2676,7 +2985,11 @@ fn starts_with_ascii_keyword_at(input: &str, start: usize, keyword: &str) -> boo
     }
 
     let slice = &bytes[start..(start + kw.len())];
-    if !slice.iter().zip(kw.iter()).all(|(a, b)| a.eq_ignore_ascii_case(b)) {
+    if !slice
+        .iter()
+        .zip(kw.iter())
+        .all(|(a, b)| a.eq_ignore_ascii_case(b))
+    {
         return false;
     }
 
@@ -2713,14 +3026,17 @@ fn parse_assignment_lhs(statement: &str) -> Option<String> {
         || tail.starts_with("*=")
         || tail.starts_with("/=")
         || tail.starts_with("%=");
-    if is_assign { Some(lhs) } else { None }
+    if is_assign {
+        Some(lhs)
+    } else {
+        None
+    }
 }
 
 fn is_supported_modify_target(name: &str) -> bool {
     matches!(
         name,
-        "x"
-            | "y"
+        "x" | "y"
             | "z"
             | "xy"
             | "xyz"
@@ -2834,14 +3150,18 @@ enum SortCriterion {
 fn parse_sort_criteria(text: &str) -> Result<Vec<(SortCriterion, Option<f64>)>, ToolError> {
     let raw = text.trim();
     if raw.is_empty() {
-        return Err(ToolError::Validation("sort_criteria must not be empty".to_string()));
+        return Err(ToolError::Validation(
+            "sort_criteria must not be empty".to_string(),
+        ));
     }
     let tokens: Vec<&str> = raw
         .split(&[' ', ',', '|', ';', '='][..])
         .filter(|s| !s.is_empty())
         .collect();
     if tokens.is_empty() {
-        return Err(ToolError::Validation("sort_criteria must not be empty".to_string()));
+        return Err(ToolError::Validation(
+            "sort_criteria must not be empty".to_string(),
+        ));
     }
 
     let mut out: Vec<(SortCriterion, Option<f64>)> = Vec::new();
@@ -2850,7 +3170,9 @@ fn parse_sort_criteria(text: &str) -> Result<Vec<(SortCriterion, Option<f64>)>, 
             if let Some(last) = out.last_mut() {
                 last.1 = Some(bin);
             } else {
-                return Err(ToolError::Validation("sort_criteria cannot start with a numeric bin size".to_string()));
+                return Err(ToolError::Validation(
+                    "sort_criteria cannot start with a numeric bin size".to_string(),
+                ));
             }
             continue;
         }
@@ -2879,7 +3201,9 @@ fn parse_sort_criteria(text: &str) -> Result<Vec<(SortCriterion, Option<f64>)>, 
     }
 
     if out.is_empty() {
-        return Err(ToolError::Validation("sort_criteria must include at least one criterion".to_string()));
+        return Err(ToolError::Validation(
+            "sort_criteria must include at least one criterion".to_string(),
+        ));
     }
     Ok(out)
 }
@@ -2917,7 +3241,9 @@ enum SplitCriterion {
 fn parse_split_criterion(text: &str) -> Result<SplitCriterion, ToolError> {
     let key = text.trim().to_lowercase();
     if key.is_empty() {
-        return Err(ToolError::Validation("split_criterion must not be empty".to_string()));
+        return Err(ToolError::Validation(
+            "split_criterion must not be empty".to_string(),
+        ));
     }
     if key.contains("num") {
         Ok(SplitCriterion::NumPts)
@@ -2940,7 +3266,10 @@ fn parse_split_criterion(text: &str) -> Result<SplitCriterion, ToolError> {
     } else if key.contains("ti") {
         Ok(SplitCriterion::Time)
     } else {
-        Err(ToolError::Validation(format!("unrecognized split_criterion '{}'", text)))
+        Err(ToolError::Validation(format!(
+            "unrecognized split_criterion '{}'",
+            text
+        )))
     }
 }
 
@@ -2960,7 +3289,10 @@ fn split_value(point: &PointRecord, criterion: SplitCriterion) -> f64 {
 }
 
 fn split_output_base(path: &Path) -> Result<(PathBuf, String, String), ToolError> {
-    let parent = path.parent().unwrap_or_else(|| Path::new(".")).to_path_buf();
+    let parent = path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
     let filename = path
         .file_name()
         .and_then(|s| s.to_str())
@@ -3013,7 +3345,9 @@ fn select_point_value(point: &PointRecord, parameter: &str) -> Option<f64> {
         "intensity" => Some(point.intensity as f64),
         "class" | "classification" => Some(point.classification as f64),
         "return_number" | "return number" => Some(point.return_number as f64),
-        "number_of_returns" | "num_returns" | "number of returns" => Some(point.number_of_returns as f64),
+        "number_of_returns" | "num_returns" | "number of returns" => {
+            Some(point.number_of_returns as f64)
+        }
         "scan_angle" | "scan angle" => Some(point.scan_angle as f64),
         "time" | "gps_time" | "gps time" => Some(point.gps_time.map(|t| t.0).unwrap_or(0.0)),
         "rgb" => point.color.map(|clr| {
@@ -3282,12 +3616,18 @@ fn build_lidar_output(
         ));
     }
 
-    let min_x = samples.iter().map(|(x, _, _)| *x).fold(f64::INFINITY, f64::min);
+    let min_x = samples
+        .iter()
+        .map(|(x, _, _)| *x)
+        .fold(f64::INFINITY, f64::min);
     let max_x = samples
         .iter()
         .map(|(x, _, _)| *x)
         .fold(f64::NEG_INFINITY, f64::max);
-    let min_y = samples.iter().map(|(_, y, _)| *y).fold(f64::INFINITY, f64::min);
+    let min_y = samples
+        .iter()
+        .map(|(_, y, _)| *y)
+        .fold(f64::INFINITY, f64::min);
     let max_y = samples
         .iter()
         .map(|(_, y, _)| *y)
@@ -3349,8 +3689,9 @@ fn store_or_write_output(
     if let Some(output_path) = output_path {
         if let Some(parent) = output_path.parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    ToolError::Execution(format!("failed creating output directory: {e}"))
+                })?;
             }
         }
         let output_path_str = output_path.to_string_lossy().to_string();
@@ -3377,8 +3718,9 @@ fn store_or_write_lidar_output(
     };
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+            fs::create_dir_all(parent).map_err(|e| {
+                ToolError::Execution(format!("failed creating output directory: {e}"))
+            })?;
         }
     }
     cloud
@@ -3440,8 +3782,9 @@ fn write_vector_output(layer: &wbvector::Layer, path: &str) -> Result<String, To
 
     if let Some(parent) = Path::new(path).parent() {
         if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .map_err(|e| ToolError::Execution(format!("failed creating output directory: {}", e)))?;
+            fs::create_dir_all(parent).map_err(|e| {
+                ToolError::Execution(format!("failed creating output directory: {}", e))
+            })?;
         }
     }
 
@@ -3457,7 +3800,9 @@ fn build_vector_result(path: String) -> ToolRunResult {
     ToolRunResult { outputs }
 }
 
-fn build_batch_placeholder_vector_result(mut paths: Vec<String>) -> Result<ToolRunResult, ToolError> {
+fn build_batch_placeholder_vector_result(
+    mut paths: Vec<String>,
+) -> Result<ToolRunResult, ToolError> {
     if paths.is_empty() {
         return Err(ToolError::Execution(
             "batch mode produced no output vector files".to_string(),
@@ -3470,7 +3815,12 @@ fn build_batch_placeholder_vector_result(mut paths: Vec<String>) -> Result<ToolR
 fn lidar_crs_to_vector_crs(crs: Option<&LidarCrs>) -> Option<wbvector::Crs> {
     let epsg = crs.and_then(|c| c.epsg);
     let wkt = crs.and_then(|c| c.wkt.clone());
-    if epsg.is_some() || wkt.as_deref().map(|v| !v.trim().is_empty()).unwrap_or(false) {
+    if epsg.is_some()
+        || wkt
+            .as_deref()
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false)
+    {
         Some(wbvector::Crs { epsg, wkt })
     } else {
         None
@@ -3494,9 +3844,7 @@ fn monotonic_chain_convex_hull(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
 
     let mut lower: Vec<(f64, f64)> = Vec::new();
     for p in &pts {
-        while lower.len() >= 2
-            && cross(lower[lower.len() - 2], lower[lower.len() - 1], *p) <= 0.0
-        {
+        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], *p) <= 0.0 {
             lower.pop();
         }
         lower.push(*p);
@@ -3504,9 +3852,7 @@ fn monotonic_chain_convex_hull(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
 
     let mut upper: Vec<(f64, f64)> = Vec::new();
     for p in pts.iter().rev() {
-        while upper.len() >= 2
-            && cross(upper[upper.len() - 2], upper[upper.len() - 1], *p) <= 0.0
-        {
+        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], *p) <= 0.0 {
             upper.pop();
         }
         upper.push(*p);
@@ -3553,7 +3899,9 @@ fn interpolate_edge_contour(
     Some((p1.0 + t * (p2.0 - p1.0), p1.1 + t * (p2.1 - p1.1)))
 }
 
-fn build_batch_placeholder_raster_result(mut paths: Vec<String>) -> Result<ToolRunResult, ToolError> {
+fn build_batch_placeholder_raster_result(
+    mut paths: Vec<String>,
+) -> Result<ToolRunResult, ToolError> {
     if paths.is_empty() {
         return Err(ToolError::Execution(
             "batch mode produced no output rasters".to_string(),
@@ -3563,7 +3911,9 @@ fn build_batch_placeholder_raster_result(mut paths: Vec<String>) -> Result<ToolR
     Ok(build_raster_result(paths[0].clone()))
 }
 
-fn build_batch_placeholder_lidar_result(mut paths: Vec<String>) -> Result<ToolRunResult, ToolError> {
+fn build_batch_placeholder_lidar_result(
+    mut paths: Vec<String>,
+) -> Result<ToolRunResult, ToolError> {
     if paths.is_empty() {
         return Err(ToolError::Execution(
             "batch mode produced no output lidar files".to_string(),
@@ -3573,7 +3923,10 @@ fn build_batch_placeholder_lidar_result(mut paths: Vec<String>) -> Result<ToolRu
     Ok(build_lidar_result(paths[0].clone()))
 }
 
-fn extract_raster_path_from_result(result: ToolRunResult, tool_id: &str) -> Result<String, ToolError> {
+fn extract_raster_path_from_result(
+    result: ToolRunResult,
+    tool_id: &str,
+) -> Result<String, ToolError> {
     let out_type = result
         .outputs
         .get("__wbw_type__")
@@ -3611,7 +3964,11 @@ fn load_lidar_cloud(path: &Path, label: &str) -> Result<PointCloud, ToolError> {
     })
 }
 
-fn stream_disk_lidar_points<F>(path: &Path, label: &str, mut visit: F) -> Result<Option<LidarCrs>, ToolError>
+fn stream_disk_lidar_points<F>(
+    path: &Path,
+    label: &str,
+    mut visit: F,
+) -> Result<Option<LidarCrs>, ToolError>
 where
     F: FnMut(&PointRecord),
 {
@@ -3625,15 +3982,24 @@ where
     match format {
         LidarFormat::Las => {
             let file = File::open(path).map_err(|e| {
-                ToolError::Execution(format!("failed opening '{label}' lidar '{}': {e}", path.display()))
+                ToolError::Execution(format!(
+                    "failed opening '{label}' lidar '{}': {e}",
+                    path.display()
+                ))
             })?;
             let mut reader = wblidar::las::LasReader::new(BufReader::new(file)).map_err(|e| {
-                ToolError::Execution(format!("failed reading '{label}' lidar '{}': {e}", path.display()))
+                ToolError::Execution(format!(
+                    "failed reading '{label}' lidar '{}': {e}",
+                    path.display()
+                ))
             })?;
             let crs = reader.crs().cloned();
             let mut point = PointRecord::default();
             while reader.read_point(&mut point).map_err(|e| {
-                ToolError::Execution(format!("failed streaming '{label}' lidar '{}': {e}", path.display()))
+                ToolError::Execution(format!(
+                    "failed streaming '{label}' lidar '{}': {e}",
+                    path.display()
+                ))
             })? {
                 visit(&point);
             }
@@ -3641,15 +4007,24 @@ where
         }
         LidarFormat::Laz => {
             let file = File::open(path).map_err(|e| {
-                ToolError::Execution(format!("failed opening '{label}' lidar '{}': {e}", path.display()))
+                ToolError::Execution(format!(
+                    "failed opening '{label}' lidar '{}': {e}",
+                    path.display()
+                ))
             })?;
             let mut reader = wblidar::laz::LazReader::new(BufReader::new(file)).map_err(|e| {
-                ToolError::Execution(format!("failed reading '{label}' lidar '{}': {e}", path.display()))
+                ToolError::Execution(format!(
+                    "failed reading '{label}' lidar '{}': {e}",
+                    path.display()
+                ))
             })?;
             let crs = reader.crs().cloned();
             let mut point = PointRecord::default();
             while reader.read_point(&mut point).map_err(|e| {
-                ToolError::Execution(format!("failed streaming '{label}' lidar '{}': {e}", path.display()))
+                ToolError::Execution(format!(
+                    "failed streaming '{label}' lidar '{}': {e}",
+                    path.display()
+                ))
             })? {
                 visit(&point);
             }
@@ -3657,7 +4032,10 @@ where
         }
         _ => {
             let cloud = PointCloud::read(path).map_err(|e| {
-                ToolError::Execution(format!("failed reading '{label}' lidar '{}': {e}", path.display()))
+                ToolError::Execution(format!(
+                    "failed reading '{label}' lidar '{}': {e}",
+                    path.display()
+                ))
             })?;
             let crs = cloud.crs.clone();
             for point in &cloud.points {
@@ -3681,7 +4059,14 @@ fn run_block_extrema_tile(
 ) -> Result<String, ToolError> {
     let cloud = load_lidar_cloud(input_path, "input")?;
 
-    let samples = collect_lidar_samples(&cloud.points, parameter, returns_mode, include_classes, min_z, max_z)?;
+    let samples = collect_lidar_samples(
+        &cloud.points,
+        parameter,
+        returns_mode,
+        include_classes,
+        min_z,
+        max_z,
+    )?;
     let mut output = build_lidar_output(
         &samples,
         resolution,
@@ -3731,7 +4116,14 @@ fn run_point_density_tile(
 ) -> Result<String, ToolError> {
     let cloud = load_lidar_cloud(input_path, "input")?;
 
-    let samples = collect_lidar_samples(&cloud.points, "elevation", returns_mode, include_classes, min_z, max_z)?;
+    let samples = collect_lidar_samples(
+        &cloud.points,
+        "elevation",
+        returns_mode,
+        include_classes,
+        min_z,
+        max_z,
+    )?;
     let mut output = build_lidar_output(
         &samples,
         resolution,
@@ -3741,8 +4133,9 @@ fn run_point_density_tile(
 
     let mut tree = KdTree::new(2);
     for (x, y, _) in &samples {
-        tree.add([*x, *y], 1u8)
-            .map_err(|e| ToolError::Execution(format!("failed building point-density index: {e}")))?;
+        tree.add([*x, *y], 1u8).map_err(|e| {
+            ToolError::Execution(format!("failed building point-density index: {e}"))
+        })?;
     }
 
     let area = std::f64::consts::PI * radius * radius;
@@ -3763,7 +4156,9 @@ fn run_point_density_tile(
                 let y = y_max - (row as f64 + 0.5) * cell_y;
                 let ret = tree
                     .within(&[x, y], radius_sq, &squared_euclidean)
-                    .map_err(|e| ToolError::Execution(format!("point-density search failed: {e}")))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("point-density search failed: {e}"))
+                    })?;
                 Ok(ret.len() as f64 / area)
             })
             .collect::<Result<Vec<_>, ToolError>>()?
@@ -3775,7 +4170,9 @@ fn run_point_density_tile(
                 let y = y_max - (row as f64 + 0.5) * cell_y;
                 let ret = tree
                     .within(&[x, y], radius_sq, &squared_euclidean)
-                    .map_err(|e| ToolError::Execution(format!("point-density search failed: {e}")))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("point-density search failed: {e}"))
+                    })?;
                 values[row * cols + col] = ret.len() as f64 / area;
             }
         }
@@ -3803,9 +4200,18 @@ fn run_dsm_tile(
     let mut include_classes = [true; 256];
     include_classes[7] = false;
     include_classes[18] = false;
-    let mut samples = collect_lidar_samples(&cloud.points, "elevation", ReturnsMode::All, &include_classes, min_z, max_z)?;
+    let mut samples = collect_lidar_samples(
+        &cloud.points,
+        "elevation",
+        ReturnsMode::All,
+        &include_classes,
+        min_z,
+        max_z,
+    )?;
     if samples.len() < 3 {
-        return Err(ToolError::Validation("input lidar must contain at least three points for triangulation".to_string()));
+        return Err(ToolError::Validation(
+            "input lidar must contain at least three points for triangulation".to_string(),
+        ));
     }
 
     // Keep local top-surface candidates before TIN interpolation.
@@ -3840,10 +4246,15 @@ fn run_dsm_tile(
         lidar_crs_to_raster_crs(cloud.crs.as_ref()),
         DataType::F64,
     )?;
-    let topo_points: Vec<TopoCoord> = samples.iter().map(|(x, y, _)| TopoCoord::xy(*x, *y)).collect();
+    let topo_points: Vec<TopoCoord> = samples
+        .iter()
+        .map(|(x, y, _)| TopoCoord::xy(*x, *y))
+        .collect();
     let triangulation = delaunay_triangulation(&topo_points, 1.0e-12);
     if triangulation.triangles.is_empty() {
-        return Err(ToolError::Execution("failed to build triangulation from input lidar points".to_string()));
+        return Err(ToolError::Execution(
+            "failed to build triangulation from input lidar points".to_string(),
+        ));
     }
 
     let mut value_lookup = HashMap::with_capacity(samples.len());
@@ -3870,9 +4281,21 @@ fn run_dsm_tile(
         let p2 = triangulation.points[tri[1]];
         let p3 = triangulation.points[tri[2]];
 
-        let z1 = *value_lookup.get(&point_key_bits(p1.x, p1.y)).ok_or_else(|| ToolError::Execution("triangulation lookup failed for vertex 1".to_string()))?;
-        let z2 = *value_lookup.get(&point_key_bits(p2.x, p2.y)).ok_or_else(|| ToolError::Execution("triangulation lookup failed for vertex 2".to_string()))?;
-        let z3 = *value_lookup.get(&point_key_bits(p3.x, p3.y)).ok_or_else(|| ToolError::Execution("triangulation lookup failed for vertex 3".to_string()))?;
+        let z1 = *value_lookup
+            .get(&point_key_bits(p1.x, p1.y))
+            .ok_or_else(|| {
+                ToolError::Execution("triangulation lookup failed for vertex 1".to_string())
+            })?;
+        let z2 = *value_lookup
+            .get(&point_key_bits(p2.x, p2.y))
+            .ok_or_else(|| {
+                ToolError::Execution("triangulation lookup failed for vertex 2".to_string())
+            })?;
+        let z3 = *value_lookup
+            .get(&point_key_bits(p3.x, p3.y))
+            .ok_or_else(|| {
+                ToolError::Execution("triangulation lookup failed for vertex 3".to_string())
+            })?;
 
         if max_triangle_edge_length_2d_sq((p1.x, p1.y), (p2.x, p2.y), (p3.x, p3.y)) > max_edge_sq {
             continue;
@@ -3882,16 +4305,27 @@ fn run_dsm_tile(
         let max_x = p1.x.max(p2.x.max(p3.x));
         let min_y = p1.y.min(p2.y.min(p3.y));
         let max_y = p1.y.max(p2.y.max(p3.y));
-        let col_start = (((min_x - x_min) / cell_x).floor() as isize).clamp(0, cols as isize - 1) as usize;
-        let col_end = (((max_x - x_min) / cell_x).ceil() as isize).clamp(0, cols as isize - 1) as usize;
-        let row_start = (((y_max - max_y) / cell_y).floor() as isize).clamp(0, rows as isize - 1) as usize;
-        let row_end = (((y_max - min_y) / cell_y).ceil() as isize).clamp(0, rows as isize - 1) as usize;
+        let col_start =
+            (((min_x - x_min) / cell_x).floor() as isize).clamp(0, cols as isize - 1) as usize;
+        let col_end =
+            (((max_x - x_min) / cell_x).ceil() as isize).clamp(0, cols as isize - 1) as usize;
+        let row_start =
+            (((y_max - max_y) / cell_y).floor() as isize).clamp(0, rows as isize - 1) as usize;
+        let row_end =
+            (((y_max - min_y) / cell_y).ceil() as isize).clamp(0, rows as isize - 1) as usize;
 
         for row in row_start..=row_end {
             for col in col_start..=col_end {
                 let x = x_min + (col as f64 + 0.5) * cell_x;
                 let y = y_max - (row as f64 + 0.5) * cell_y;
-                if let Some((w1, w2, w3)) = point_in_triangle_with_barycentric(x, y, (p1.x, p1.y), (p2.x, p2.y), (p3.x, p3.y), 1.0e-10) {
+                if let Some((w1, w2, w3)) = point_in_triangle_with_barycentric(
+                    x,
+                    y,
+                    (p1.x, p1.y),
+                    (p2.x, p2.y),
+                    (p3.x, p3.y),
+                    1.0e-10,
+                ) {
                     out_values[row * cols + col] = w1 * z1 + w2 * z2 + w3 * z3;
                 }
             }
@@ -3963,8 +4397,7 @@ fn convex_hull_2d(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
 
     let mut lower: Vec<(f64, f64)> = Vec::new();
     for p in &pts {
-        while lower.len() >= 2
-            && cross2d(lower[lower.len() - 2], lower[lower.len() - 1], *p) <= 0.0
+        while lower.len() >= 2 && cross2d(lower[lower.len() - 2], lower[lower.len() - 1], *p) <= 0.0
         {
             lower.pop();
         }
@@ -3973,8 +4406,7 @@ fn convex_hull_2d(points: &[(f64, f64)]) -> Vec<(f64, f64)> {
 
     let mut upper: Vec<(f64, f64)> = Vec::new();
     for p in pts.iter().rev() {
-        while upper.len() >= 2
-            && cross2d(upper[upper.len() - 2], upper[upper.len() - 1], *p) <= 0.0
+        while upper.len() >= 2 && cross2d(upper[upper.len() - 2], upper[upper.len() - 1], *p) <= 0.0
         {
             upper.pop();
         }
@@ -4095,7 +4527,10 @@ enum RbfBasisType {
 
 impl RbfBasisType {
     fn parse(value: Option<&str>) -> Self {
-        let text = value.unwrap_or("thinplatespline").trim().to_ascii_lowercase();
+        let text = value
+            .unwrap_or("thinplatespline")
+            .trim()
+            .to_ascii_lowercase();
         if text.contains("thin") {
             Self::ThinPlateSpline
         } else if text.contains("polyharmonic") {
@@ -4233,7 +4668,8 @@ impl Tool for LidarNearestNeighbourGriddingTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?;
         if input_path.is_none() {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let all_paths: Vec<String> = files
                 .iter()
@@ -4253,7 +4689,10 @@ impl Tool for LidarNearestNeighbourGriddingTool {
                     tile_args.insert("batch_neighbor_inputs".to_string(), json!(neighbors));
                     tile_args.remove("input_lidar");
                     let out = generate_batch_output_path(&input, "nn");
-                    tile_args.insert("output".to_string(), json!(out.to_string_lossy().to_string()));
+                    tile_args.insert(
+                        "output".to_string(),
+                        json!(out.to_string_lossy().to_string()),
+                    );
                     let result = self.run(&tile_args, ctx)?;
                     extract_raster_path_from_result(result, "lidar_nearest_neighbour_gridding")
                 })
@@ -4314,8 +4753,9 @@ impl Tool for LidarNearestNeighbourGriddingTool {
 
         let mut tree = KdTree::new(2);
         for (x, y, value) in &samples {
-            tree.add([*x, *y], *value)
-                .map_err(|e| ToolError::Execution(format!("failed building nearest-neighbour index: {e}")))?;
+            tree.add([*x, *y], *value).map_err(|e| {
+                ToolError::Execution(format!("failed building nearest-neighbour index: {e}"))
+            })?;
         }
         let tree = Arc::new(tree);
 
@@ -4335,9 +4775,9 @@ impl Tool for LidarNearestNeighbourGriddingTool {
                 for col in 0..cols {
                     let x = x_min + (col as f64 + 0.5) * cell_x;
                     let y = y_max - (row as f64 + 0.5) * cell_y;
-                    let nearest = tree
-                        .nearest(&[x, y], 1, &squared_euclidean)
-                        .map_err(|e| ToolError::Execution(format!("nearest-neighbour search failed: {e}")))?;
+                    let nearest = tree.nearest(&[x, y], 1, &squared_euclidean).map_err(|e| {
+                        ToolError::Execution(format!("nearest-neighbour search failed: {e}"))
+                    })?;
                     if let Some((dist2, value)) = nearest.first() {
                         if dist2.sqrt() <= radius {
                             vals[col] = **value;
@@ -4353,7 +4793,8 @@ impl Tool for LidarNearestNeighbourGriddingTool {
             let start = row * cols;
             let end = start + cols;
             out_values[start..end].copy_from_slice(&vals);
-            compute_progress.emit_unit_fraction(ctx.progress, (row + 1) as f64 / rows.max(1) as f64);
+            compute_progress
+                .emit_unit_fraction(ctx.progress, (row + 1) as f64 / rows.max(1) as f64);
         }
 
         for (idx, value) in out_values.iter().enumerate() {
@@ -4492,7 +4933,8 @@ impl Tool for LidarIdwInterpolationTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?;
         if input_path.is_none() {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let all_paths: Vec<String> = files
                 .iter()
@@ -4512,7 +4954,10 @@ impl Tool for LidarIdwInterpolationTool {
                     tile_args.insert("batch_neighbor_inputs".to_string(), json!(neighbors));
                     tile_args.remove("input_lidar");
                     let out = generate_batch_output_path(&input, "idw");
-                    tile_args.insert("output".to_string(), json!(out.to_string_lossy().to_string()));
+                    tile_args.insert(
+                        "output".to_string(),
+                        json!(out.to_string_lossy().to_string()),
+                    );
                     let result = self.run(&tile_args, ctx)?;
                     extract_raster_path_from_result(result, "lidar_idw_interpolation")
                 })
@@ -4557,13 +5002,98 @@ impl Tool for LidarIdwInterpolationTool {
         let mut max_x = f64::NEG_INFINITY;
         let mut min_y = f64::INFINITY;
         let mut max_y = f64::NEG_INFINITY;
-        let (frs, tree): (Option<FixedRadiusSearch2D<f64>>, Option<KdTree<f64, f64, [f64; 2]>>) =
-            if radius > 0.0 {
-                let mut index = FixedRadiusSearch2D::new(radius, DistanceMetric::Euclidean);
-                let mut n_primary = 0usize;
-                if matches!(input_format, Some(LidarFormat::Las | LidarFormat::Laz)) {
-                    primary_crs = stream_disk_lidar_points(input_lidar_path, "input", |p| {
+        let (frs, tree): (
+            Option<FixedRadiusSearch2D<f64>>,
+            Option<KdTree<f64, f64, [f64; 2]>>,
+        ) = if radius > 0.0 {
+            let mut index = FixedRadiusSearch2D::new(radius, DistanceMetric::Euclidean);
+            let mut n_primary = 0usize;
+            if matches!(input_format, Some(LidarFormat::Las | LidarFormat::Laz)) {
+                primary_crs = stream_disk_lidar_points(input_lidar_path, "input", |p| {
+                    if !p.x.is_finite() || !p.y.is_finite() || !p.z.is_finite() {
+                        return;
+                    }
+                    if p.z < min_z || p.z > max_z {
+                        return;
+                    }
+                    if is_withheld(p) {
+                        return;
+                    }
+                    if !return_filter_match(p, returns_mode) {
+                        return;
+                    }
+                    if !include_classes[p.classification as usize] {
+                        return;
+                    }
+                    if let Some(value) = select_point_value(p, &parameter) {
+                        if value.is_finite() {
+                            min_x = min_x.min(p.x);
+                            max_x = max_x.max(p.x);
+                            min_y = min_y.min(p.y);
+                            max_y = max_y.max(p.y);
+                            index.insert(p.x, p.y, value);
+                            n_primary += 1;
+                        }
+                    }
+                })?;
+            } else {
+                let cloud = load_lidar_cloud(input_lidar_path, "input")?;
+                primary_crs = cloud.crs.clone();
+                for p in &cloud.points {
+                    if !p.x.is_finite() || !p.y.is_finite() || !p.z.is_finite() {
+                        continue;
+                    }
+                    if p.z < min_z || p.z > max_z {
+                        continue;
+                    }
+                    if is_withheld(p) {
+                        continue;
+                    }
+                    if !return_filter_match(p, returns_mode) {
+                        continue;
+                    }
+                    if !include_classes[p.classification as usize] {
+                        continue;
+                    }
+                    if let Some(value) = select_point_value(p, &parameter) {
+                        if value.is_finite() {
+                            min_x = min_x.min(p.x);
+                            max_x = max_x.max(p.x);
+                            min_y = min_y.min(p.y);
+                            max_y = max_y.max(p.y);
+                            index.insert(p.x, p.y, value);
+                            n_primary += 1;
+                        }
+                    }
+                }
+            }
+            if n_primary == 0 {
+                return Err(ToolError::Validation(
+                    "input lidar contains no valid points after filtering".to_string(),
+                ));
+            }
+            // Neighbour tiles: insert into FRS only — output grid is sized to primary tile.
+            for neighbor_path in &neighbor_paths {
+                let neighbor_bounds = (
+                    min_x - radius,
+                    max_x + radius,
+                    min_y - radius,
+                    max_y + radius,
+                );
+                let neighbor_path = Path::new(neighbor_path);
+                if matches!(
+                    LidarFormat::detect(neighbor_path),
+                    Ok(LidarFormat::Las | LidarFormat::Laz)
+                ) {
+                    let _ = stream_disk_lidar_points(neighbor_path, "batch-neighbor", |p| {
                         if !p.x.is_finite() || !p.y.is_finite() || !p.z.is_finite() {
+                            return;
+                        }
+                        if p.x < neighbor_bounds.0
+                            || p.x > neighbor_bounds.1
+                            || p.y < neighbor_bounds.2
+                            || p.y > neighbor_bounds.3
+                        {
                             return;
                         }
                         if p.z < min_z || p.z > max_z {
@@ -4580,20 +5110,21 @@ impl Tool for LidarIdwInterpolationTool {
                         }
                         if let Some(value) = select_point_value(p, &parameter) {
                             if value.is_finite() {
-                                min_x = min_x.min(p.x);
-                                max_x = max_x.max(p.x);
-                                min_y = min_y.min(p.y);
-                                max_y = max_y.max(p.y);
                                 index.insert(p.x, p.y, value);
-                                n_primary += 1;
                             }
                         }
                     })?;
                 } else {
-                    let cloud = load_lidar_cloud(input_lidar_path, "input")?;
-                    primary_crs = cloud.crs.clone();
-                    for p in &cloud.points {
+                    let n_cloud = load_lidar_cloud(neighbor_path, "batch-neighbor")?;
+                    for p in &n_cloud.points {
                         if !p.x.is_finite() || !p.y.is_finite() || !p.z.is_finite() {
+                            continue;
+                        }
+                        if p.x < neighbor_bounds.0
+                            || p.x > neighbor_bounds.1
+                            || p.y < neighbor_bounds.2
+                            || p.y > neighbor_bounds.3
+                        {
                             continue;
                         }
                         if p.z < min_z || p.z > max_z {
@@ -4610,119 +5141,51 @@ impl Tool for LidarIdwInterpolationTool {
                         }
                         if let Some(value) = select_point_value(p, &parameter) {
                             if value.is_finite() {
-                                min_x = min_x.min(p.x);
-                                max_x = max_x.max(p.x);
-                                min_y = min_y.min(p.y);
-                                max_y = max_y.max(p.y);
                                 index.insert(p.x, p.y, value);
-                                n_primary += 1;
                             }
                         }
                     }
                 }
-                if n_primary == 0 {
-                    return Err(ToolError::Validation(
-                        "input lidar contains no valid points after filtering".to_string(),
-                    ));
-                }
-                // Neighbour tiles: insert into FRS only — output grid is sized to primary tile.
-                for neighbor_path in &neighbor_paths {
-                    let neighbor_bounds = (min_x - radius, max_x + radius, min_y - radius, max_y + radius);
-                    let neighbor_path = Path::new(neighbor_path);
-                    if matches!(LidarFormat::detect(neighbor_path), Ok(LidarFormat::Las | LidarFormat::Laz)) {
-                        let _ = stream_disk_lidar_points(neighbor_path, "batch-neighbor", |p| {
-                            if !p.x.is_finite() || !p.y.is_finite() || !p.z.is_finite() {
-                                return;
-                            }
-                            if p.x < neighbor_bounds.0 || p.x > neighbor_bounds.1 || p.y < neighbor_bounds.2 || p.y > neighbor_bounds.3 {
-                                return;
-                            }
-                            if p.z < min_z || p.z > max_z {
-                                return;
-                            }
-                            if is_withheld(p) {
-                                return;
-                            }
-                            if !return_filter_match(p, returns_mode) {
-                                return;
-                            }
-                            if !include_classes[p.classification as usize] {
-                                return;
-                            }
-                            if let Some(value) = select_point_value(p, &parameter) {
-                                if value.is_finite() {
-                                    index.insert(p.x, p.y, value);
-                                }
-                            }
-                        })?;
-                    } else {
-                        let n_cloud = load_lidar_cloud(neighbor_path, "batch-neighbor")?;
-                        for p in &n_cloud.points {
-                            if !p.x.is_finite() || !p.y.is_finite() || !p.z.is_finite() {
-                                continue;
-                            }
-                            if p.x < neighbor_bounds.0 || p.x > neighbor_bounds.1 || p.y < neighbor_bounds.2 || p.y > neighbor_bounds.3 {
-                                continue;
-                            }
-                            if p.z < min_z || p.z > max_z {
-                                continue;
-                            }
-                            if is_withheld(p) {
-                                continue;
-                            }
-                            if !return_filter_match(p, returns_mode) {
-                                continue;
-                            }
-                            if !include_classes[p.classification as usize] {
-                                continue;
-                            }
-                            if let Some(value) = select_point_value(p, &parameter) {
-                                if value.is_finite() {
-                                    index.insert(p.x, p.y, value);
-                                }
-                            }
-                        }
-                    }
-                }
-                (Some(index), None)
-            } else {
-                // k-nearest fallback: collect primary samples for bounds, then append neighbours.
-                let cloud = load_lidar_cloud(input_lidar_path, "input")?;
-                primary_crs = cloud.crs.clone();
-                let mut primary_samples = collect_lidar_samples(
-                    &cloud.points,
+            }
+            (Some(index), None)
+        } else {
+            // k-nearest fallback: collect primary samples for bounds, then append neighbours.
+            let cloud = load_lidar_cloud(input_lidar_path, "input")?;
+            primary_crs = cloud.crs.clone();
+            let mut primary_samples = collect_lidar_samples(
+                &cloud.points,
+                &parameter,
+                returns_mode,
+                &include_classes,
+                min_z,
+                max_z,
+            )?;
+            for (x, y, _) in &primary_samples {
+                min_x = min_x.min(*x);
+                max_x = max_x.max(*x);
+                min_y = min_y.min(*y);
+                max_y = max_y.max(*y);
+            }
+            for neighbor_path in &neighbor_paths {
+                let n_cloud = load_lidar_cloud(Path::new(neighbor_path), "batch-neighbor")?;
+                let mut n_samples = collect_lidar_samples(
+                    &n_cloud.points,
                     &parameter,
                     returns_mode,
                     &include_classes,
                     min_z,
                     max_z,
                 )?;
-                for (x, y, _) in &primary_samples {
-                    min_x = min_x.min(*x);
-                    max_x = max_x.max(*x);
-                    min_y = min_y.min(*y);
-                    max_y = max_y.max(*y);
-                }
-                for neighbor_path in &neighbor_paths {
-                    let n_cloud = load_lidar_cloud(Path::new(neighbor_path), "batch-neighbor")?;
-                    let mut n_samples = collect_lidar_samples(
-                        &n_cloud.points,
-                        &parameter,
-                        returns_mode,
-                        &include_classes,
-                        min_z,
-                        max_z,
-                    )?;
-                    primary_samples.append(&mut n_samples);
-                }
-                let mut index: KdTree<f64, f64, [f64; 2]> = KdTree::new(2);
-                for (x, y, value) in &primary_samples {
-                    index
-                        .add([*x, *y], *value)
-                        .map_err(|e| ToolError::Execution(format!("failed building interpolation index: {e}")))?;
-                }
-                (None, Some(index))
-            };
+                primary_samples.append(&mut n_samples);
+            }
+            let mut index: KdTree<f64, f64, [f64; 2]> = KdTree::new(2);
+            for (x, y, value) in &primary_samples {
+                index.add([*x, *y], *value).map_err(|e| {
+                    ToolError::Execution(format!("failed building interpolation index: {e}"))
+                })?;
+            }
+            (None, Some(index))
+        };
         let filter_index_s = t_filter.elapsed().as_secs_f64();
 
         if primary_crs.is_none() {
@@ -4775,7 +5238,11 @@ impl Tool for LidarIdwInterpolationTool {
                                 assigned = true;
                                 break;
                             }
-                            let w = if weight == 0.0 { 1.0 } else { 1.0 / dist.powf(weight) };
+                            let w = if weight == 0.0 {
+                                1.0
+                            } else {
+                                1.0 / dist.powf(weight)
+                            };
                             weighted_sum += value * w;
                             sum_w += w;
                         }
@@ -4787,9 +5254,12 @@ impl Tool for LidarIdwInterpolationTool {
                             .as_ref()
                             .expect("k-nearest mode requires KD-tree index");
                         let k = min_points.max(1).min(tree.size());
-                        let neighbours = tree
-                            .nearest(&[x, y], k, &squared_euclidean)
-                            .map_err(|e| ToolError::Execution(format!("idw nearest-neighbour search failed: {e}")))?;
+                        let neighbours =
+                            tree.nearest(&[x, y], k, &squared_euclidean).map_err(|e| {
+                                ToolError::Execution(format!(
+                                    "idw nearest-neighbour search failed: {e}"
+                                ))
+                            })?;
                         if neighbours.is_empty() {
                             continue;
                         }
@@ -4803,7 +5273,11 @@ impl Tool for LidarIdwInterpolationTool {
                                 break;
                             }
                             let dist = dist2.sqrt();
-                            let w = if weight == 0.0 { 1.0 } else { 1.0 / dist.powf(weight) };
+                            let w = if weight == 0.0 {
+                                1.0
+                            } else {
+                                1.0 / dist.powf(weight)
+                            };
                             weighted_sum += *value * w;
                             sum_w += w;
                         }
@@ -4823,7 +5297,8 @@ impl Tool for LidarIdwInterpolationTool {
             let start = row * cols;
             let end = start + cols;
             out_values[start..end].copy_from_slice(&row_values[row]);
-            compute_progress.emit_unit_fraction(ctx.progress, (row + 1) as f64 / rows.max(1) as f64);
+            compute_progress
+                .emit_unit_fraction(ctx.progress, (row + 1) as f64 / rows.max(1) as f64);
         }
         for (idx, value) in out_values.iter().enumerate() {
             output.data.set_f64(idx, *value);
@@ -4959,9 +5434,8 @@ impl Tool for LidarTinGriddingTool {
                 "min_elev/minz must be <= max_elev/maxz".to_string(),
             ));
         }
-        let _ = parse_triangulation_backend(
-            args.get("triangulation_backend").and_then(Value::as_str),
-        )?;
+        let _ =
+            parse_triangulation_backend(args.get("triangulation_backend").and_then(Value::as_str))?;
         let auto_threshold = args
             .get("triangulation_auto_threshold")
             .and_then(Value::as_u64)
@@ -4984,7 +5458,8 @@ impl Tool for LidarTinGriddingTool {
             ));
         }
         let _ = parse_triangulation_thin_method(
-            args.get("triangulation_thin_method").and_then(Value::as_str),
+            args.get("triangulation_thin_method")
+                .and_then(Value::as_str),
         )?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
@@ -4993,7 +5468,8 @@ impl Tool for LidarTinGriddingTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?;
         if input_path.is_none() {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let all_paths: Vec<String> = files
                 .iter()
@@ -5013,7 +5489,10 @@ impl Tool for LidarTinGriddingTool {
                     tile_args.insert("batch_neighbor_inputs".to_string(), json!(neighbors));
                     tile_args.remove("input_lidar");
                     let out = generate_batch_output_path(&input, "tin");
-                    tile_args.insert("output".to_string(), json!(out.to_string_lossy().to_string()));
+                    tile_args.insert(
+                        "output".to_string(),
+                        json!(out.to_string_lossy().to_string()),
+                    );
                     let result = self.run(&tile_args, ctx)?;
                     extract_raster_path_from_result(result, "lidar_tin_gridding")
                 })
@@ -5041,9 +5520,8 @@ impl Tool for LidarTinGriddingTool {
         let neighbor_paths = parse_batch_neighbor_inputs(args)?;
         let (min_z, max_z) = parse_elevation_bounds(args);
         let output_path = parse_optional_output_path(args, "output")?;
-        let requested_backend = parse_triangulation_backend(
-            args.get("triangulation_backend").and_then(Value::as_str),
-        )?;
+        let requested_backend =
+            parse_triangulation_backend(args.get("triangulation_backend").and_then(Value::as_str))?;
         let triangulation_auto_threshold = args
             .get("triangulation_auto_threshold")
             .and_then(Value::as_u64)
@@ -5052,7 +5530,8 @@ impl Tool for LidarTinGriddingTool {
         let triangulation_thin_cell_size =
             parse_f64_alias(args, &["triangulation_thin_cell_size"], 0.0);
         let triangulation_thin_method = parse_triangulation_thin_method(
-            args.get("triangulation_thin_method").and_then(Value::as_str),
+            args.get("triangulation_thin_method")
+                .and_then(Value::as_str),
         )?;
 
         let run_start = Instant::now();
@@ -5148,7 +5627,8 @@ impl Tool for LidarTinGriddingTool {
                         tri = delaunay_triangulation_fast(&topo_points, triangulation_epsilon);
                     }
                     let local_points = tri.points;
-                    let local_z_values: Vec<f64> = local_points.iter().map(|p| p.z.unwrap_or(0.0)).collect();
+                    let local_z_values: Vec<f64> =
+                        local_points.iter().map(|p| p.z.unwrap_or(0.0)).collect();
                     let mut local_triangles = Vec::with_capacity(tri.triangles.len() * 3);
                     for t in tri.triangles {
                         local_triangles.push(t[0]);
@@ -5168,7 +5648,8 @@ impl Tool for LidarTinGriddingTool {
                         .iter()
                         .map(|p| TopoCoord::xyz(p.x, p.y, p.z.unwrap_or(0.0)))
                         .collect();
-                    let local_z_values: Vec<f64> = tri.points.iter().map(|p| p.z.unwrap_or(0.0)).collect();
+                    let local_z_values: Vec<f64> =
+                        tri.points.iter().map(|p| p.z.unwrap_or(0.0)).collect();
                     let mut local_triangles = Vec::with_capacity(tri.triangles.len() * 3);
                     for t in tri.triangles {
                         local_triangles.push(t[0]);
@@ -5248,7 +5729,9 @@ impl Tool for LidarTinGriddingTool {
             let z2 = z_values[p2_idx];
             let z3 = z_values[p3_idx];
 
-            if max_triangle_edge_length_2d_sq((p1.x, p1.y), (p2.x, p2.y), (p3.x, p3.y)) > max_edge_sq {
+            if max_triangle_edge_length_2d_sq((p1.x, p1.y), (p2.x, p2.y), (p3.x, p3.y))
+                > max_edge_sq
+            {
                 continue;
             }
 
@@ -5275,10 +5758,14 @@ impl Tool for LidarTinGriddingTool {
             let max_x = p1.x.max(p2.x.max(p3.x));
             let min_y = p1.y.min(p2.y.min(p3.y));
             let max_y = p1.y.max(p2.y.max(p3.y));
-            let col_start = (((min_x - x_min) / cell_x).floor() as isize).clamp(0, cols as isize - 1) as usize;
-            let col_end = (((max_x - x_min) / cell_x).ceil() as isize).clamp(0, cols as isize - 1) as usize;
-            let row_start = (((y_max - max_y) / cell_y).floor() as isize).clamp(0, rows as isize - 1) as usize;
-            let row_end = (((y_max - min_y) / cell_y).ceil() as isize).clamp(0, rows as isize - 1) as usize;
+            let col_start =
+                (((min_x - x_min) / cell_x).floor() as isize).clamp(0, cols as isize - 1) as usize;
+            let col_end =
+                (((max_x - x_min) / cell_x).ceil() as isize).clamp(0, cols as isize - 1) as usize;
+            let row_start =
+                (((y_max - max_y) / cell_y).floor() as isize).clamp(0, rows as isize - 1) as usize;
+            let row_end =
+                (((y_max - min_y) / cell_y).ceil() as isize).clamp(0, rows as isize - 1) as usize;
             if row_start > row_end || col_start > col_end {
                 continue;
             }
@@ -5377,7 +5864,7 @@ impl Tool for LidarTinGriddingTool {
         let locator = store_or_write_output(output, output_path)?;
         let write_elapsed = write_start.elapsed();
         let total_elapsed = run_start.elapsed();
-        
+
         // Only emit per-tile timing in single-file mode (not batch mode)
         if neighbor_paths.is_empty() {
             let thin_cell_size_label = if triangulation_thin_cell_size > 0.0 {
@@ -5545,7 +6032,8 @@ impl Tool for LidarRadialBasisFunctionInterpolationTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?;
         if input_path.is_none() {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let all_paths: Vec<String> = files
                 .iter()
@@ -5565,9 +6053,15 @@ impl Tool for LidarRadialBasisFunctionInterpolationTool {
                     tile_args.insert("batch_neighbor_inputs".to_string(), json!(neighbors));
                     tile_args.remove("input_lidar");
                     let out = generate_batch_output_path(&input, "rbf");
-                    tile_args.insert("output".to_string(), json!(out.to_string_lossy().to_string()));
+                    tile_args.insert(
+                        "output".to_string(),
+                        json!(out.to_string_lossy().to_string()),
+                    );
                     let result = self.run(&tile_args, ctx)?;
-                    extract_raster_path_from_result(result, "lidar_radial_basis_function_interpolation")
+                    extract_raster_path_from_result(
+                        result,
+                        "lidar_radial_basis_function_interpolation",
+                    )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             ctx.progress.progress(1.0);
@@ -5588,10 +6082,7 @@ impl Tool for LidarRadialBasisFunctionInterpolationTool {
         let neighbor_paths = parse_batch_neighbor_inputs(args)?;
         let (min_z, max_z) = parse_elevation_bounds(args);
         let basis = RbfBasisType::parse(args.get("func_type").and_then(Value::as_str));
-        let poly_order = RbfPolyOrder::parse(
-            args.get("poly_order")
-                .and_then(Value::as_str),
-        );
+        let poly_order = RbfPolyOrder::parse(args.get("poly_order").and_then(Value::as_str));
         let shape_weight = args.get("weight").and_then(Value::as_f64).unwrap_or(0.1);
         let output_path = parse_optional_output_path(args, "output")?;
 
@@ -5633,8 +6124,9 @@ impl Tool for LidarRadialBasisFunctionInterpolationTool {
 
         let mut tree = KdTree::new(2);
         for (idx, (x, y, _)) in samples.iter().enumerate() {
-            tree.add([*x, *y], idx)
-                .map_err(|e| ToolError::Execution(format!("failed building interpolation index: {e}")))?;
+            tree.add([*x, *y], idx).map_err(|e| {
+                ToolError::Execution(format!("failed building interpolation index: {e}"))
+            })?;
         }
         let tree = Arc::new(tree);
 
@@ -5663,14 +6155,18 @@ impl Tool for LidarRadialBasisFunctionInterpolationTool {
 
                     let mut neighbours = if radius > 0.0 {
                         tree.within(&[x, y], radius_sq, &squared_euclidean)
-                            .map_err(|e| ToolError::Execution(format!("rbf radius search failed: {e}")))?
+                            .map_err(|e| {
+                                ToolError::Execution(format!("rbf radius search failed: {e}"))
+                            })?
                     } else {
                         Vec::new()
                     };
                     if neighbours.len() < k {
-                        neighbours = tree
-                            .nearest(&[x, y], k, &squared_euclidean)
-                            .map_err(|e| ToolError::Execution(format!("rbf nearest-neighbour search failed: {e}")))?;
+                        neighbours = tree.nearest(&[x, y], k, &squared_euclidean).map_err(|e| {
+                            ToolError::Execution(format!(
+                                "rbf nearest-neighbour search failed: {e}"
+                            ))
+                        })?;
                     }
 
                     if neighbours.is_empty() {
@@ -5700,7 +6196,9 @@ impl Tool for LidarRadialBasisFunctionInterpolationTool {
                     if !assigned && sum_w > 0.0 {
                         if poly_order == RbfPolyOrder::None {
                             vals[col] = weighted_sum / sum_w;
-                        } else if let Some(zn) = weighted_poly_predict(x, y, &poly_neighbors, poly_order) {
+                        } else if let Some(zn) =
+                            weighted_poly_predict(x, y, &poly_neighbors, poly_order)
+                        {
                             vals[col] = zn;
                         } else {
                             vals[col] = weighted_sum / sum_w;
@@ -5716,7 +6214,8 @@ impl Tool for LidarRadialBasisFunctionInterpolationTool {
             let start = row * cols;
             let end = start + cols;
             out_values[start..end].copy_from_slice(&vals);
-            compute_progress.emit_unit_fraction(ctx.progress, (row + 1) as f64 / rows.max(1) as f64);
+            compute_progress
+                .emit_unit_fraction(ctx.progress, (row + 1) as f64 / rows.max(1) as f64);
         }
 
         for (idx, value) in out_values.iter().enumerate() {
@@ -5825,7 +6324,8 @@ impl Tool for LidarSibsonInterpolationTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?;
         if input_path.is_none() {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let all_paths: Vec<String> = files
                 .iter()
@@ -5845,7 +6345,10 @@ impl Tool for LidarSibsonInterpolationTool {
                     tile_args.insert("batch_neighbor_inputs".to_string(), json!(neighbors));
                     tile_args.remove("input_lidar");
                     let out = generate_batch_output_path(&input, "sibson");
-                    tile_args.insert("output".to_string(), json!(out.to_string_lossy().to_string()));
+                    tile_args.insert(
+                        "output".to_string(),
+                        json!(out.to_string_lossy().to_string()),
+                    );
                     let result = self.run(&tile_args, ctx)?;
                     extract_raster_path_from_result(result, "lidar_sibson_interpolation")
                 })
@@ -5935,13 +6438,7 @@ impl Tool for LidarSibsonInterpolationTool {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let hull = convex_hull_2d(
-            &sibson
-                .points
-                .iter()
-                .map(|p| (p.x, p.y))
-                .collect::<Vec<_>>(),
-        );
+        let hull = convex_hull_2d(&sibson.points.iter().map(|p| (p.x, p.y)).collect::<Vec<_>>());
         let hull_min_x = hull.iter().map(|(x, _)| *x).fold(f64::INFINITY, f64::min);
         let hull_max_x = hull
             .iter()
@@ -5971,7 +6468,8 @@ impl Tool for LidarSibsonInterpolationTool {
                     return Ok((row, row_values));
                 }
 
-                let Some((scan_min_x, scan_max_x)) = convex_hull_scanline_span(y, &hull, 1.0e-12) else {
+                let Some((scan_min_x, scan_max_x)) = convex_hull_scanline_span(y, &hull, 1.0e-12)
+                else {
                     return Ok((row, row_values));
                 };
                 let start_col_f = ((scan_min_x - x_min) / cell_x - 0.5).ceil();
@@ -6012,7 +6510,8 @@ impl Tool for LidarSibsonInterpolationTool {
             let start = row * cols;
             out_values[start..start + cols].copy_from_slice(&row_values);
             completed += 1;
-            compute_progress.emit_unit_fraction(ctx.progress, completed as f64 / rows.max(1) as f64);
+            compute_progress
+                .emit_unit_fraction(ctx.progress, completed as f64 / rows.max(1) as f64);
         }
 
         for (idx, value) in out_values.iter().enumerate() {
@@ -6050,9 +6549,16 @@ impl Tool for LidarBlockMaximumTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let resolution = parse_f64_alias(args, &["resolution", "cell_size"], 1.0);
         if !resolution.is_finite() || resolution <= 0.0 {
-            return Err(ToolError::Validation("resolution/cell_size must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "resolution/cell_size must be a positive finite value".to_string(),
+            ));
         }
-        let parameter = args.get("interpolation_parameter").or_else(|| args.get("parameter")).and_then(Value::as_str).unwrap_or("elevation").to_lowercase();
+        let parameter = args
+            .get("interpolation_parameter")
+            .or_else(|| args.get("parameter"))
+            .and_then(Value::as_str)
+            .unwrap_or("elevation")
+            .to_lowercase();
         if !supports_interpolation_parameter(&parameter) {
             return Err(ToolError::Validation(format!(
                 "unsupported interpolation_parameter '{}'; expected elevation/intensity/class/return_number/number_of_returns/scan_angle/time/rgb/user_data",
@@ -6063,7 +6569,9 @@ impl Tool for LidarBlockMaximumTool {
         let min_z = parse_f64_alias(args, &["min_elev", "minz"], f64::NEG_INFINITY);
         let max_z = parse_f64_alias(args, &["max_elev", "maxz"], f64::INFINITY);
         if min_z > max_z {
-            return Err(ToolError::Validation("min_elev/minz must be <= max_elev/maxz".to_string()));
+            return Err(ToolError::Validation(
+                "min_elev/minz must be <= max_elev/maxz".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
@@ -6072,7 +6580,12 @@ impl Tool for LidarBlockMaximumTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?;
         let resolution = parse_f64_alias(args, &["resolution", "cell_size"], 1.0);
-        let parameter = args.get("interpolation_parameter").or_else(|| args.get("parameter")).and_then(Value::as_str).unwrap_or("elevation").to_lowercase();
+        let parameter = args
+            .get("interpolation_parameter")
+            .or_else(|| args.get("parameter"))
+            .and_then(Value::as_str)
+            .unwrap_or("elevation")
+            .to_lowercase();
         let returns_mode = parse_returns_mode(args);
         let include_classes = parse_excluded_classes(args)?;
         let (min_z, max_z) = parse_elevation_bounds(args);
@@ -6094,7 +6607,8 @@ impl Tool for LidarBlockMaximumTool {
             ctx.progress.progress(1.0);
             Ok(build_raster_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let total = files.len().max(1);
             let coalescer = PercentCoalescer::new(1, 99);
@@ -6115,7 +6629,8 @@ impl Tool for LidarBlockMaximumTool {
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            coalescer.emit_unit_fraction(ctx.progress, (outputs.len() as f64 / total as f64).min(1.0));
+            coalescer
+                .emit_unit_fraction(ctx.progress, (outputs.len() as f64 / total as f64).min(1.0));
             build_batch_placeholder_raster_result(outputs)
         }
     }
@@ -6146,9 +6661,16 @@ impl Tool for LidarBlockMinimumTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let resolution = parse_f64_alias(args, &["resolution", "cell_size"], 1.0);
         if !resolution.is_finite() || resolution <= 0.0 {
-            return Err(ToolError::Validation("resolution/cell_size must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "resolution/cell_size must be a positive finite value".to_string(),
+            ));
         }
-        let parameter = args.get("interpolation_parameter").or_else(|| args.get("parameter")).and_then(Value::as_str).unwrap_or("elevation").to_lowercase();
+        let parameter = args
+            .get("interpolation_parameter")
+            .or_else(|| args.get("parameter"))
+            .and_then(Value::as_str)
+            .unwrap_or("elevation")
+            .to_lowercase();
         if !supports_interpolation_parameter(&parameter) {
             return Err(ToolError::Validation(format!(
                 "unsupported interpolation_parameter '{}'; expected elevation/intensity/class/return_number/number_of_returns/scan_angle/time/rgb/user_data",
@@ -6159,7 +6681,9 @@ impl Tool for LidarBlockMinimumTool {
         let min_z = parse_f64_alias(args, &["min_elev", "minz"], f64::NEG_INFINITY);
         let max_z = parse_f64_alias(args, &["max_elev", "maxz"], f64::INFINITY);
         if min_z > max_z {
-            return Err(ToolError::Validation("min_elev/minz must be <= max_elev/maxz".to_string()));
+            return Err(ToolError::Validation(
+                "min_elev/minz must be <= max_elev/maxz".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
@@ -6168,7 +6692,12 @@ impl Tool for LidarBlockMinimumTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?;
         let resolution = parse_f64_alias(args, &["resolution", "cell_size"], 1.0);
-        let parameter = args.get("interpolation_parameter").or_else(|| args.get("parameter")).and_then(Value::as_str).unwrap_or("elevation").to_lowercase();
+        let parameter = args
+            .get("interpolation_parameter")
+            .or_else(|| args.get("parameter"))
+            .and_then(Value::as_str)
+            .unwrap_or("elevation")
+            .to_lowercase();
         let returns_mode = parse_returns_mode(args);
         let include_classes = parse_excluded_classes(args)?;
         let min_z = parse_f64_alias(args, &["min_elev", "minz"], f64::NEG_INFINITY);
@@ -6191,7 +6720,8 @@ impl Tool for LidarBlockMinimumTool {
             ctx.progress.progress(1.0);
             Ok(build_raster_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let total = files.len().max(1);
             let coalescer = PercentCoalescer::new(1, 99);
@@ -6212,7 +6742,8 @@ impl Tool for LidarBlockMinimumTool {
                     )
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            coalescer.emit_unit_fraction(ctx.progress, (outputs.len() as f64 / total as f64).min(1.0));
+            coalescer
+                .emit_unit_fraction(ctx.progress, (outputs.len() as f64 / total as f64).min(1.0));
             build_batch_placeholder_raster_result(outputs)
         }
     }
@@ -6243,11 +6774,15 @@ impl Tool for LidarPointDensityTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let resolution = parse_f64_alias(args, &["resolution", "cell_size"], 1.0);
         if !resolution.is_finite() || resolution <= 0.0 {
-            return Err(ToolError::Validation("resolution/cell_size must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "resolution/cell_size must be a positive finite value".to_string(),
+            ));
         }
         let radius = parse_f64_alias(args, &["search_radius", "radius"], 2.5);
         if !radius.is_finite() || radius <= 0.0 {
-            return Err(ToolError::Validation("search_radius/radius must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius/radius must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_excluded_classes(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -6280,7 +6815,8 @@ impl Tool for LidarPointDensityTool {
             ctx.progress.progress(1.0);
             Ok(build_raster_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -6329,11 +6865,15 @@ impl Tool for LidarDigitalSurfaceModelTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let resolution = parse_f64_alias(args, &["resolution", "cell_size"], 1.0);
         if !resolution.is_finite() || resolution <= 0.0 {
-            return Err(ToolError::Validation("resolution/cell_size must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "resolution/cell_size must be a positive finite value".to_string(),
+            ));
         }
         let radius = parse_f64_alias(args, &["search_radius", "radius"], 0.5);
         if !radius.is_finite() || radius <= 0.0 {
-            return Err(ToolError::Validation("search_radius/radius must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius/radius must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
@@ -6345,8 +6885,13 @@ impl Tool for LidarDigitalSurfaceModelTool {
         let radius = parse_f64_alias(args, &["search_radius", "radius"], 0.5);
         let min_z = parse_f64_alias(args, &["min_elev", "minz"], f64::NEG_INFINITY);
         let max_z = parse_f64_alias(args, &["max_elev", "maxz"], f64::INFINITY);
-        let max_triangle_edge_length_raw = parse_f64_alias(args, &["max_triangle_edge_length"], f64::INFINITY);
-        let max_triangle_edge_length = if max_triangle_edge_length_raw <= 0.0 { f64::INFINITY } else { max_triangle_edge_length_raw };
+        let max_triangle_edge_length_raw =
+            parse_f64_alias(args, &["max_triangle_edge_length"], f64::INFINITY);
+        let max_triangle_edge_length = if max_triangle_edge_length_raw <= 0.0 {
+            f64::INFINITY
+        } else {
+            max_triangle_edge_length_raw
+        };
         let output_path = parse_optional_output_path(args, "output")?;
 
         if let Some(input_path) = input_path {
@@ -6363,7 +6908,8 @@ impl Tool for LidarDigitalSurfaceModelTool {
             ctx.progress.progress(1.0);
             Ok(build_raster_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -6408,7 +6954,9 @@ impl Tool for LidarHillshadeTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], -1.0);
         if !search_radius.is_finite() {
-            return Err(ToolError::Validation("search_radius/radius must be finite".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius/radius must be finite".to_string(),
+            ));
         }
         let _ = parse_optional_lidar_output_path(args)?;
         Ok(())
@@ -6425,82 +6973,83 @@ impl Tool for LidarHillshadeTool {
         let sin_theta = altitude_rad.sin();
         let cos_theta = altitude_rad.cos();
 
-        let run_single = |input_path: &Path, out_path: Option<PathBuf>| -> Result<String, ToolError> {
-            let cloud = load_lidar_cloud(input_path, "input")?;
-            if cloud.points.is_empty() {
+        let run_single =
+            |input_path: &Path, out_path: Option<PathBuf>| -> Result<String, ToolError> {
+                let cloud = load_lidar_cloud(input_path, "input")?;
+                if cloud.points.is_empty() {
+                    let out_cloud = PointCloud {
+                        points: vec![],
+                        crs: cloud.crs.clone(),
+                    };
+                    return store_or_write_lidar_output(&out_cloud, out_path, "lidar_hillshade");
+                }
+
+                let local_radius = if search_radius <= 0.0 {
+                    estimate_nominal_spacing(&cloud) * 3.0
+                } else {
+                    search_radius
+                };
+                let radius_sq = local_radius * local_radius;
+
+                let mut tree = KdTree::new(3);
+                for (i, p) in cloud.points.iter().enumerate() {
+                    tree.add([p.x, p.y, p.z], i).map_err(|e| {
+                        ToolError::Execution(format!("failed indexing lidar points: {e}"))
+                    })?;
+                }
+                let tree = Arc::new(tree);
+
+                let points: Vec<PointRecord> = cloud
+                    .points
+                    .par_iter()
+                    .map(|p| {
+                        let mut q = *p;
+                        let neighbours = tree
+                            .within(&[p.x, p.y, p.z], radius_sq, &squared_euclidean)
+                            .unwrap_or_default();
+                        let sample: Vec<Vector3<f64>> = neighbours
+                            .iter()
+                            .map(|(_, idx)| point_to_vec3(&cloud.points[**idx]))
+                            .collect();
+
+                        let mut hillshade = 0.0_f64;
+                        let normal = plane_normal_and_centroid(&sample)
+                            .map(|(n, _)| n)
+                            .unwrap_or_else(|| Vector3::new(0.0, 0.0, 0.0));
+                        let a = normal.x;
+                        let b = normal.y;
+                        let c = normal.z;
+                        if c != 0.0 {
+                            let fx = -a / c;
+                            let fy = -b / c;
+                            if fx != 0.0 {
+                                let tan_slope = (fx * fx + fy * fy).sqrt();
+                                let aspect = (180.0 - (fy / fx).atan().to_degrees()
+                                    + 90.0 * (fx / fx.abs()))
+                                .to_radians();
+                                let term1 = tan_slope / (1.0 + tan_slope * tan_slope).sqrt();
+                                let term2 = sin_theta / tan_slope;
+                                let term3 = cos_theta * (azimuth - aspect).sin();
+                                hillshade = term1 * (term2 - term3);
+                            } else {
+                                hillshade = 0.5;
+                            }
+                            hillshade = (hillshade * 255.0).max(0.0).min(255.0);
+                        }
+
+                        let g = hillshade.round() as u8;
+                        q.color = Some(color8_to_rgb16(g, g, g));
+                        q
+                    })
+                    .collect();
+
                 let out_cloud = PointCloud {
-                    points: vec![],
+                    points,
                     crs: cloud.crs.clone(),
                 };
-                return store_or_write_lidar_output(&out_cloud, out_path, "lidar_hillshade");
-            }
 
-            let local_radius = if search_radius <= 0.0 {
-                estimate_nominal_spacing(&cloud) * 3.0
-            } else {
-                search_radius
+                store_or_write_lidar_output(&out_cloud, out_path, "lidar_hillshade")
             };
-            let radius_sq = local_radius * local_radius;
-
-            let mut tree = KdTree::new(3);
-            for (i, p) in cloud.points.iter().enumerate() {
-                tree.add([p.x, p.y, p.z], i)
-                    .map_err(|e| ToolError::Execution(format!("failed indexing lidar points: {e}")))?;
-            }
-            let tree = Arc::new(tree);
-
-            let points: Vec<PointRecord> = cloud
-                .points
-                .par_iter()
-                .map(|p| {
-                    let mut q = *p;
-                    let neighbours = tree
-                        .within(&[p.x, p.y, p.z], radius_sq, &squared_euclidean)
-                        .unwrap_or_default();
-                    let sample: Vec<Vector3<f64>> = neighbours
-                        .iter()
-                        .map(|(_, idx)| point_to_vec3(&cloud.points[**idx]))
-                        .collect();
-
-                    let mut hillshade = 0.0_f64;
-                    let normal = plane_normal_and_centroid(&sample)
-                        .map(|(n, _)| n)
-                        .unwrap_or_else(|| Vector3::new(0.0, 0.0, 0.0));
-                    let a = normal.x;
-                    let b = normal.y;
-                    let c = normal.z;
-                    if c != 0.0 {
-                        let fx = -a / c;
-                        let fy = -b / c;
-                        if fx != 0.0 {
-                            let tan_slope = (fx * fx + fy * fy).sqrt();
-                            let aspect = (180.0
-                                - (fy / fx).atan().to_degrees()
-                                + 90.0 * (fx / fx.abs()))
-                                .to_radians();
-                            let term1 = tan_slope / (1.0 + tan_slope * tan_slope).sqrt();
-                            let term2 = sin_theta / tan_slope;
-                            let term3 = cos_theta * (azimuth - aspect).sin();
-                            hillshade = term1 * (term2 - term3);
-                        } else {
-                            hillshade = 0.5;
-                        }
-                        hillshade = (hillshade * 255.0).max(0.0).min(255.0);
-                    }
-
-                    let g = hillshade.round() as u8;
-                    q.color = Some(color8_to_rgb16(g, g, g));
-                    q
-                })
-                .collect();
-
-            let out_cloud = PointCloud {
-                points,
-                crs: cloud.crs.clone(),
-            };
-
-            store_or_write_lidar_output(&out_cloud, out_path, "lidar_hillshade")
-        };
 
         if let Some(input_path) = input_path {
             ctx.progress.info("reading input lidar");
@@ -6508,7 +7057,8 @@ impl Tool for LidarHillshadeTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -6559,7 +7109,10 @@ impl Tool for FilterLidarClassesTool {
                 .filter(|p| include_classes[p.classification as usize])
                 .cloned()
                 .collect();
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
             store_or_write_lidar_output(&out_cloud, out_path, "filter_lidar_classes")
         };
 
@@ -6569,7 +7122,8 @@ impl Tool for FilterLidarClassesTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -6608,7 +7162,9 @@ impl Tool for LidarShiftTool {
         let y_shift = parse_f64_alias(args, &["y_shift"], 0.0);
         let z_shift = parse_f64_alias(args, &["z_shift"], 0.0);
         if !(x_shift.is_finite() && y_shift.is_finite() && z_shift.is_finite()) {
-            return Err(ToolError::Validation("x_shift/y_shift/z_shift must be finite values".to_string()));
+            return Err(ToolError::Validation(
+                "x_shift/y_shift/z_shift must be finite values".to_string(),
+            ));
         }
         let _ = parse_optional_lidar_output_path(args)?;
         Ok(())
@@ -6634,7 +7190,10 @@ impl Tool for LidarShiftTool {
                     q
                 })
                 .collect();
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
             store_or_write_lidar_output(&out_cloud, out_path, "lidar_shift")
         };
 
@@ -6644,7 +7203,8 @@ impl Tool for LidarShiftTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -6691,7 +7251,8 @@ impl Tool for RemoveDuplicatesTool {
             let cloud = load_lidar_cloud(in_path, "input")?;
 
             let points = if include_z {
-                let mut counts = HashMap::<(u64, u64, u64), usize>::with_capacity(cloud.points.len());
+                let mut counts =
+                    HashMap::<(u64, u64, u64), usize>::with_capacity(cloud.points.len());
                 for p in &cloud.points {
                     let key = (p.x.to_bits(), p.y.to_bits(), p.z.to_bits());
                     *counts.entry(key).or_insert(0) += 1;
@@ -6724,7 +7285,10 @@ impl Tool for RemoveDuplicatesTool {
                     .collect::<Vec<_>>()
             };
 
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
             store_or_write_lidar_output(&out_cloud, out_path, "remove_duplicates")
         };
 
@@ -6734,7 +7298,8 @@ impl Tool for RemoveDuplicatesTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -6772,7 +7337,9 @@ impl Tool for FilterLidarScanAnglesTool {
             return Err(ToolError::Validation("threshold is required".to_string()));
         }
         if !threshold.is_finite() || threshold < 0.0 {
-            return Err(ToolError::Validation("threshold must be a non-negative finite value".to_string()));
+            return Err(ToolError::Validation(
+                "threshold must be a non-negative finite value".to_string(),
+            ));
         }
         Ok(())
     }
@@ -6790,7 +7357,10 @@ impl Tool for FilterLidarScanAnglesTool {
                 .filter(|p| p.scan_angle.abs() <= threshold)
                 .cloned()
                 .collect();
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
             store_or_write_lidar_output(&out_cloud, out_path, "filter_lidar_scan_angles")
         };
 
@@ -6800,7 +7370,8 @@ impl Tool for FilterLidarScanAnglesTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -6840,7 +7411,10 @@ impl Tool for FilterLidarNoiseTool {
         let input_path = parse_lidar_path_arg_optional(args)?;
         let output_path = parse_optional_lidar_output_path(args)?;
 
-        let run_single = |in_path: &Path, out_path: Option<PathBuf>, parallel_points: bool| -> Result<String, ToolError> {
+        let run_single = |in_path: &Path,
+                          out_path: Option<PathBuf>,
+                          parallel_points: bool|
+         -> Result<String, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             let points: Vec<PointRecord> = if parallel_points {
                 cloud
@@ -6857,7 +7431,10 @@ impl Tool for FilterLidarNoiseTool {
                     .cloned()
                     .collect()
             };
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
             store_or_write_lidar_output(&out_cloud, out_path, "filter_lidar_noise")
         };
 
@@ -6867,7 +7444,8 @@ impl Tool for FilterLidarNoiseTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -6905,14 +7483,19 @@ impl Tool for LidarThinTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let resolution = parse_f64_alias(args, &["resolution"], 1.0);
         if !resolution.is_finite() || resolution <= 0.0 {
-            return Err(ToolError::Validation("resolution must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "resolution must be a positive finite value".to_string(),
+            ));
         }
         if let Some(method) = args.get("method").and_then(Value::as_str) {
             match method.to_lowercase().as_str() {
                 "first" | "last" | "lowest" | "highest" | "nearest" => {}
-                other => return Err(ToolError::Validation(
-                    format!("method '{}' is not recognised; use first, last, lowest, highest, or nearest", other)
-                )),
+                other => {
+                    return Err(ToolError::Validation(format!(
+                    "method '{}' is not recognised; use first, last, lowest, highest, or nearest",
+                    other
+                )))
+                }
             }
         }
         let _ = parse_bool_alias(args, &["save_filtered"], false);
@@ -6932,15 +7515,28 @@ impl Tool for LidarThinTool {
         let output_path = parse_optional_lidar_output_path(args)?;
         let filtered_output_path = parse_optional_output_path(args, "filtered_output")?;
 
-        let run_single = |in_path: &Path, out_path: Option<PathBuf>, filtered_out_path: Option<PathBuf>| -> Result<(String, Option<String>), ToolError> {
+        let run_single = |in_path: &Path,
+                          out_path: Option<PathBuf>,
+                          filtered_out_path: Option<PathBuf>|
+         -> Result<(String, Option<String>), ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             let n = cloud.points.len();
             if n == 0 {
-                let out_cloud = PointCloud { points: vec![], crs: cloud.crs.clone() };
+                let out_cloud = PointCloud {
+                    points: vec![],
+                    crs: cloud.crs.clone(),
+                };
                 let kept_path = store_or_write_lidar_output(&out_cloud, out_path, "lidar_thin")?;
                 let filtered_path = if save_filtered {
-                    let filtered_cloud = PointCloud { points: vec![], crs: cloud.crs.clone() };
-                    Some(store_or_write_lidar_output(&filtered_cloud, filtered_out_path, "lidar_thin_filtered")?)
+                    let filtered_cloud = PointCloud {
+                        points: vec![],
+                        crs: cloud.crs.clone(),
+                    };
+                    Some(store_or_write_lidar_output(
+                        &filtered_cloud,
+                        filtered_out_path,
+                        "lidar_thin_filtered",
+                    )?)
                 } else {
                     None
                 };
@@ -6948,8 +7544,16 @@ impl Tool for LidarThinTool {
             }
 
             // Compute bounding box
-            let min_x = cloud.points.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-            let max_y = cloud.points.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
+            let min_x = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::INFINITY, f64::min);
+            let max_y = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::NEG_INFINITY, f64::max);
 
             // Map each point to a grid cell key (col, row)
             let cell_key = |px: f64, py: f64| -> (i64, i64) {
@@ -7023,28 +7627,44 @@ impl Tool for LidarThinTool {
 
             let keep_arc = Arc::new(keep);
             let (kept_points, filtered_points) = if save_filtered {
-                let kept: Vec<PointRecord> = cloud.points.par_iter()
+                let kept: Vec<PointRecord> = cloud
+                    .points
+                    .par_iter()
                     .enumerate()
                     .filter_map(|(i, p)| if keep_arc[i] { Some(*p) } else { None })
                     .collect();
-                let filtered: Vec<PointRecord> = cloud.points.par_iter()
+                let filtered: Vec<PointRecord> = cloud
+                    .points
+                    .par_iter()
                     .enumerate()
                     .filter_map(|(i, p)| if !keep_arc[i] { Some(*p) } else { None })
                     .collect();
                 (kept, filtered)
             } else {
-                let kept: Vec<PointRecord> = cloud.points.par_iter()
+                let kept: Vec<PointRecord> = cloud
+                    .points
+                    .par_iter()
                     .enumerate()
                     .filter_map(|(i, p)| if keep_arc[i] { Some(*p) } else { None })
                     .collect();
                 (kept, Vec::new())
             };
 
-            let out_cloud = PointCloud { points: kept_points, crs: cloud.crs.clone() };
+            let out_cloud = PointCloud {
+                points: kept_points,
+                crs: cloud.crs.clone(),
+            };
             let kept_path = store_or_write_lidar_output(&out_cloud, out_path, "lidar_thin")?;
             let filtered_path = if save_filtered {
-                let filtered_cloud = PointCloud { points: filtered_points, crs: cloud.crs.clone() };
-                Some(store_or_write_lidar_output(&filtered_cloud, filtered_out_path, "lidar_thin_filtered")?)
+                let filtered_cloud = PointCloud {
+                    points: filtered_points,
+                    crs: cloud.crs.clone(),
+                };
+                Some(store_or_write_lidar_output(
+                    &filtered_cloud,
+                    filtered_out_path,
+                    "lidar_thin_filtered",
+                )?)
             } else {
                 None
             };
@@ -7053,11 +7673,13 @@ impl Tool for LidarThinTool {
 
         if let Some(input_path) = input_path {
             ctx.progress.info("reading input lidar");
-            let (locator, filtered_locator) = run_single(Path::new(&input_path), output_path, filtered_output_path)?;
+            let (locator, filtered_locator) =
+                run_single(Path::new(&input_path), output_path, filtered_output_path)?;
             ctx.progress.progress(1.0);
             Ok(build_lidar_result_with_filtered(locator, filtered_locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -7081,7 +7703,9 @@ impl Tool for LidarThinTool {
                 }
             }
             if kept_paths.is_empty() {
-                return Err(ToolError::Execution("batch mode produced no output lidar files".to_string()));
+                return Err(ToolError::Execution(
+                    "batch mode produced no output lidar files".to_string(),
+                ));
             }
             kept_paths.sort();
             if !filtered_paths.is_empty() {
@@ -7136,7 +7760,10 @@ impl Tool for LidarElevationSliceTool {
         let out_class_value = parse_f64_alias(args, &["out_class_value"], 1.0) as u8;
         let output_path = parse_optional_lidar_output_path(args)?;
 
-        let run_single = |in_path: &Path, out_path: Option<PathBuf>, parallel_points: bool| -> Result<String, ToolError> {
+        let run_single = |in_path: &Path,
+                          out_path: Option<PathBuf>,
+                          parallel_points: bool|
+         -> Result<String, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             let points: Vec<PointRecord> = if !classify {
                 // Filter mode: keep only points inside slice
@@ -7187,7 +7814,10 @@ impl Tool for LidarElevationSliceTool {
                         .collect()
                 }
             };
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
             store_or_write_lidar_output(&out_cloud, out_path, "lidar_elevation_slice")
         };
 
@@ -7197,7 +7827,8 @@ impl Tool for LidarElevationSliceTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -7238,27 +7869,28 @@ impl Tool for LidarJoinTool {
         let output_path = parse_optional_lidar_output_path(args)?;
 
         ctx.progress.info("reading input lidar files");
-        let (out_points, out_crs): (Vec<PointRecord>, Option<LidarCrs>) = inputs.par_iter()
-            .fold(|| {
-                (Vec::new(), None)
-            },
-            |(mut points, mut crs), input| {
-                if let Ok(cloud) = load_lidar_cloud(Path::new(input), "input") {
-                    if crs.is_none() {
-                        crs = cloud.crs.clone();
+        let (out_points, out_crs): (Vec<PointRecord>, Option<LidarCrs>) = inputs
+            .par_iter()
+            .fold(
+                || (Vec::new(), None),
+                |(mut points, mut crs), input| {
+                    if let Ok(cloud) = load_lidar_cloud(Path::new(input), "input") {
+                        if crs.is_none() {
+                            crs = cloud.crs.clone();
+                        }
+                        points.extend(cloud.points.iter().copied());
                     }
-                    points.extend(cloud.points.iter().copied());
-                }
-                (points, crs)
-            })
-            .reduce(|| {
-                (Vec::new(), None)
-            },
-            |(mut acc_points, acc_crs), (points, crs)| {
-                acc_points.extend(points);
-                let final_crs = if acc_crs.is_none() { crs } else { acc_crs };
-                (acc_points, final_crs)
-            });
+                    (points, crs)
+                },
+            )
+            .reduce(
+                || (Vec::new(), None),
+                |(mut acc_points, acc_crs), (points, crs)| {
+                    acc_points.extend(points);
+                    let final_crs = if acc_crs.is_none() { crs } else { acc_crs };
+                    (acc_points, final_crs)
+                },
+            );
 
         let out_cloud = PointCloud {
             points: out_points,
@@ -7293,11 +7925,15 @@ impl Tool for LidarThinHighDensityTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let density = parse_f64_alias(args, &["density"], f64::NAN);
         if density.is_nan() || !density.is_finite() || density <= 0.0 {
-            return Err(ToolError::Validation("density is required and must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "density is required and must be a positive finite value".to_string(),
+            ));
         }
         let resolution = parse_f64_alias(args, &["resolution"], 1.0);
         if !resolution.is_finite() || resolution <= 0.0 {
-            return Err(ToolError::Validation("resolution must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "resolution must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_bool_alias(args, &["save_filtered"], false);
         let _ = parse_optional_output_path(args, "filtered_output")?;
@@ -7313,25 +7949,55 @@ impl Tool for LidarThinHighDensityTool {
         let output_path = parse_optional_lidar_output_path(args)?;
         let filtered_output_path = parse_optional_output_path(args, "filtered_output")?;
 
-        let run_single = |in_path: &Path, out_path: Option<PathBuf>, filtered_out_path: Option<PathBuf>| -> Result<(String, Option<String>), ToolError> {
+        let run_single = |in_path: &Path,
+                          out_path: Option<PathBuf>,
+                          filtered_out_path: Option<PathBuf>|
+         -> Result<(String, Option<String>), ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             let n_points = cloud.points.len();
             if n_points == 0 {
-                let out_cloud = PointCloud { points: vec![], crs: cloud.crs.clone() };
-                let kept_path = store_or_write_lidar_output(&out_cloud, out_path, "lidar_thin_high_density")?;
+                let out_cloud = PointCloud {
+                    points: vec![],
+                    crs: cloud.crs.clone(),
+                };
+                let kept_path =
+                    store_or_write_lidar_output(&out_cloud, out_path, "lidar_thin_high_density")?;
                 let filtered_path = if save_filtered {
-                    let filtered_cloud = PointCloud { points: vec![], crs: cloud.crs.clone() };
-                    Some(store_or_write_lidar_output(&filtered_cloud, filtered_out_path, "lidar_thin_high_density_filtered")?)
+                    let filtered_cloud = PointCloud {
+                        points: vec![],
+                        crs: cloud.crs.clone(),
+                    };
+                    Some(store_or_write_lidar_output(
+                        &filtered_cloud,
+                        filtered_out_path,
+                        "lidar_thin_high_density_filtered",
+                    )?)
                 } else {
                     None
                 };
                 return Ok((kept_path, filtered_path));
             }
 
-            let min_x = cloud.points.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-            let max_x = cloud.points.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
-            let min_y = cloud.points.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
-            let max_y = cloud.points.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
+            let min_x = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::INFINITY, f64::min);
+            let max_x = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let min_y = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::INFINITY, f64::min);
+            let max_y = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::NEG_INFINITY, f64::max);
             let half_res = resolution / 2.0;
             let cols = (((max_x - min_x) / resolution).ceil() as i64).max(1);
             let rows = (((max_y - min_y) / resolution).ceil() as i64).max(1);
@@ -7340,26 +8006,40 @@ impl Tool for LidarThinHighDensityTool {
 
             let bins: HashMap<(i64, i64), Vec<(f64, usize)>> = {
                 let cloud_arc = Arc::new(cloud.points.clone());
-                let result = cloud_arc.par_iter()
+                let result = cloud_arc
+                    .par_iter()
                     .enumerate()
-                    .fold(|| {
-                        (HashMap::<(i64, i64), Vec<(f64, usize)>>::new(), cloud_arc.clone())
-                    },
-                    |(mut acc_bins, arc), (idx, p)| {
-                        let col = (((cols - 1) as f64 * (p.x - min_x - half_res) / ew_range).round()) as i64;
-                        let row = (((rows - 1) as f64 * (max_y - half_res - p.y) / ns_range).round()) as i64;
-                        acc_bins.entry((row, col)).or_default().push((p.z, idx));
-                        (acc_bins, arc)
-                    })
-                    .reduce(|| {
-                        (HashMap::<(i64, i64), Vec<(f64, usize)>>::new(), cloud_arc.clone())
-                    },
-                    |(mut acc_bins, arc): (HashMap<(i64, i64), Vec<(f64, usize)>>, _), (other_bins, _)| {
-                        for ((row, col), vals) in other_bins {
-                            acc_bins.entry((row, col)).or_default().extend(vals);
-                        }
-                        (acc_bins, arc)
-                    });
+                    .fold(
+                        || {
+                            (
+                                HashMap::<(i64, i64), Vec<(f64, usize)>>::new(),
+                                cloud_arc.clone(),
+                            )
+                        },
+                        |(mut acc_bins, arc), (idx, p)| {
+                            let col = (((cols - 1) as f64 * (p.x - min_x - half_res) / ew_range)
+                                .round()) as i64;
+                            let row = (((rows - 1) as f64 * (max_y - half_res - p.y) / ns_range)
+                                .round()) as i64;
+                            acc_bins.entry((row, col)).or_default().push((p.z, idx));
+                            (acc_bins, arc)
+                        },
+                    )
+                    .reduce(
+                        || {
+                            (
+                                HashMap::<(i64, i64), Vec<(f64, usize)>>::new(),
+                                cloud_arc.clone(),
+                            )
+                        },
+                        |(mut acc_bins, arc): (HashMap<(i64, i64), Vec<(f64, usize)>>, _),
+                         (other_bins, _)| {
+                            for ((row, col), vals) in other_bins {
+                                acc_bins.entry((row, col)).or_default().extend(vals);
+                            }
+                            (acc_bins, arc)
+                        },
+                    );
                 result.0
             };
 
@@ -7417,7 +8097,11 @@ impl Tool for LidarThinHighDensityTool {
             }
 
             let mut kept_points = Vec::with_capacity(n_points);
-            let mut filtered_points = if save_filtered { Vec::with_capacity(n_points) } else { Vec::new() };
+            let mut filtered_points = if save_filtered {
+                Vec::with_capacity(n_points)
+            } else {
+                Vec::new()
+            };
             for (i, p) in cloud.points.iter().enumerate() {
                 if filtered[i] {
                     if save_filtered {
@@ -7432,7 +8116,8 @@ impl Tool for LidarThinHighDensityTool {
                 points: kept_points,
                 crs: cloud.crs.clone(),
             };
-            let kept_path = store_or_write_lidar_output(&kept_cloud, out_path, "lidar_thin_high_density")?;
+            let kept_path =
+                store_or_write_lidar_output(&kept_cloud, out_path, "lidar_thin_high_density")?;
             let filtered_path = if save_filtered {
                 let filtered_cloud = PointCloud {
                     points: filtered_points,
@@ -7451,18 +8136,23 @@ impl Tool for LidarThinHighDensityTool {
 
         if let Some(input_path) = input_path {
             ctx.progress.info("reading input lidar");
-            let (locator, filtered_locator) = run_single(Path::new(&input_path), output_path, filtered_output_path)?;
+            let (locator, filtered_locator) =
+                run_single(Path::new(&input_path), output_path, filtered_output_path)?;
             ctx.progress.progress(1.0);
             Ok(build_lidar_result_with_filtered(locator, filtered_locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
                 .map(|input| {
                     let out = generate_batch_lidar_output_path(&input, "thinned_hd");
                     let filtered_out = if save_filtered {
-                        Some(generate_batch_lidar_output_path(&input, "thinned_hd_filtered"))
+                        Some(generate_batch_lidar_output_path(
+                            &input,
+                            "thinned_hd_filtered",
+                        ))
                     } else {
                         None
                     };
@@ -7482,7 +8172,9 @@ impl Tool for LidarThinHighDensityTool {
             filtered_paths.sort();
             ctx.progress.progress(1.0);
             if kept_paths.is_empty() {
-                return Err(ToolError::Execution("batch mode produced no output lidar files".to_string()));
+                return Err(ToolError::Execution(
+                    "batch mode produced no output lidar files".to_string(),
+                ));
             }
             if !filtered_paths.is_empty() {
                 Ok(build_lidar_result_with_filtered(
@@ -7524,8 +8216,14 @@ impl Tool for LidarTileTool {
         }
         let tile_width = parse_f64_alias(args, &["tile_width", "width"], 1000.0);
         let tile_height = parse_f64_alias(args, &["tile_height", "height"], 1000.0);
-        if !tile_width.is_finite() || !tile_height.is_finite() || tile_width <= 0.0 || tile_height <= 0.0 {
-            return Err(ToolError::Validation("tile_width/tile_height must be positive finite values".to_string()));
+        if !tile_width.is_finite()
+            || !tile_height.is_finite()
+            || tile_width <= 0.0
+            || tile_height <= 0.0
+        {
+            return Err(ToolError::Validation(
+                "tile_width/tile_height must be positive finite values".to_string(),
+            ));
         }
         let _ = parse_f64_alias(args, &["origin_x"], 0.0);
         let _ = parse_f64_alias(args, &["origin_y"], 0.0);
@@ -7541,7 +8239,8 @@ impl Tool for LidarTileTool {
         let tile_height = parse_f64_alias(args, &["tile_height", "height"], 1000.0);
         let origin_x = parse_f64_alias(args, &["origin_x"], 0.0);
         let origin_y = parse_f64_alias(args, &["origin_y"], 0.0);
-        let mut min_points = parse_f64_alias(args, &["min_points_in_tile", "min_points"], 2.0) as usize;
+        let mut min_points =
+            parse_f64_alias(args, &["min_points_in_tile", "min_points"], 2.0) as usize;
         let output_laz = parse_bool_alias(args, &["output_laz_format"], true);
         let output_dir_override = parse_optional_output_path(args, "output_directory")?;
         if min_points < 2 {
@@ -7551,13 +8250,31 @@ impl Tool for LidarTileTool {
         ctx.progress.info("reading input lidar");
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
         if cloud.points.is_empty() {
-            return Err(ToolError::Execution("input lidar contains no points".to_string()));
+            return Err(ToolError::Execution(
+                "input lidar contains no points".to_string(),
+            ));
         }
 
-        let min_x = cloud.points.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-        let max_x = cloud.points.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
-        let min_y = cloud.points.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
-        let max_y = cloud.points.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
+        let min_x = cloud
+            .points
+            .iter()
+            .map(|p| p.x)
+            .fold(f64::INFINITY, f64::min);
+        let max_x = cloud
+            .points
+            .iter()
+            .map(|p| p.x)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let min_y = cloud
+            .points
+            .iter()
+            .map(|p| p.y)
+            .fold(f64::INFINITY, f64::min);
+        let max_y = cloud
+            .points
+            .iter()
+            .map(|p| p.y)
+            .fold(f64::NEG_INFINITY, f64::max);
 
         let start_x_grid = ((min_x - origin_x) / tile_width).floor();
         let end_x_grid = ((max_x - origin_x) / tile_width).ceil();
@@ -7567,10 +8284,14 @@ impl Tool for LidarTileTool {
         let rows = (end_y_grid - start_y_grid).abs() as usize;
         let num_tiles = rows.saturating_mul(cols);
         if num_tiles == 0 {
-            return Err(ToolError::Execution("no output tiles would be created with current parameters".to_string()));
+            return Err(ToolError::Execution(
+                "no output tiles would be created with current parameters".to_string(),
+            ));
         }
         if num_tiles > 32767 {
-            return Err(ToolError::Validation("too many output tiles; increase tile width/height".to_string()));
+            return Err(ToolError::Validation(
+                "too many output tiles; increase tile width/height".to_string(),
+            ));
         }
 
         let mut tile_index = vec![0usize; cloud.points.len()];
@@ -7607,50 +8328,62 @@ impl Tool for LidarTileTool {
             }
         }
         if min_row == usize::MAX {
-            return Err(ToolError::Execution("no tiles met min_points_in_tile threshold".to_string()));
+            return Err(ToolError::Execution(
+                "no tiles met min_points_in_tile threshold".to_string(),
+            ));
         }
 
         let input_path_obj = Path::new(&input_path);
         let input_name = input_path_obj
             .file_stem()
             .and_then(|s| s.to_str())
-            .ok_or_else(|| ToolError::Validation("input filename stem could not be determined".to_string()))?
+            .ok_or_else(|| {
+                ToolError::Validation("input filename stem could not be determined".to_string())
+            })?
             .to_string();
         let base_output_dir = if let Some(dir) = output_dir_override {
             dir
         } else {
-            let parent = input_path_obj
-                .parent()
-                .ok_or_else(|| ToolError::Validation("input path parent directory could not be determined".to_string()))?;
+            let parent = input_path_obj.parent().ok_or_else(|| {
+                ToolError::Validation(
+                    "input path parent directory could not be determined".to_string(),
+                )
+            })?;
             parent.join(&input_name)
         };
-        fs::create_dir_all(&base_output_dir)
-            .map_err(|e| ToolError::Execution(format!("failed creating output directory '{}': {e}", base_output_dir.to_string_lossy())))?;
+        fs::create_dir_all(&base_output_dir).map_err(|e| {
+            ToolError::Execution(format!(
+                "failed creating output directory '{}': {e}",
+                base_output_dir.to_string_lossy()
+            ))
+        })?;
 
         let buckets: Vec<Vec<PointRecord>> = {
             let tile_index_arc = Arc::new(tile_index);
             let write_tile_arc = Arc::new(write_tile.clone());
-            cloud.points.par_iter()
+            cloud
+                .points
+                .par_iter()
                 .enumerate()
-                .fold(|| {
-                    vec![Vec::new(); num_tiles]
-                },
-                |mut acc, (idx, p)| {
-                    let tid = tile_index_arc[idx];
-                    if write_tile_arc[tid] {
-                        acc[tid].push(*p);
-                    }
-                    acc
-                })
-                .reduce(|| {
-                    vec![Vec::new(); num_tiles]
-                },
-                |mut acc, other| {
-                    for (tid, pts) in other.into_iter().enumerate() {
-                        acc[tid].extend(pts);
-                    }
-                    acc
-                })
+                .fold(
+                    || vec![Vec::new(); num_tiles],
+                    |mut acc, (idx, p)| {
+                        let tid = tile_index_arc[idx];
+                        if write_tile_arc[tid] {
+                            acc[tid].push(*p);
+                        }
+                        acc
+                    },
+                )
+                .reduce(
+                    || vec![Vec::new(); num_tiles],
+                    |mut acc, other| {
+                        for (tid, pts) in other.into_iter().enumerate() {
+                            acc[tid].extend(pts);
+                        }
+                        acc
+                    },
+                )
         };
 
         let ext = if output_laz { "laz" } else { "las" };
@@ -7673,19 +8406,26 @@ impl Tool for LidarTileTool {
                 points: buckets[tid].clone(),
                 crs: cloud.crs.clone(),
             };
-            out_cloud
-                .write(&out_path)
-                .map_err(|e| ToolError::Execution(format!("failed writing tiled lidar '{}': {e}", out_path.to_string_lossy())))?;
+            out_cloud.write(&out_path).map_err(|e| {
+                ToolError::Execution(format!(
+                    "failed writing tiled lidar '{}': {e}",
+                    out_path.to_string_lossy()
+                ))
+            })?;
             written_paths.push(out_path.to_string_lossy().to_string());
         }
 
         if written_paths.is_empty() {
-            return Err(ToolError::Execution("no output tiles were written".to_string()));
+            return Err(ToolError::Execution(
+                "no output tiles were written".to_string(),
+            ));
         }
         written_paths.sort();
         ctx.progress.progress(1.0);
         let mut result = build_lidar_result(written_paths[0].clone());
-        result.outputs.insert("tile_count".to_string(), json!(written_paths.len()));
+        result
+            .outputs
+            .insert("tile_count".to_string(), json!(written_paths.len()));
         Ok(result)
     }
 }
@@ -7770,7 +8510,8 @@ impl Tool for SortLidarTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -7806,11 +8547,15 @@ impl Tool for FilterLidarByPercentileTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let percentile = parse_f64_alias(args, &["percentile"], 0.0);
         if !percentile.is_finite() || !(0.0..=100.0).contains(&percentile) {
-            return Err(ToolError::Validation("percentile must be a finite value in [0, 100]".to_string()));
+            return Err(ToolError::Validation(
+                "percentile must be a finite value in [0, 100]".to_string(),
+            ));
         }
         let block_size = parse_f64_alias(args, &["block_size", "resolution"], 1.0);
         if !block_size.is_finite() || block_size <= 0.0 {
-            return Err(ToolError::Validation("block_size/resolution must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "block_size/resolution must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_optional_lidar_output_path(args)?;
         Ok(())
@@ -7825,14 +8570,37 @@ impl Tool for FilterLidarByPercentileTool {
         let run_single = |in_path: &Path, out_path: Option<PathBuf>| -> Result<String, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             if cloud.points.is_empty() {
-                let out_cloud = PointCloud { points: vec![], crs: cloud.crs.clone() };
-                return store_or_write_lidar_output(&out_cloud, out_path, "filter_lidar_by_percentile");
+                let out_cloud = PointCloud {
+                    points: vec![],
+                    crs: cloud.crs.clone(),
+                };
+                return store_or_write_lidar_output(
+                    &out_cloud,
+                    out_path,
+                    "filter_lidar_by_percentile",
+                );
             }
 
-            let west = cloud.points.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-            let north = cloud.points.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
-            let min_y = cloud.points.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
-            let max_x = cloud.points.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
+            let west = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::INFINITY, f64::min);
+            let north = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let min_y = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::INFINITY, f64::min);
+            let max_x = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::NEG_INFINITY, f64::max);
             let rows = (((north - min_y) / block_size).ceil() as usize).max(1);
             let cols = (((max_x - west) / block_size).ceil() as usize).max(1);
             let south = north - rows as f64 * block_size;
@@ -7845,20 +8613,24 @@ impl Tool for FilterLidarByPercentileTool {
                 if point_is_withheld(p) || point_is_noise(p) {
                     continue;
                 }
-                let col = (((cols - 1) as f64 * ((p.x - west) / ew_range).clamp(0.0, 1.0)).floor()) as usize;
-                let row = (((rows - 1) as f64 * ((north - p.y) / ns_range).clamp(0.0, 1.0)).floor()) as usize;
+                let col = (((cols - 1) as f64 * ((p.x - west) / ew_range).clamp(0.0, 1.0)).floor())
+                    as usize;
+                let row = (((rows - 1) as f64 * ((north - p.y) / ns_range).clamp(0.0, 1.0)).floor())
+                    as usize;
                 cell_ids[row * cols + col].push(i);
             }
 
             let cell_ids_arc = Arc::new(cell_ids);
             let cloud_arc = Arc::new(cloud.points.clone());
-            let selected_ids: Vec<usize> = cell_ids_arc.par_iter()
+            let selected_ids: Vec<usize> = cell_ids_arc
+                .par_iter()
                 .enumerate()
                 .filter_map(|(_, ids)| {
                     if ids.is_empty() {
                         return None;
                     }
-                    let mut sorted: Vec<(f64, usize)> = ids.iter().map(|id| (cloud_arc[*id].z, *id)).collect();
+                    let mut sorted: Vec<(f64, usize)> =
+                        ids.iter().map(|id| (cloud_arc[*id].z, *id)).collect();
                     sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(Ordering::Equal));
                     let idx = ((percentile / 100.0) * (sorted.len() - 1) as f64).round() as usize;
                     Some(sorted[idx].1)
@@ -7867,8 +8639,12 @@ impl Tool for FilterLidarByPercentileTool {
             let mut selected_ids = selected_ids;
             selected_ids.sort_unstable();
 
-            let points: Vec<PointRecord> = selected_ids.into_iter().map(|i| cloud.points[i]).collect();
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+            let points: Vec<PointRecord> =
+                selected_ids.into_iter().map(|i| cloud.points[i]).collect();
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
             store_or_write_lidar_output(&out_cloud, out_path, "filter_lidar_by_percentile")
         };
 
@@ -7878,7 +8654,8 @@ impl Tool for FilterLidarByPercentileTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -7921,10 +8698,14 @@ impl Tool for SplitLidarTool {
         let criterion = parse_split_criterion(criterion_text)?;
         let interval = parse_f64_alias(args, &["interval"], 5.0);
         if !interval.is_finite() || interval <= 0.0 {
-            return Err(ToolError::Validation("interval must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "interval must be a positive finite value".to_string(),
+            ));
         }
         if criterion == SplitCriterion::NumPts && interval.floor() < 100.0 {
-            return Err(ToolError::Validation("for split_criterion=num_pts, interval must be at least 100".to_string()));
+            return Err(ToolError::Validation(
+                "for split_criterion=num_pts, interval must be at least 100".to_string(),
+            ));
         }
         let _ = parse_f64_alias(args, &["min_pts"], 5.0);
         let _ = parse_optional_output_path(args, "output_directory")?;
@@ -7950,11 +8731,13 @@ impl Tool for SplitLidarTool {
             }
 
             let (input_parent, stem, ext) = split_output_base(in_path)?;
-            let out_dir = output_dir_override
-                .clone()
-                .unwrap_or(input_parent);
-            fs::create_dir_all(&out_dir)
-                .map_err(|e| ToolError::Execution(format!("failed creating output directory '{}': {e}", out_dir.to_string_lossy())))?;
+            let out_dir = output_dir_override.clone().unwrap_or(input_parent);
+            fs::create_dir_all(&out_dir).map_err(|e| {
+                ToolError::Execution(format!(
+                    "failed creating output directory '{}': {e}",
+                    out_dir.to_string_lossy()
+                ))
+            })?;
 
             let mut outputs: Vec<String> = Vec::new();
 
@@ -7973,7 +8756,10 @@ impl Tool for SplitLidarTool {
                         crs: cloud.crs.clone(),
                     };
                     out_cloud.write(&out_path).map_err(|e| {
-                        ToolError::Execution(format!("failed writing split lidar '{}': {e}", out_path.to_string_lossy()))
+                        ToolError::Execution(format!(
+                            "failed writing split lidar '{}': {e}",
+                            out_path.to_string_lossy()
+                        ))
                     })?;
                     outputs.push(out_path.to_string_lossy().to_string());
                     split_idx += 1;
@@ -7981,43 +8767,50 @@ impl Tool for SplitLidarTool {
                 return Ok(outputs);
             }
 
-            let groups: BTreeMap<String, Vec<PointRecord>> = cloud.points.par_iter()
-                .fold(|| {
-                    BTreeMap::<String, Vec<PointRecord>>::new()
-                },
-                |mut groups: BTreeMap<String, Vec<PointRecord>>, p| {
-                    let key = match criterion {
-                        SplitCriterion::Class => format!("class{}", p.classification),
-                        SplitCriterion::PointSourceId => format!("point_source_id{}", p.point_source_id),
-                        _ => {
-                            let v = split_value(p, criterion);
-                            let bin = (v / interval).floor();
-                            let label = (bin * interval).to_string();
-                            match criterion {
-                                SplitCriterion::X => format!("x{}", label),
-                                SplitCriterion::Y => format!("y{}", label),
-                                SplitCriterion::Z => format!("z{}", label),
-                                SplitCriterion::Intensity => format!("intensity{}", label),
-                                SplitCriterion::UserData => format!("user_data{}", label),
-                                SplitCriterion::ScanAngle => format!("scan_angle{}", label),
-                                SplitCriterion::Time => format!("time{}", label),
-                                SplitCriterion::NumPts => "split".to_string(),
-                                SplitCriterion::Class | SplitCriterion::PointSourceId => unreachable!(),
+            let groups: BTreeMap<String, Vec<PointRecord>> = cloud
+                .points
+                .par_iter()
+                .fold(
+                    || BTreeMap::<String, Vec<PointRecord>>::new(),
+                    |mut groups: BTreeMap<String, Vec<PointRecord>>, p| {
+                        let key = match criterion {
+                            SplitCriterion::Class => format!("class{}", p.classification),
+                            SplitCriterion::PointSourceId => {
+                                format!("point_source_id{}", p.point_source_id)
                             }
+                            _ => {
+                                let v = split_value(p, criterion);
+                                let bin = (v / interval).floor();
+                                let label = (bin * interval).to_string();
+                                match criterion {
+                                    SplitCriterion::X => format!("x{}", label),
+                                    SplitCriterion::Y => format!("y{}", label),
+                                    SplitCriterion::Z => format!("z{}", label),
+                                    SplitCriterion::Intensity => format!("intensity{}", label),
+                                    SplitCriterion::UserData => format!("user_data{}", label),
+                                    SplitCriterion::ScanAngle => format!("scan_angle{}", label),
+                                    SplitCriterion::Time => format!("time{}", label),
+                                    SplitCriterion::NumPts => "split".to_string(),
+                                    SplitCriterion::Class | SplitCriterion::PointSourceId => {
+                                        unreachable!()
+                                    }
+                                }
+                            }
+                        };
+                        groups.entry(key).or_default().push(*p);
+                        groups
+                    },
+                )
+                .reduce(
+                    || BTreeMap::<String, Vec<PointRecord>>::new(),
+                    |mut acc: BTreeMap<String, Vec<PointRecord>>,
+                     other: BTreeMap<String, Vec<PointRecord>>| {
+                        for (k, v) in other {
+                            acc.entry(k).or_default().extend(v);
                         }
-                    };
-                    groups.entry(key).or_default().push(*p);
-                    groups
-                })
-                .reduce(|| {
-                    BTreeMap::<String, Vec<PointRecord>>::new()
-                },
-                |mut acc: BTreeMap<String, Vec<PointRecord>>, other: BTreeMap<String, Vec<PointRecord>>| {
-                    for (k, v) in other {
-                        acc.entry(k).or_default().extend(v);
-                    }
-                    acc
-                });
+                        acc
+                    },
+                );
 
             for (suffix, points) in groups {
                 if points.len() <= min_pts {
@@ -8029,7 +8822,10 @@ impl Tool for SplitLidarTool {
                     crs: cloud.crs.clone(),
                 };
                 out_cloud.write(&out_path).map_err(|e| {
-                    ToolError::Execution(format!("failed writing split lidar '{}': {e}", out_path.to_string_lossy()))
+                    ToolError::Execution(format!(
+                        "failed writing split lidar '{}': {e}",
+                        out_path.to_string_lossy()
+                    ))
                 })?;
                 outputs.push(out_path.to_string_lossy().to_string());
             }
@@ -8041,14 +8837,19 @@ impl Tool for SplitLidarTool {
             ctx.progress.info("reading input lidar");
             let outputs = run_single(Path::new(&input_path))?;
             if outputs.is_empty() {
-                return Err(ToolError::Execution("split_lidar produced no output files".to_string()));
+                return Err(ToolError::Execution(
+                    "split_lidar produced no output files".to_string(),
+                ));
             }
             let mut result = build_lidar_result(outputs[0].clone());
-            result.outputs.insert("output_count".to_string(), json!(outputs.len()));
+            result
+                .outputs
+                .insert("output_count".to_string(), json!(outputs.len()));
             ctx.progress.progress(1.0);
             Ok(result)
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let all_outputs = files
                 .into_par_iter()
@@ -8056,11 +8857,15 @@ impl Tool for SplitLidarTool {
                 .collect::<Result<Vec<_>, _>>()?;
             let mut flat: Vec<String> = all_outputs.into_iter().flatten().collect();
             if flat.is_empty() {
-                return Err(ToolError::Execution("split_lidar batch mode produced no output files".to_string()));
+                return Err(ToolError::Execution(
+                    "split_lidar batch mode produced no output files".to_string(),
+                ));
             }
             flat.sort();
             let mut result = build_lidar_result(flat[0].clone());
-            result.outputs.insert("output_count".to_string(), json!(flat.len()));
+            result
+                .outputs
+                .insert("output_count".to_string(), json!(flat.len()));
             ctx.progress.progress(1.0);
             Ok(result)
         }
@@ -8090,11 +8895,15 @@ impl Tool for LidarRemoveOutliersTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 2.0);
         if !search_radius.is_finite() || search_radius <= 0.0 {
-            return Err(ToolError::Validation("search_radius/radius must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius/radius must be a positive finite value".to_string(),
+            ));
         }
         let elev_diff = parse_f64_alias(args, &["elev_diff", "threshold"], 50.0);
         if !elev_diff.is_finite() || elev_diff < 0.0 {
-            return Err(ToolError::Validation("elev_diff/threshold must be a non-negative finite value".to_string()));
+            return Err(ToolError::Validation(
+                "elev_diff/threshold must be a non-negative finite value".to_string(),
+            ));
         }
         let _ = parse_bool_alias(args, &["use_median"], false);
         let _ = parse_bool_alias(args, &["classify"], false);
@@ -8110,10 +8919,16 @@ impl Tool for LidarRemoveOutliersTool {
         let classify = parse_bool_alias(args, &["classify"], false);
         let output_path = parse_optional_lidar_output_path(args)?;
 
-        let run_single = |in_path: &Path, out_path: Option<PathBuf>, parallel_points: bool| -> Result<String, ToolError> {
+        let run_single = |in_path: &Path,
+                          out_path: Option<PathBuf>,
+                          parallel_points: bool|
+         -> Result<String, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             if cloud.points.is_empty() {
-                let out_cloud = PointCloud { points: vec![], crs: cloud.crs.clone() };
+                let out_cloud = PointCloud {
+                    points: vec![],
+                    crs: cloud.crs.clone(),
+                };
                 return store_or_write_lidar_output(&out_cloud, out_path, "lidar_remove_outliers");
             }
 
@@ -8131,7 +8946,9 @@ impl Tool for LidarRemoveOutliersTool {
                     .par_iter()
                     .enumerate()
                     .map(|(i, p)| {
-                        let neigh = tree.within(&[p.x, p.y], radius_sq, &squared_euclidean).unwrap_or_default();
+                        let neigh = tree
+                            .within(&[p.x, p.y], radius_sq, &squared_euclidean)
+                            .unwrap_or_default();
                         let mut z_vals = Vec::with_capacity(neigh.len());
                         for (_, idx_ref) in neigh {
                             let idx = *idx_ref;
@@ -8158,7 +8975,9 @@ impl Tool for LidarRemoveOutliersTool {
             } else {
                 let mut values = vec![0.0_f64; cloud.points.len()];
                 for (i, p) in cloud.points.iter().enumerate() {
-                    let neigh = tree.within(&[p.x, p.y], radius_sq, &squared_euclidean).unwrap_or_default();
+                    let neigh = tree
+                        .within(&[p.x, p.y], radius_sq, &squared_euclidean)
+                        .unwrap_or_default();
                     let mut z_vals = Vec::with_capacity(neigh.len());
                     for (_, idx_ref) in neigh {
                         let idx = *idx_ref;
@@ -8236,7 +9055,10 @@ impl Tool for LidarRemoveOutliersTool {
                 }
             };
 
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
             let suffix = if classify {
                 "lidar_remove_outliers_classified"
             } else {
@@ -8251,12 +9073,17 @@ impl Tool for LidarRemoveOutliersTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
                 .map(|input| {
-                    let suffix = if classify { "outliers_classified" } else { "outliers_removed" };
+                    let suffix = if classify {
+                        "outliers_classified"
+                    } else {
+                        "outliers_removed"
+                    };
                     let out = generate_batch_lidar_output_path(&input, suffix);
                     run_single(&input, Some(out), false)
                 })
@@ -8296,18 +9123,22 @@ impl Tool for NormalizeLidarTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?
             .ok_or_else(|| ToolError::Validation("input is required".to_string()))?;
-        let dtm_path = parse_required_raster_path_alias(args, &["dtm", "input_dtm"], "dtm/input_dtm")?;
+        let dtm_path =
+            parse_required_raster_path_alias(args, &["dtm", "input_dtm"], "dtm/input_dtm")?;
         let no_negatives = parse_bool_alias(args, &["no_negatives"], false);
         let output_path = parse_optional_lidar_output_path(args)?;
 
         ctx.progress.info("reading input lidar");
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
         ctx.progress.info("reading DTM raster");
-        let dtm = Raster::read(Path::new(&dtm_path))
-            .map_err(|e| ToolError::Execution(format!("failed reading dtm raster '{}': {e}", dtm_path)))?;
+        let dtm = Raster::read(Path::new(&dtm_path)).map_err(|e| {
+            ToolError::Execution(format!("failed reading dtm raster '{}': {e}", dtm_path))
+        })?;
 
         let dtm_arc = Arc::new(dtm);
-        let points: Vec<PointRecord> = cloud.points.par_iter()
+        let points: Vec<PointRecord> = cloud
+            .points
+            .par_iter()
             .map(|p| {
                 let mut point = *p;
                 if !point_is_withheld(p) && !point_is_noise(p) {
@@ -8378,7 +9209,9 @@ impl Tool for HeightAboveGroundTool {
         }
 
         let tree_arc = Arc::new(tree);
-        let points: Vec<PointRecord> = cloud.points.par_iter()
+        let points: Vec<PointRecord> = cloud
+            .points
+            .par_iter()
             .map(|p| {
                 let mut point = *p;
                 if point.classification == 2 {
@@ -8434,19 +9267,27 @@ impl Tool for LidarGroundPointFilterTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 2.0);
         if !search_radius.is_finite() || search_radius <= 0.0 {
-            return Err(ToolError::Validation("search_radius/radius must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius/radius must be a positive finite value".to_string(),
+            ));
         }
         let min_neighbours = parse_f64_alias(args, &["min_neighbours"], 0.0);
         if !min_neighbours.is_finite() || min_neighbours < 0.0 {
-            return Err(ToolError::Validation("min_neighbours must be a non-negative value".to_string()));
+            return Err(ToolError::Validation(
+                "min_neighbours must be a non-negative value".to_string(),
+            ));
         }
         let slope_threshold = parse_f64_alias(args, &["slope_threshold"], 45.0);
         if !slope_threshold.is_finite() || slope_threshold < 0.0 {
-            return Err(ToolError::Validation("slope_threshold must be a non-negative finite value".to_string()));
+            return Err(ToolError::Validation(
+                "slope_threshold must be a non-negative finite value".to_string(),
+            ));
         }
         let height_threshold = parse_f64_alias(args, &["height_threshold"], 1.0);
         if !height_threshold.is_finite() || height_threshold < 0.0 {
-            return Err(ToolError::Validation("height_threshold must be a non-negative finite value".to_string()));
+            return Err(ToolError::Validation(
+                "height_threshold must be a non-negative finite value".to_string(),
+            ));
         }
         let _ = parse_bool_alias(args, &["classify"], false);
         let _ = parse_bool_alias(args, &["slope_norm"], true);
@@ -8470,8 +9311,15 @@ impl Tool for LidarGroundPointFilterTool {
         let run_single = |in_path: &Path, out_path: Option<PathBuf>| -> Result<String, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             if cloud.points.is_empty() {
-                let out_cloud = PointCloud { points: vec![], crs: cloud.crs.clone() };
-                return store_or_write_lidar_output(&out_cloud, out_path, "lidar_ground_point_filter");
+                let out_cloud = PointCloud {
+                    points: vec![],
+                    crs: cloud.crs.clone(),
+                };
+                return store_or_write_lidar_output(
+                    &out_cloud,
+                    out_path,
+                    "lidar_ground_point_filter",
+                );
             }
 
             let mut tree: KdTree<f64, usize, [f64; 2]> = KdTree::new(2);
@@ -8484,7 +9332,7 @@ impl Tool for LidarGroundPointFilterTool {
             }
 
             let radius_sq = search_radius * search_radius;
-            
+
             let tree_arc = Arc::new(tree);
             let cloud_arc = Arc::new(cloud.points.clone());
             let eligible_arc = Arc::new(eligible);
@@ -8658,8 +9506,15 @@ impl Tool for LidarGroundPointFilterTool {
                     .collect()
             };
 
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
-            let suffix = if classify { "lidar_ground_point_filter_classified" } else { "lidar_ground_point_filter" };
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
+            let suffix = if classify {
+                "lidar_ground_point_filter_classified"
+            } else {
+                "lidar_ground_point_filter"
+            };
             store_or_write_lidar_output(&out_cloud, out_path, suffix)
         };
 
@@ -8669,7 +9524,8 @@ impl Tool for LidarGroundPointFilterTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -8708,7 +9564,9 @@ impl Tool for FilterLidarTool {
             .map(str::trim)
             .ok_or_else(|| ToolError::Validation("statement is required".to_string()))?;
         if statement.is_empty() {
-            return Err(ToolError::Validation("statement must be non-empty".to_string()));
+            return Err(ToolError::Validation(
+                "statement must be non-empty".to_string(),
+            ));
         }
         let normalized_statement = normalize_filter_lidar_statement(statement);
         let _ = build_operator_tree::<DefaultNumericTypes>(&normalized_statement)
@@ -8733,19 +9591,48 @@ impl Tool for FilterLidarTool {
         let run_single = |in_path: &Path, out_path: Option<PathBuf>| -> Result<String, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             if cloud.points.is_empty() {
-                let out_cloud = PointCloud { points: vec![], crs: cloud.crs.clone() };
+                let out_cloud = PointCloud {
+                    points: vec![],
+                    crs: cloud.crs.clone(),
+                };
                 return store_or_write_lidar_output(&out_cloud, out_path, "filter_lidar");
             }
 
-            let min_x = cloud.points.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-            let max_x = cloud.points.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
-            let min_y = cloud.points.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
-            let max_y = cloud.points.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
-            let min_z = cloud.points.iter().map(|p| p.z).fold(f64::INFINITY, f64::min);
-            let max_z = cloud.points.iter().map(|p| p.z).fold(f64::NEG_INFINITY, f64::max);
+            let min_x = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::INFINITY, f64::min);
+            let max_x = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let min_y = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::INFINITY, f64::min);
+            let max_y = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let min_z = cloud
+                .points
+                .iter()
+                .map(|p| p.z)
+                .fold(f64::INFINITY, f64::min);
+            let max_z = cloud
+                .points
+                .iter()
+                .map(|p| p.z)
+                .fold(f64::NEG_INFINITY, f64::max);
 
             let tree_arc = Arc::new(tree.clone());
-            let points: Vec<PointRecord> = cloud.points.par_iter()
+            let points: Vec<PointRecord> = cloud
+                .points
+                .par_iter()
                 .enumerate()
                 .filter_map(|(i, p)| {
                     let ctx = build_filter_context(
@@ -8758,13 +9645,21 @@ impl Tool for FilterLidarTool {
                         max_y,
                         min_z,
                         max_z,
-                    ).ok()?;
+                    )
+                    .ok()?;
                     let keep = tree_arc.eval_boolean_with_context(&ctx).ok()?;
-                    if keep { Some(*p) } else { None }
+                    if keep {
+                        Some(*p)
+                    } else {
+                        None
+                    }
                 })
                 .collect();
 
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
             store_or_write_lidar_output(&out_cloud, out_path, "filter_lidar")
         };
 
@@ -8774,7 +9669,8 @@ impl Tool for FilterLidarTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -8820,8 +9716,9 @@ impl Tool for ModifyLidarTool {
                     found_assignment = true;
                 }
             }
-            let _ = build_operator_tree::<DefaultNumericTypes>(s)
-                .map_err(|e| ToolError::Validation(format!("invalid statement expression '{}': {e}", s)))?;
+            let _ = build_operator_tree::<DefaultNumericTypes>(s).map_err(|e| {
+                ToolError::Validation(format!("invalid statement expression '{}': {e}", s))
+            })?;
         }
         if !found_assignment {
             return Err(ToolError::Validation(
@@ -8842,24 +9739,58 @@ impl Tool for ModifyLidarTool {
         let statements = parse_modify_statements(statement_raw)?;
         let trees = statements
             .iter()
-            .map(|s| build_operator_tree::<DefaultNumericTypes>(s).map_err(|e| ToolError::Validation(format!("invalid statement expression '{}': {e}", s))))
+            .map(|s| {
+                build_operator_tree::<DefaultNumericTypes>(s).map_err(|e| {
+                    ToolError::Validation(format!("invalid statement expression '{}': {e}", s))
+                })
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let output_path = parse_optional_lidar_output_path(args)?;
 
-        let run_single = |in_path: &Path, out_path: Option<PathBuf>, parallel_points: bool| -> Result<String, ToolError> {
+        let run_single = |in_path: &Path,
+                          out_path: Option<PathBuf>,
+                          parallel_points: bool|
+         -> Result<String, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
 
             if cloud.points.is_empty() {
-                let out_cloud = PointCloud { points: vec![], crs: cloud.crs.clone() };
+                let out_cloud = PointCloud {
+                    points: vec![],
+                    crs: cloud.crs.clone(),
+                };
                 return store_or_write_lidar_output(&out_cloud, out_path, "modify_lidar");
             }
 
-            let min_x = cloud.points.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-            let max_x = cloud.points.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
-            let min_y = cloud.points.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
-            let max_y = cloud.points.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
-            let min_z = cloud.points.iter().map(|p| p.z).fold(f64::INFINITY, f64::min);
-            let max_z = cloud.points.iter().map(|p| p.z).fold(f64::NEG_INFINITY, f64::max);
+            let min_x = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::INFINITY, f64::min);
+            let max_x = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let min_y = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::INFINITY, f64::min);
+            let max_y = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let min_z = cloud
+                .points
+                .iter()
+                .map(|p| p.z)
+                .fold(f64::INFINITY, f64::min);
+            let max_z = cloud
+                .points
+                .iter()
+                .map(|p| p.z)
+                .fold(f64::NEG_INFINITY, f64::max);
 
             let process_point = |i: usize, p: &PointRecord| -> Result<PointRecord, ToolError> {
                 let mut point = *p;
@@ -8878,7 +9809,10 @@ impl Tool for ModifyLidarTool {
                 // Add tuple aliases for statement compatibility.
                 let _ = eval_ctx.set_value(
                     "xy".to_string(),
-                    EvalValue::Tuple(vec![EvalValue::from_float(point.x), EvalValue::from_float(point.y)]),
+                    EvalValue::Tuple(vec![
+                        EvalValue::from_float(point.x),
+                        EvalValue::from_float(point.y),
+                    ]),
                 );
                 let _ = eval_ctx.set_value(
                     "xyz".to_string(),
@@ -8961,9 +9895,12 @@ impl Tool for ModifyLidarTool {
                     )
                 });
                 if rgb_out.is_none() {
-                    let r = value_as_i64(&eval_ctx, "red").map(|v| v.clamp(0, i64::from(u16::MAX)) as u16);
-                    let g = value_as_i64(&eval_ctx, "green").map(|v| v.clamp(0, i64::from(u16::MAX)) as u16);
-                    let b = value_as_i64(&eval_ctx, "blue").map(|v| v.clamp(0, i64::from(u16::MAX)) as u16);
+                    let r = value_as_i64(&eval_ctx, "red")
+                        .map(|v| v.clamp(0, i64::from(u16::MAX)) as u16);
+                    let g = value_as_i64(&eval_ctx, "green")
+                        .map(|v| v.clamp(0, i64::from(u16::MAX)) as u16);
+                    let b = value_as_i64(&eval_ctx, "blue")
+                        .map(|v| v.clamp(0, i64::from(u16::MAX)) as u16);
                     if let (Some(rr), Some(gg), Some(bb)) = (r, g, b) {
                         rgb_out = Some((rr, gg, bb));
                     }
@@ -9006,11 +9943,17 @@ impl Tool for ModifyLidarTool {
             };
 
             let out_points: Vec<PointRecord> = if parallel_points {
-                cloud.points.par_iter().enumerate()
+                cloud
+                    .points
+                    .par_iter()
+                    .enumerate()
                     .map(|(i, p)| process_point(i, p))
                     .collect::<Result<Vec<_>, _>>()?
             } else {
-                cloud.points.iter().enumerate()
+                cloud
+                    .points
+                    .iter()
+                    .enumerate()
                     .map(|(i, p)| process_point(i, p))
                     .collect::<Result<Vec<_>, _>>()?
             };
@@ -9028,7 +9971,8 @@ impl Tool for ModifyLidarTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -9068,10 +10012,16 @@ impl Tool for FilterLidarByReferenceSurfaceTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = parse_lidar_path_arg_optional(args)?
             .ok_or_else(|| ToolError::Validation("input is required".to_string()))?;
-        let _ = parse_required_raster_path_alias(args, &["ref_surface", "surface", "input_surface"], "ref_surface/surface/input_surface")?;
+        let _ = parse_required_raster_path_alias(
+            args,
+            &["ref_surface", "surface", "input_surface"],
+            "ref_surface/surface/input_surface",
+        )?;
         let threshold = parse_f64_alias(args, &["threshold"], 0.0);
         if !threshold.is_finite() || threshold < 0.0 {
-            return Err(ToolError::Validation("threshold must be a non-negative finite value".to_string()));
+            return Err(ToolError::Validation(
+                "threshold must be a non-negative finite value".to_string(),
+            ));
         }
         let _ = parse_bool_alias(args, &["classify"], false);
         let _ = parse_bool_alias(args, &["preserve_classes"], false);
@@ -9087,12 +10037,19 @@ impl Tool for FilterLidarByReferenceSurfaceTool {
             &["ref_surface", "surface", "input_surface"],
             "ref_surface/surface/input_surface",
         )?;
-        let query = args.get("query").and_then(Value::as_str).unwrap_or("within");
+        let query = args
+            .get("query")
+            .and_then(Value::as_str)
+            .unwrap_or("within");
         let query_type = parse_ref_surface_query_type(query);
         let threshold = parse_f64_alias(args, &["threshold"], 0.0);
         let classify = parse_bool_alias(args, &["classify"], false);
-        let true_class_value = parse_f64_alias(args, &["true_class_value"], 2.0).round().clamp(0.0, 255.0) as u8;
-        let false_class_value = parse_f64_alias(args, &["false_class_value"], 1.0).round().clamp(0.0, 255.0) as u8;
+        let true_class_value = parse_f64_alias(args, &["true_class_value"], 2.0)
+            .round()
+            .clamp(0.0, 255.0) as u8;
+        let false_class_value = parse_f64_alias(args, &["false_class_value"], 1.0)
+            .round()
+            .clamp(0.0, 255.0) as u8;
         let preserve_classes = parse_bool_alias(args, &["preserve_classes"], false);
         let output_path = parse_optional_lidar_output_path(args)?;
 
@@ -9102,7 +10059,9 @@ impl Tool for FilterLidarByReferenceSurfaceTool {
         let surface = load_raster_path_or_memory(&ref_surface_path, "reference surface")?;
 
         let surface_arc = Arc::new(surface);
-        let matches: Vec<bool> = cloud.points.par_iter()
+        let matches: Vec<bool> = cloud
+            .points
+            .par_iter()
             .map(|p| {
                 if point_is_withheld(p) || point_is_noise(p) {
                     return false;
@@ -9152,8 +10111,15 @@ impl Tool for FilterLidarByReferenceSurfaceTool {
                 .collect()
         };
 
-        let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
-        let locator = store_or_write_lidar_output(&out_cloud, output_path, "filter_lidar_by_reference_surface")?;
+        let out_cloud = PointCloud {
+            points,
+            crs: cloud.crs.clone(),
+        };
+        let locator = store_or_write_lidar_output(
+            &out_cloud,
+            output_path,
+            "filter_lidar_by_reference_surface",
+        )?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
     }
@@ -9185,15 +10151,25 @@ impl Tool for ClassifyLidarTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 2.5);
         if !search_radius.is_finite() || search_radius <= 0.0 {
-            return Err(ToolError::Validation("search_radius/radius must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius/radius must be a positive finite value".to_string(),
+            ));
         }
         let grd_threshold = parse_f64_alias(args, &["grd_threshold"], 0.1);
         let oto_threshold = parse_f64_alias(args, &["oto_threshold"], 1.0);
-        if !grd_threshold.is_finite() || !oto_threshold.is_finite() || grd_threshold < 0.0 || oto_threshold < 0.0 {
-            return Err(ToolError::Validation("grd_threshold and oto_threshold must be non-negative finite values".to_string()));
+        if !grd_threshold.is_finite()
+            || !oto_threshold.is_finite()
+            || grd_threshold < 0.0
+            || oto_threshold < 0.0
+        {
+            return Err(ToolError::Validation(
+                "grd_threshold and oto_threshold must be non-negative finite values".to_string(),
+            ));
         }
         if grd_threshold > oto_threshold {
-            return Err(ToolError::Validation("grd_threshold must be <= oto_threshold".to_string()));
+            return Err(ToolError::Validation(
+                "grd_threshold must be <= oto_threshold".to_string(),
+            ));
         }
         let _ = parse_optional_lidar_output_path(args)?;
         Ok(())
@@ -9204,8 +10180,10 @@ impl Tool for ClassifyLidarTool {
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 2.5);
         let grd_threshold = parse_f64_alias(args, &["grd_threshold"], 0.1);
         let oto_threshold = parse_f64_alias(args, &["oto_threshold"], 1.0);
-        let linearity_threshold = parse_f64_alias(args, &["linearity_threshold"], 0.5).clamp(0.0, 1.0);
-        let planarity_threshold = parse_f64_alias(args, &["planarity_threshold"], 0.85).clamp(0.0, 1.0);
+        let linearity_threshold =
+            parse_f64_alias(args, &["linearity_threshold"], 0.5).clamp(0.0, 1.0);
+        let planarity_threshold =
+            parse_f64_alias(args, &["planarity_threshold"], 0.85).clamp(0.0, 1.0);
         let num_iter = parse_f64_alias(args, &["num_iter"], 30.0).max(1.0) as usize;
         let facade_threshold = parse_f64_alias(args, &["facade_threshold"], 0.5).max(0.0);
         let output_path = parse_optional_lidar_output_path(args)?;
@@ -9213,7 +10191,10 @@ impl Tool for ClassifyLidarTool {
         let run_single = |in_path: &Path, out_path: Option<PathBuf>| -> Result<String, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             if cloud.points.is_empty() {
-                let out_cloud = PointCloud { points: vec![], crs: cloud.crs.clone() };
+                let out_cloud = PointCloud {
+                    points: vec![],
+                    crs: cloud.crs.clone(),
+                };
                 return store_or_write_lidar_output(&out_cloud, out_path, "classify_lidar");
             }
 
@@ -9239,7 +10220,9 @@ impl Tool for ClassifyLidarTool {
                         return (0.0, 0.0);
                     }
                     let p1 = cloud.points[i];
-                    let found = tree.within(&[p1.x, p1.y], radius_sq, &squared_euclidean).unwrap_or_default();
+                    let found = tree
+                        .within(&[p1.x, p1.y], radius_sq, &squared_euclidean)
+                        .unwrap_or_default();
                     let mut neigh: Vec<usize> = Vec::with_capacity(found.len());
                     for (_, idx_ref) in found {
                         let idx = *idx_ref;
@@ -9284,7 +10267,8 @@ impl Tool for ClassifyLidarTool {
                         for (j, idx) in neigh.iter().enumerate() {
                             if j != n1 && j != n2 {
                                 let pt = cloud.points[*idx];
-                                let residual_plane = (a * pt.x + b * pt.y + c * pt.z + d).abs() / norm1;
+                                let residual_plane =
+                                    (a * pt.x + b * pt.y + c * pt.z + d).abs() / norm1;
                                 if residual_plane < grd_threshold {
                                     planar_pts += 1;
                                 }
@@ -9316,7 +10300,9 @@ impl Tool for ClassifyLidarTool {
                         return f64::MAX;
                     }
                     let p = cloud.points[i];
-                    let found = tree.within(&[p.x, p.y], radius_sq, &squared_euclidean).unwrap_or_default();
+                    let found = tree
+                        .within(&[p.x, p.y], radius_sq, &squared_euclidean)
+                        .unwrap_or_default();
                     let mut min_z = f64::MAX;
                     for (_, idx_ref) in found {
                         let idx = *idx_ref;
@@ -9324,7 +10310,11 @@ impl Tool for ClassifyLidarTool {
                             min_z = min_z.min(cloud.points[idx].z);
                         }
                     }
-                    if min_z.is_finite() { min_z } else { f64::MAX }
+                    if min_z.is_finite() {
+                        min_z
+                    } else {
+                        f64::MAX
+                    }
                 })
                 .collect();
 
@@ -9335,7 +10325,9 @@ impl Tool for ClassifyLidarTool {
                         return f64::MIN;
                     }
                     let p = cloud.points[i];
-                    let found = tree.within(&[p.x, p.y], radius_sq, &squared_euclidean).unwrap_or_default();
+                    let found = tree
+                        .within(&[p.x, p.y], radius_sq, &squared_euclidean)
+                        .unwrap_or_default();
                     let mut max_z = f64::NEG_INFINITY;
                     for (_, idx_ref) in found {
                         let idx = *idx_ref;
@@ -9346,7 +10338,11 @@ impl Tool for ClassifyLidarTool {
                             }
                         }
                     }
-                    if max_z.is_finite() { p.z - max_z } else { 0.0 }
+                    if max_z.is_finite() {
+                        p.z - max_z
+                    } else {
+                        0.0
+                    }
                 })
                 .collect();
 
@@ -9360,7 +10356,10 @@ impl Tool for ClassifyLidarTool {
                 if cluster[i] != 0 {
                     continue;
                 }
-                if active_late[i] && residuals[i].abs() <= grd_threshold && planar[i] >= planarity_threshold {
+                if active_late[i]
+                    && residuals[i].abs() <= grd_threshold
+                    && planar[i] >= planarity_threshold
+                {
                     cluster_num += 1;
                     cluster[i] = cluster_num;
                     let mut min_x = f64::INFINITY;
@@ -9376,7 +10375,9 @@ impl Tool for ClassifyLidarTool {
                         min_y = min_y.min(p.y);
                         max_y = max_y.max(p.y);
 
-                        let found = tree.within(&[p.x, p.y], radius_sq, &squared_euclidean).unwrap_or_default();
+                        let found = tree
+                            .within(&[p.x, p.y], radius_sq, &squared_euclidean)
+                            .unwrap_or_default();
                         for (_, idx_ref) in found {
                             let idx = *idx_ref;
                             let z_n = cloud.points[idx].z;
@@ -9422,7 +10423,9 @@ impl Tool for ClassifyLidarTool {
                 let cluster_val = cluster[point_num];
                 if cluster_val > 1 && cluster_val != grd_cluster {
                     let p = cloud.points[point_num];
-                    let found = tree.within(&[p.x, p.y], radius_sq, &squared_euclidean).unwrap_or_default();
+                    let found = tree
+                        .within(&[p.x, p.y], radius_sq, &squared_euclidean)
+                        .unwrap_or_default();
                     for (_, idx_ref) in found {
                         let idx = *idx_ref;
                         if cluster[idx] == 1 {
@@ -9479,7 +10482,9 @@ impl Tool for ClassifyLidarTool {
                         && cluster[point_num] != grd_cluster
                     {
                         let p = cloud.points[point_num];
-                        let found = tree.within(&[p.x, p.y], facade_sq, &squared_euclidean).unwrap_or_default();
+                        let found = tree
+                            .within(&[p.x, p.y], facade_sq, &squared_euclidean)
+                            .unwrap_or_default();
                         for (_, idx_ref) in found {
                             let idx = *idx_ref;
                             let p2 = cloud.points[idx];
@@ -9520,7 +10525,9 @@ impl Tool for ClassifyLidarTool {
                     }
                     if residuals[point_num] < 5.0 {
                         let p = cloud.points[point_num];
-                        let found = tree.within(&[p.x, p.y], radius_sq, &squared_euclidean).unwrap_or_default();
+                        let found = tree
+                            .within(&[p.x, p.y], radius_sq, &squared_euclidean)
+                            .unwrap_or_default();
                         let mut building_cluster = 0usize;
                         let mut reassign = true;
                         for (_, idx_ref) in found {
@@ -9577,7 +10584,10 @@ impl Tool for ClassifyLidarTool {
                 })
                 .collect();
 
-            let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+            let out_cloud = PointCloud {
+                points,
+                crs: cloud.crs.clone(),
+            };
             store_or_write_lidar_output(&out_cloud, out_path, "classify_lidar")
         };
 
@@ -9587,7 +10597,8 @@ impl Tool for ClassifyLidarTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -9626,29 +10637,44 @@ impl Tool for LidarClassifySubsetTool {
         let _ = parse_required_lidar_path_alias(args, &["subset", "subset_lidar"], "subset")?;
         let subset_class = parse_f64_alias(args, &["subset_class_value", "subset_class"], f64::NAN);
         if !subset_class.is_finite() {
-            return Err(ToolError::Validation("subset_class_value is required".to_string()));
+            return Err(ToolError::Validation(
+                "subset_class_value is required".to_string(),
+            ));
         }
         let subset_class = subset_class.round() as i64;
         if !(0..=18).contains(&subset_class) {
-            return Err(ToolError::Validation("subset_class_value must be in [0, 18]".to_string()));
+            return Err(ToolError::Validation(
+                "subset_class_value must be in [0, 18]".to_string(),
+            ));
         }
-        let nonsubset_class = parse_f64_alias(args, &["nonsubset_class_value", "nonsubset_class"], 255.0).round() as i64;
+        let nonsubset_class =
+            parse_f64_alias(args, &["nonsubset_class_value", "nonsubset_class"], 255.0).round()
+                as i64;
         if nonsubset_class != 255 && !(0..=18).contains(&nonsubset_class) {
-            return Err(ToolError::Validation("nonsubset_class_value must be in [0, 18] or 255".to_string()));
+            return Err(ToolError::Validation(
+                "nonsubset_class_value must be in [0, 18] or 255".to_string(),
+            ));
         }
         let tolerance = parse_f64_alias(args, &["tolerance"], 0.001);
         if !tolerance.is_finite() || tolerance <= 0.0 {
-            return Err(ToolError::Validation("tolerance must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "tolerance must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let base_path = parse_required_lidar_path_alias(args, &["base", "base_lidar", "input"], "base")?;
-        let subset_path = parse_required_lidar_path_alias(args, &["subset", "subset_lidar"], "subset")?;
-        let subset_class = parse_f64_alias(args, &["subset_class_value", "subset_class"], 2.0).round() as u8;
-        let nonsubset_class = parse_f64_alias(args, &["nonsubset_class_value", "nonsubset_class"], 255.0).round() as i64;
+        let base_path =
+            parse_required_lidar_path_alias(args, &["base", "base_lidar", "input"], "base")?;
+        let subset_path =
+            parse_required_lidar_path_alias(args, &["subset", "subset_lidar"], "subset")?;
+        let subset_class =
+            parse_f64_alias(args, &["subset_class_value", "subset_class"], 2.0).round() as u8;
+        let nonsubset_class =
+            parse_f64_alias(args, &["nonsubset_class_value", "nonsubset_class"], 255.0).round()
+                as i64;
         let tolerance = parse_f64_alias(args, &["tolerance"], 0.001);
         let tolerance_sq = tolerance * tolerance;
         let output_path = parse_optional_output_path(args, "output")?;
@@ -9664,7 +10690,9 @@ impl Tool for LidarClassifySubsetTool {
         }
 
         let tree_arc = Arc::new(tree);
-        let out_points: Vec<PointRecord> = base.points.par_iter()
+        let out_points: Vec<PointRecord> = base
+            .points
+            .par_iter()
             .map(|p| {
                 let mut pt = *p;
                 let is_subset = if subset.points.is_empty() {
@@ -9688,7 +10716,8 @@ impl Tool for LidarClassifySubsetTool {
             points: out_points,
             crs: base.crs.clone(),
         };
-        let locator = store_or_write_lidar_output(&out_cloud, output_path, "lidar_classify_subset")?;
+        let locator =
+            store_or_write_lidar_output(&out_cloud, output_path, "lidar_classify_subset")?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
     }
@@ -9737,7 +10766,8 @@ impl Tool for ClipLidarToPolygonTool {
             points,
             crs: cloud.crs.clone(),
         };
-        let locator = store_or_write_lidar_output(&out_cloud, output_path, "clip_lidar_to_polygon")?;
+        let locator =
+            store_or_write_lidar_output(&out_cloud, output_path, "clip_lidar_to_polygon")?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
     }
@@ -9752,9 +10782,24 @@ impl Tool for ErasePolygonFromLidarTool {
             category: ToolCategory::Lidar,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input LiDAR path or typed LiDAR object.", required: true, ..Default::default() },
-                ToolParamSpec { name: "polygons", description: "Input polygon vector path or typed vector object.", required: true, ..Default::default() },
-                ToolParamSpec { name: "output", description: "Optional output LiDAR path.", required: false, ..Default::default() },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input LiDAR path or typed LiDAR object.",
+                    required: true,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "polygons",
+                    description: "Input polygon vector path or typed vector object.",
+                    required: true,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output LiDAR path.",
+                    required: false,
+                    ..Default::default()
+                },
             ],
         }
     }
@@ -9786,7 +10831,8 @@ impl Tool for ErasePolygonFromLidarTool {
             points,
             crs: cloud.crs.clone(),
         };
-        let locator = store_or_write_lidar_output(&out_cloud, output_path, "erase_polygon_from_lidar")?;
+        let locator =
+            store_or_write_lidar_output(&out_cloud, output_path, "erase_polygon_from_lidar")?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
     }
@@ -9811,17 +10857,21 @@ impl Tool for ClassifyOverlapPointsTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let resolution = parse_f64_alias(args, &["resolution", "grid_res"], 1.0);
         if !resolution.is_finite() || resolution <= 0.0 {
-            return Err(ToolError::Validation("resolution must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "resolution must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let resolution = parse_f64_alias(args, &["resolution", "grid_res"], 1.0);
         let overlap_criterion = parse_overlap_criterion(
             args.get("overlap_criterion")
@@ -9835,7 +10885,8 @@ impl Tool for ClassifyOverlapPointsTool {
         ctx.progress.info("reading input lidar");
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
         if cloud.points.is_empty() {
-            let locator = store_or_write_lidar_output(&cloud, output_path, "classify_overlap_points")?;
+            let locator =
+                store_or_write_lidar_output(&cloud, output_path, "classify_overlap_points")?;
             return Ok(build_lidar_result(locator));
         }
 
@@ -9900,7 +10951,11 @@ impl Tool for ClassifyOverlapPointsTool {
                     }
                 }
                 OverlapCriterion::NotMinPointSourceId => {
-                    let min_psid = ids.iter().map(|i| cloud.points[*i].point_source_id).min().unwrap_or(0);
+                    let min_psid = ids
+                        .iter()
+                        .map(|i| cloud.points[*i].point_source_id)
+                        .min()
+                        .unwrap_or(0);
                     for id in ids {
                         if cloud.points[*id].point_source_id != min_psid {
                             overlapping[*id] = true;
@@ -9911,7 +10966,10 @@ impl Tool for ClassifyOverlapPointsTool {
                     let mut min_time = f64::INFINITY;
                     let mut min_time_psid = cloud.points[ids[0]].point_source_id;
                     for id in ids {
-                        let t = cloud.points[*id].gps_time.map(|v| v.0).unwrap_or(f64::INFINITY);
+                        let t = cloud.points[*id]
+                            .gps_time
+                            .map(|v| v.0)
+                            .unwrap_or(f64::INFINITY);
                         if t < min_time {
                             min_time = t;
                             min_time_psid = cloud.points[*id].point_source_id;
@@ -9969,7 +11027,8 @@ impl Tool for ClassifyOverlapPointsTool {
             points,
             crs: cloud.crs.clone(),
         };
-        let locator = store_or_write_lidar_output(&out_cloud, output_path, "classify_overlap_points")?;
+        let locator =
+            store_or_write_lidar_output(&out_cloud, output_path, "classify_overlap_points")?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
     }
@@ -10001,31 +11060,43 @@ impl Tool for LidarSegmentationTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 2.0);
         if !search_radius.is_finite() || search_radius <= 0.0 {
-            return Err(ToolError::Validation("search_radius must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius must be a positive finite value".to_string(),
+            ));
         }
         let norm_diff = parse_f64_alias(args, &["norm_diff_threshold", "norm_diff"], 2.0);
         if !norm_diff.is_finite() {
-            return Err(ToolError::Validation("norm_diff_threshold must be finite".to_string()));
+            return Err(ToolError::Validation(
+                "norm_diff_threshold must be finite".to_string(),
+            ));
         }
         let max_z_diff = parse_f64_alias(args, &["max_z_diff", "maxzdiff"], 1.0);
         if !max_z_diff.is_finite() || max_z_diff < 0.0 {
-            return Err(ToolError::Validation("max_z_diff must be a finite non-negative value".to_string()));
+            return Err(ToolError::Validation(
+                "max_z_diff must be a finite non-negative value".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 2.0);
-        let num_iterations = parse_f64_alias(args, &["num_iterations", "num_iter"], 50.0).max(1.0) as usize;
+        let num_iterations =
+            parse_f64_alias(args, &["num_iterations", "num_iter"], 50.0).max(1.0) as usize;
         let num_samples = parse_f64_alias(args, &["num_samples"], 10.0).max(5.0) as usize;
-        let inlier_threshold = parse_f64_alias(args, &["inlier_threshold", "threshold"], 0.15).max(0.0);
-        let acceptable_model_size = parse_f64_alias(args, &["acceptable_model_size", "model_size"], 30.0).max(5.0) as usize;
-        let max_planar_slope = parse_f64_alias(args, &["max_planar_slope", "max_slope"], 75.0).clamp(0.0, 90.0);
+        let inlier_threshold =
+            parse_f64_alias(args, &["inlier_threshold", "threshold"], 0.15).max(0.0);
+        let acceptable_model_size =
+            parse_f64_alias(args, &["acceptable_model_size", "model_size"], 30.0).max(5.0) as usize;
+        let max_planar_slope =
+            parse_f64_alias(args, &["max_planar_slope", "max_slope"], 75.0).clamp(0.0, 90.0);
         let max_norm_diff = parse_f64_alias(args, &["norm_diff_threshold", "norm_diff"], 2.0)
             .clamp(0.0, 90.0)
             .to_radians();
@@ -10091,12 +11162,12 @@ impl Tool for LidarSegmentationTool {
                         .sample(&mut rng, num_samples.min(choices.len()))
                         .copied()
                         .collect();
-                    let sample: Vec<Vector3<f64>> = picks
-                        .iter()
-                        .map(|pidx| neighbour_points[*pidx].1)
-                        .collect();
+                    let sample: Vec<Vector3<f64>> =
+                        picks.iter().map(|pidx| neighbour_points[*pidx].1).collect();
                     let model = Plane::from_points(&sample);
-                    if model.slope() > max_planar_slope || model.residual(&center) > inlier_threshold {
+                    if model.slope() > max_planar_slope
+                        || model.residual(&center) > inlier_threshold
+                    {
                         continue;
                     }
 
@@ -10288,12 +11359,15 @@ impl Tool for IndividualTreeSegmentationTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let _ = parse_include_classes_arg(args, &["veg_classes"], &[3, 4, 5])?;
 
         let min_height = parse_f64_alias(args, &["min_height"], 2.0);
         if !min_height.is_finite() {
-            return Err(ToolError::Validation("min_height must be finite".to_string()));
+            return Err(ToolError::Validation(
+                "min_height must be finite".to_string(),
+            ));
         }
         let max_height = args.get("max_height").and_then(Value::as_f64);
         if let Some(v) = max_height {
@@ -10340,7 +11414,9 @@ impl Tool for IndividualTreeSegmentationTool {
         }
         let tile_size = parse_f64_alias(args, &["tile_size"], 0.0);
         if !tile_size.is_finite() {
-            return Err(ToolError::Validation("tile_size must be finite".to_string()));
+            return Err(ToolError::Validation(
+                "tile_size must be finite".to_string(),
+            ));
         }
         let tile_overlap = parse_f64_alias(args, &["tile_overlap"], 0.0);
         if !tile_overlap.is_finite() || tile_overlap < 0.0 {
@@ -10363,7 +11439,9 @@ impl Tool for IndividualTreeSegmentationTool {
 
         let max_iterations = parse_usize_alias(args, &["max_iterations"], 30);
         if max_iterations == 0 {
-            return Err(ToolError::Validation("max_iterations must be greater than 0".to_string()));
+            return Err(ToolError::Validation(
+                "max_iterations must be greater than 0".to_string(),
+            ));
         }
 
         let tol = parse_f64_alias(args, &["convergence_tol"], 0.05);
@@ -10389,7 +11467,13 @@ impl Tool for IndividualTreeSegmentationTool {
         }
 
         let mode = parse_string_alias(args, &["output_id_mode"], "rgb").to_ascii_lowercase();
-        let allowed = ["rgb", "user_data", "point_source_id", "rgb+user_data", "rgb+point_source_id"];
+        let allowed = [
+            "rgb",
+            "user_data",
+            "point_source_id",
+            "rgb+user_data",
+            "rgb+point_source_id",
+        ];
         if !allowed.contains(&mode.as_str()) {
             return Err(ToolError::Validation(format!(
                 "unsupported output_id_mode '{}'; expected one of rgb/user_data/point_source_id/rgb+user_data/rgb+point_source_id",
@@ -10400,7 +11484,8 @@ impl Tool for IndividualTreeSegmentationTool {
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let output_path = parse_optional_output_path(args, "output")?;
         let only_use_veg = parse_bool_alias(args, &["only_use_veg"], true);
         let veg_classes = parse_include_classes_arg(args, &["veg_classes"], &[3, 4, 5])?;
@@ -10424,7 +11509,8 @@ impl Tool for IndividualTreeSegmentationTool {
         let mode_merge_dist = parse_f64_alias(args, &["mode_merge_dist"], 0.8);
         let threads = parse_usize_alias(args, &["threads"], 0);
         let simd = parse_bool_alias(args, &["simd"], true);
-        let output_id_mode = parse_string_alias(args, &["output_id_mode"], "rgb").to_ascii_lowercase();
+        let output_id_mode =
+            parse_string_alias(args, &["output_id_mode"], "rgb").to_ascii_lowercase();
         let output_sidecar_csv = parse_bool_alias(args, &["output_sidecar_csv"], false);
         let seed = args.get("seed").and_then(Value::as_u64).unwrap_or(1);
 
@@ -10435,7 +11521,8 @@ impl Tool for IndividualTreeSegmentationTool {
         ctx.progress.info("reading input lidar");
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
         if cloud.points.is_empty() {
-            let locator = store_or_write_lidar_output(&cloud, output_path, "individual_tree_segmentation")?;
+            let locator =
+                store_or_write_lidar_output(&cloud, output_path, "individual_tree_segmentation")?;
             return Ok(build_lidar_result(locator));
         }
 
@@ -10461,7 +11548,8 @@ impl Tool for IndividualTreeSegmentationTool {
 
         if eligible_indices.is_empty() {
             return Err(ToolError::Validation(
-                "no eligible points remained after filtering (check class and height filters)".to_string(),
+                "no eligible points remained after filtering (check class and height filters)"
+                    .to_string(),
             ));
         }
 
@@ -10478,8 +11566,9 @@ impl Tool for IndividualTreeSegmentationTool {
         ctx.progress.info("building spatial index");
         let mut tree: KdTree<f64, usize, [f64; 2]> = KdTree::new(2);
         for i in 0..eligible_indices.len() {
-            tree.add([xs[i], ys[i]], i)
-                .map_err(|e| ToolError::Execution(format!("failed indexing candidate points: {e}")))?;
+            tree.add([xs[i], ys[i]], i).map_err(|e| {
+                ToolError::Execution(format!("failed indexing candidate points: {e}"))
+            })?;
         }
 
         let grid = if grid_acceleration {
@@ -10628,7 +11717,8 @@ impl Tool for IndividualTreeSegmentationTool {
             compute_modes()
         };
 
-        ctx.progress.info("merging nearby modes and assigning clusters");
+        ctx.progress
+            .info("merging nearby modes and assigning clusters");
         let merge_dist2 = mode_merge_dist * mode_merge_dist;
         let mut merged: Vec<[f64; 3]> = Vec::new();
         let mut assigned_segment_local: Vec<usize> = vec![0; eligible_indices.len()];
@@ -10732,23 +11822,32 @@ impl Tool for IndividualTreeSegmentationTool {
             points: out_points,
             crs: cloud.crs.clone(),
         };
-        let locator = store_or_write_lidar_output(&out_cloud, output_path.clone(), "individual_tree_segmentation")?;
+        let locator = store_or_write_lidar_output(
+            &out_cloud,
+            output_path.clone(),
+            "individual_tree_segmentation",
+        )?;
 
         let mut result = build_lidar_result(locator.clone());
         if output_sidecar_csv {
             let lidar_path = PathBuf::from(&locator);
             let csv_path = derive_sidecar_csv_path(&lidar_path);
             let mut writer = BufWriter::new(File::create(&csv_path).map_err(|e| {
-                ToolError::Execution(format!("failed creating sidecar csv '{}': {e}", csv_path.to_string_lossy()))
+                ToolError::Execution(format!(
+                    "failed creating sidecar csv '{}': {e}",
+                    csv_path.to_string_lossy()
+                ))
             })?);
-            writer
-                .write_all(b"point_index,segment_id\n")
-                .map_err(|e| ToolError::Execution(format!("failed writing sidecar csv header: {e}")))?;
+            writer.write_all(b"point_index,segment_id\n").map_err(|e| {
+                ToolError::Execution(format!("failed writing sidecar csv header: {e}"))
+            })?;
             for (local_idx, orig_idx) in eligible_indices.iter().enumerate() {
                 let sid = assigned_segment_local[local_idx];
                 writer
                     .write_all(format!("{},{}\n", orig_idx, sid).as_bytes())
-                    .map_err(|e| ToolError::Execution(format!("failed writing sidecar csv row: {e}")))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing sidecar csv row: {e}"))
+                    })?;
             }
             writer
                 .flush()
@@ -10785,26 +11884,34 @@ impl Tool for IndividualTreeDetectionTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
-        
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+
         let min_search_radius = parse_f64_alias(args, &["min_search_radius"], 1.0);
         if !min_search_radius.is_finite() || min_search_radius <= 0.0 {
-            return Err(ToolError::Validation("min_search_radius must be finite and positive".to_string()));
+            return Err(ToolError::Validation(
+                "min_search_radius must be finite and positive".to_string(),
+            ));
         }
-        
+
         let max_search_radius = parse_f64_alias(args, &["max_search_radius"], min_search_radius);
         if !max_search_radius.is_finite() || max_search_radius <= 0.0 {
-            return Err(ToolError::Validation("max_search_radius must be finite and positive".to_string()));
+            return Err(ToolError::Validation(
+                "max_search_radius must be finite and positive".to_string(),
+            ));
         }
         if max_search_radius < min_search_radius {
-            return Err(ToolError::Validation("max_search_radius must be >= min_search_radius".to_string()));
+            return Err(ToolError::Validation(
+                "max_search_radius must be >= min_search_radius".to_string(),
+            ));
         }
 
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let output_path = parse_optional_output_path(args, "output")?;
 
         let min_search_radius = parse_f64_alias(args, &["min_search_radius"], 1.0);
@@ -10823,13 +11930,16 @@ impl Tool for IndividualTreeDetectionTool {
         let n_points = cloud.points.len();
         let coalescer = PercentCoalescer::new(1, 99);
         if n_points == 0 {
-            return Err(ToolError::Execution("Input LiDAR has no points".to_string()));
+            return Err(ToolError::Execution(
+                "Input LiDAR has no points".to_string(),
+            ));
         }
 
         coalescer.emit_unit_fraction(ctx.progress, 0.2);
 
         // Filter eligible points and build KdTree
-        ctx.progress.info("Building spatial index and filtering points");
+        ctx.progress
+            .info("Building spatial index and filtering points");
         let mut eligible_pts: Vec<(usize, f64, f64, f64)> = Vec::new();
 
         for (i, point) in cloud.points.iter().enumerate() {
@@ -10850,21 +11960,38 @@ impl Tool for IndividualTreeDetectionTool {
 
         if eligible_pts.is_empty() {
             return Err(ToolError::Execution(
-                "No eligible points found. Try setting only_use_veg=false.".to_string()
+                "No eligible points found. Try setting only_use_veg=false.".to_string(),
             ));
         }
 
         coalescer.emit_unit_fraction(ctx.progress, 0.4);
 
+        // Build KD-tree from eligible points for O(log n) radius queries
+        ctx.progress.info("Building spatial index");
+        let mut kdtree: KdTree<f64, usize, [f64; 2]> = KdTree::new(2);
+        // Also build a point_idx → z lookup for O(1) height comparison
+        let mut z_by_idx: std::collections::HashMap<usize, f64> =
+            std::collections::HashMap::with_capacity(eligible_pts.len());
+        for &(idx, x, y, z) in &eligible_pts {
+            kdtree
+                .add([x, y], idx)
+                .map_err(|e| ToolError::Execution(format!("Failed to build spatial index: {e}")))?;
+            z_by_idx.insert(idx, z);
+        }
+        let kdtree = Arc::new(kdtree);
+        let z_by_idx = Arc::new(z_by_idx);
+
         // Create output layer
         ctx.progress.info("Identifying tree tops");
-        let mut layer = wbvector::Layer::new("treetops").with_geom_type(wbvector::GeometryType::Point);
+        let mut layer =
+            wbvector::Layer::new("treetops").with_geom_type(wbvector::GeometryType::Point);
         layer.crs = lidar_crs_to_vector_crs(cloud.crs.as_ref());
 
         layer.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
         layer.add_field(wbvector::FieldDef::new("Z", wbvector::FieldType::Float));
 
-        // Find tree tops using parallel brute force neighbor search.
+        // Find tree tops: for each eligible point query only neighbours within radius.
+        // O(n log n) total vs the previous O(n²) brute-force scan.
         let detect_progress = PercentCoalescer::new(40, 80);
         let eligible_pts = Arc::new(eligible_pts);
         let mut tree_tops: Vec<(usize, f64)> = eligible_pts
@@ -10878,16 +12005,19 @@ impl Tool for IndividualTreeDetectionTool {
                     min_search_radius
                 };
 
-                let mut is_highest = true;
-                for &(neighbor_idx, nx, ny, nz) in eligible_pts.iter() {
-                    if neighbor_idx != point_idx {
-                        let dist_sq = (nx - x).powi(2) + (ny - y).powi(2);
-                        if dist_sq <= radius.powi(2) && nz > z {
-                            is_highest = false;
-                            break;
-                        }
-                    }
-                }
+                let radius_sq = radius * radius;
+                let neighbours = kdtree
+                    .within(&[x, y], radius_sq, &squared_euclidean)
+                    .unwrap_or_default();
+
+                let is_highest = neighbours.iter().all(|&(_dist, &neighbor_idx)| {
+                    neighbor_idx == point_idx
+                        || z_by_idx
+                            .get(&neighbor_idx)
+                            .copied()
+                            .unwrap_or(f64::NEG_INFINITY)
+                            <= z
+                });
 
                 if is_highest {
                     Some((point_idx, z))
@@ -10919,9 +12049,9 @@ impl Tool for IndividualTreeDetectionTool {
 
         // Write output
         ctx.progress.info("Writing output shapefile");
-        let out = output_path
-            .map(PathBuf::from)
-            .unwrap_or_else(|| default_output_sibling_path(Path::new(&input_path), "treetops", "shp"));
+        let out = output_path.map(PathBuf::from).unwrap_or_else(|| {
+            default_output_sibling_path(Path::new(&input_path), "treetops", "shp")
+        });
         let out_path = write_vector_output(&layer, out.to_string_lossy().as_ref())?;
 
         ctx.progress.progress(1.0);
@@ -10949,31 +12079,43 @@ impl Tool for LidarSegmentationBasedFilterTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 5.0);
         if !search_radius.is_finite() || search_radius <= 0.0 {
-            return Err(ToolError::Validation("search_radius must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius must be a positive finite value".to_string(),
+            ));
         }
         let norm_diff_threshold = parse_f64_alias(args, &["norm_diff_threshold", "norm_diff"], 2.0);
         if !norm_diff_threshold.is_finite() {
-            return Err(ToolError::Validation("norm_diff_threshold must be a finite value".to_string()));
+            return Err(ToolError::Validation(
+                "norm_diff_threshold must be a finite value".to_string(),
+            ));
         }
         let max_z_diff = parse_f64_alias(args, &["max_z_diff", "maxzdiff"], 1.0);
         if !max_z_diff.is_finite() || max_z_diff < 0.0 {
-            return Err(ToolError::Validation("max_z_diff must be a finite non-negative value".to_string()));
+            return Err(ToolError::Validation(
+                "max_z_diff must be a finite non-negative value".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 5.0);
-        let _num_iterations = parse_f64_alias(args, &["num_iterations", "num_iter"], 50.0).max(1.0) as usize;
+        let _num_iterations =
+            parse_f64_alias(args, &["num_iterations", "num_iter"], 50.0).max(1.0) as usize;
         let _num_samples = parse_f64_alias(args, &["num_samples"], 10.0).max(5.0) as usize;
-        let _inlier_threshold = parse_f64_alias(args, &["inlier_threshold", "threshold"], 0.15).max(0.0);
-        let _acceptable_model_size = parse_f64_alias(args, &["acceptable_model_size", "model_size"], 30.0).max(5.0) as usize;
-        let _max_planar_slope = parse_f64_alias(args, &["max_planar_slope", "max_slope"], 75.0).clamp(0.0, 90.0);
+        let _inlier_threshold =
+            parse_f64_alias(args, &["inlier_threshold", "threshold"], 0.15).max(0.0);
+        let _acceptable_model_size =
+            parse_f64_alias(args, &["acceptable_model_size", "model_size"], 30.0).max(5.0) as usize;
+        let _max_planar_slope =
+            parse_f64_alias(args, &["max_planar_slope", "max_slope"], 75.0).clamp(0.0, 90.0);
         let norm_diff_threshold = parse_f64_alias(args, &["norm_diff_threshold", "norm_diff"], 2.0)
             .clamp(0.0, 90.0)
             .to_radians();
@@ -10985,7 +12127,11 @@ impl Tool for LidarSegmentationBasedFilterTool {
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
 
         if cloud.points.is_empty() {
-            let locator = store_or_write_lidar_output(&cloud, output_path, "lidar_segmentation_based_filter")?;
+            let locator = store_or_write_lidar_output(
+                &cloud,
+                output_path,
+                "lidar_segmentation_based_filter",
+            )?;
             return Ok(build_lidar_result(locator));
         }
 
@@ -11017,7 +12163,11 @@ impl Tool for LidarSegmentationBasedFilterTool {
                 points,
                 crs: cloud.crs.clone(),
             };
-            let locator = store_or_write_lidar_output(&out_cloud, output_path, "lidar_segmentation_based_filter")?;
+            let locator = store_or_write_lidar_output(
+                &out_cloud,
+                output_path,
+                "lidar_segmentation_based_filter",
+            )?;
             ctx.progress.progress(1.0);
             return Ok(build_lidar_result(locator));
         }
@@ -11059,9 +12209,9 @@ impl Tool for LidarSegmentationBasedFilterTool {
         let mut tree3d = KdTree::new(3);
         for idx in &active {
             let p = cloud.points[*idx];
-            tree3d
-                .add([p.x, p.y, residual[*idx]], *idx)
-                .map_err(|e| ToolError::Execution(format!("failed indexing lidar residual points: {e}")))?;
+            tree3d.add([p.x, p.y, residual[*idx]], *idx).map_err(|e| {
+                ToolError::Execution(format!("failed indexing lidar residual points: {e}"))
+            })?;
         }
 
         let mut normals: Vec<Option<Vector3<f64>>> = vec![None; cloud.points.len()];
@@ -11154,7 +12304,11 @@ impl Tool for LidarSegmentationBasedFilterTool {
             points,
             crs: cloud.crs.clone(),
         };
-        let locator = store_or_write_lidar_output(&out_cloud, output_path, "lidar_segmentation_based_filter")?;
+        let locator = store_or_write_lidar_output(
+            &out_cloud,
+            output_path,
+            "lidar_segmentation_based_filter",
+        )?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
     }
@@ -11177,21 +12331,26 @@ impl Tool for LidarColourizeTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
-        let _ = parse_required_raster_path_alias(args, &["image", "input_image", "in_image"], "image")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_raster_path_alias(args, &["image", "input_image", "in_image"], "image")?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
-        let image_path = parse_required_raster_path_alias(args, &["image", "input_image", "in_image"], "image")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let image_path =
+            parse_required_raster_path_alias(args, &["image", "input_image", "in_image"], "image")?;
         let output_path = parse_optional_output_path(args, "output")?;
 
         ctx.progress.info("reading input lidar and image raster");
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
-        let image = Raster::read(Path::new(&image_path))
-            .map_err(|e| ToolError::Execution(format!("failed reading input image '{}': {e}", image_path)))?;
+        let image = Raster::read(Path::new(&image_path)).map_err(|e| {
+            ToolError::Execution(format!("failed reading input image '{}': {e}", image_path))
+        })?;
 
         let mut points = cloud.points.clone();
         for p in &mut points {
@@ -11242,13 +12401,21 @@ impl Tool for ColourizeBasedOnClassTool {
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = parse_lidar_path_arg_optional(args)?;
-        let blend = parse_f64_alias(args, &["intensity_blending_amount", "intensity_blending"], 50.0);
+        let blend = parse_f64_alias(
+            args,
+            &["intensity_blending_amount", "intensity_blending"],
+            50.0,
+        );
         if !blend.is_finite() || !(0.0..=100.0).contains(&blend) {
-            return Err(ToolError::Validation("intensity_blending_amount must be in [0, 100]".to_string()));
+            return Err(ToolError::Validation(
+                "intensity_blending_amount must be in [0, 100]".to_string(),
+            ));
         }
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 2.0);
         if !search_radius.is_finite() || search_radius <= 0.0 {
-            return Err(ToolError::Validation("search_radius must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
@@ -11256,9 +12423,21 @@ impl Tool for ColourizeBasedOnClassTool {
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?;
-        let blend = parse_f64_alias(args, &["intensity_blending_amount", "intensity_blending"], 50.0) / 100.0;
-        let clr_str = args.get("clr_str").and_then(Value::as_str).unwrap_or("").to_string();
-        let unique_buildings = parse_bool_alias(args, &["use_unique_clrs_for_buildings", "unique_building_colours"], false);
+        let blend = parse_f64_alias(
+            args,
+            &["intensity_blending_amount", "intensity_blending"],
+            50.0,
+        ) / 100.0;
+        let clr_str = args
+            .get("clr_str")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let unique_buildings = parse_bool_alias(
+            args,
+            &["use_unique_clrs_for_buildings", "unique_building_colours"],
+            false,
+        );
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 2.0);
         let output_path = parse_optional_output_path(args, "output")?;
 
@@ -11273,12 +12452,17 @@ impl Tool for ColourizeBasedOnClassTool {
                         continue;
                     }
                     let Some((cls_txt, colour_txt)) = pair.split_once(':') else {
-                        return Err(ToolError::Validation(format!("invalid clr_str token '{}': expected class:colour", pair)));
+                        return Err(ToolError::Validation(format!(
+                            "invalid clr_str token '{}': expected class:colour",
+                            pair
+                        )));
                     };
-                    let cls = cls_txt
-                        .trim()
-                        .parse::<usize>()
-                        .map_err(|_| ToolError::Validation(format!("invalid class '{}' in clr_str", cls_txt.trim())))?;
+                    let cls = cls_txt.trim().parse::<usize>().map_err(|_| {
+                        ToolError::Validation(format!(
+                            "invalid class '{}' in clr_str",
+                            cls_txt.trim()
+                        ))
+                    })?;
                     if cls >= palette.len() {
                         continue;
                     }
@@ -11294,7 +12478,9 @@ impl Tool for ColourizeBasedOnClassTool {
                 for (i, p) in cloud.points.iter().enumerate() {
                     if p.classification == 6 {
                         tree.add([p.x, p.y], i).map_err(|e| {
-                            ToolError::Execution(format!("failed indexing building points for colour clustering: {e}"))
+                            ToolError::Execution(format!(
+                                "failed indexing building points for colour clustering: {e}"
+                            ))
                         })?;
                         building_indices.push(i);
                     }
@@ -11310,7 +12496,9 @@ impl Tool for ColourizeBasedOnClassTool {
                     let mut stack = vec![seed];
                     while let Some(idx) = stack.pop() {
                         let p = cloud.points[idx];
-                        let neighbours = tree.within(&[p.x, p.y], radius_sq, &squared_euclidean).unwrap_or_default();
+                        let neighbours = tree
+                            .within(&[p.x, p.y], radius_sq, &squared_euclidean)
+                            .unwrap_or_default();
                         for (_, nref) in neighbours {
                             let nidx = *nref;
                             if building_cluster_id[nidx] == 0 {
@@ -11352,7 +12540,8 @@ impl Tool for ColourizeBasedOnClassTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -11389,9 +12578,15 @@ impl Tool for ColourizeBasedOnPointReturnsTool {
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = parse_lidar_path_arg_optional(args)?;
-        let blend = parse_f64_alias(args, &["intensity_blending_amount", "intensity_blending"], 50.0);
+        let blend = parse_f64_alias(
+            args,
+            &["intensity_blending_amount", "intensity_blending"],
+            50.0,
+        );
         if !blend.is_finite() || !(0.0..=100.0).contains(&blend) {
-            return Err(ToolError::Validation("intensity_blending_amount must be in [0, 100]".to_string()));
+            return Err(ToolError::Validation(
+                "intensity_blending_amount must be in [0, 100]".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
@@ -11399,7 +12594,11 @@ impl Tool for ColourizeBasedOnPointReturnsTool {
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?;
-        let blend = parse_f64_alias(args, &["intensity_blending_amount", "intensity_blending"], 50.0) / 100.0;
+        let blend = parse_f64_alias(
+            args,
+            &["intensity_blending_amount", "intensity_blending"],
+            50.0,
+        ) / 100.0;
         let only_colour = parse_rgb_spec(
             args.get("only_ret_colour")
                 .and_then(Value::as_str)
@@ -11454,7 +12653,8 @@ impl Tool for ColourizeBasedOnPointReturnsTool {
             ctx.progress.progress(1.0);
             Ok(build_lidar_result(locator))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -11486,18 +12686,29 @@ impl Tool for ClassifyBuildingsInLidarTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
-        let _ = parse_required_vector_path_alias(args, &["buildings", "building_footprints", "polygons"], "buildings")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ = parse_required_vector_path_alias(
+            args,
+            &["buildings", "building_footprints", "polygons"],
+            "buildings",
+        )?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
-        let buildings_path = parse_required_vector_path_alias(args, &["buildings", "building_footprints", "polygons"], "buildings")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let buildings_path = parse_required_vector_path_alias(
+            args,
+            &["buildings", "building_footprints", "polygons"],
+            "buildings",
+        )?;
         let output_path = parse_optional_output_path(args, "output")?;
 
-        ctx.progress.info("reading input lidar and building polygons");
+        ctx.progress
+            .info("reading input lidar and building polygons");
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
         let polys = read_prepared_polygons(&buildings_path)?;
 
@@ -11517,7 +12728,8 @@ impl Tool for ClassifyBuildingsInLidarTool {
             points,
             crs: cloud.crs.clone(),
         };
-        let locator = store_or_write_lidar_output(&out_cloud, output_path, "classify_buildings_in_lidar")?;
+        let locator =
+            store_or_write_lidar_output(&out_cloud, output_path, "classify_buildings_in_lidar")?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
     }
@@ -11549,14 +12761,16 @@ impl Tool for AsciiToLasTool {
         let _ = parse_ascii_pattern(pattern)?;
         let epsg = parse_f64_alias(args, &["epsg_code", "epsg"], 4326.0).round() as i64;
         if !(1..=998_999).contains(&epsg) {
-            return Err(ToolError::Validation("epsg_code must be in [1, 998999]".to_string()));
+            return Err(ToolError::Validation(
+                "epsg_code must be in [1, 998999]".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output_directory")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let input_paths = parse_ascii_inputs_arg(args)?;
         let pattern = args
             .get("pattern")
@@ -11566,8 +12780,12 @@ impl Tool for AsciiToLasTool {
         let epsg = parse_f64_alias(args, &["epsg_code", "epsg"], 4326.0).round() as u32;
         let output_dir = parse_optional_output_path(args, "output_directory")?;
         if let Some(ref dir) = output_dir {
-            fs::create_dir_all(dir)
-                .map_err(|e| ToolError::Execution(format!("failed creating output directory '{}': {e}", dir.to_string_lossy())))?;
+            fs::create_dir_all(dir).map_err(|e| {
+                ToolError::Execution(format!(
+                    "failed creating output directory '{}': {e}",
+                    dir.to_string_lossy()
+                ))
+            })?;
         }
 
         let mut outputs = Vec::with_capacity(input_paths.len());
@@ -11622,13 +12840,16 @@ impl Tool for AsciiToLasTool {
                     p.intensity = parse_field::<u16>(&fields, i_idx, "i", line_num, input_path)?;
                 }
                 if let Some(c_idx) = pattern.c_idx {
-                    p.classification = parse_field::<u8>(&fields, c_idx, "c", line_num, input_path)?;
+                    p.classification =
+                        parse_field::<u8>(&fields, c_idx, "c", line_num, input_path)?;
                 }
                 if let Some(rn_idx) = pattern.rn_idx {
-                    p.return_number = parse_field::<u8>(&fields, rn_idx, "rn", line_num, input_path)?;
+                    p.return_number =
+                        parse_field::<u8>(&fields, rn_idx, "rn", line_num, input_path)?;
                 }
                 if let Some(nr_idx) = pattern.nr_idx {
-                    p.number_of_returns = parse_field::<u8>(&fields, nr_idx, "nr", line_num, input_path)?;
+                    p.number_of_returns =
+                        parse_field::<u8>(&fields, nr_idx, "nr", line_num, input_path)?;
                 }
                 if let Some(time_idx) = pattern.time_idx {
                     let t = parse_field::<f64>(&fields, time_idx, "time", line_num, input_path)?;
@@ -11637,7 +12858,9 @@ impl Tool for AsciiToLasTool {
                 if let Some(sa_idx) = pattern.sa_idx {
                     p.scan_angle = parse_field::<i16>(&fields, sa_idx, "sa", line_num, input_path)?;
                 }
-                if let (Some(r_idx), Some(g_idx), Some(b_idx)) = (pattern.r_idx, pattern.g_idx, pattern.b_idx) {
+                if let (Some(r_idx), Some(g_idx), Some(b_idx)) =
+                    (pattern.r_idx, pattern.g_idx, pattern.b_idx)
+                {
                     p.color = Some(Rgb16 {
                         red: parse_field::<u16>(&fields, r_idx, "r", line_num, input_path)?,
                         green: parse_field::<u16>(&fields, g_idx, "g", line_num, input_path)?,
@@ -11666,7 +12889,10 @@ impl Tool for AsciiToLasTool {
                 ))
             })?;
             outputs.push(out_path.to_string_lossy().to_string());
-            coalescer.emit_unit_fraction(ctx.progress, (file_idx + 1) as f64 / input_paths.len() as f64);
+            coalescer.emit_unit_fraction(
+                ctx.progress,
+                (file_idx + 1) as f64 / input_paths.len() as f64,
+            );
         }
 
         if outputs.len() == 1 {
@@ -11720,7 +12946,8 @@ impl Tool for LasToAsciiTool {
             ctx.progress.progress(1.0);
             Ok(build_string_output_result("output", out))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -11765,10 +12992,14 @@ impl Tool for SelectTilesByPolygonTool {
             .and_then(Value::as_str)
             .ok_or_else(|| ToolError::Validation("output_directory is required".to_string()))?;
         if in_dir.trim().is_empty() {
-            return Err(ToolError::Validation("input_directory must not be empty".to_string()));
+            return Err(ToolError::Validation(
+                "input_directory must not be empty".to_string(),
+            ));
         }
         if out_dir.trim().is_empty() {
-            return Err(ToolError::Validation("output_directory must not be empty".to_string()));
+            return Err(ToolError::Validation(
+                "output_directory must not be empty".to_string(),
+            ));
         }
         let in_path = Path::new(in_dir);
         if !in_path.is_dir() {
@@ -11806,7 +13037,9 @@ impl Tool for SelectTilesByPolygonTool {
                 input_directory.to_string_lossy()
             ))
         })? {
-            let entry = entry.map_err(|e| ToolError::Execution(format!("failed reading directory entry: {e}")))?;
+            let entry = entry.map_err(|e| {
+                ToolError::Execution(format!("failed reading directory entry: {e}"))
+            })?;
             let path = entry.path();
             if path.is_file() && is_valid_lidar_extension(&path) {
                 tile_paths.push(path);
@@ -11891,7 +13124,8 @@ impl Tool for LidarInfoTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         if let Some(path) = parse_optional_output_path(args, "output")? {
             ensure_html_or_txt(&path)?;
         }
@@ -11902,7 +13136,8 @@ impl Tool for LidarInfoTool {
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let output_path = parse_optional_output_path(args, "output")?;
         let show_density = parse_bool_alias(args, &["show_point_density"], true);
         let show_vlrs = parse_bool_alias(args, &["show_vlrs"], true);
@@ -11911,80 +13146,93 @@ impl Tool for LidarInfoTool {
         ctx.progress.info("reading lidar and building info report");
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
         let n = cloud.points.len();
-        let (min_x, max_x, min_y, max_y, min_z, max_z, min_i, max_i, class_counts_hm, ret_counts) = cloud
-            .points
-            .par_iter()
-            .fold(
-                || {
-                    (
-                        f64::INFINITY,
-                        f64::NEG_INFINITY,
-                        f64::INFINITY,
-                        f64::NEG_INFINITY,
-                        f64::INFINITY,
-                        f64::NEG_INFINITY,
-                        u16::MAX,
-                        u16::MIN,
-                        HashMap::<u8, usize>::new(),
-                        [0usize; 5],
-                    )
-                },
-                |(min_x, max_x, min_y, max_y, min_z, max_z, min_i, max_i, mut class_counts, mut ret_counts), p| {
-                    let r = p.return_number.max(1).min(5) as usize;
-                    ret_counts[r - 1] += 1;
-                    *class_counts.entry(p.classification).or_insert(0) += 1;
-                    (
-                        min_x.min(p.x),
-                        max_x.max(p.x),
-                        min_y.min(p.y),
-                        max_y.max(p.y),
-                        min_z.min(p.z),
-                        max_z.max(p.z),
-                        min_i.min(p.intensity),
-                        max_i.max(p.intensity),
-                        class_counts,
-                        ret_counts,
-                    )
-                },
-            )
-            .reduce(
-                || {
-                    (
-                        f64::INFINITY,
-                        f64::NEG_INFINITY,
-                        f64::INFINITY,
-                        f64::NEG_INFINITY,
-                        f64::INFINITY,
-                        f64::NEG_INFINITY,
-                        u16::MAX,
-                        u16::MIN,
-                        HashMap::<u8, usize>::new(),
-                        [0usize; 5],
-                    )
-                },
-                |a, b| {
-                    let mut class_counts = a.8;
-                    for (k, v) in b.8 {
-                        *class_counts.entry(k).or_insert(0) += v;
-                    }
-                    let mut ret_counts = a.9;
-                    for i in 0..5 {
-                        ret_counts[i] += b.9[i];
-                    }
-                    (
-                        a.0.min(b.0),
-                        a.1.max(b.1),
-                        a.2.min(b.2),
-                        a.3.max(b.3),
-                        a.4.min(b.4),
-                        a.5.max(b.5),
-                        a.6.min(b.6),
-                        a.7.max(b.7),
-                        class_counts,
-                        ret_counts,
-                    )
-                },
-            );
+        let (min_x, max_x, min_y, max_y, min_z, max_z, min_i, max_i, class_counts_hm, ret_counts) =
+            cloud
+                .points
+                .par_iter()
+                .fold(
+                    || {
+                        (
+                            f64::INFINITY,
+                            f64::NEG_INFINITY,
+                            f64::INFINITY,
+                            f64::NEG_INFINITY,
+                            f64::INFINITY,
+                            f64::NEG_INFINITY,
+                            u16::MAX,
+                            u16::MIN,
+                            HashMap::<u8, usize>::new(),
+                            [0usize; 5],
+                        )
+                    },
+                    |(
+                        min_x,
+                        max_x,
+                        min_y,
+                        max_y,
+                        min_z,
+                        max_z,
+                        min_i,
+                        max_i,
+                        mut class_counts,
+                        mut ret_counts,
+                    ),
+                     p| {
+                        let r = p.return_number.max(1).min(5) as usize;
+                        ret_counts[r - 1] += 1;
+                        *class_counts.entry(p.classification).or_insert(0) += 1;
+                        (
+                            min_x.min(p.x),
+                            max_x.max(p.x),
+                            min_y.min(p.y),
+                            max_y.max(p.y),
+                            min_z.min(p.z),
+                            max_z.max(p.z),
+                            min_i.min(p.intensity),
+                            max_i.max(p.intensity),
+                            class_counts,
+                            ret_counts,
+                        )
+                    },
+                )
+                .reduce(
+                    || {
+                        (
+                            f64::INFINITY,
+                            f64::NEG_INFINITY,
+                            f64::INFINITY,
+                            f64::NEG_INFINITY,
+                            f64::INFINITY,
+                            f64::NEG_INFINITY,
+                            u16::MAX,
+                            u16::MIN,
+                            HashMap::<u8, usize>::new(),
+                            [0usize; 5],
+                        )
+                    },
+                    |a, b| {
+                        let mut class_counts = a.8;
+                        for (k, v) in b.8 {
+                            *class_counts.entry(k).or_insert(0) += v;
+                        }
+                        let mut ret_counts = a.9;
+                        for i in 0..5 {
+                            ret_counts[i] += b.9[i];
+                        }
+                        (
+                            a.0.min(b.0),
+                            a.1.max(b.1),
+                            a.2.min(b.2),
+                            a.3.max(b.3),
+                            a.4.min(b.4),
+                            a.5.max(b.5),
+                            a.6.min(b.6),
+                            a.7.max(b.7),
+                            class_counts,
+                            ret_counts,
+                        )
+                    },
+                );
         let mut class_counts: BTreeMap<u8, usize> = BTreeMap::new();
         for (cls, c) in class_counts_hm {
             class_counts.insert(cls, c);
@@ -12017,16 +13265,23 @@ impl Tool for LidarInfoTool {
 
         if show_vlrs || show_geokeys {
             if lidar_memory_store::lidar_is_memory_path(&input_path) {
-                report.push_str("\nmetadata detail (vlrs/geokeys): unavailable for memory:// lidar inputs\n");
+                report.push_str(
+                    "\nmetadata detail (vlrs/geokeys): unavailable for memory:// lidar inputs\n",
+                );
             } else {
                 match File::open(&input_path)
-                    .map_err(|e| ToolError::Execution(format!("failed opening lidar file for metadata parsing: {e}")))
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed opening lidar file for metadata parsing: {e}"
+                        ))
+                    })
                     .and_then(|file| {
                         LasReader::new(file).map_err(|e| {
-                            ToolError::Execution(format!("failed parsing LAS header/VLR metadata: {e}"))
+                            ToolError::Execution(format!(
+                                "failed parsing LAS header/VLR metadata: {e}"
+                            ))
                         })
-                    })
-                {
+                    }) {
                     Ok(reader) => {
                         let vlrs = reader.vlrs();
                         if show_vlrs {
@@ -12055,14 +13310,20 @@ impl Tool for LidarInfoTool {
                                         && v.key.record_id == GEOKEY_DIRECTORY_RECORD_ID
                                 })
                                 .count();
-                            report.push_str(&format!("  geokey_directory_vlrs: {}\n", geokey_vlr_count));
+                            report.push_str(&format!(
+                                "  geokey_directory_vlrs: {}\n",
+                                geokey_vlr_count
+                            ));
                             if let Some(epsg) = find_epsg(vlrs) {
                                 report.push_str(&format!("  epsg: {}\n", epsg));
                             } else {
                                 report.push_str("  epsg: not found\n");
                             }
                             if let Some(wkt) = find_ogc_wkt(vlrs) {
-                                report.push_str(&format!("  wkt_present: true\n  wkt_chars: {}\n", wkt.len()));
+                                report.push_str(&format!(
+                                    "  wkt_present: true\n  wkt_chars: {}\n",
+                                    wkt.len()
+                                ));
                             } else {
                                 report.push_str("  wkt_present: false\n");
                             }
@@ -12078,11 +13339,13 @@ impl Tool for LidarInfoTool {
             }
         }
 
-        let out = output_path.unwrap_or_else(|| default_output_sibling_path(Path::new(&input_path), "info", "txt"));
+        let out = output_path
+            .unwrap_or_else(|| default_output_sibling_path(Path::new(&input_path), "info", "txt"));
         if let Some(parent) = out.parent() {
             if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+                fs::create_dir_all(parent).map_err(|e| {
+                    ToolError::Execution(format!("failed creating output directory: {e}"))
+                })?;
             }
         }
         let ext = out
@@ -12093,13 +13356,26 @@ impl Tool for LidarInfoTool {
         if ext == "html" || ext == "htm" {
             let mut html = String::new();
             html.push_str("<!doctype html><html><head><meta charset=\"utf-8\"><title>LiDAR Info</title></head><body><pre>");
-            html.push_str(&report.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;"));
+            html.push_str(
+                &report
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;"),
+            );
             html.push_str("</pre></body></html>");
-            fs::write(&out, html)
-                .map_err(|e| ToolError::Execution(format!("failed writing report '{}': {e}", out.to_string_lossy())))?;
+            fs::write(&out, html).map_err(|e| {
+                ToolError::Execution(format!(
+                    "failed writing report '{}': {e}",
+                    out.to_string_lossy()
+                ))
+            })?;
         } else {
-            fs::write(&out, report)
-                .map_err(|e| ToolError::Execution(format!("failed writing report '{}': {e}", out.to_string_lossy())))?;
+            fs::write(&out, report).map_err(|e| {
+                ToolError::Execution(format!(
+                    "failed writing report '{}': {e}",
+                    out.to_string_lossy()
+                ))
+            })?;
         }
 
         ctx.progress.progress(1.0);
@@ -12128,19 +13404,23 @@ impl Tool for LidarHistogramTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         if let Some(path) = parse_optional_output_path(args, "output")? {
             ensure_html_or_txt(&path)?;
         }
         let clip = parse_f64_alias(args, &["clip_percent", "clip"], 1.0);
         if !clip.is_finite() || !(0.0..=50.0).contains(&clip) {
-            return Err(ToolError::Validation("clip_percent must be in [0, 50]".to_string()));
+            return Err(ToolError::Validation(
+                "clip_percent must be in [0, 50]".to_string(),
+            ));
         }
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let output_path = parse_optional_output_path(args, "output")?;
         let parameter = parse_histogram_parameter(
             args.get("parameter")
@@ -12149,10 +13429,13 @@ impl Tool for LidarHistogramTool {
         );
         let clip_percent = parse_f64_alias(args, &["clip_percent", "clip"], 1.0);
 
-        ctx.progress.info("reading lidar and computing histogram bins");
+        ctx.progress
+            .info("reading lidar and computing histogram bins");
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
         if cloud.points.is_empty() {
-            return Err(ToolError::Execution("input LiDAR has no points".to_string()));
+            return Err(ToolError::Execution(
+                "input LiDAR has no points".to_string(),
+            ));
         }
 
         let mut values: Vec<f64> = cloud
@@ -12172,7 +13455,11 @@ impl Tool for LidarHistogramTool {
         let lo = quantile(&values, clip);
         let hi = quantile(&values, 1.0 - clip).max(lo + 1.0e-12);
 
-        let bins = if parameter == "class" { 256usize } else { (values.len() as f64).log2().ceil() as usize + 1 };
+        let bins = if parameter == "class" {
+            256usize
+        } else {
+            (values.len() as f64).log2().ceil() as usize + 1
+        };
         let bins = bins.max(8).min(512);
         let width = (hi - lo) / bins as f64;
         let mut freq = vec![0usize; bins];
@@ -12207,15 +13494,22 @@ impl Tool for LidarHistogramTool {
         }
         html.push_str("</table></body></html>");
 
-        let out = output_path.unwrap_or_else(|| default_output_sibling_path(Path::new(&input_path), "histogram", "html"));
+        let out = output_path.unwrap_or_else(|| {
+            default_output_sibling_path(Path::new(&input_path), "histogram", "html")
+        });
         if let Some(parent) = out.parent() {
             if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+                fs::create_dir_all(parent).map_err(|e| {
+                    ToolError::Execution(format!("failed creating output directory: {e}"))
+                })?;
             }
         }
-        fs::write(&out, html)
-            .map_err(|e| ToolError::Execution(format!("failed writing histogram '{}': {e}", out.to_string_lossy())))?;
+        fs::write(&out, html).map_err(|e| {
+            ToolError::Execution(format!(
+                "failed writing histogram '{}': {e}",
+                out.to_string_lossy()
+            ))
+        })?;
 
         ctx.progress.progress(1.0);
         Ok(build_string_output_result(
@@ -12251,7 +13545,9 @@ impl Tool for LidarPointStatsTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let res = parse_f64_alias(args, &["resolution", "cell_size"], 1.0);
         if !res.is_finite() || res <= 0.0 {
-            return Err(ToolError::Validation("resolution must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "resolution must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output_directory")?;
         Ok(())
@@ -12268,7 +13564,13 @@ impl Tool for LidarPointStatsTool {
         let mut pred_class_flag = parse_bool_alias(args, &["predominant_class"], false);
         let output_dir = parse_optional_output_path(args, "output_directory")?;
 
-        if !(num_points_flag || num_pulses_flag || avg_pp_flag || z_range_flag || i_range_flag || pred_class_flag) {
+        if !(num_points_flag
+            || num_pulses_flag
+            || avg_pp_flag
+            || z_range_flag
+            || i_range_flag
+            || pred_class_flag)
+        {
             num_points_flag = true;
             num_pulses_flag = true;
             avg_pp_flag = true;
@@ -12277,16 +13579,34 @@ impl Tool for LidarPointStatsTool {
             pred_class_flag = true;
         }
 
-        let run_single = |in_path: &Path, out_dir_override: Option<&Path>| -> Result<Vec<String>, ToolError> {
+        let run_single = |in_path: &Path,
+                          out_dir_override: Option<&Path>|
+         -> Result<Vec<String>, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             if cloud.points.is_empty() {
                 return Ok(Vec::new());
             }
 
-            let min_x = cloud.points.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-            let max_x = cloud.points.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
-            let min_y = cloud.points.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
-            let max_y = cloud.points.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
+            let min_x = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::INFINITY, f64::min);
+            let max_x = cloud
+                .points
+                .iter()
+                .map(|p| p.x)
+                .fold(f64::NEG_INFINITY, f64::max);
+            let min_y = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::INFINITY, f64::min);
+            let max_y = cloud
+                .points
+                .iter()
+                .map(|p| p.y)
+                .fold(f64::NEG_INFINITY, f64::max);
 
             let cols = (((max_x - min_x) / resolution).ceil() as usize).max(1);
             let rows = (((max_y - min_y) / resolution).ceil() as usize).max(1);
@@ -12323,7 +13643,13 @@ impl Tool for LidarPointStatsTool {
                     if row < 0 || col < 0 || row >= rows as isize || col >= cols as isize {
                         None
                     } else {
-                        Some((idx(row as usize, col as usize), p.return_number, p.classification, p.z, p.intensity))
+                        Some((
+                            idx(row as usize, col as usize),
+                            p.return_number,
+                            p.classification,
+                            p.z,
+                            p.intensity,
+                        ))
                     }
                 })
                 .collect();
@@ -12344,8 +13670,12 @@ impl Tool for LidarPointStatsTool {
                 .map(Path::to_path_buf)
                 .or_else(|| in_path.parent().map(Path::to_path_buf))
                 .unwrap_or_else(|| PathBuf::from("."));
-            fs::create_dir_all(&out_dir)
-                .map_err(|e| ToolError::Execution(format!("failed creating output directory '{}': {e}", out_dir.to_string_lossy())))?;
+            fs::create_dir_all(&out_dir).map_err(|e| {
+                ToolError::Execution(format!(
+                    "failed creating output directory '{}': {e}",
+                    out_dir.to_string_lossy()
+                ))
+            })?;
             let stem = in_path
                 .file_stem()
                 .and_then(|s| s.to_str())
@@ -12354,24 +13684,30 @@ impl Tool for LidarPointStatsTool {
 
             let mut outputs = Vec::new();
 
-            let mut write_stat = |suffix: &str, compute: &dyn Fn(usize) -> Option<f64>| -> Result<(), ToolError> {
-                let mut raster = Raster::new(cfg.clone());
-                for row in 0..rows {
-                    for col in 0..cols {
-                        let i = idx(row, col);
-                        let v = compute(i).unwrap_or(cfg.nodata);
-                        raster
-                            .set(0, row as isize, col as isize, v)
-                            .map_err(|e| ToolError::Execution(format!("failed writing raster cell: {e}")))?;
+            let mut write_stat =
+                |suffix: &str, compute: &dyn Fn(usize) -> Option<f64>| -> Result<(), ToolError> {
+                    let mut raster = Raster::new(cfg.clone());
+                    for row in 0..rows {
+                        for col in 0..cols {
+                            let i = idx(row, col);
+                            let v = compute(i).unwrap_or(cfg.nodata);
+                            raster.set(0, row as isize, col as isize, v).map_err(|e| {
+                                ToolError::Execution(format!("failed writing raster cell: {e}"))
+                            })?;
+                        }
                     }
-                }
-                let out_path = out_dir.join(format!("{stem}_{suffix}.tif"));
-                raster.write(&out_path, RasterFormat::GeoTiff).map_err(|e| {
-                    ToolError::Execution(format!("failed writing raster '{}': {e}", out_path.to_string_lossy()))
-                })?;
-                outputs.push(out_path.to_string_lossy().to_string());
-                Ok(())
-            };
+                    let out_path = out_dir.join(format!("{stem}_{suffix}.tif"));
+                    raster
+                        .write(&out_path, RasterFormat::GeoTiff)
+                        .map_err(|e| {
+                            ToolError::Execution(format!(
+                                "failed writing raster '{}': {e}",
+                                out_path.to_string_lossy()
+                            ))
+                        })?;
+                    outputs.push(out_path.to_string_lossy().to_string());
+                    Ok(())
+                };
 
             if num_points_flag {
                 write_stat("num_pnts", &|i| Some(count[i] as f64))?;
@@ -12423,20 +13759,28 @@ impl Tool for LidarPointStatsTool {
             ctx.progress.info("computing lidar point stats rasters");
             let outputs = run_single(Path::new(&input_path), output_dir_ref)?;
             if outputs.is_empty() {
-                return Err(ToolError::Execution("no point-stats rasters were generated".to_string()));
+                return Err(ToolError::Execution(
+                    "no point-stats rasters were generated".to_string(),
+                ));
             }
             let mut sorted = outputs;
             sorted.sort();
             ctx.progress.progress(1.0);
-            Ok(build_string_output_result("output_directory", output_dir_ref
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| Path::new(&input_path)
-                    .parent()
-                    .unwrap_or_else(|| Path::new("."))
-                    .to_string_lossy()
-                    .to_string())))
+            Ok(build_string_output_result(
+                "output_directory",
+                output_dir_ref
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| {
+                        Path::new(&input_path)
+                            .parent()
+                            .unwrap_or_else(|| Path::new("."))
+                            .to_string_lossy()
+                            .to_string()
+                    }),
+            ))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let all_outputs = files
                 .into_par_iter()
@@ -12444,14 +13788,21 @@ impl Tool for LidarPointStatsTool {
                 .collect::<Result<Vec<_>, _>>()?;
             let generated: usize = all_outputs.iter().map(Vec::len).sum();
             if generated == 0 {
-                return Err(ToolError::Execution("batch mode produced no point-stats rasters".to_string()));
+                return Err(ToolError::Execution(
+                    "batch mode produced no point-stats rasters".to_string(),
+                ));
             }
             ctx.progress.progress(1.0);
             Ok(build_string_output_result(
                 "output_directory",
                 output_dir_ref
                     .map(|p| p.to_string_lossy().to_string())
-                    .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).to_string_lossy().to_string()),
+                    .unwrap_or_else(|| {
+                        std::env::current_dir()
+                            .unwrap_or_else(|_| PathBuf::from("."))
+                            .to_string_lossy()
+                            .to_string()
+                    }),
             ))
         }
     }
@@ -12488,7 +13839,9 @@ impl Tool for LidarContourTool {
         }
         let interval = parse_f64_alias(args, &["interval", "contour_interval"], 10.0);
         if !interval.is_finite() || interval <= 0.0 {
-            return Err(ToolError::Validation("interval must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "interval must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_f64_alias(args, &["base_contour"], 0.0);
         let smooth = parse_f64_alias(args, &["smooth"], 5.0) as i64;
@@ -12522,7 +13875,11 @@ impl Tool for LidarContourTool {
         let min_z = parse_f64_alias(args, &["min_elev", "minz"], f64::NEG_INFINITY);
         let max_z = parse_f64_alias(args, &["max_elev", "maxz"], f64::INFINITY);
         let max_edge = parse_f64_alias(args, &["max_triangle_edge_length"], f64::INFINITY);
-        let max_edge_sq = if max_edge.is_finite() { max_edge * max_edge } else { f64::INFINITY };
+        let max_edge_sq = if max_edge.is_finite() {
+            max_edge * max_edge
+        } else {
+            f64::INFINITY
+        };
 
         let run_single = |in_path: &Path, out_path: Option<&Path>| -> Result<String, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
@@ -12551,10 +13908,14 @@ impl Tool for LidarContourTool {
                 ));
             }
 
-            let mut layer = wbvector::Layer::new("lidar_contours").with_geom_type(wbvector::GeometryType::LineString);
+            let mut layer = wbvector::Layer::new("lidar_contours")
+                .with_geom_type(wbvector::GeometryType::LineString);
             layer.crs = lidar_crs_to_vector_crs(cloud.crs.as_ref());
             layer.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
-            layer.add_field(wbvector::FieldDef::new("HEIGHT", wbvector::FieldType::Float));
+            layer.add_field(wbvector::FieldDef::new(
+                "HEIGHT",
+                wbvector::FieldType::Float,
+            ));
 
             let mut fid = 1i64;
             for tri in &triangulation.triangles {
@@ -12602,7 +13963,9 @@ impl Tool for LidarContourTool {
                                 ("HEIGHT", wbvector::FieldValue::Float(level)),
                             ],
                         )
-                        .map_err(|e| ToolError::Execution(format!("failed creating contour feature: {}", e)))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!("failed creating contour feature: {}", e))
+                        })?;
                     fid += 1;
                 }
             }
@@ -12620,12 +13983,14 @@ impl Tool for LidarContourTool {
         };
 
         if let Some(input_path) = input_path {
-            ctx.progress.info("building contour vectors from lidar input");
+            ctx.progress
+                .info("building contour vectors from lidar input");
             let out = run_single(Path::new(&input_path), output_path.as_deref())?;
             ctx.progress.progress(1.0);
             Ok(build_vector_result(out))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -12674,10 +14039,14 @@ impl Tool for LidarTileFootprintTool {
         };
         files.sort();
 
-        let mut layer = wbvector::Layer::new("lidar_tile_footprints").with_geom_type(wbvector::GeometryType::Polygon);
+        let mut layer = wbvector::Layer::new("lidar_tile_footprints")
+            .with_geom_type(wbvector::GeometryType::Polygon);
         layer.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
         layer.add_field(wbvector::FieldDef::new("LAS_NM", wbvector::FieldType::Text));
-        layer.add_field(wbvector::FieldDef::new("NUM_PNTS", wbvector::FieldType::Integer));
+        layer.add_field(wbvector::FieldDef::new(
+            "NUM_PNTS",
+            wbvector::FieldType::Integer,
+        ));
         layer.add_field(wbvector::FieldDef::new("Z_MIN", wbvector::FieldType::Float));
         layer.add_field(wbvector::FieldDef::new("Z_MAX", wbvector::FieldType::Float));
 
@@ -12743,7 +14112,11 @@ impl Tool for LidarTileFootprintTool {
                 let xy: Vec<(f64, f64)> = cloud.points.iter().map(|p| (p.x, p.y)).collect();
                 let hull = monotonic_chain_convex_hull(&xy);
                 if hull.len() >= 3 {
-                    close_ring(hull.into_iter().map(|(x, y)| wbvector::Coord::xy(x, y)).collect())
+                    close_ring(
+                        hull.into_iter()
+                            .map(|(x, y)| wbvector::Coord::xy(x, y))
+                            .collect(),
+                    )
                 } else {
                     vec![
                         wbvector::Coord::xy(min_x, max_y),
@@ -12775,12 +14148,17 @@ impl Tool for LidarTileFootprintTool {
                     &[
                         ("FID", wbvector::FieldValue::Integer(fid)),
                         ("LAS_NM", wbvector::FieldValue::Text(name)),
-                        ("NUM_PNTS", wbvector::FieldValue::Integer(cloud.points.len() as i64)),
+                        (
+                            "NUM_PNTS",
+                            wbvector::FieldValue::Integer(cloud.points.len() as i64),
+                        ),
                         ("Z_MIN", wbvector::FieldValue::Float(min_z)),
                         ("Z_MAX", wbvector::FieldValue::Float(max_z)),
                     ],
                 )
-                .map_err(|e| ToolError::Execution(format!("failed creating footprint feature: {}", e)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed creating footprint feature: {}", e))
+                })?;
             fid += 1;
         }
 
@@ -12808,7 +14186,7 @@ impl Tool for LidarTileFootprintTool {
 }
 
 impl Tool for LidarConstructVectorTinTool {
-            fn metadata(&self) -> ToolMetadata {
+    fn metadata(&self) -> ToolMetadata {
         ToolMetadata {
             id: "lidar_construct_vector_tin",
             display_name: "LiDAR Construct Vector TIN",
@@ -12825,131 +14203,137 @@ impl Tool for LidarConstructVectorTinTool {
                         ToolParamSpec { name: "max_triangle_edge_length", description: "Optional maximum allowed triangle edge length.", required: false, ..Default::default() },
                     ],
                 }
-            }
+    }
 
-            fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-                let _ = parse_lidar_path_arg_optional(args)?;
-                if let Some(path) = parse_optional_output_path(args, "output")? {
-                    let _ = detect_vector_output_format(path.to_string_lossy().as_ref())?;
-                }
-                let _ = parse_excluded_classes(args)?;
-                let max_edge = parse_f64_alias(args, &["max_triangle_edge_length"], f64::INFINITY);
-                if !max_edge.is_finite() && !max_edge.is_infinite() {
-                    return Err(ToolError::Validation(
-                        "max_triangle_edge_length must be finite or infinity".to_string(),
-                    ));
-                }
-                Ok(())
-            }
-
-            fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-                let input_path = parse_lidar_path_arg_optional(args)?;
-                let output_path = parse_optional_output_path(args, "output")?;
-                let returns_mode = parse_returns_mode(args);
-                let include_classes = parse_excluded_classes(args)?;
-                let min_z = parse_f64_alias(args, &["min_elev", "minz"], f64::NEG_INFINITY);
-                let max_z = parse_f64_alias(args, &["max_elev", "maxz"], f64::INFINITY);
-                let max_edge = parse_f64_alias(args, &["max_triangle_edge_length"], f64::INFINITY);
-                let max_edge_sq = if max_edge.is_infinite() {
-                    f64::INFINITY
-                } else {
-                    max_edge * max_edge
-                };
-
-                let run_single = |in_path: &Path, out_path: Option<&Path>| -> Result<String, ToolError> {
-                    let cloud = load_lidar_cloud(in_path, "input")?;
-                    let samples = collect_lidar_samples(
-                        &cloud.points,
-                        "elevation",
-                        returns_mode,
-                        &include_classes,
-                        min_z,
-                        max_z,
-                    )?;
-                    if samples.len() < 3 {
-                        return Err(ToolError::Validation(
-                            "input lidar must contain at least three points after filtering".to_string(),
-                        ));
-                    }
-
-                    let topo_points: Vec<TopoCoord> = samples
-                        .iter()
-                        .map(|(x, y, _)| TopoCoord::xy(*x, *y))
-                        .collect();
-                    let triangulation = delaunay_triangulation(&topo_points, 1.0e-12);
-                    if triangulation.triangles.is_empty() {
-                        return Err(ToolError::Execution(
-                            "failed to build triangulation from input lidar points".to_string(),
-                        ));
-                    }
-
-                    let mut layer = wbvector::Layer::new("lidar_tin").with_geom_type(wbvector::GeometryType::Polygon);
-                    layer.crs = lidar_crs_to_vector_crs(cloud.crs.as_ref());
-                    layer.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
-                    layer.add_field(wbvector::FieldDef::new("AVG_Z", wbvector::FieldType::Float));
-
-                    let mut fid = 1i64;
-                    for tri in &triangulation.triangles {
-                        let a = samples[tri[0]];
-                        let b = samples[tri[1]];
-                        let c = samples[tri[2]];
-                        if max_triangle_edge_length_2d_sq((a.0, a.1), (b.0, b.1), (c.0, c.1)) > max_edge_sq {
-                            continue;
-                        }
-                        let ring = vec![
-                            wbvector::Coord::xy(a.0, a.1),
-                            wbvector::Coord::xy(b.0, b.1),
-                            wbvector::Coord::xy(c.0, c.1),
-                            wbvector::Coord::xy(a.0, a.1),
-                        ];
-                        layer
-                            .add_feature(
-                                Some(wbvector::Geometry::polygon(ring, vec![])),
-                                &[
-                                    ("FID", wbvector::FieldValue::Integer(fid)),
-                                    (
-                                        "AVG_Z",
-                                        wbvector::FieldValue::Float((a.2 + b.2 + c.2) / 3.0),
-                                    ),
-                                ],
-                            )
-                            .map_err(|e| ToolError::Execution(format!("failed creating TIN feature: {}", e)))?;
-                        fid += 1;
-                    }
-
-                    if layer.features.is_empty() {
-                        return Err(ToolError::Execution(
-                            "no TIN triangles were generated from input lidar".to_string(),
-                        ));
-                    }
-
-                    let out = out_path
-                        .map(Path::to_path_buf)
-                        .unwrap_or_else(|| default_output_sibling_path(in_path, "tin", "shp"));
-                    write_vector_output(&layer, out.to_string_lossy().as_ref())
-                };
-
-                if let Some(input_path) = input_path {
-                    ctx.progress.info("constructing vector TIN from lidar input");
-                    let out = run_single(Path::new(&input_path), output_path.as_deref())?;
-                    ctx.progress.progress(1.0);
-                    Ok(build_vector_result(out))
-                } else {
-                    ctx.progress.info("batch mode: scanning working directory for lidar files");
-                    let files = find_lidar_files()?;
-                    let outputs = files
-                        .into_par_iter()
-                        .map(|p| run_single(&p, None))
-                        .collect::<Result<Vec<_>, _>>()?;
-                    ctx.progress.progress(1.0);
-                    build_batch_placeholder_vector_result(outputs)
-                }
-            }
+    fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
+        let _ = parse_lidar_path_arg_optional(args)?;
+        if let Some(path) = parse_optional_output_path(args, "output")? {
+            let _ = detect_vector_output_format(path.to_string_lossy().as_ref())?;
         }
+        let _ = parse_excluded_classes(args)?;
+        let max_edge = parse_f64_alias(args, &["max_triangle_edge_length"], f64::INFINITY);
+        if !max_edge.is_finite() && !max_edge.is_infinite() {
+            return Err(ToolError::Validation(
+                "max_triangle_edge_length must be finite or infinity".to_string(),
+            ));
+        }
+        Ok(())
+    }
 
-    impl Tool for LidarHexBinTool {
-            fn metadata(&self) -> ToolMetadata {
-                ToolMetadata {
+    fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+        let input_path = parse_lidar_path_arg_optional(args)?;
+        let output_path = parse_optional_output_path(args, "output")?;
+        let returns_mode = parse_returns_mode(args);
+        let include_classes = parse_excluded_classes(args)?;
+        let min_z = parse_f64_alias(args, &["min_elev", "minz"], f64::NEG_INFINITY);
+        let max_z = parse_f64_alias(args, &["max_elev", "maxz"], f64::INFINITY);
+        let max_edge = parse_f64_alias(args, &["max_triangle_edge_length"], f64::INFINITY);
+        let max_edge_sq = if max_edge.is_infinite() {
+            f64::INFINITY
+        } else {
+            max_edge * max_edge
+        };
+
+        let run_single = |in_path: &Path, out_path: Option<&Path>| -> Result<String, ToolError> {
+            let cloud = load_lidar_cloud(in_path, "input")?;
+            let samples = collect_lidar_samples(
+                &cloud.points,
+                "elevation",
+                returns_mode,
+                &include_classes,
+                min_z,
+                max_z,
+            )?;
+            if samples.len() < 3 {
+                return Err(ToolError::Validation(
+                    "input lidar must contain at least three points after filtering".to_string(),
+                ));
+            }
+
+            let topo_points: Vec<TopoCoord> = samples
+                .iter()
+                .map(|(x, y, _)| TopoCoord::xy(*x, *y))
+                .collect();
+            let triangulation = delaunay_triangulation(&topo_points, 1.0e-12);
+            if triangulation.triangles.is_empty() {
+                return Err(ToolError::Execution(
+                    "failed to build triangulation from input lidar points".to_string(),
+                ));
+            }
+
+            let mut layer =
+                wbvector::Layer::new("lidar_tin").with_geom_type(wbvector::GeometryType::Polygon);
+            layer.crs = lidar_crs_to_vector_crs(cloud.crs.as_ref());
+            layer.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
+            layer.add_field(wbvector::FieldDef::new("AVG_Z", wbvector::FieldType::Float));
+
+            let mut fid = 1i64;
+            for tri in &triangulation.triangles {
+                let a = samples[tri[0]];
+                let b = samples[tri[1]];
+                let c = samples[tri[2]];
+                if max_triangle_edge_length_2d_sq((a.0, a.1), (b.0, b.1), (c.0, c.1)) > max_edge_sq
+                {
+                    continue;
+                }
+                let ring = vec![
+                    wbvector::Coord::xy(a.0, a.1),
+                    wbvector::Coord::xy(b.0, b.1),
+                    wbvector::Coord::xy(c.0, c.1),
+                    wbvector::Coord::xy(a.0, a.1),
+                ];
+                layer
+                    .add_feature(
+                        Some(wbvector::Geometry::polygon(ring, vec![])),
+                        &[
+                            ("FID", wbvector::FieldValue::Integer(fid)),
+                            (
+                                "AVG_Z",
+                                wbvector::FieldValue::Float((a.2 + b.2 + c.2) / 3.0),
+                            ),
+                        ],
+                    )
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed creating TIN feature: {}", e))
+                    })?;
+                fid += 1;
+            }
+
+            if layer.features.is_empty() {
+                return Err(ToolError::Execution(
+                    "no TIN triangles were generated from input lidar".to_string(),
+                ));
+            }
+
+            let out = out_path
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| default_output_sibling_path(in_path, "tin", "shp"));
+            write_vector_output(&layer, out.to_string_lossy().as_ref())
+        };
+
+        if let Some(input_path) = input_path {
+            ctx.progress
+                .info("constructing vector TIN from lidar input");
+            let out = run_single(Path::new(&input_path), output_path.as_deref())?;
+            ctx.progress.progress(1.0);
+            Ok(build_vector_result(out))
+        } else {
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
+            let files = find_lidar_files()?;
+            let outputs = files
+                .into_par_iter()
+                .map(|p| run_single(&p, None))
+                .collect::<Result<Vec<_>, _>>()?;
+            ctx.progress.progress(1.0);
+            build_batch_placeholder_vector_result(outputs)
+        }
+    }
+}
+
+impl Tool for LidarHexBinTool {
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata {
                     id: "lidar_hex_bin",
                     display_name: "LiDAR Hex Bin",
                     summary: "Aggregates points to hexagons: binning grid with per-cell summaries (count, mean-z, intensity). Uniform sampling and statistical binning.",
@@ -12962,167 +14346,225 @@ impl Tool for LidarConstructVectorTinTool {
                         ToolParamSpec { name: "output", description: "Optional output vector path.", required: false, ..Default::default() },
                     ],
                 }
+    }
+
+    fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let width = parse_f64_alias(args, &["width"], f64::NAN);
+        if !width.is_finite() || width <= 0.0 {
+            return Err(ToolError::Validation(
+                "width must be a positive finite value".to_string(),
+            ));
+        }
+        if let Some(path) = parse_optional_output_path(args, "output")? {
+            let _ = detect_vector_output_format(path.to_string_lossy().as_ref())?;
+        }
+        Ok(())
+    }
+
+    fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let output_path = parse_optional_output_path(args, "output")?;
+        let width = parse_f64_alias(args, &["width"], 0.0);
+        let orientation = args
+            .get("orientation")
+            .and_then(Value::as_str)
+            .unwrap_or("h")
+            .trim()
+            .to_ascii_lowercase();
+        let is_vertical = orientation.starts_with('v');
+
+        ctx.progress
+            .info("building hexagonal bins from lidar points");
+        let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
+        if cloud.points.is_empty() {
+            return Err(ToolError::Execution(
+                "input lidar has no points".to_string(),
+            ));
+        }
+
+        let min_x = cloud
+            .points
+            .iter()
+            .map(|p| p.x)
+            .fold(f64::INFINITY, f64::min);
+        let max_x = cloud
+            .points
+            .iter()
+            .map(|p| p.x)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let min_y = cloud
+            .points
+            .iter()
+            .map(|p| p.y)
+            .fold(f64::INFINITY, f64::min);
+        let max_y = cloud
+            .points
+            .iter()
+            .map(|p| p.y)
+            .fold(f64::NEG_INFINITY, f64::max);
+
+        let sixty = std::f64::consts::PI / 6.0;
+        let half_width = 0.5 * width;
+        let size = half_width / sixty.cos();
+        let height = size * 2.0;
+        let step_a = width;
+        let step_b = 0.75 * height;
+
+        let mut centers: Vec<(f64, f64)> = Vec::new();
+        if !is_vertical {
+            let center_x_0 = min_x + half_width;
+            let center_y_0 = max_y - 0.25 * height;
+            let rows = (((max_y - min_y) / step_b).ceil() as usize).max(1);
+            for row in 0..rows {
+                let cy = center_y_0 - row as f64 * step_b;
+                let cols = (((max_x - min_x + half_width * ((row % 2) as f64)) / step_a).ceil()
+                    as usize)
+                    .max(1);
+                for col in 0..cols {
+                    let cx = (center_x_0 - half_width * ((row % 2) as f64)) + col as f64 * step_a;
+                    centers.push((cx, cy));
+                }
             }
-
-            fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-                let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
-                let width = parse_f64_alias(args, &["width"], f64::NAN);
-                if !width.is_finite() || width <= 0.0 {
-                    return Err(ToolError::Validation("width must be a positive finite value".to_string()));
+        } else {
+            let center_x_0 = min_x + 0.5 * size;
+            let center_y_0 = max_y - half_width;
+            let cols = (((max_x - min_x) / step_b).ceil() as usize).max(1);
+            for col in 0..cols {
+                let rows = (((max_y - min_y + ((col % 2) as f64) * half_width) / step_a).ceil()
+                    as usize)
+                    .max(1);
+                for row in 0..rows {
+                    let cx = center_x_0 + col as f64 * step_b;
+                    let cy = center_y_0 - row as f64 * step_a + ((col % 2) as f64) * half_width;
+                    centers.push((cx, cy));
                 }
-                if let Some(path) = parse_optional_output_path(args, "output")? {
-                    let _ = detect_vector_output_format(path.to_string_lossy().as_ref())?;
-                }
-                Ok(())
-            }
-
-            fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-                let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
-                let output_path = parse_optional_output_path(args, "output")?;
-                let width = parse_f64_alias(args, &["width"], 0.0);
-                let orientation = args
-                    .get("orientation")
-                    .and_then(Value::as_str)
-                    .unwrap_or("h")
-                    .trim()
-                    .to_ascii_lowercase();
-                let is_vertical = orientation.starts_with('v');
-
-                ctx.progress.info("building hexagonal bins from lidar points");
-                let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
-                if cloud.points.is_empty() {
-                    return Err(ToolError::Execution("input lidar has no points".to_string()));
-                }
-
-                let min_x = cloud.points.iter().map(|p| p.x).fold(f64::INFINITY, f64::min);
-                let max_x = cloud.points.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max);
-                let min_y = cloud.points.iter().map(|p| p.y).fold(f64::INFINITY, f64::min);
-                let max_y = cloud.points.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
-
-                let sixty = std::f64::consts::PI / 6.0;
-                let half_width = 0.5 * width;
-                let size = half_width / sixty.cos();
-                let height = size * 2.0;
-                let step_a = width;
-                let step_b = 0.75 * height;
-
-                let mut centers: Vec<(f64, f64)> = Vec::new();
-                if !is_vertical {
-                    let center_x_0 = min_x + half_width;
-                    let center_y_0 = max_y - 0.25 * height;
-                    let rows = (((max_y - min_y) / step_b).ceil() as usize).max(1);
-                    for row in 0..rows {
-                        let cy = center_y_0 - row as f64 * step_b;
-                        let cols = (((max_x - min_x + half_width * ((row % 2) as f64)) / step_a).ceil() as usize).max(1);
-                        for col in 0..cols {
-                            let cx = (center_x_0 - half_width * ((row % 2) as f64)) + col as f64 * step_a;
-                            centers.push((cx, cy));
-                        }
-                    }
-                } else {
-                    let center_x_0 = min_x + 0.5 * size;
-                    let center_y_0 = max_y - half_width;
-                    let cols = (((max_x - min_x) / step_b).ceil() as usize).max(1);
-                    for col in 0..cols {
-                        let rows = (((max_y - min_y + ((col % 2) as f64) * half_width) / step_a).ceil() as usize).max(1);
-                        for row in 0..rows {
-                            let cx = center_x_0 + col as f64 * step_b;
-                            let cy = center_y_0 - row as f64 * step_a + ((col % 2) as f64) * half_width;
-                            centers.push((cx, cy));
-                        }
-                    }
-                }
-
-                if centers.is_empty() {
-                    return Err(ToolError::Execution("failed generating hexagonal grid centers".to_string()));
-                }
-
-                let mut tree = KdTree::new(2);
-                for (i, c) in centers.iter().enumerate() {
-                    tree.add([c.0, c.1], i)
-                        .map_err(|e| ToolError::Execution(format!("failed building hex index: {e}")))?;
-                }
-
-                let mut count = vec![0usize; centers.len()];
-                let mut min_z = vec![f64::INFINITY; centers.len()];
-                let mut max_z = vec![f64::NEG_INFINITY; centers.len()];
-                let mut min_i = vec![u16::MAX; centers.len()];
-                let mut max_i = vec![u16::MIN; centers.len()];
-
-                let tree = Arc::new(tree);
-                let assignments: Vec<Option<(usize, f64, u16)>> = cloud
-                    .points
-                    .par_iter()
-                    .map(|p| -> Result<Option<(usize, f64, u16)>, ToolError> {
-                        let nearest = tree
-                            .nearest(&[p.x, p.y], 1, &squared_euclidean)
-                            .map_err(|e| ToolError::Execution(format!("failed searching hex index: {e}")))?;
-                        Ok(nearest.into_iter().next().map(|(_, idx_ref)| (*idx_ref, p.z, p.intensity)))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                for item in assignments.into_iter().flatten() {
-                    let (idx, z, intensity) = item;
-                    count[idx] += 1;
-                    min_z[idx] = min_z[idx].min(z);
-                    max_z[idx] = max_z[idx].max(z);
-                    min_i[idx] = min_i[idx].min(intensity);
-                    max_i[idx] = max_i[idx].max(intensity);
-                }
-
-                let mut layer = wbvector::Layer::new("lidar_hex_bin").with_geom_type(wbvector::GeometryType::Polygon);
-                layer.crs = lidar_crs_to_vector_crs(cloud.crs.as_ref());
-                layer.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
-                layer.add_field(wbvector::FieldDef::new("COUNT", wbvector::FieldType::Integer));
-                layer.add_field(wbvector::FieldDef::new("MIN_Z", wbvector::FieldType::Float));
-                layer.add_field(wbvector::FieldDef::new("MAX_Z", wbvector::FieldType::Float));
-                layer.add_field(wbvector::FieldDef::new("MIN_I", wbvector::FieldType::Integer));
-                layer.add_field(wbvector::FieldDef::new("MAX_I", wbvector::FieldType::Integer));
-
-                let mut fid = 1i64;
-                for (idx, (cx, cy)) in centers.iter().enumerate() {
-                    if count[idx] == 0 {
-                        continue;
-                    }
-                    let mut ring: Vec<wbvector::Coord> = Vec::with_capacity(7);
-                    for i in (0..=6).rev() {
-                        let theta = if !is_vertical {
-                            2.0 * sixty * (i as f64 + 0.5)
-                        } else {
-                            2.0 * sixty * (i as f64 + 0.5) - sixty
-                        };
-                        ring.push(wbvector::Coord::xy(cx + size * theta.cos(), cy + size * theta.sin()));
-                    }
-                    layer
-                        .add_feature(
-                            Some(wbvector::Geometry::polygon(ring, vec![])),
-                            &[
-                                ("FID", wbvector::FieldValue::Integer(fid)),
-                                ("COUNT", wbvector::FieldValue::Integer(count[idx] as i64)),
-                                ("MIN_Z", wbvector::FieldValue::Float(min_z[idx])),
-                                ("MAX_Z", wbvector::FieldValue::Float(max_z[idx])),
-                                ("MIN_I", wbvector::FieldValue::Integer(i64::from(min_i[idx]))),
-                                ("MAX_I", wbvector::FieldValue::Integer(i64::from(max_i[idx]))),
-                            ],
-                        )
-                        .map_err(|e| ToolError::Execution(format!("failed creating hex-bin feature: {}", e)))?;
-                    fid += 1;
-                }
-
-                if layer.features.is_empty() {
-                    return Err(ToolError::Execution("hex binning produced no populated cells".to_string()));
-                }
-
-                let out = output_path
-                    .unwrap_or_else(|| default_output_sibling_path(Path::new(&input_path), "hex_bin", "shp"));
-                let out_path = write_vector_output(&layer, out.to_string_lossy().as_ref())?;
-                ctx.progress.progress(1.0);
-                Ok(build_vector_result(out_path))
             }
         }
 
-    impl Tool for LidarPointReturnAnalysisTool {
-            fn metadata(&self) -> ToolMetadata {
-                ToolMetadata {
+        if centers.is_empty() {
+            return Err(ToolError::Execution(
+                "failed generating hexagonal grid centers".to_string(),
+            ));
+        }
+
+        let mut tree = KdTree::new(2);
+        for (i, c) in centers.iter().enumerate() {
+            tree.add([c.0, c.1], i)
+                .map_err(|e| ToolError::Execution(format!("failed building hex index: {e}")))?;
+        }
+
+        let mut count = vec![0usize; centers.len()];
+        let mut min_z = vec![f64::INFINITY; centers.len()];
+        let mut max_z = vec![f64::NEG_INFINITY; centers.len()];
+        let mut min_i = vec![u16::MAX; centers.len()];
+        let mut max_i = vec![u16::MIN; centers.len()];
+
+        let tree = Arc::new(tree);
+        let assignments: Vec<Option<(usize, f64, u16)>> = cloud
+            .points
+            .par_iter()
+            .map(|p| -> Result<Option<(usize, f64, u16)>, ToolError> {
+                let nearest = tree
+                    .nearest(&[p.x, p.y], 1, &squared_euclidean)
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed searching hex index: {e}"))
+                    })?;
+                Ok(nearest
+                    .into_iter()
+                    .next()
+                    .map(|(_, idx_ref)| (*idx_ref, p.z, p.intensity)))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        for item in assignments.into_iter().flatten() {
+            let (idx, z, intensity) = item;
+            count[idx] += 1;
+            min_z[idx] = min_z[idx].min(z);
+            max_z[idx] = max_z[idx].max(z);
+            min_i[idx] = min_i[idx].min(intensity);
+            max_i[idx] = max_i[idx].max(intensity);
+        }
+
+        let mut layer =
+            wbvector::Layer::new("lidar_hex_bin").with_geom_type(wbvector::GeometryType::Polygon);
+        layer.crs = lidar_crs_to_vector_crs(cloud.crs.as_ref());
+        layer.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
+        layer.add_field(wbvector::FieldDef::new(
+            "COUNT",
+            wbvector::FieldType::Integer,
+        ));
+        layer.add_field(wbvector::FieldDef::new("MIN_Z", wbvector::FieldType::Float));
+        layer.add_field(wbvector::FieldDef::new("MAX_Z", wbvector::FieldType::Float));
+        layer.add_field(wbvector::FieldDef::new(
+            "MIN_I",
+            wbvector::FieldType::Integer,
+        ));
+        layer.add_field(wbvector::FieldDef::new(
+            "MAX_I",
+            wbvector::FieldType::Integer,
+        ));
+
+        let mut fid = 1i64;
+        for (idx, (cx, cy)) in centers.iter().enumerate() {
+            if count[idx] == 0 {
+                continue;
+            }
+            let mut ring: Vec<wbvector::Coord> = Vec::with_capacity(7);
+            for i in (0..=6).rev() {
+                let theta = if !is_vertical {
+                    2.0 * sixty * (i as f64 + 0.5)
+                } else {
+                    2.0 * sixty * (i as f64 + 0.5) - sixty
+                };
+                ring.push(wbvector::Coord::xy(
+                    cx + size * theta.cos(),
+                    cy + size * theta.sin(),
+                ));
+            }
+            layer
+                .add_feature(
+                    Some(wbvector::Geometry::polygon(ring, vec![])),
+                    &[
+                        ("FID", wbvector::FieldValue::Integer(fid)),
+                        ("COUNT", wbvector::FieldValue::Integer(count[idx] as i64)),
+                        ("MIN_Z", wbvector::FieldValue::Float(min_z[idx])),
+                        ("MAX_Z", wbvector::FieldValue::Float(max_z[idx])),
+                        (
+                            "MIN_I",
+                            wbvector::FieldValue::Integer(i64::from(min_i[idx])),
+                        ),
+                        (
+                            "MAX_I",
+                            wbvector::FieldValue::Integer(i64::from(max_i[idx])),
+                        ),
+                    ],
+                )
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed creating hex-bin feature: {}", e))
+                })?;
+            fid += 1;
+        }
+
+        if layer.features.is_empty() {
+            return Err(ToolError::Execution(
+                "hex binning produced no populated cells".to_string(),
+            ));
+        }
+
+        let out = output_path.unwrap_or_else(|| {
+            default_output_sibling_path(Path::new(&input_path), "hex_bin", "shp")
+        });
+        let out_path = write_vector_output(&layer, out.to_string_lossy().as_ref())?;
+        ctx.progress.progress(1.0);
+        Ok(build_vector_result(out_path))
+    }
+}
+
+impl Tool for LidarPointReturnAnalysisTool {
+    fn metadata(&self) -> ToolMetadata {
+        ToolMetadata {
                     id: "lidar_point_return_analysis",
                     display_name: "LiDAR Point Return Analysis",
                     summary: "QA tool: audits return sequence validity (multi/first/last consistency). Generates report + classified output marking return anomalies. Data integrity check.",
@@ -13135,181 +14577,207 @@ impl Tool for LidarConstructVectorTinTool {
                         ToolParamSpec { name: "report", description: "Optional text report output path.", required: false, ..Default::default() },
                     ],
                 }
+    }
+
+    fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ = parse_bool_alias(args, &["create_output"], false);
+        let _ = parse_optional_output_path(args, "output")?;
+        let _ = parse_optional_output_path(args, "report")?;
+        Ok(())
+    }
+
+    fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let create_output = parse_bool_alias(args, &["create_output"], false);
+        let output_path = parse_optional_output_path(args, "output")?;
+        let report_path = parse_optional_output_path(args, "report")?;
+
+        ctx.progress.info("analyzing lidar return sequence quality");
+        let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
+        if cloud.points.is_empty() {
+            return Err(ToolError::Execution(
+                "input lidar has no points".to_string(),
+            ));
+        }
+
+        let mut grouped: HashMap<(u64, u8, u8), Vec<(usize, u8)>> = HashMap::new();
+        let entries: Vec<(usize, bool, (u64, u8, u8), u8)> = cloud
+            .points
+            .par_iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let greater = p.return_number > p.number_of_returns;
+                let time_bits = p
+                    .gps_time
+                    .map(|t| t.0.to_bits())
+                    .unwrap_or((i as f64).to_bits());
+                let channel = (p.flags & 0b0000_0011) as u8;
+                (
+                    i,
+                    greater,
+                    (time_bits, channel, p.number_of_returns),
+                    p.return_number,
+                )
+            })
+            .collect();
+        let mut r_greater_n = 0usize;
+        for (i, greater, key, ret_no) in entries {
+            if greater {
+                r_greater_n += 1;
+            }
+            grouped.entry(key).or_default().push((i, ret_no));
+        }
+
+        let mut missing_points = 0usize;
+        let mut duplicate_points = 0usize;
+        let mut missing_by_rn: BTreeMap<(u8, u8), usize> = BTreeMap::new();
+        let mut duplicate_by_rn: BTreeMap<(u8, u8), usize> = BTreeMap::new();
+        let mut is_missing = vec![false; cloud.points.len()];
+        let mut is_duplicate = vec![false; cloud.points.len()];
+
+        for ((_, _, nret), members) in grouped {
+            if nret == 0 {
+                continue;
+            }
+            let mut present = vec![0usize; nret as usize + 1];
+            for (_, r) in &members {
+                if *r > 0 && (*r as usize) <= nret as usize {
+                    present[*r as usize] += 1;
+                }
             }
 
-            fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-                let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
-                let _ = parse_bool_alias(args, &["create_output"], false);
-                let _ = parse_optional_output_path(args, "output")?;
-                let _ = parse_optional_output_path(args, "report")?;
-                Ok(())
+            let mut group_missing = false;
+            for r in 1..=nret {
+                if present[r as usize] == 0 {
+                    missing_points += 1;
+                    *missing_by_rn.entry((r, nret)).or_insert(0) += 1;
+                    group_missing = true;
+                }
+            }
+            if group_missing {
+                for (idx, _) in &members {
+                    is_missing[*idx] = true;
+                }
             }
 
-            fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-                let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
-                let create_output = parse_bool_alias(args, &["create_output"], false);
-                let output_path = parse_optional_output_path(args, "output")?;
-                let report_path = parse_optional_output_path(args, "report")?;
-
-                ctx.progress.info("analyzing lidar return sequence quality");
-                let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
-                if cloud.points.is_empty() {
-                    return Err(ToolError::Execution("input lidar has no points".to_string()));
-                }
-
-                let mut grouped: HashMap<(u64, u8, u8), Vec<(usize, u8)>> = HashMap::new();
-                let entries: Vec<(usize, bool, (u64, u8, u8), u8)> = cloud
-                    .points
-                    .par_iter()
-                    .enumerate()
-                    .map(|(i, p)| {
-                        let greater = p.return_number > p.number_of_returns;
-                        let time_bits = p.gps_time.map(|t| t.0.to_bits()).unwrap_or((i as f64).to_bits());
-                        let channel = (p.flags & 0b0000_0011) as u8;
-                        (i, greater, (time_bits, channel, p.number_of_returns), p.return_number)
-                    })
-                    .collect();
-                let mut r_greater_n = 0usize;
-                for (i, greater, key, ret_no) in entries {
-                    if greater {
-                        r_greater_n += 1;
-                    }
-                    grouped.entry(key).or_default().push((i, ret_no));
-                }
-
-                let mut missing_points = 0usize;
-                let mut duplicate_points = 0usize;
-                let mut missing_by_rn: BTreeMap<(u8, u8), usize> = BTreeMap::new();
-                let mut duplicate_by_rn: BTreeMap<(u8, u8), usize> = BTreeMap::new();
-                let mut is_missing = vec![false; cloud.points.len()];
-                let mut is_duplicate = vec![false; cloud.points.len()];
-
-                for ((_, _, nret), members) in grouped {
-                    if nret == 0 {
-                        continue;
-                    }
-                    let mut present = vec![0usize; nret as usize + 1];
-                    for (_, r) in &members {
-                        if *r > 0 && (*r as usize) <= nret as usize {
-                            present[*r as usize] += 1;
-                        }
-                    }
-
-                    let mut group_missing = false;
-                    for r in 1..=nret {
-                        if present[r as usize] == 0 {
-                            missing_points += 1;
-                            *missing_by_rn.entry((r, nret)).or_insert(0) += 1;
-                            group_missing = true;
-                        }
-                    }
-                    if group_missing {
-                        for (idx, _) in &members {
-                            is_missing[*idx] = true;
-                        }
-                    }
-
-                    for r in 1..=nret {
-                        let c = present[r as usize];
-                        if c > 1 {
-                            duplicate_points += c - 1;
-                            *duplicate_by_rn.entry((r, nret)).or_insert(0) += c - 1;
-                            for (idx, rr) in &members {
-                                if *rr == r {
-                                    is_duplicate[*idx] = true;
-                                }
-                            }
+            for r in 1..=nret {
+                let c = present[r as usize];
+                if c > 1 {
+                    duplicate_points += c - 1;
+                    *duplicate_by_rn.entry((r, nret)).or_insert(0) += c - 1;
+                    for (idx, rr) in &members {
+                        if *rr == r {
+                            is_duplicate[*idx] = true;
                         }
                     }
                 }
-
-                let total = cloud.points.len().max(1);
-                let mut report = String::new();
-                report.push_str("LiDAR Point Return Analysis\n\n");
-                report.push_str(&format!("input: {}\n", input_path));
-                report.push_str(&format!(
-                    "Missing Returns: {} ({:.3} percent)\n",
-                    missing_points,
-                    100.0 * missing_points as f64 / total as f64
-                ));
-                if !missing_by_rn.is_empty() {
-                    report.push_str("\n| r | n | Missing Pts |\n|---|---|-------------|\n");
-                    for ((r, n), c) in &missing_by_rn {
-                        report.push_str(&format!("| {} | {} | {} |\n", r, n, c));
-                    }
-                }
-                report.push_str(&format!(
-                    "\nDuplicate Returns: {} ({:.3} percent)\n",
-                    duplicate_points,
-                    100.0 * duplicate_points as f64 / total as f64
-                ));
-                if !duplicate_by_rn.is_empty() {
-                    report.push_str("\n| r | n | Duplicates |\n|---|---|------------|\n");
-                    for ((r, n), c) in &duplicate_by_rn {
-                        report.push_str(&format!("| {} | {} | {} |\n", r, n, c));
-                    }
-                }
-                report.push_str(&format!(
-                    "\nReturn Greater Than Num. Returns: {} ({:.3} percent)\n",
-                    r_greater_n,
-                    100.0 * r_greater_n as f64 / total as f64
-                ));
-
-                let report_out = report_path
-                    .unwrap_or_else(|| default_output_sibling_path(Path::new(&input_path), "point_return_report", "txt"));
-                if let Some(parent) = report_out.parent() {
-                    if !parent.as_os_str().is_empty() {
-                        fs::create_dir_all(parent)
-                            .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
-                    }
-                }
-                fs::write(&report_out, report)
-                    .map_err(|e| ToolError::Execution(format!("failed writing report '{}': {e}", report_out.to_string_lossy())))?;
-
-                let mut outputs = BTreeMap::new();
-                outputs.insert(
-                    "report_path".to_string(),
-                    json!(report_out.to_string_lossy().to_string()),
-                );
-
-                if create_output {
-                    let out_points: Vec<PointRecord> = cloud
-                        .points
-                        .par_iter()
-                        .enumerate()
-                        .map(|(i, p)| {
-                            let mut q = *p;
-                            q.classification = match (is_missing[i], is_duplicate[i]) {
-                                (true, true) => 15,
-                                (true, false) => 13,
-                                (false, true) => 14,
-                                (false, false) => 1,
-                            };
-                            q
-                        })
-                        .collect();
-                    let out_cloud = PointCloud {
-                        points: out_points,
-                        crs: cloud.crs.clone(),
-                    };
-                    let out = output_path
-                        .unwrap_or_else(|| default_output_sibling_path(Path::new(&input_path), "return_qc", "las"));
-                    if let Some(parent) = out.parent() {
-                        if !parent.as_os_str().is_empty() {
-                            fs::create_dir_all(parent)
-                                .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
-                        }
-                    }
-                    out_cloud.write(&out).map_err(|e| {
-                        ToolError::Execution(format!("failed writing output lidar '{}': {e}", out.to_string_lossy()))
-                    })?;
-                    outputs.insert("output".to_string(), json!(out.to_string_lossy().to_string()));
-                }
-
-                ctx.progress.progress(1.0);
-                Ok(ToolRunResult { outputs })
             }
         }
+
+        let total = cloud.points.len().max(1);
+        let mut report = String::new();
+        report.push_str("LiDAR Point Return Analysis\n\n");
+        report.push_str(&format!("input: {}\n", input_path));
+        report.push_str(&format!(
+            "Missing Returns: {} ({:.3} percent)\n",
+            missing_points,
+            100.0 * missing_points as f64 / total as f64
+        ));
+        if !missing_by_rn.is_empty() {
+            report.push_str("\n| r | n | Missing Pts |\n|---|---|-------------|\n");
+            for ((r, n), c) in &missing_by_rn {
+                report.push_str(&format!("| {} | {} | {} |\n", r, n, c));
+            }
+        }
+        report.push_str(&format!(
+            "\nDuplicate Returns: {} ({:.3} percent)\n",
+            duplicate_points,
+            100.0 * duplicate_points as f64 / total as f64
+        ));
+        if !duplicate_by_rn.is_empty() {
+            report.push_str("\n| r | n | Duplicates |\n|---|---|------------|\n");
+            for ((r, n), c) in &duplicate_by_rn {
+                report.push_str(&format!("| {} | {} | {} |\n", r, n, c));
+            }
+        }
+        report.push_str(&format!(
+            "\nReturn Greater Than Num. Returns: {} ({:.3} percent)\n",
+            r_greater_n,
+            100.0 * r_greater_n as f64 / total as f64
+        ));
+
+        let report_out = report_path.unwrap_or_else(|| {
+            default_output_sibling_path(Path::new(&input_path), "point_return_report", "txt")
+        });
+        if let Some(parent) = report_out.parent() {
+            if !parent.as_os_str().is_empty() {
+                fs::create_dir_all(parent).map_err(|e| {
+                    ToolError::Execution(format!("failed creating output directory: {e}"))
+                })?;
+            }
+        }
+        fs::write(&report_out, report).map_err(|e| {
+            ToolError::Execution(format!(
+                "failed writing report '{}': {e}",
+                report_out.to_string_lossy()
+            ))
+        })?;
+
+        let mut outputs = BTreeMap::new();
+        outputs.insert(
+            "report_path".to_string(),
+            json!(report_out.to_string_lossy().to_string()),
+        );
+
+        if create_output {
+            let out_points: Vec<PointRecord> = cloud
+                .points
+                .par_iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    let mut q = *p;
+                    q.classification = match (is_missing[i], is_duplicate[i]) {
+                        (true, true) => 15,
+                        (true, false) => 13,
+                        (false, true) => 14,
+                        (false, false) => 1,
+                    };
+                    q
+                })
+                .collect();
+            let out_cloud = PointCloud {
+                points: out_points,
+                crs: cloud.crs.clone(),
+            };
+            let out = output_path.unwrap_or_else(|| {
+                default_output_sibling_path(Path::new(&input_path), "return_qc", "las")
+            });
+            if let Some(parent) = out.parent() {
+                if !parent.as_os_str().is_empty() {
+                    fs::create_dir_all(parent).map_err(|e| {
+                        ToolError::Execution(format!("failed creating output directory: {e}"))
+                    })?;
+                }
+            }
+            out_cloud.write(&out).map_err(|e| {
+                ToolError::Execution(format!(
+                    "failed writing output lidar '{}': {e}",
+                    out.to_string_lossy()
+                ))
+            })?;
+            outputs.insert(
+                "output".to_string(),
+                json!(out.to_string_lossy().to_string()),
+            );
+        }
+
+        ctx.progress.progress(1.0);
+        Ok(ToolRunResult { outputs })
+    }
+}
 
 impl Tool for LasToShapefileTool {
     fn metadata(&self) -> ToolMetadata {
@@ -13345,7 +14813,8 @@ impl Tool for LasToShapefileTool {
             let cloud = load_lidar_cloud(in_path, "input")?;
 
             let mut layer = if output_multipoint {
-                wbvector::Layer::new("las_to_multipoint").with_geom_type(wbvector::GeometryType::MultiPoint)
+                wbvector::Layer::new("las_to_multipoint")
+                    .with_geom_type(wbvector::GeometryType::MultiPoint)
             } else {
                 wbvector::Layer::new("las_to_points").with_geom_type(wbvector::GeometryType::Point)
             };
@@ -13359,20 +14828,36 @@ impl Tool for LasToShapefileTool {
                     .map(|p| wbvector::Coord::xyz(p.x, p.y, p.z))
                     .collect();
                 if coords.is_empty() {
-                    return Err(ToolError::Execution("input lidar has no points".to_string()));
+                    return Err(ToolError::Execution(
+                        "input lidar has no points".to_string(),
+                    ));
                 }
                 layer
                     .add_feature(
                         Some(wbvector::Geometry::MultiPoint(coords)),
                         &[("FID", wbvector::FieldValue::Integer(1))],
                     )
-                    .map_err(|e| ToolError::Execution(format!("failed creating multipoint feature: {}", e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed creating multipoint feature: {}", e))
+                    })?;
             } else {
                 layer.add_field(wbvector::FieldDef::new("Z", wbvector::FieldType::Float));
-                layer.add_field(wbvector::FieldDef::new("INTENSITY", wbvector::FieldType::Integer));
-                layer.add_field(wbvector::FieldDef::new("CLASS", wbvector::FieldType::Integer));
-                layer.add_field(wbvector::FieldDef::new("RTN_NUM", wbvector::FieldType::Integer));
-                layer.add_field(wbvector::FieldDef::new("NUM_RTNS", wbvector::FieldType::Integer));
+                layer.add_field(wbvector::FieldDef::new(
+                    "INTENSITY",
+                    wbvector::FieldType::Integer,
+                ));
+                layer.add_field(wbvector::FieldDef::new(
+                    "CLASS",
+                    wbvector::FieldType::Integer,
+                ));
+                layer.add_field(wbvector::FieldDef::new(
+                    "RTN_NUM",
+                    wbvector::FieldType::Integer,
+                ));
+                layer.add_field(wbvector::FieldDef::new(
+                    "NUM_RTNS",
+                    wbvector::FieldType::Integer,
+                ));
 
                 for (i, p) in cloud.points.iter().enumerate() {
                     layer
@@ -13399,7 +14884,9 @@ impl Tool for LasToShapefileTool {
                                 ),
                             ],
                         )
-                        .map_err(|e| ToolError::Execution(format!("failed creating point feature: {}", e)))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!("failed creating point feature: {}", e))
+                        })?;
                 }
             }
 
@@ -13410,12 +14897,14 @@ impl Tool for LasToShapefileTool {
         };
 
         if let Some(input_path) = input_path {
-            ctx.progress.info("converting lidar points to vector output");
+            ctx.progress
+                .info("converting lidar points to vector output");
             let out = run_single(Path::new(&input_path), output_path.as_deref())?;
             ctx.progress.progress(1.0);
             Ok(build_vector_result(out))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -13488,7 +14977,14 @@ impl Tool for FlightlineOverlapTool {
                 let (min_x, max_x, min_y, max_y) = active_points
                     .par_iter()
                     .fold(
-                        || (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY),
+                        || {
+                            (
+                                f64::INFINITY,
+                                f64::NEG_INFINITY,
+                                f64::INFINITY,
+                                f64::NEG_INFINITY,
+                            )
+                        },
                         |(min_x, max_x, min_y, max_y), p| {
                             (
                                 min_x.min(p.x),
@@ -13499,15 +14995,15 @@ impl Tool for FlightlineOverlapTool {
                         },
                     )
                     .reduce(
-                        || (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY),
-                        |a, b| {
+                        || {
                             (
-                                a.0.min(b.0),
-                                a.1.max(b.1),
-                                a.2.min(b.2),
-                                a.3.max(b.3),
+                                f64::INFINITY,
+                                f64::NEG_INFINITY,
+                                f64::INFINITY,
+                                f64::NEG_INFINITY,
                             )
                         },
+                        |a, b| (a.0.min(b.0), a.1.max(b.1), a.2.min(b.2), a.3.max(b.3)),
                     );
 
                 let cols = (((max_x - min_x) / resolution).ceil() as usize).max(1);
@@ -13518,9 +15014,11 @@ impl Tool for FlightlineOverlapTool {
                     .par_iter()
                     .map(|p| {
                         let col = (((p.x - min_x) / resolution).floor() as isize)
-                            .clamp(0, cols.saturating_sub(1) as isize) as usize;
+                            .clamp(0, cols.saturating_sub(1) as isize)
+                            as usize;
                         let row = (((max_y - p.y) / resolution).floor() as isize)
-                            .clamp(0, rows.saturating_sub(1) as isize) as usize;
+                            .clamp(0, rows.saturating_sub(1) as isize)
+                            as usize;
                         (row, col, p.point_source_id)
                     })
                     .collect();
@@ -13546,24 +15044,28 @@ impl Tool for FlightlineOverlapTool {
                 for ((row, col), ids) in cells {
                     raster
                         .set(0, row as isize, col as isize, ids.len() as f64)
-                        .map_err(|e| ToolError::Execution(format!("failed populating output raster: {e}")))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!("failed populating output raster: {e}"))
+                        })?;
                 }
                 raster
             };
 
-            let out = out_path
-                .map(Path::to_path_buf)
-                .unwrap_or_else(|| default_output_sibling_path(in_path, "flightline_overlap", "tif"));
+            let out = out_path.map(Path::to_path_buf).unwrap_or_else(|| {
+                default_output_sibling_path(in_path, "flightline_overlap", "tif")
+            });
             store_or_write_output(raster, Some(out))
         };
 
         if let Some(input_path) = input_path {
-            ctx.progress.info("counting flightline overlap by raster cell");
+            ctx.progress
+                .info("counting flightline overlap by raster cell");
             let out = run_single(Path::new(&input_path), output_path.as_deref())?;
             ctx.progress.progress(1.0);
             Ok(build_raster_result(out))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -13598,7 +15100,8 @@ impl Tool for RecoverFlightlineInfoTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let max_time_diff = parse_f64_alias(args, &["max_time_diff"], 5.0);
         if !max_time_diff.is_finite() || max_time_diff <= 0.0 {
             return Err(ToolError::Validation(
@@ -13613,17 +15116,20 @@ impl Tool for RecoverFlightlineInfoTool {
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let max_time_diff = parse_f64_alias(args, &["max_time_diff"], 5.0);
         let pt_src_id = parse_bool_alias(args, &["pt_src_id"], false);
         let user_data = parse_bool_alias(args, &["user_data"], false);
         let mut rgb = parse_bool_alias(args, &["rgb"], false);
         let output_path = parse_optional_lidar_output_path(args)?;
 
-        ctx.progress.info("recovering flightline identifiers from gps time");
+        ctx.progress
+            .info("recovering flightline identifiers from gps time");
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
         if cloud.points.is_empty() {
-            let locator = store_or_write_lidar_output(&cloud, output_path, "recover_flightline_info")?;
+            let locator =
+                store_or_write_lidar_output(&cloud, output_path, "recover_flightline_info")?;
             ctx.progress.progress(1.0);
             return Ok(build_lidar_result(locator));
         }
@@ -13690,7 +15196,8 @@ impl Tool for RecoverFlightlineInfoTool {
             points: out_points,
             crs: cloud.crs.clone(),
         };
-        let locator = store_or_write_lidar_output(&out_cloud, output_path, "recover_flightline_info")?;
+        let locator =
+            store_or_write_lidar_output(&out_cloud, output_path, "recover_flightline_info")?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
     }
@@ -13712,13 +15219,15 @@ impl Tool for FindFlightlineEdgePointsTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let _ = parse_optional_lidar_output_path(args)?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let output_path = parse_optional_lidar_output_path(args)?;
 
         ctx.progress.info("extracting flightline edge points");
@@ -13733,7 +15242,8 @@ impl Tool for FindFlightlineEdgePointsTool {
             crs: cloud.crs.clone(),
         };
 
-        let locator = store_or_write_lidar_output(&out_cloud, output_path, "find_flightline_edge_points")?;
+        let locator =
+            store_or_write_lidar_output(&out_cloud, output_path, "find_flightline_edge_points")?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
     }
@@ -13756,17 +15266,21 @@ impl Tool for LidarTophatTransformTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let radius = parse_f64_alias(args, &["search_radius", "radius"], f64::NAN);
         if !radius.is_finite() || radius <= 0.0 {
-            return Err(ToolError::Validation("search_radius/radius must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius/radius must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_optional_lidar_output_path(args)?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 1.0);
         let output_path = parse_optional_lidar_output_path(args)?;
 
@@ -13795,7 +15309,11 @@ impl Tool for LidarTophatTransformTool {
                     .iter()
                     .map(|(_, idx)| cloud.points[**idx].z)
                     .fold(f64::INFINITY, f64::min);
-                if local_min.is_finite() { local_min } else { p.z }
+                if local_min.is_finite() {
+                    local_min
+                } else {
+                    p.z
+                }
             })
             .collect();
 
@@ -13816,8 +15334,12 @@ impl Tool for LidarTophatTransformTool {
             })
             .collect();
 
-        let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
-        let locator = store_or_write_lidar_output(&out_cloud, output_path, "lidar_tophat_transform")?;
+        let out_cloud = PointCloud {
+            points,
+            crs: cloud.crs.clone(),
+        };
+        let locator =
+            store_or_write_lidar_output(&out_cloud, output_path, "lidar_tophat_transform")?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
     }
@@ -13840,17 +15362,21 @@ impl Tool for NormalVectorsTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let radius = parse_f64_alias(args, &["search_radius", "radius"], -1.0);
         if !radius.is_finite() {
-            return Err(ToolError::Validation("search_radius/radius must be finite".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius/radius must be finite".to_string(),
+            ));
         }
         let _ = parse_optional_lidar_output_path(args)?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let output_path = parse_optional_lidar_output_path(args)?;
 
         ctx.progress.info("calculating lidar normal vectors");
@@ -13890,7 +15416,10 @@ impl Tool for NormalVectorsTool {
             })
             .collect();
 
-        let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+        let out_cloud = PointCloud {
+            points,
+            crs: cloud.crs.clone(),
+        };
         let locator = store_or_write_lidar_output(&out_cloud, output_path, "normal_vectors")?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
@@ -13917,22 +15446,40 @@ impl Tool for LidarKappaTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input1", "input_lidar1", "classification"], "input1")?;
-        let _ = parse_required_lidar_path_alias(args, &["input2", "input_lidar2", "reference"], "input2")?;
+        let _ = parse_required_lidar_path_alias(
+            args,
+            &["input1", "input_lidar1", "classification"],
+            "input1",
+        )?;
+        let _ = parse_required_lidar_path_alias(
+            args,
+            &["input2", "input_lidar2", "reference"],
+            "input2",
+        )?;
         let report = parse_optional_output_path(args, "report")?
             .ok_or_else(|| ToolError::Validation("report is required".to_string()))?;
         ensure_html_or_txt(&report)?;
         let resolution = parse_f64_alias(args, &["resolution", "cell_size"], 1.0);
         if !resolution.is_finite() || resolution <= 0.0 {
-            return Err(ToolError::Validation("resolution/cell_size must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "resolution/cell_size must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input1_path = parse_required_lidar_path_alias(args, &["input1", "input_lidar1", "classification"], "input1")?;
-        let input2_path = parse_required_lidar_path_alias(args, &["input2", "input_lidar2", "reference"], "input2")?;
+        let input1_path = parse_required_lidar_path_alias(
+            args,
+            &["input1", "input_lidar1", "classification"],
+            "input1",
+        )?;
+        let input2_path = parse_required_lidar_path_alias(
+            args,
+            &["input2", "input_lidar2", "reference"],
+            "input2",
+        )?;
         let report_path = parse_optional_output_path(args, "report")?.unwrap();
         let output_path = parse_optional_output_path(args, "output")?;
         let resolution = parse_f64_alias(args, &["resolution", "cell_size"], 1.0);
@@ -13943,8 +15490,9 @@ impl Tool for LidarKappaTool {
 
         let mut tree = KdTree::new(3);
         for (i, p) in reference.points.iter().enumerate() {
-            tree.add([p.x, p.y, p.z], i)
-                .map_err(|e| ToolError::Execution(format!("failed indexing reference lidar: {e}")))?;
+            tree.add([p.x, p.y, p.z], i).map_err(|e| {
+                ToolError::Execution(format!("failed indexing reference lidar: {e}"))
+            })?;
         }
 
         let mut min_x = f64::INFINITY;
@@ -13969,24 +15517,30 @@ impl Tool for LidarKappaTool {
         let comparisons: Vec<Option<(usize, usize, usize, bool)>> = classification
             .points
             .par_iter()
-            .map(|p| -> Result<Option<(usize, usize, usize, bool)>, ToolError> {
-                let nearest = tree
-                    .nearest(&[p.x, p.y, p.z], 1, &squared_euclidean)
-                    .map_err(|e| ToolError::Execution(format!("failed querying reference lidar: {e}")))?;
-                if let Some((_, idx)) = nearest.first() {
-                    let ref_pt = reference.points[**idx];
-                    let c1 = p.classification as usize;
-                    let c2 = ref_pt.classification as usize;
-                    let col = (((p.x - min_x) / resolution).floor() as isize)
-                        .clamp(0, cols.saturating_sub(1) as isize) as usize;
-                    let row = (((max_y - p.y) / resolution).floor() as isize)
-                        .clamp(0, rows.saturating_sub(1) as isize) as usize;
-                    let index = row * cols + col;
-                    Ok(Some((c1, c2, index, c1 == c2)))
-                } else {
-                    Ok(None)
-                }
-            })
+            .map(
+                |p| -> Result<Option<(usize, usize, usize, bool)>, ToolError> {
+                    let nearest = tree
+                        .nearest(&[p.x, p.y, p.z], 1, &squared_euclidean)
+                        .map_err(|e| {
+                            ToolError::Execution(format!("failed querying reference lidar: {e}"))
+                        })?;
+                    if let Some((_, idx)) = nearest.first() {
+                        let ref_pt = reference.points[**idx];
+                        let c1 = p.classification as usize;
+                        let c2 = ref_pt.classification as usize;
+                        let col = (((p.x - min_x) / resolution).floor() as isize)
+                            .clamp(0, cols.saturating_sub(1) as isize)
+                            as usize;
+                        let row = (((max_y - p.y) / resolution).floor() as isize)
+                            .clamp(0, rows.saturating_sub(1) as isize)
+                            as usize;
+                        let index = row * cols + col;
+                        Ok(Some((c1, c2, index, c1 == c2)))
+                    } else {
+                        Ok(None)
+                    }
+                },
+            )
             .collect::<Result<Vec<_>, _>>()?;
 
         for item in comparisons.into_iter().flatten() {
@@ -14017,8 +15571,16 @@ impl Tool for LidarKappaTool {
             for col in 0..cols {
                 let index = row * cols + col;
                 if total[index] > 0 {
-                    raster.set(0, row as isize, col as isize, 100.0 * correct[index] as f64 / total[index] as f64)
-                        .map_err(|e| ToolError::Execution(format!("failed populating kappa raster: {e}")))?;
+                    raster
+                        .set(
+                            0,
+                            row as isize,
+                            col as isize,
+                            100.0 * correct[index] as f64 / total[index] as f64,
+                        )
+                        .map_err(|e| {
+                            ToolError::Execution(format!("failed populating kappa raster: {e}"))
+                        })?;
                 }
             }
         }
@@ -14045,9 +15607,18 @@ impl Tool for LidarKappaTool {
         let mut html = String::new();
         html.push_str("<!doctype html><html><head><meta charset=\"utf-8\"><title>LiDAR Kappa</title></head><body>");
         html.push_str("<h1>LiDAR Kappa Index of Agreement</h1>");
-        html.push_str(&format!("<p><strong>Classification Data:</strong> {}</p>", input1_path));
-        html.push_str(&format!("<p><strong>Reference Data:</strong> {}</p>", input2_path));
-        html.push_str(&format!("<p><strong>Overall Accuracy:</strong> {:.4}</p>", overall_accuracy));
+        html.push_str(&format!(
+            "<p><strong>Classification Data:</strong> {}</p>",
+            input1_path
+        ));
+        html.push_str(&format!(
+            "<p><strong>Reference Data:</strong> {}</p>",
+            input2_path
+        ));
+        html.push_str(&format!(
+            "<p><strong>Overall Accuracy:</strong> {:.4}</p>",
+            overall_accuracy
+        ));
         html.push_str(&format!("<p><strong>Kappa:</strong> {:.4}</p>", kappa));
         html.push_str("<table border=\"1\" cellspacing=\"0\" cellpadding=\"4\"><tr><th>Class</th><th>User's Accuracy</th><th>Producer's Accuracy</th></tr>");
         for class_id in 0..256usize {
@@ -14056,8 +15627,16 @@ impl Tool for LidarKappaTool {
             }
             let row_total: usize = error_matrix[class_id].iter().sum();
             let col_total: usize = (0..256).map(|b| error_matrix[b][class_id]).sum();
-            let users = if row_total > 0 { error_matrix[class_id][class_id] as f64 / row_total as f64 } else { 0.0 };
-            let producers = if col_total > 0 { error_matrix[class_id][class_id] as f64 / col_total as f64 } else { 0.0 };
+            let users = if row_total > 0 {
+                error_matrix[class_id][class_id] as f64 / row_total as f64
+            } else {
+                0.0
+            };
+            let producers = if col_total > 0 {
+                error_matrix[class_id][class_id] as f64 / col_total as f64
+            } else {
+                0.0
+            };
             html.push_str(&format!(
                 "<tr><td>{}</td><td>{:.4}</td><td>{:.4}</td></tr>",
                 class_id, users, producers
@@ -14066,19 +15645,29 @@ impl Tool for LidarKappaTool {
         html.push_str("</table></body></html>");
         if let Some(parent) = report_path.parent() {
             if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| ToolError::Execution(format!("failed creating report directory: {e}")))?;
+                fs::create_dir_all(parent).map_err(|e| {
+                    ToolError::Execution(format!("failed creating report directory: {e}"))
+                })?;
             }
         }
-        fs::write(&report_path, html)
-            .map_err(|e| ToolError::Execution(format!("failed writing report '{}': {e}", report_path.to_string_lossy())))?;
+        fs::write(&report_path, html).map_err(|e| {
+            ToolError::Execution(format!(
+                "failed writing report '{}': {e}",
+                report_path.to_string_lossy()
+            ))
+        })?;
 
         let locator = store_or_write_output(
             raster,
-            Some(output_path.unwrap_or_else(|| default_output_sibling_path(Path::new(&input1_path), "kappa", "tif"))),
+            Some(output_path.unwrap_or_else(|| {
+                default_output_sibling_path(Path::new(&input1_path), "kappa", "tif")
+            })),
         )?;
         let mut result = build_raster_result(locator);
-        result.outputs.insert("report_path".to_string(), json!(report_path.to_string_lossy().to_string()));
+        result.outputs.insert(
+            "report_path".to_string(),
+            json!(report_path.to_string_lossy().to_string()),
+        );
         ctx.progress.progress(1.0);
         Ok(result)
     }
@@ -14105,11 +15694,15 @@ impl Tool for LidarEigenvalueFeaturesTool {
         let _ = parse_lidar_path_arg_optional(args)?;
         let k = parse_f64_alias(args, &["num_neighbours", "num_neighbors"], -1.0);
         if k.is_finite() && k > 0.0 && k < 7.0 {
-            return Err(ToolError::Validation("num_neighbours must be at least 7 when specified".to_string()));
+            return Err(ToolError::Validation(
+                "num_neighbours must be at least 7 when specified".to_string(),
+            ));
         }
         let r = parse_f64_alias(args, &["search_radius", "radius"], f64::NAN);
         if r.is_finite() && r <= 0.0 {
-            return Err(ToolError::Validation("search_radius/radius must be positive when specified".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius/radius must be positive when specified".to_string(),
+            ));
         }
         if args.get("input").is_some() || args.get("input_lidar").is_some() {
             let _ = parse_optional_output_path(args, "output")?;
@@ -14120,17 +15713,26 @@ impl Tool for LidarEigenvalueFeaturesTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_lidar_path_arg_optional(args)?;
         let k = parse_f64_alias(args, &["num_neighbours", "num_neighbors"], -1.0);
-        let k = if k.is_finite() && k > 0.0 { Some(k as usize + 1) } else { None };
+        let k = if k.is_finite() && k > 0.0 {
+            Some(k as usize + 1)
+        } else {
+            None
+        };
         let radius = parse_f64_alias(args, &["search_radius", "radius"], f64::NAN);
-        let radius = if radius.is_finite() { Some(radius) } else { None };
+        let radius = if radius.is_finite() {
+            Some(radius)
+        } else {
+            None
+        };
         let output_path = parse_optional_output_path(args, "output")?;
 
         let run_single = |in_path: &Path, out_path: Option<&Path>| -> Result<String, ToolError> {
             let cloud = load_lidar_cloud(in_path, "input")?;
             let mut tree = KdTree::new(3);
             for (i, p) in cloud.points.iter().enumerate() {
-                tree.add([p.x, p.y, p.z], i)
-                    .map_err(|e| ToolError::Execution(format!("failed indexing lidar points: {e}")))?;
+                tree.add([p.x, p.y, p.z], i).map_err(|e| {
+                    ToolError::Execution(format!("failed indexing lidar points: {e}"))
+                })?;
             }
 
             let out = out_path
@@ -14138,8 +15740,9 @@ impl Tool for LidarEigenvalueFeaturesTool {
                 .unwrap_or_else(|| in_path.with_extension("eigen"));
             if let Some(parent) = out.parent() {
                 if !parent.as_os_str().is_empty() {
-                    fs::create_dir_all(parent)
-                        .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+                    fs::create_dir_all(parent).map_err(|e| {
+                        ToolError::Execution(format!("failed creating output directory: {e}"))
+                    })?;
                 }
             }
             let mut json_file = File::create(format!("{}.json", out.to_string_lossy()))
@@ -14160,7 +15763,9 @@ impl Tool for LidarEigenvalueFeaturesTool {
                 .map(|p| -> Result<[f32; 10], ToolError> {
                     let sample_idx = if let Some(k) = k {
                         tree.nearest(&[p.x, p.y, p.z], k, &squared_euclidean)
-                            .map_err(|e| ToolError::Execution(format!("failed querying neighbours: {e}")))?
+                            .map_err(|e| {
+                                ToolError::Execution(format!("failed querying neighbours: {e}"))
+                            })?
                             .into_iter()
                             .filter_map(|(dist, idx)| {
                                 if let Some(r) = radius {
@@ -14172,22 +15777,33 @@ impl Tool for LidarEigenvalueFeaturesTool {
                             })
                             .collect::<Vec<_>>()
                     } else {
-                        tree.within(&[p.x, p.y, p.z], default_radius * default_radius, &squared_euclidean)
-                            .map_err(|e| ToolError::Execution(format!("failed querying neighbours: {e}")))?
-                            .into_iter()
-                            .map(|(_, idx)| *idx)
-                            .collect::<Vec<_>>()
+                        tree.within(
+                            &[p.x, p.y, p.z],
+                            default_radius * default_radius,
+                            &squared_euclidean,
+                        )
+                        .map_err(|e| {
+                            ToolError::Execution(format!("failed querying neighbours: {e}"))
+                        })?
+                        .into_iter()
+                        .map(|(_, idx)| *idx)
+                        .collect::<Vec<_>>()
                     };
                     let sample: Vec<Vector3<f64>> = sample_idx
                         .iter()
                         .map(|idx| point_to_vec3(&cloud.points[*idx]))
                         .collect();
                     if let Some(features) = neighborhood_pca(&sample, point_to_vec3(p)) {
-                        let sum = (features.lambda1 + features.lambda2 + features.lambda3).max(f32::EPSILON);
-                        let linearity = (features.lambda1 - features.lambda2) / features.lambda1.max(f32::EPSILON);
-                        let planarity = (features.lambda2 - features.lambda3) / features.lambda1.max(f32::EPSILON);
+                        let sum = (features.lambda1 + features.lambda2 + features.lambda3)
+                            .max(f32::EPSILON);
+                        let linearity = (features.lambda1 - features.lambda2)
+                            / features.lambda1.max(f32::EPSILON);
+                        let planarity = (features.lambda2 - features.lambda3)
+                            / features.lambda1.max(f32::EPSILON);
                         let sphericity = features.lambda3 / features.lambda1.max(f32::EPSILON);
-                        let omnivariance = (features.lambda1 * features.lambda2 * features.lambda3).max(0.0).cbrt();
+                        let omnivariance = (features.lambda1 * features.lambda2 * features.lambda3)
+                            .max(0.0)
+                            .cbrt();
                         let e1 = features.lambda1 / sum;
                         let e2 = features.lambda2 / sum;
                         let e3 = features.lambda3 / sum;
@@ -14214,17 +15830,25 @@ impl Tool for LidarEigenvalueFeaturesTool {
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
-            let mut writer = BufWriter::new(File::create(&out)
-                .map_err(|e| ToolError::Execution(format!("failed creating eigen output: {e}")))?);
+            let mut writer =
+                BufWriter::new(File::create(&out).map_err(|e| {
+                    ToolError::Execution(format!("failed creating eigen output: {e}"))
+                })?);
             for (point_num, row) in feature_rows.into_iter().enumerate() {
-                writer.write_all(&(point_num as u64).to_le_bytes())
-                    .map_err(|e| ToolError::Execution(format!("failed writing eigen record: {e}")))?;
+                writer
+                    .write_all(&(point_num as u64).to_le_bytes())
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing eigen record: {e}"))
+                    })?;
                 for value in row {
-                    writer.write_all(&value.to_le_bytes())
-                        .map_err(|e| ToolError::Execution(format!("failed writing eigen record: {e}")))?;
+                    writer.write_all(&value.to_le_bytes()).map_err(|e| {
+                        ToolError::Execution(format!("failed writing eigen record: {e}"))
+                    })?;
                 }
             }
-            writer.flush().map_err(|e| ToolError::Execution(format!("failed flushing eigen output: {e}")))?;
+            writer
+                .flush()
+                .map_err(|e| ToolError::Execution(format!("failed flushing eigen output: {e}")))?;
             Ok(out.to_string_lossy().to_string())
         };
 
@@ -14234,7 +15858,8 @@ impl Tool for LidarEigenvalueFeaturesTool {
             ctx.progress.progress(1.0);
             Ok(build_string_output_result("output", out))
         } else {
-            ctx.progress.info("batch mode: scanning working directory for lidar files");
+            ctx.progress
+                .info("batch mode: scanning working directory for lidar files");
             let files = find_lidar_files()?;
             let outputs = files
                 .into_par_iter()
@@ -14253,47 +15878,108 @@ impl Tool for LidarRansacPlanesTool {
         ToolMetadata {
             id: "lidar_ransac_planes",
             display_name: "LiDAR RANSAC Planes",
-            summary: "Identifies locally planar LiDAR points using neighbourhood RANSAC plane fitting.",
+            summary:
+                "Identifies locally planar LiDAR points using neighbourhood RANSAC plane fitting.",
             category: ToolCategory::Lidar,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input LiDAR path or typed LiDAR object.", required: true, ..Default::default() },
-                ToolParamSpec { name: "search_radius", description: "Neighbourhood radius for local plane fitting.", required: false, ..Default::default() },
-                ToolParamSpec { name: "num_iterations", description: "Number of RANSAC iterations per point.", required: false, ..Default::default() },
-                ToolParamSpec { name: "num_samples", description: "Number of sampled neighbour points per RANSAC iteration.", required: false, ..Default::default() },
-                ToolParamSpec { name: "inlier_threshold", description: "Maximum point-to-plane residual for inliers.", required: false, ..Default::default() },
-                ToolParamSpec { name: "acceptable_model_size", description: "Minimum number of inlier points required for a planar model.", required: false, ..Default::default() },
-                ToolParamSpec { name: "max_planar_slope", description: "Maximum accepted plane slope in degrees.", required: false, ..Default::default() },
-                ToolParamSpec { name: "classify", description: "If true classify planar vs non-planar points instead of filtering.", required: false, ..Default::default() },
-                ToolParamSpec { name: "only_last_returns", description: "If true, only use late returns in model fitting.", required: false, ..Default::default() },
-                ToolParamSpec { name: "output", description: "Optional output LiDAR path.", required: false, ..Default::default() },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input LiDAR path or typed LiDAR object.",
+                    required: true,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "search_radius",
+                    description: "Neighbourhood radius for local plane fitting.",
+                    required: false,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "num_iterations",
+                    description: "Number of RANSAC iterations per point.",
+                    required: false,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "num_samples",
+                    description: "Number of sampled neighbour points per RANSAC iteration.",
+                    required: false,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "inlier_threshold",
+                    description: "Maximum point-to-plane residual for inliers.",
+                    required: false,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "acceptable_model_size",
+                    description: "Minimum number of inlier points required for a planar model.",
+                    required: false,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "max_planar_slope",
+                    description: "Maximum accepted plane slope in degrees.",
+                    required: false,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "classify",
+                    description:
+                        "If true classify planar vs non-planar points instead of filtering.",
+                    required: false,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "only_last_returns",
+                    description: "If true, only use late returns in model fitting.",
+                    required: false,
+                    ..Default::default()
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output LiDAR path.",
+                    required: false,
+                    ..Default::default()
+                },
             ],
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let _ =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let radius = parse_f64_alias(args, &["search_radius", "radius"], 2.0);
         if !radius.is_finite() || radius <= 0.0 {
-            return Err(ToolError::Validation("search_radius/radius must be a positive finite value".to_string()));
+            return Err(ToolError::Validation(
+                "search_radius/radius must be a positive finite value".to_string(),
+            ));
         }
         let _ = parse_optional_lidar_output_path(args)?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
+        let input_path =
+            parse_required_lidar_path_alias(args, &["input", "input_lidar", "in_lidar"], "input")?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 2.0);
-        let num_iterations = parse_f64_alias(args, &["num_iterations", "num_iter"], 50.0).max(1.0) as usize;
+        let num_iterations =
+            parse_f64_alias(args, &["num_iterations", "num_iter"], 50.0).max(1.0) as usize;
         let num_samples = parse_f64_alias(args, &["num_samples"], 10.0).max(3.0) as usize;
-        let inlier_threshold = parse_f64_alias(args, &["inlier_threshold", "threshold"], 0.15).max(0.0);
-        let acceptable_model_size = parse_f64_alias(args, &["acceptable_model_size", "model_size"], 30.0).max(5.0) as usize;
-        let max_planar_slope = parse_f64_alias(args, &["max_planar_slope", "max_slope"], 75.0).clamp(0.0, 90.0);
+        let inlier_threshold =
+            parse_f64_alias(args, &["inlier_threshold", "threshold"], 0.15).max(0.0);
+        let acceptable_model_size =
+            parse_f64_alias(args, &["acceptable_model_size", "model_size"], 30.0).max(5.0) as usize;
+        let max_planar_slope =
+            parse_f64_alias(args, &["max_planar_slope", "max_slope"], 75.0).clamp(0.0, 90.0);
         let classify = parse_bool_alias(args, &["classify"], false);
         let only_last_returns = parse_bool_alias(args, &["only_last_returns"], false);
         let output_path = parse_optional_lidar_output_path(args)?;
 
-        ctx.progress.info("identifying planar lidar points with ransac");
+        ctx.progress
+            .info("identifying planar lidar points with ransac");
         let cloud = load_lidar_cloud(Path::new(&input_path), "input")?;
         if cloud.points.is_empty() {
             let locator = store_or_write_lidar_output(&cloud, output_path, "lidar_ransac_planes")?;
@@ -14303,7 +15989,10 @@ impl Tool for LidarRansacPlanesTool {
         let mut tree = KdTree::new(3);
         let mut active_indices = Vec::new();
         for (i, p) in cloud.points.iter().enumerate() {
-            if point_is_noise(p) || point_is_withheld(p) || (only_last_returns && !is_late_return(p)) {
+            if point_is_noise(p)
+                || point_is_withheld(p)
+                || (only_last_returns && !is_late_return(p))
+            {
                 continue;
             }
             tree.add([p.x, p.y, p.z], i)
@@ -14320,7 +16009,11 @@ impl Tool for LidarRansacPlanesTool {
                 let idx = *idx;
                 let center = point_to_vec3(&cloud.points[idx]);
                 let neighbours = tree
-                    .within(&[center.x, center.y, center.z], radius_sq, &squared_euclidean)
+                    .within(
+                        &[center.x, center.y, center.z],
+                        radius_sq,
+                        &squared_euclidean,
+                    )
                     .unwrap_or_default();
                 if neighbours.len() < num_samples.max(acceptable_model_size) {
                     return None;
@@ -14330,7 +16023,8 @@ impl Tool for LidarRansacPlanesTool {
                     .map(|(_, nidx)| (**nidx, point_to_vec3(&cloud.points[**nidx])))
                     .collect();
                 let sample_indices: Vec<usize> = (0..neighbour_points.len()).collect();
-                let mut rng = rand::rngs::StdRng::seed_from_u64(0x9E37_79B9_7F4A_7C15_u64 ^ idx as u64);
+                let mut rng =
+                    rand::rngs::StdRng::seed_from_u64(0x9E37_79B9_7F4A_7C15_u64 ^ idx as u64);
                 let mut best_plane = Plane::zero();
                 let mut best_inliers = Vec::new();
                 let mut best_rmse = f64::INFINITY;
@@ -14339,14 +16033,23 @@ impl Tool for LidarRansacPlanesTool {
                         .sample(&mut rng, num_samples.min(sample_indices.len()))
                         .copied()
                         .collect();
-                    let sample: Vec<Vector3<f64>> = picks.iter().map(|p| neighbour_points[*p].1).collect();
+                    let sample: Vec<Vector3<f64>> =
+                        picks.iter().map(|p| neighbour_points[*p].1).collect();
                     let plane = Plane::from_points(&sample);
-                    if plane.slope() > max_planar_slope || plane.residual(&center) > inlier_threshold {
+                    if plane.slope() > max_planar_slope
+                        || plane.residual(&center) > inlier_threshold
+                    {
                         continue;
                     }
                     let inliers: Vec<usize> = neighbour_points
                         .iter()
-                        .filter_map(|(pid, pt)| if plane.residual(pt) <= inlier_threshold { Some(*pid) } else { None })
+                        .filter_map(|(pid, pt)| {
+                            if plane.residual(pt) <= inlier_threshold {
+                                Some(*pid)
+                            } else {
+                                None
+                            }
+                        })
                         .collect();
                     if inliers.len() < acceptable_model_size {
                         continue;
@@ -14356,7 +16059,10 @@ impl Tool for LidarRansacPlanesTool {
                         .map(|pid| point_to_vec3(&cloud.points[*pid]))
                         .collect();
                     let refined = Plane::from_points(&refined_points);
-                    let rmse = refined_points.iter().map(|pt| refined.residual(pt)).sum::<f64>()
+                    let rmse = refined_points
+                        .iter()
+                        .map(|pt| refined.residual(pt))
+                        .sum::<f64>()
                         / refined_points.len() as f64;
                     if rmse < best_rmse {
                         best_rmse = rmse;
@@ -14365,7 +16071,11 @@ impl Tool for LidarRansacPlanesTool {
                     }
                 }
                 if best_rmse.is_finite() {
-                    Some((idx, best_inliers, best_plane.residual(&center) <= inlier_threshold))
+                    Some((
+                        idx,
+                        best_inliers,
+                        best_plane.residual(&center) <= inlier_threshold,
+                    ))
                 } else {
                     None
                 }
@@ -14382,16 +16092,29 @@ impl Tool for LidarRansacPlanesTool {
         }
 
         let points = if classify {
-            cloud.points.iter().enumerate().map(|(i, p)| {
-                let mut q = *p;
-                q.classification = if is_planar[i] { 0 } else { 1 };
-                q
-            }).collect::<Vec<_>>()
+            cloud
+                .points
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    let mut q = *p;
+                    q.classification = if is_planar[i] { 0 } else { 1 };
+                    q
+                })
+                .collect::<Vec<_>>()
         } else {
-            cloud.points.iter().enumerate().filter_map(|(i, p)| if is_planar[i] { Some(*p) } else { None }).collect::<Vec<_>>()
+            cloud
+                .points
+                .iter()
+                .enumerate()
+                .filter_map(|(i, p)| if is_planar[i] { Some(*p) } else { None })
+                .collect::<Vec<_>>()
         };
 
-        let out_cloud = PointCloud { points, crs: cloud.crs.clone() };
+        let out_cloud = PointCloud {
+            points,
+            crs: cloud.crs.clone(),
+        };
         let locator = store_or_write_lidar_output(&out_cloud, output_path, "lidar_ransac_planes")?;
         ctx.progress.progress(1.0);
         Ok(build_lidar_result(locator))
@@ -14426,7 +16149,11 @@ impl Tool for LidarRooftopAnalysisTool {
         if inputs.is_empty() {
             return Err(ToolError::Validation("inputs is required".to_string()));
         }
-        let _ = parse_required_vector_path_alias(args, &["building_footprints", "buildings"], "building_footprints")?;
+        let _ = parse_required_vector_path_alias(
+            args,
+            &["building_footprints", "buildings"],
+            "building_footprints",
+        )?;
         if let Some(path) = parse_optional_output_path(args, "output")? {
             let _ = detect_vector_output_format(path.to_string_lossy().as_ref())?;
         }
@@ -14435,17 +16162,27 @@ impl Tool for LidarRooftopAnalysisTool {
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_paths = parse_lidar_inputs_arg(args)?;
-        let buildings_path = parse_required_vector_path_alias(args, &["building_footprints", "buildings"], "building_footprints")?;
+        let buildings_path = parse_required_vector_path_alias(
+            args,
+            &["building_footprints", "buildings"],
+            "building_footprints",
+        )?;
         let output_path = parse_optional_output_path(args, "output")?;
         let search_radius = parse_f64_alias(args, &["search_radius", "radius"], 2.0).max(0.1);
-        let inlier_threshold = parse_f64_alias(args, &["inlier_threshold", "threshold"], 0.15).max(0.0);
-        let acceptable_model_size = parse_f64_alias(args, &["acceptable_model_size", "model_size"], 30.0).max(5.0) as usize;
-        let max_planar_slope = parse_f64_alias(args, &["max_planar_slope", "max_slope"], 75.0).clamp(0.0, 90.0);
-        let norm_diff_threshold = parse_f64_alias(args, &["norm_diff_threshold", "norm_diff"], 2.0).clamp(0.0, 90.0).to_radians();
+        let inlier_threshold =
+            parse_f64_alias(args, &["inlier_threshold", "threshold"], 0.15).max(0.0);
+        let acceptable_model_size =
+            parse_f64_alias(args, &["acceptable_model_size", "model_size"], 30.0).max(5.0) as usize;
+        let max_planar_slope =
+            parse_f64_alias(args, &["max_planar_slope", "max_slope"], 75.0).clamp(0.0, 90.0);
+        let norm_diff_threshold = parse_f64_alias(args, &["norm_diff_threshold", "norm_diff"], 2.0)
+            .clamp(0.0, 90.0)
+            .to_radians();
         let azimuth = parse_f64_alias(args, &["azimuth"], 180.0).to_radians();
         let altitude = parse_f64_alias(args, &["altitude"], 30.0).to_radians();
 
-        ctx.progress.info("analyzing rooftop facets within building footprints");
+        ctx.progress
+            .info("analyzing rooftop facets within building footprints");
         let buildings = load_vector(&buildings_path, "building_footprints")?;
 
         let mut feature_polys: Vec<Vec<PreparedPolygon>> = Vec::new();
@@ -14485,18 +16222,33 @@ impl Tool for LidarRooftopAnalysisTool {
             }
         }
 
-        let mut layer = wbvector::Layer::new("lidar_rooftop_analysis").with_geom_type(wbvector::GeometryType::Polygon);
+        let mut layer = wbvector::Layer::new("lidar_rooftop_analysis")
+            .with_geom_type(wbvector::GeometryType::Polygon);
         layer.crs = lidar_crs_to_vector_crs(crs.as_ref());
         layer.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
-        layer.add_field(wbvector::FieldDef::new("BUILDING", wbvector::FieldType::Integer));
-        layer.add_field(wbvector::FieldDef::new("MAX_ELEV", wbvector::FieldType::Float));
-        layer.add_field(wbvector::FieldDef::new("HILLSHADE", wbvector::FieldType::Float));
+        layer.add_field(wbvector::FieldDef::new(
+            "BUILDING",
+            wbvector::FieldType::Integer,
+        ));
+        layer.add_field(wbvector::FieldDef::new(
+            "MAX_ELEV",
+            wbvector::FieldType::Float,
+        ));
+        layer.add_field(wbvector::FieldDef::new(
+            "HILLSHADE",
+            wbvector::FieldType::Float,
+        ));
         layer.add_field(wbvector::FieldDef::new("SLOPE", wbvector::FieldType::Float));
-        layer.add_field(wbvector::FieldDef::new("ASPECT", wbvector::FieldType::Float));
+        layer.add_field(wbvector::FieldDef::new(
+            "ASPECT",
+            wbvector::FieldType::Float,
+        ));
         layer.add_field(wbvector::FieldDef::new("AREA", wbvector::FieldType::Float));
 
         if selected_points.is_empty() {
-            let out = output_path.unwrap_or_else(|| default_output_sibling_path(Path::new(&input_paths[0]), "rooftops", "shp"));
+            let out = output_path.unwrap_or_else(|| {
+                default_output_sibling_path(Path::new(&input_paths[0]), "rooftops", "shp")
+            });
             let out_path = write_vector_output(&layer, out.to_string_lossy().as_ref())?;
             ctx.progress.progress(1.0);
             return Ok(build_vector_result(out_path));
@@ -14504,8 +16256,9 @@ impl Tool for LidarRooftopAnalysisTool {
 
         let mut tree = KdTree::new(2);
         for (i, p) in selected_points.iter().enumerate() {
-            tree.add([p.x, p.y], i)
-                .map_err(|e| ToolError::Execution(format!("failed indexing rooftop points: {e}")))?;
+            tree.add([p.x, p.y], i).map_err(|e| {
+                ToolError::Execution(format!("failed indexing rooftop points: {e}"))
+            })?;
         }
         let radius_sq = search_radius * search_radius;
         let tree = Arc::new(tree);
@@ -14538,8 +16291,12 @@ impl Tool for LidarRooftopAnalysisTool {
                 (pca, is_planar)
             })
             .collect();
-        let local_pca: Vec<Option<NeighborhoodPca>> = local_results.iter().map(|(p, _)| *p).collect();
-        let planar: Vec<bool> = local_results.iter().map(|(_, is_planar)| *is_planar).collect();
+        let local_pca: Vec<Option<NeighborhoodPca>> =
+            local_results.iter().map(|(p, _)| *p).collect();
+        let planar: Vec<bool> = local_results
+            .iter()
+            .map(|(_, is_planar)| *is_planar)
+            .collect();
 
         let mut segment_id = vec![0usize; selected_points.len()];
         let mut current_segment = 0usize;
@@ -14552,16 +16309,27 @@ impl Tool for LidarRooftopAnalysisTool {
             let mut stack = vec![i];
             while let Some(idx) = stack.pop() {
                 let p = selected_points[idx];
-                let Some(pca0) = local_pca[idx] else { continue; };
-                let neighbours = tree.within(&[p.x, p.y], radius_sq, &squared_euclidean).unwrap_or_default();
+                let Some(pca0) = local_pca[idx] else {
+                    continue;
+                };
+                let neighbours = tree
+                    .within(&[p.x, p.y], radius_sq, &squared_euclidean)
+                    .unwrap_or_default();
                 for (_, nref) in neighbours {
                     let nidx = *nref;
-                    if segment_id[nidx] != 0 || !planar[nidx] || building_ids[nidx] != building_ids[idx] {
+                    if segment_id[nidx] != 0
+                        || !planar[nidx]
+                        || building_ids[nidx] != building_ids[idx]
+                    {
                         continue;
                     }
-                    let Some(pca1) = local_pca[nidx] else { continue; };
+                    let Some(pca1) = local_pca[nidx] else {
+                        continue;
+                    };
                     let angle = pca0.normal.dot(&pca1.normal).clamp(-1.0, 1.0).abs().acos();
-                    if angle <= norm_diff_threshold && (selected_points[nidx].z - selected_points[idx].z).abs() <= 1.0 {
+                    if angle <= norm_diff_threshold
+                        && (selected_points[nidx].z - selected_points[idx].z).abs() <= 1.0
+                    {
                         segment_id[nidx] = current_segment;
                         stack.push(nidx);
                     }
@@ -14582,7 +16350,10 @@ impl Tool for LidarRooftopAnalysisTool {
                 continue;
             }
             let building_id = building_ids[point_ids[0]];
-            let data: Vec<Vector3<f64>> = point_ids.iter().map(|idx| point_to_vec3(&selected_points[*idx])).collect();
+            let data: Vec<Vector3<f64>> = point_ids
+                .iter()
+                .map(|idx| point_to_vec3(&selected_points[*idx]))
+                .collect();
             let plane = Plane::from_points(&data);
             if plane.slope() > max_planar_slope {
                 continue;
@@ -14600,31 +16371,54 @@ impl Tool for LidarRooftopAnalysisTool {
             if hull.len() < 4 {
                 continue;
             }
-            let max_elev = point_ids.iter().map(|idx| selected_points[*idx].z).fold(f64::NEG_INFINITY, f64::max);
+            let max_elev = point_ids
+                .iter()
+                .map(|idx| selected_points[*idx].z)
+                .fold(f64::NEG_INFINITY, f64::max);
             let slope = plane.slope();
-            let fx = if plane.c.abs() > 1.0e-12 { -plane.a / plane.c } else { 0.0 };
-            let fy = if plane.c.abs() > 1.0e-12 { -plane.b / plane.c } else { 0.0 };
+            let fx = if plane.c.abs() > 1.0e-12 {
+                -plane.a / plane.c
+            } else {
+                0.0
+            };
+            let fy = if plane.c.abs() > 1.0e-12 {
+                -plane.b / plane.c
+            } else {
+                0.0
+            };
             let aspect = (180.0 - fy.atan2(fx).to_degrees() + 90.0).rem_euclid(360.0);
             let slope_rad = slope.to_radians();
             let aspect_rad = aspect.to_radians();
-            let hillshade = 255.0 * (altitude.sin() * slope_rad.cos() + altitude.cos() * slope_rad.sin() * (azimuth - aspect_rad).cos()).max(0.0);
+            let hillshade = 255.0
+                * (altitude.sin() * slope_rad.cos()
+                    + altitude.cos() * slope_rad.sin() * (azimuth - aspect_rad).cos())
+                .max(0.0);
             let area = polygon_area(&hull);
-            layer.add_feature(
-                Some(wbvector::Geometry::polygon(hull, vec![])),
-                &[
-                    ("FID", wbvector::FieldValue::Integer(fid)),
-                    ("BUILDING", wbvector::FieldValue::Integer(building_id as i64 + 1)),
-                    ("MAX_ELEV", wbvector::FieldValue::Float(max_elev)),
-                    ("HILLSHADE", wbvector::FieldValue::Float(hillshade)),
-                    ("SLOPE", wbvector::FieldValue::Float(slope)),
-                    ("ASPECT", wbvector::FieldValue::Float(aspect)),
-                    ("AREA", wbvector::FieldValue::Float(area)),
-                ],
-            ).map_err(|e| ToolError::Execution(format!("failed creating rooftop feature: {e}")))?;
+            layer
+                .add_feature(
+                    Some(wbvector::Geometry::polygon(hull, vec![])),
+                    &[
+                        ("FID", wbvector::FieldValue::Integer(fid)),
+                        (
+                            "BUILDING",
+                            wbvector::FieldValue::Integer(building_id as i64 + 1),
+                        ),
+                        ("MAX_ELEV", wbvector::FieldValue::Float(max_elev)),
+                        ("HILLSHADE", wbvector::FieldValue::Float(hillshade)),
+                        ("SLOPE", wbvector::FieldValue::Float(slope)),
+                        ("ASPECT", wbvector::FieldValue::Float(aspect)),
+                        ("AREA", wbvector::FieldValue::Float(area)),
+                    ],
+                )
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed creating rooftop feature: {e}"))
+                })?;
             fid += 1;
         }
 
-        let out = output_path.unwrap_or_else(|| default_output_sibling_path(Path::new(&input_paths[0]), "rooftops", "shp"));
+        let out = output_path.unwrap_or_else(|| {
+            default_output_sibling_path(Path::new(&input_paths[0]), "rooftops", "shp")
+        });
         let out_path = write_vector_output(&layer, out.to_string_lossy().as_ref())?;
         ctx.progress.progress(1.0);
         Ok(build_vector_result(out_path))
@@ -14632,7 +16426,6 @@ impl Tool for LidarRooftopAnalysisTool {
 }
 
 #[cfg(test)]
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -14733,7 +16526,10 @@ mod tests {
         );
         let out_id = memory_store::raster_path_to_id(out_path).expect("invalid memory raster path");
         let out = memory_store::get_raster_by_id(out_id).expect("missing raster in memory store");
-        assert!(out.rows > 0 && out.cols > 0, "expected non-empty output raster");
+        assert!(
+            out.rows > 0 && out.cols > 0,
+            "expected non-empty output raster"
+        );
     }
 
     #[test]
@@ -14756,12 +16552,21 @@ mod tests {
             .get("path")
             .and_then(|v| v.as_str())
             .expect("result missing path output");
-        let out = PointCloud::read(Path::new(out_path)).expect("failed reading filtered lidar output");
-        assert!(out.points.len() < original_len, "expected filtered cloud to remove points");
+        assert!(
+            lidar_memory_store::lidar_is_memory_path(out_path),
+            "expected memory lidar output path, got {out_path}"
+        );
+        let out_id = lidar_memory_store::lidar_path_to_id(out_path)
+            .expect("invalid memory lidar output path");
+        let out = lidar_memory_store::get_lidar_by_id(out_id)
+            .expect("missing filtered lidar output in memory store");
+        assert!(
+            out.points.len() < original_len,
+            "expected filtered cloud to remove points"
+        );
         assert!(
             out.points.iter().all(|p| p.classification != 5),
             "filtered output still contains excluded class 5"
         );
     }
-
 }

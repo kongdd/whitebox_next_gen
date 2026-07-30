@@ -3,7 +3,9 @@
 //! Includes Ripley's K/L, envelope testing, inhomogeneous baselines, residual diagnostics, and comparison tools.
 
 use super::*;
-use wbspatialstats::point_process::{KFunction, CriticalBandEnvelope, InhomogeneousKProcess, PointProcessResiduals, ResidualType};
+use wbspatialstats::point_process::{
+    CriticalBandEnvelope, InhomogeneousKProcess, KFunction, PointProcessResiduals, ResidualType,
+};
 
 /// Computes Ripley's K and L functions for point pattern analysis
 pub struct RipleysKFunctionTool;
@@ -29,10 +31,16 @@ fn parse_opt_usize(args: &ToolArgs, key: &str) -> Result<Option<usize>, ToolErro
                 if n > 0 {
                     Ok(Some(n as usize))
                 } else {
-                    Err(ToolError::Validation(format!("parameter '{}' must be > 0", key)))
+                    Err(ToolError::Validation(format!(
+                        "parameter '{}' must be > 0",
+                        key
+                    )))
                 }
             } else {
-                Err(ToolError::Validation(format!("parameter '{}' must be an integer", key)))
+                Err(ToolError::Validation(format!(
+                    "parameter '{}' must be an integer",
+                    key
+                )))
             }
         }
     }
@@ -51,10 +59,26 @@ impl Tool for RipleysKFunctionTool {
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector layer.", required: true },
-                ToolParamSpec { name: "max_distance", description: "Maximum distance for K computation.", required: true },
-                ToolParamSpec { name: "num_distances", description: "Number of distance bins (default: 20).", required: false },
-                ToolParamSpec { name: "output", description: "Output CSV with K and L values.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "max_distance",
+                    description: "Maximum distance for K computation.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "num_distances",
+                    description: "Number of distance bins (default: 20).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output CSV with K and L values.",
+                    required: true,
+                },
             ],
         }
     }
@@ -69,14 +93,31 @@ impl Tool for RipleysKFunctionTool {
         ToolManifest {
             id: "ripleys_k_function".to_string(),
             display_name: "Ripley's K Function".to_string(),
-            summary: "Compute K(t) and L(t) for characterizing spatial clustering patterns.".to_string(),
+            summary: "Compute K(t) and L(t) for characterizing spatial clustering patterns."
+                .to_string(),
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Point vector layer.".to_string(), required: true },
-                ToolParamDescriptor { name: "max_distance".to_string(), description: "Maximum distance threshold.".to_string(), required: true },
-                ToolParamDescriptor { name: "num_distances".to_string(), description: "Number of distance steps.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Output CSV.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Point vector layer.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "max_distance".to_string(),
+                    description: "Maximum distance threshold.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "num_distances".to_string(),
+                    description: "Number of distance steps.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Output CSV.".to_string(),
+                    required: true,
+                },
             ],
             defaults: defaults.clone(),
             examples: vec![ToolExample {
@@ -84,7 +125,11 @@ impl Tool for RipleysKFunctionTool {
                 description: "Compute K function from 0 to 1.0 with 20 distances.".to_string(),
                 args: defaults,
             }],
-            tags: vec!["vector".to_string(), "point-pattern".to_string(), "spatial-statistics".to_string()],
+            tags: vec![
+                "vector".to_string(),
+                "point-pattern".to_string(),
+                "spatial-statistics".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -112,10 +157,13 @@ impl Tool for RipleysKFunctionTool {
         }
 
         if points.len() < 5 {
-            return Err(ToolError::Execution("At least 5 points required".to_string()));
+            return Err(ToolError::Execution(
+                "At least 5 points required".to_string(),
+            ));
         }
 
-        ctx.progress.info(&format!("Computing K function for {} points", points.len()));
+        ctx.progress
+            .info(&format!("Computing K function for {} points", points.len()));
         let kf = KFunction::new(points)
             .map_err(|e| ToolError::Execution(format!("K function creation failed: {}", e)))?;
 
@@ -123,13 +171,17 @@ impl Tool for RipleysKFunctionTool {
             .map(|i| (i as f64 / num_distances as f64) * max_distance)
             .collect();
 
-        let result = kf.compute(&distances)
+        let result = kf
+            .compute(&distances)
             .map_err(|e| ToolError::Execution(format!("K computation failed: {}", e)))?;
 
         ctx.progress.info("Writing output");
         let mut csv = String::from("distance,k_value,l_value\n");
         for i in 0..result.distances.len() {
-            csv.push_str(&format!("{},{},{}\n", result.distances[i], result.k_values[i], result.l_values[i]));
+            csv.push_str(&format!(
+                "{},{},{}\n",
+                result.distances[i], result.k_values[i], result.l_values[i]
+            ));
         }
 
         std::fs::write(output_path, csv)
@@ -137,7 +189,7 @@ impl Tool for RipleysKFunctionTool {
 
         let mut outputs = ToolArgs::new();
         outputs.insert("output".to_string(), json!(output_path));
-        
+
         ctx.progress.progress(1.0);
         Ok(ToolRunResult { outputs })
     }
@@ -156,12 +208,36 @@ impl Tool for PointPatternEnvelopeTool {
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector layer.", required: true },
-                ToolParamSpec { name: "max_distance", description: "Maximum distance for envelope.", required: true },
-                ToolParamSpec { name: "num_distances", description: "Number of distance bins (default: 20).", required: false },
-                ToolParamSpec { name: "num_simulations", description: "Monte Carlo simulations (default: 99).", required: false },
-                ToolParamSpec { name: "alpha", description: "Significance level (default: 0.05).", required: false },
-                ToolParamSpec { name: "output", description: "Output CSV with envelope bounds.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "max_distance",
+                    description: "Maximum distance for envelope.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "num_distances",
+                    description: "Number of distance bins (default: 20).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "num_simulations",
+                    description: "Monte Carlo simulations (default: 99).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "alpha",
+                    description: "Significance level (default: 0.05).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output CSV with envelope bounds.",
+                    required: true,
+                },
             ],
         }
     }
@@ -178,16 +254,41 @@ impl Tool for PointPatternEnvelopeTool {
         ToolManifest {
             id: "point_pattern_envelope".to_string(),
             display_name: "Point Pattern Envelope Test".to_string(),
-            summary: "Generate critical-band envelopes for hypothesis testing against CSR.".to_string(),
+            summary: "Generate critical-band envelopes for hypothesis testing against CSR."
+                .to_string(),
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Point vector layer.".to_string(), required: true },
-                ToolParamDescriptor { name: "max_distance".to_string(), description: "Maximum distance.".to_string(), required: true },
-                ToolParamDescriptor { name: "num_distances".to_string(), description: "Distance bins.".to_string(), required: false },
-                ToolParamDescriptor { name: "num_simulations".to_string(), description: "Monte Carlo replicates.".to_string(), required: false },
-                ToolParamDescriptor { name: "alpha".to_string(), description: "Significance level.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Output CSV.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Point vector layer.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "max_distance".to_string(),
+                    description: "Maximum distance.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "num_distances".to_string(),
+                    description: "Distance bins.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "num_simulations".to_string(),
+                    description: "Monte Carlo replicates.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "alpha".to_string(),
+                    description: "Significance level.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Output CSV.".to_string(),
+                    required: true,
+                },
             ],
             defaults: defaults.clone(),
             examples: vec![ToolExample {
@@ -195,7 +296,11 @@ impl Tool for PointPatternEnvelopeTool {
                 description: "Test pattern with 99 simulations at α=0.05.".to_string(),
                 args: defaults,
             }],
-            tags: vec!["vector".to_string(), "hypothesis-test".to_string(), "spatial-statistics".to_string()],
+            tags: vec![
+                "vector".to_string(),
+                "hypothesis-test".to_string(),
+                "spatial-statistics".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -214,7 +319,8 @@ impl Tool for PointPatternEnvelopeTool {
         let alpha = parse_optional_f64_arg(args, "alpha").unwrap_or(0.05);
         let output_path = parse_string_arg(args, "output")?;
 
-        ctx.progress.info("Extracting points and computing observed K");
+        ctx.progress
+            .info("Extracting points and computing observed K");
         let mut points = Vec::new();
         for feature in &input.features {
             if let Some(geom) = &feature.geometry {
@@ -225,7 +331,9 @@ impl Tool for PointPatternEnvelopeTool {
         }
 
         if points.len() < 5 {
-            return Err(ToolError::Execution("At least 5 points required".to_string()));
+            return Err(ToolError::Execution(
+                "At least 5 points required".to_string(),
+            ));
         }
 
         let kf = KFunction::new(points.clone())
@@ -235,17 +343,37 @@ impl Tool for PointPatternEnvelopeTool {
             .map(|i| (i as f64 / num_distances as f64) * max_distance)
             .collect();
 
-        let result = kf.compute(&distances)
+        let result = kf
+            .compute(&distances)
             .map_err(|e| ToolError::Execution(format!("K computation failed: {}", e)))?;
 
-        let min_x = points.iter().map(|(x, _)| x).copied().fold(f64::INFINITY, f64::min);
-        let max_x = points.iter().map(|(x, _)| x).copied().fold(f64::NEG_INFINITY, f64::max);
-        let min_y = points.iter().map(|(_, y)| y).copied().fold(f64::INFINITY, f64::min);
-        let max_y = points.iter().map(|(_, y)| y).copied().fold(f64::NEG_INFINITY, f64::max);
+        let min_x = points
+            .iter()
+            .map(|(x, _)| x)
+            .copied()
+            .fold(f64::INFINITY, f64::min);
+        let max_x = points
+            .iter()
+            .map(|(x, _)| x)
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
+        let min_y = points
+            .iter()
+            .map(|(_, y)| y)
+            .copied()
+            .fold(f64::INFINITY, f64::min);
+        let max_y = points
+            .iter()
+            .map(|(_, y)| y)
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
         let bounds = (min_x, min_y, max_x, max_y);
         let intensity = points.len() as f64 / ((max_x - min_x) * (max_y - min_y)).max(1e-10);
 
-        ctx.progress.info(&format!("Generating {} envelope simulations", num_simulations));
+        ctx.progress.info(&format!(
+            "Generating {} envelope simulations",
+            num_simulations
+        ));
         let envelope = CriticalBandEnvelope::generate(
             &result.k_values,
             &result.l_values,
@@ -258,9 +386,15 @@ impl Tool for PointPatternEnvelopeTool {
         .map_err(|e| ToolError::Execution(format!("Envelope generation failed: {}", e)))?;
 
         ctx.progress.info("Writing output");
-        let mut csv = String::from("distance,observed_k,lower_bound,upper_bound,observed_l,l_lower,l_upper,significant\n");
+        let mut csv = String::from(
+            "distance,observed_k,lower_bound,upper_bound,observed_l,l_lower,l_upper,significant\n",
+        );
         for i in 0..envelope.distances.len() {
-            let sig = if envelope.is_significant[i] { "yes" } else { "no" };
+            let sig = if envelope.is_significant[i] {
+                "yes"
+            } else {
+                "no"
+            };
             csv.push_str(&format!(
                 "{},{},{},{},{},{},{},{}\n",
                 envelope.distances[i],
@@ -279,7 +413,7 @@ impl Tool for PointPatternEnvelopeTool {
 
         let mut outputs = ToolArgs::new();
         outputs.insert("output".to_string(), json!(output_path));
-        
+
         ctx.progress.progress(1.0);
         Ok(ToolRunResult { outputs })
     }
@@ -294,15 +428,36 @@ impl Tool for InhomogeneousBaselineTool {
         ToolMetadata {
             id: "inhomogeneous_baseline",
             display_name: "Inhomogeneous Poisson Process Baseline",
-            summary: "Estimates intensity λ(x,y) via KDE and computes intensity-corrected K function.",
+            summary:
+                "Estimates intensity λ(x,y) via KDE and computes intensity-corrected K function.",
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector layer.", required: true },
-                ToolParamSpec { name: "max_distance", description: "Maximum distance for K.", required: true },
-                ToolParamSpec { name: "num_distances", description: "Number of distance bins (default: 20).", required: false },
-                ToolParamSpec { name: "bandwidth", description: "KDE bandwidth for intensity estimation (optional).", required: false },
-                ToolParamSpec { name: "output", description: "Output CSV with intensity-corrected K.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "max_distance",
+                    description: "Maximum distance for K.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "num_distances",
+                    description: "Number of distance bins (default: 20).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "bandwidth",
+                    description: "KDE bandwidth for intensity estimation (optional).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output CSV with intensity-corrected K.",
+                    required: true,
+                },
             ],
         }
     }
@@ -317,15 +472,36 @@ impl Tool for InhomogeneousBaselineTool {
         ToolManifest {
             id: "inhomogeneous_baseline".to_string(),
             display_name: "Inhomogeneous Poisson Process Baseline".to_string(),
-            summary: "Estimate intensity surface and compute intensity-corrected K function.".to_string(),
+            summary: "Estimate intensity surface and compute intensity-corrected K function."
+                .to_string(),
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Point vector layer.".to_string(), required: true },
-                ToolParamDescriptor { name: "max_distance".to_string(), description: "Maximum distance.".to_string(), required: true },
-                ToolParamDescriptor { name: "num_distances".to_string(), description: "Distance bins.".to_string(), required: false },
-                ToolParamDescriptor { name: "bandwidth".to_string(), description: "KDE bandwidth (auto-select if omitted).".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Output CSV.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Point vector layer.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "max_distance".to_string(),
+                    description: "Maximum distance.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "num_distances".to_string(),
+                    description: "Distance bins.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "bandwidth".to_string(),
+                    description: "KDE bandwidth (auto-select if omitted).".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Output CSV.".to_string(),
+                    required: true,
+                },
             ],
             defaults: defaults.clone(),
             examples: vec![ToolExample {
@@ -333,7 +509,11 @@ impl Tool for InhomogeneousBaselineTool {
                 description: "Compute intensity-corrected K with automatic bandwidth.".to_string(),
                 args: defaults,
             }],
-            tags: vec!["vector".to_string(), "inhomogeneous".to_string(), "spatial-statistics".to_string()],
+            tags: vec![
+                "vector".to_string(),
+                "inhomogeneous".to_string(),
+                "spatial-statistics".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -362,7 +542,9 @@ impl Tool for InhomogeneousBaselineTool {
         }
 
         if points.len() < 5 {
-            return Err(ToolError::Execution("At least 5 points required".to_string()));
+            return Err(ToolError::Execution(
+                "At least 5 points required".to_string(),
+            ));
         }
 
         ctx.progress.info("Creating inhomogeneous K process");
@@ -374,12 +556,14 @@ impl Tool for InhomogeneousBaselineTool {
             .collect();
 
         ctx.progress.info("Computing intensity-corrected K");
-        let result = process.compute_k_inhom(&distances)
+        let result = process
+            .compute_k_inhom(&distances)
             .map_err(|e| ToolError::Execution(format!("K computation failed: {}", e)))?;
 
         ctx.progress.info("Writing output");
         let mut csv = String::from("distance,k_inhom,l_inhom,intensity_mean,bandwidth\n");
-        let mean_intensity = result.intensities.iter().sum::<f64>() / result.intensities.len() as f64;
+        let mean_intensity =
+            result.intensities.iter().sum::<f64>() / result.intensities.len() as f64;
         for i in 0..result.distances.len() {
             csv.push_str(&format!(
                 "{},{},{},{},{}\n",
@@ -396,7 +580,7 @@ impl Tool for InhomogeneousBaselineTool {
 
         let mut outputs = ToolArgs::new();
         outputs.insert("output".to_string(), json!(output_path));
-        
+
         ctx.progress.progress(1.0);
         Ok(ToolRunResult { outputs })
     }
@@ -439,11 +623,31 @@ impl Tool for PointProcessResidualsComparisonTool {
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Point vector layer.".to_string(), required: true },
-                ToolParamDescriptor { name: "observed_field".to_string(), description: "Observed values field.".to_string(), required: true },
-                ToolParamDescriptor { name: "predicted_field".to_string(), description: "Predicted values field.".to_string(), required: true },
-                ToolParamDescriptor { name: "residual_type".to_string(), description: "Residual type.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Output CSV.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Point vector layer.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "observed_field".to_string(),
+                    description: "Observed values field.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "predicted_field".to_string(),
+                    description: "Predicted values field.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "residual_type".to_string(),
+                    description: "Residual type.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Output CSV.".to_string(),
+                    required: true,
+                },
             ],
             defaults: defaults.clone(),
             examples: vec![ToolExample {
@@ -451,7 +655,11 @@ impl Tool for PointProcessResidualsComparisonTool {
                 description: "Compute standardized residuals with diagnostics.".to_string(),
                 args: defaults,
             }],
-            tags: vec!["vector".to_string(), "diagnostics".to_string(), "spatial-statistics".to_string()],
+            tags: vec![
+                "vector".to_string(),
+                "diagnostics".to_string(),
+                "spatial-statistics".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -467,7 +675,8 @@ impl Tool for PointProcessResidualsComparisonTool {
         let input = load_vector_arg(args, "input")?;
         let observed_field = parse_string_arg(args, "observed_field")?;
         let predicted_field = parse_string_arg(args, "predicted_field")?;
-        let residual_type_str = parse_optional_string_arg(args, "residual_type").unwrap_or("standardized");
+        let residual_type_str =
+            parse_optional_string_arg(args, "residual_type").unwrap_or("standardized");
         let output_path = parse_string_arg(args, "output")?;
 
         let residual_type = match residual_type_str.to_lowercase().as_str() {
@@ -476,11 +685,14 @@ impl Tool for PointProcessResidualsComparisonTool {
             _ => ResidualType::Standardized,
         };
 
-        ctx.progress.info("Extracting observed and predicted values");
-        let obs_idx = input.schema.field_index(observed_field)
-            .ok_or_else(|| ToolError::Validation(format!("Field '{}' not found", observed_field)))?;
-        let pred_idx = input.schema.field_index(predicted_field)
-            .ok_or_else(|| ToolError::Validation(format!("Field '{}' not found", predicted_field)))?;
+        ctx.progress
+            .info("Extracting observed and predicted values");
+        let obs_idx = input.schema.field_index(observed_field).ok_or_else(|| {
+            ToolError::Validation(format!("Field '{}' not found", observed_field))
+        })?;
+        let pred_idx = input.schema.field_index(predicted_field).ok_or_else(|| {
+            ToolError::Validation(format!("Field '{}' not found", predicted_field))
+        })?;
 
         let mut locations = Vec::new();
         let mut observed = Vec::new();
@@ -504,12 +716,15 @@ impl Tool for PointProcessResidualsComparisonTool {
         }
 
         if locations.is_empty() {
-            return Err(ToolError::Execution("No valid observations found".to_string()));
+            return Err(ToolError::Execution(
+                "No valid observations found".to_string(),
+            ));
         }
 
         ctx.progress.info("Computing residuals");
-        let residuals = PointProcessResiduals::compute(locations, observed, predicted, residual_type)
-            .map_err(|e| ToolError::Execution(format!("Residual computation failed: {}", e)))?;
+        let residuals =
+            PointProcessResiduals::compute(locations, observed, predicted, residual_type)
+                .map_err(|e| ToolError::Execution(format!("Residual computation failed: {}", e)))?;
 
         let (is_adequate, diagnostics) = residuals.adequacy_check();
 
@@ -532,7 +747,10 @@ impl Tool for PointProcessResidualsComparisonTool {
         csv.push_str("\nDiagnostics:\n");
         csv.push_str(&format!("Total Deviance: {}\n", residuals.total_deviance));
         csv.push_str(&format!("AIC: {}\n", residuals.aic));
-        csv.push_str(&format!("Model Adequate: {}\n", if is_adequate { "YES" } else { "NO" }));
+        csv.push_str(&format!(
+            "Model Adequate: {}\n",
+            if is_adequate { "YES" } else { "NO" }
+        ));
 
         std::fs::write(output_path, csv)
             .map_err(|e| ToolError::Execution(format!("Write failed: {}", e)))?;
@@ -540,7 +758,7 @@ impl Tool for PointProcessResidualsComparisonTool {
         let mut outputs = ToolArgs::new();
         outputs.insert("output".to_string(), json!(output_path));
         outputs.insert("adequate".to_string(), json!(is_adequate));
-        
+
         ctx.progress.progress(1.0);
         Ok(ToolRunResult { outputs })
     }
@@ -555,14 +773,31 @@ impl Tool for HotspotVsProcessTool {
         ToolMetadata {
             id: "hotspot_vs_process",
             display_name: "Hotspot vs Process Comparison",
-            summary: "Compares spatial hotspot classifications with point-process model predictions.",
+            summary:
+                "Compares spatial hotspot classifications with point-process model predictions.",
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector with hotspot classifications.", required: true },
-                ToolParamSpec { name: "hotspot_field", description: "Field with hotspot classification (hot/cold/insignificant).", required: true },
-                ToolParamSpec { name: "intensity_field", description: "Field with estimated intensity λ.", required: true },
-                ToolParamSpec { name: "output", description: "Output CSV with comparison metrics.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector with hotspot classifications.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "hotspot_field",
+                    description: "Field with hotspot classification (hot/cold/insignificant).",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "intensity_field",
+                    description: "Field with estimated intensity λ.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output CSV with comparison metrics.",
+                    required: true,
+                },
             ],
         }
     }
@@ -577,14 +812,31 @@ impl Tool for HotspotVsProcessTool {
         ToolManifest {
             id: "hotspot_vs_process".to_string(),
             display_name: "Hotspot vs Process Comparison".to_string(),
-            summary: "Compare hotspot patterns with underlying point-process intensity.".to_string(),
+            summary: "Compare hotspot patterns with underlying point-process intensity."
+                .to_string(),
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Point vector layer.".to_string(), required: true },
-                ToolParamDescriptor { name: "hotspot_field".to_string(), description: "Hotspot classification field.".to_string(), required: true },
-                ToolParamDescriptor { name: "intensity_field".to_string(), description: "Intensity field.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Output CSV.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Point vector layer.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "hotspot_field".to_string(),
+                    description: "Hotspot classification field.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "intensity_field".to_string(),
+                    description: "Intensity field.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Output CSV.".to_string(),
+                    required: true,
+                },
             ],
             defaults: defaults.clone(),
             examples: vec![ToolExample {
@@ -592,7 +844,11 @@ impl Tool for HotspotVsProcessTool {
                 description: "Compare Getis-Ord hotspots with KDE intensity.".to_string(),
                 args: defaults,
             }],
-            tags: vec!["vector".to_string(), "comparison".to_string(), "spatial-statistics".to_string()],
+            tags: vec![
+                "vector".to_string(),
+                "comparison".to_string(),
+                "spatial-statistics".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -611,10 +867,13 @@ impl Tool for HotspotVsProcessTool {
         let output_path = parse_string_arg(args, "output")?;
 
         ctx.progress.info("Extracting hotspot and intensity data");
-        let hotspot_idx = input.schema.field_index(hotspot_field)
+        let hotspot_idx = input
+            .schema
+            .field_index(hotspot_field)
             .ok_or_else(|| ToolError::Validation(format!("Field '{}' not found", hotspot_field)))?;
-        let intensity_idx = input.schema.field_index(intensity_field)
-            .ok_or_else(|| ToolError::Validation(format!("Field '{}' not found", intensity_field)))?;
+        let intensity_idx = input.schema.field_index(intensity_field).ok_or_else(|| {
+            ToolError::Validation(format!("Field '{}' not found", intensity_field))
+        })?;
 
         let mut hot_points = 0;
         let mut cold_points = 0;
@@ -631,7 +890,10 @@ impl Tool for HotspotVsProcessTool {
         for feature in &input.features {
             if let (Some(hotspot_val), Some(intensity_val)) = (
                 feature.attributes.get(hotspot_idx).and_then(|v| v.as_str()),
-                feature.attributes.get(intensity_idx).and_then(|v| v.as_f64()),
+                feature
+                    .attributes
+                    .get(intensity_idx)
+                    .and_then(|v| v.as_f64()),
             ) {
                 let class = hotspot_val.trim().to_lowercase();
                 csv.push_str(&format!("{},{}\n", class, intensity_val));
@@ -657,28 +919,51 @@ impl Tool for HotspotVsProcessTool {
         }
 
         ctx.progress.info("Computing comparison metrics");
-        let hot_mean = if hot_intensity_count > 0 { hot_intensity_sum / hot_intensity_count as f64 } else { 0.0 };
-        let cold_mean = if cold_intensity_count > 0 { cold_intensity_sum / cold_intensity_count as f64 } else { 0.0 };
-        let insignificant_mean = if insignificant_intensity_count > 0 { 
-            insignificant_intensity_sum / insignificant_intensity_count as f64 
-        } else { 
-            0.0 
+        let hot_mean = if hot_intensity_count > 0 {
+            hot_intensity_sum / hot_intensity_count as f64
+        } else {
+            0.0
+        };
+        let cold_mean = if cold_intensity_count > 0 {
+            cold_intensity_sum / cold_intensity_count as f64
+        } else {
+            0.0
+        };
+        let insignificant_mean = if insignificant_intensity_count > 0 {
+            insignificant_intensity_sum / insignificant_intensity_count as f64
+        } else {
+            0.0
         };
 
         ctx.progress.info("Writing output");
         csv.push_str("\n=== Summary Statistics ===\n");
-        csv.push_str(&format!("Hot Spots: {} (mean intensity: {:.4})\n", hot_points, hot_mean));
-        csv.push_str(&format!("Cold Spots: {} (mean intensity: {:.4})\n", cold_points, cold_mean));
-        csv.push_str(&format!("Insignificant: {} (mean intensity: {:.4})\n", insignificant_points, insignificant_mean));
-        csv.push_str(&format!("\nHotspot/Coldspot Intensity Ratio: {:.4}\n", 
-            if cold_mean > 0.0 { hot_mean / cold_mean } else { 0.0 }));
+        csv.push_str(&format!(
+            "Hot Spots: {} (mean intensity: {:.4})\n",
+            hot_points, hot_mean
+        ));
+        csv.push_str(&format!(
+            "Cold Spots: {} (mean intensity: {:.4})\n",
+            cold_points, cold_mean
+        ));
+        csv.push_str(&format!(
+            "Insignificant: {} (mean intensity: {:.4})\n",
+            insignificant_points, insignificant_mean
+        ));
+        csv.push_str(&format!(
+            "\nHotspot/Coldspot Intensity Ratio: {:.4}\n",
+            if cold_mean > 0.0 {
+                hot_mean / cold_mean
+            } else {
+                0.0
+            }
+        ));
 
         std::fs::write(output_path, csv)
             .map_err(|e| ToolError::Execution(format!("Write failed: {}", e)))?;
 
         let mut outputs = ToolArgs::new();
         outputs.insert("output".to_string(), json!(output_path));
-        
+
         ctx.progress.progress(1.0);
         Ok(ToolRunResult { outputs })
     }

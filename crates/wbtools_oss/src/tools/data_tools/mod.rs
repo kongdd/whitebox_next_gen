@@ -3,24 +3,31 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use serde_json::json;
-use rayon::prelude::*;
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
-use wbcore::{PercentCoalescer, 
-    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH, LicenseTier, Tool,
-    ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
-    ToolParamDescriptor, ToolParamSchema, ToolParamSpec, ToolRunResult, ToolStability, ToolVectorGeometry,
+use rayon::prelude::*;
+use serde_json::json;
+use wbcore::{
+    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier,
+    PercentCoalescer, Tool, ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample,
+    ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSchema, ToolParamSpec, ToolRunResult,
+    ToolStability, ToolVectorGeometry, IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH,
 };
-use wbgeotiff::{ifd::{IfdValue, TiffReader}, tags::tag, GeoTiff};
+use wbgeotiff::{
+    ifd::{IfdValue, TiffReader},
+    tags::tag,
+    GeoTiff,
+};
 use wbraster::{CrsInfo, DataType, Raster, RasterConfig, RasterFormat};
-use wbvector::{Coord, FieldDef, FieldType, FieldValue, Geometry, GeometryType, Layer, Ring, VectorFormat};
-use wbvector::memory_store as vector_memory_store;
 use wbtopology::{
-    from_wkb as topology_from_wkb, overlaps as topology_overlaps, to_wkb as topology_to_wkb,
-    Geometry as TopologyGeometry, Polygon as TopologyPolygon, is_simple_linestring, is_valid_polygon,
-    geometry_distance, coord_dist, Envelope as TopologyEnvelope, SpatialIndex,
-    Coord as TopoCoord,
+    coord_dist, from_wkb as topology_from_wkb, geometry_distance, is_simple_linestring,
+    is_valid_polygon, overlaps as topology_overlaps, to_wkb as topology_to_wkb, Coord as TopoCoord,
+    Envelope as TopologyEnvelope, Geometry as TopologyGeometry, Polygon as TopologyPolygon,
+    SpatialIndex,
+};
+use wbvector::memory_store as vector_memory_store;
+use wbvector::{
+    Coord, FieldDef, FieldType, FieldValue, Geometry, GeometryType, Layer, Ring, VectorFormat,
 };
 
 use crate::memory_store;
@@ -95,7 +102,10 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("output", ToolParamSchema::output_raster()),
         ])),
         "vector_lines_to_raster" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input_vector(ToolVectorGeometry::Line)),
+            (
+                "input",
+                ToolParamSchema::input_vector(ToolVectorGeometry::Line),
+            ),
             ("field", ToolParamSchema::field("input", None)),
             ("zero_background", ToolParamSchema::bool()),
             ("cell_size", ToolParamSchema::scalar_float()),
@@ -114,7 +124,10 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("output", ToolParamSchema::output_raster()),
         ])),
         "fix_dangling_arcs" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input_vector(ToolVectorGeometry::Line)),
+            (
+                "input",
+                ToolParamSchema::input_vector(ToolVectorGeometry::Line),
+            ),
             ("snap", ToolParamSchema::scalar_float()),
             (
                 "output",
@@ -124,7 +137,10 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
         ])),
         "lines_to_polygons" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input_vector(ToolVectorGeometry::Line)),
+            (
+                "input",
+                ToolParamSchema::input_vector(ToolVectorGeometry::Line),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -180,7 +196,10 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("output", ToolParamSchema::output_vector_any()),
         ])),
         "add_point_coordinates_to_table" => Some(param_schema_map(&[
-            ("input", ToolParamSchema::input_vector(ToolVectorGeometry::Point)),
+            (
+                "input",
+                ToolParamSchema::input_vector(ToolVectorGeometry::Point),
+            ),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -206,15 +225,15 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
         ])),
         "join_tables" => Some(param_schema_map(&[
             ("primary_vector", ToolParamSchema::input_vector_any()),
-            ("primary_key_field", ToolParamSchema::string()),
+            ("primary_key_field", ToolParamSchema::field("primary_vector", None)),
             ("foreign_vector", ToolParamSchema::input_vector_any()),
-            ("foreign_key_field", ToolParamSchema::string()),
-            ("import_field", ToolParamSchema::string()),
+            ("foreign_key_field", ToolParamSchema::field("foreign_vector", None)),
+            ("import_field", ToolParamSchema::field("foreign_vector", None)),
             ("output", ToolParamSchema::output_vector_any()),
         ])),
         "merge_table_with_csv" => Some(param_schema_map(&[
             ("primary_vector", ToolParamSchema::input_vector_any()),
-            ("primary_key_field", ToolParamSchema::string()),
+            ("primary_key_field", ToolParamSchema::field("primary_vector", None)),
             ("foreign_csv_filename", ToolParamSchema::string()),
             ("foreign_key_field", ToolParamSchema::string()),
             ("import_field", ToolParamSchema::string()),
@@ -243,7 +262,10 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
                     geometry: ToolVectorGeometry::Point,
                 }),
             ),
-            ("report", ToolParamSchema::output(wbcore::ToolDatasetSchema::File)),
+            (
+                "report",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
+            ),
         ])),
         "topology_rule_autofix" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_vector_any()),
@@ -313,8 +335,9 @@ pub struct SinglepartToMultipartTool;
 fn ensure_parent_dir(path: &Path) -> Result<(), ToolError> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ToolError::Execution(format!("failed creating output directory: {e}"))
+            })?;
         }
     }
     Ok(())
@@ -378,7 +401,9 @@ fn write_vector_output(layer: &Layer, output_path: &Path) -> Result<ToolRunResul
 fn read_vector_layer(path: &str, label: &str) -> Result<Layer, ToolError> {
     if wbvector::memory_store::vector_is_memory_path(path) {
         let id = wbvector::memory_store::vector_path_to_id(path).ok_or_else(|| {
-            ToolError::Validation(format!("failed reading {label} vector '{path}': malformed in-memory vector path"))
+            ToolError::Validation(format!(
+                "failed reading {label} vector '{path}': malformed in-memory vector path"
+            ))
         })?;
         return wbvector::memory_store::get_vector_arc_by_id(id)
             .map(|layer| layer.as_ref().clone())
@@ -417,7 +442,10 @@ fn apply_raster_crs_to_layer(input: &Raster, output: &mut Layer) {
     }
 }
 
-fn clone_feature_attrs<'a>(layer: &'a Layer, feature: &'a wbvector::Feature) -> Vec<(&'a str, FieldValue)> {
+fn clone_feature_attrs<'a>(
+    layer: &'a Layer,
+    feature: &'a wbvector::Feature,
+) -> Vec<(&'a str, FieldValue)> {
     layer
         .schema
         .fields()
@@ -426,7 +454,11 @@ fn clone_feature_attrs<'a>(layer: &'a Layer, feature: &'a wbvector::Feature) -> 
         .map(|(idx, field)| {
             (
                 field.name.as_str(),
-                feature.attributes.get(idx).cloned().unwrap_or(FieldValue::Null),
+                feature
+                    .attributes
+                    .get(idx)
+                    .cloned()
+                    .unwrap_or(FieldValue::Null),
             )
         })
         .collect()
@@ -443,8 +475,11 @@ fn close_ring(coords: &[wbvector::Coord]) -> Vec<wbvector::Coord> {
 }
 
 fn strip_polygon_holes_with_topology(geometry: &Geometry) -> Result<Geometry, ToolError> {
-    let topo_geom = topology_from_wkb(&geometry.to_wkb())
-        .map_err(|e| ToolError::Execution(format!("failed converting geometry for topology processing: {e}")))?;
+    let topo_geom = topology_from_wkb(&geometry.to_wkb()).map_err(|e| {
+        ToolError::Execution(format!(
+            "failed converting geometry for topology processing: {e}"
+        ))
+    })?;
 
     let stripped = match topo_geom {
         TopologyGeometry::Polygon(poly) => {
@@ -464,7 +499,9 @@ fn strip_polygon_holes_with_topology(geometry: &Geometry) -> Result<Geometry, To
     };
 
     Geometry::from_wkb(&topology_to_wkb(&stripped)).map_err(|e| {
-        ToolError::Execution(format!("failed converting topology geometry back to vector geometry: {e}"))
+        ToolError::Execution(format!(
+            "failed converting topology geometry back to vector geometry: {e}"
+        ))
     })
 }
 
@@ -586,9 +623,17 @@ fn build_geotiff_tag_report(input_path: &str) -> Result<String, ToolError> {
     report.push_str(&format!("Input: {input_path}\n"));
     report.push_str(&format!(
         "Variant: {}\n",
-        if tiff.is_bigtiff { "BigTIFF" } else { "Classic TIFF" }
+        if tiff.is_bigtiff {
+            "BigTIFF"
+        } else {
+            "Classic TIFF"
+        }
     ));
-    report.push_str(&format!("Dimensions: {} x {}\n", tiff.width(), tiff.height()));
+    report.push_str(&format!(
+        "Dimensions: {} x {}\n",
+        tiff.width(),
+        tiff.height()
+    ));
     report.push_str(&format!("Bands: {}\n", tiff.band_count()));
     report.push_str(&format!("Bits per sample: {}\n", tiff.bits_per_sample()));
     report.push_str(&format!("Sample format: {:?}\n", tiff.sample_format()));
@@ -750,10 +795,7 @@ fn expand_to_single_part(geom: &Geometry, exclude_holes: bool) -> Vec<Geometry> 
         Geometry::Point(_) | Geometry::LineString(_) | Geometry::Polygon { .. } => {
             vec![geom.clone()]
         }
-        Geometry::MultiPoint(coords) => coords
-            .iter()
-            .map(|c| Geometry::Point(c.clone()))
-            .collect(),
+        Geometry::MultiPoint(coords) => coords.iter().map(|c| Geometry::Point(c.clone())).collect(),
         Geometry::MultiLineString(lines) => lines
             .iter()
             .map(|ls| Geometry::line_string(ls.clone()))
@@ -820,7 +862,11 @@ fn merge_to_multi(
             let mut polys = Vec::new();
             for &i in feat_indices {
                 if let Some(f) = input.features.get(i) {
-                    if let Some(Geometry::Polygon { exterior, interiors }) = &f.geometry {
+                    if let Some(Geometry::Polygon {
+                        exterior,
+                        interiors,
+                    }) = &f.geometry
+                    {
                         polys.push((exterior.clone(), interiors.clone()));
                     }
                 }
@@ -855,7 +901,10 @@ fn clean_geometry(geometry: &Geometry) -> Option<Geometry> {
                 None
             }
         }
-        Geometry::Polygon { exterior, interiors } => {
+        Geometry::Polygon {
+            exterior,
+            interiors,
+        } => {
             if exterior.0.len() < 3 {
                 return None;
             }
@@ -966,7 +1015,10 @@ fn geometry_line_parts(geometry: &Geometry, out: &mut Vec<Vec<Coord>>) {
                 }
             }
         }
-        Geometry::Polygon { exterior, interiors } => {
+        Geometry::Polygon {
+            exterior,
+            interiors,
+        } => {
             if exterior.0.len() >= 2 {
                 out.push(exterior.0.clone());
             }
@@ -1022,7 +1074,13 @@ fn point_to_segment_distance(point: &Coord, start: &Coord, end: &Coord) -> f64 {
     dist
 }
 
-fn segment_intersection_point(a1: &Coord, a2: &Coord, b1: &Coord, b2: &Coord, tol: f64) -> Option<Coord> {
+fn segment_intersection_point(
+    a1: &Coord,
+    a2: &Coord,
+    b1: &Coord,
+    b2: &Coord,
+    tol: f64,
+) -> Option<Coord> {
     let x1 = a1.x;
     let y1 = a1.y;
     let x2 = a2.x;
@@ -1071,7 +1129,11 @@ fn coords_have_duplicate_vertices(coords: &[Coord], closed_ring: bool) -> bool {
     if coords.len() < 2 {
         return false;
     }
-    let limit = if closed_ring && coords.len() > 1 { coords.len() - 1 } else { coords.len() };
+    let limit = if closed_ring && coords.len() > 1 {
+        coords.len() - 1
+    } else {
+        coords.len()
+    };
     let mut seen = HashMap::<(u64, u64), usize>::new();
     for coord in coords.iter().take(limit) {
         let key = (coord.x.to_bits(), coord.y.to_bits());
@@ -1096,7 +1158,10 @@ fn polygon_topology_issues(exterior: &Ring, interiors: &[Ring]) -> Vec<TopologyI
     if exterior.0.len() < 4 {
         issues.push(TopologyIssue {
             issue_type: "polygon_exterior_too_short".to_string(),
-            detail: format!("exterior ring has {} coordinates; expected at least 4 including closure", exterior.0.len()),
+            detail: format!(
+                "exterior ring has {} coordinates; expected at least 4 including closure",
+                exterior.0.len()
+            ),
         });
     }
     if !ring_closed(&exterior.0) {
@@ -1116,7 +1181,11 @@ fn polygon_topology_issues(exterior: &Ring, interiors: &[Ring]) -> Vec<TopologyI
         if hole.0.len() < 4 {
             issues.push(TopologyIssue {
                 issue_type: "polygon_hole_too_short".to_string(),
-                detail: format!("hole {} has {} coordinates; expected at least 4 including closure", idx + 1, hole.0.len()),
+                detail: format!(
+                    "hole {} has {} coordinates; expected at least 4 including closure",
+                    idx + 1,
+                    hole.0.len()
+                ),
             });
         }
         if !ring_closed(&hole.0) {
@@ -1177,7 +1246,8 @@ fn linestring_topology_issues(coords: &[Coord]) -> Vec<TopologyIssue> {
             if !is_simple_linestring(&ls) {
                 issues.push(TopologyIssue {
                     issue_type: "linestring_self_intersection".to_string(),
-                    detail: "line is not simple; self-intersection or self-overlap detected".to_string(),
+                    detail: "line is not simple; self-intersection or self-overlap detected"
+                        .to_string(),
                 });
             }
         }
@@ -1222,7 +1292,10 @@ fn collect_topology_issues(geometry: &Geometry) -> Vec<TopologyIssue> {
             }
             issues
         }
-        Geometry::Polygon { exterior, interiors } => polygon_topology_issues(exterior, interiors),
+        Geometry::Polygon {
+            exterior,
+            interiors,
+        } => polygon_topology_issues(exterior, interiors),
         Geometry::MultiPolygon(polys) => {
             if polys.is_empty() {
                 return vec![TopologyIssue {
@@ -1323,11 +1396,7 @@ fn find_best_snap_candidate(
             continue;
         }
 
-        if best
-            .as_ref()
-            .map(|b| dist < b.distance)
-            .unwrap_or(true)
-        {
+        if best.as_ref().map(|b| dist < b.distance).unwrap_or(true) {
             best = Some(ArcSnapCandidate {
                 nearest,
                 distance: dist,
@@ -1378,8 +1447,8 @@ fn point_in_ring(pt: (f64, f64), ring: &[(f64, f64)]) -> bool {
     for i in 0..ring.len() {
         let (xi, yi) = ring[i];
         let (xj, yj) = ring[j];
-        let intersects = ((yi > y) != (yj > y))
-            && (x < (xj - xi) * (y - yi) / (yj - yi + f64::EPSILON) + xi);
+        let intersects =
+            ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + f64::EPSILON) + xi);
         if intersects {
             inside = !inside;
         }
@@ -1417,7 +1486,9 @@ fn detect_delimiter(line: &str) -> char {
 
 fn split_line(line: &str, delimiter: char) -> Vec<String> {
     if delimiter == ' ' {
-        line.split_whitespace().map(|s| s.trim().to_string()).collect()
+        line.split_whitespace()
+            .map(|s| s.trim().to_string())
+            .collect()
     } else {
         line.split(delimiter)
             .map(|s| s.trim().trim_matches('"').to_string())
@@ -1437,13 +1508,15 @@ fn parse_csv_table(path: &str) -> Result<(Vec<String>, Vec<Vec<String>>), ToolEr
     let delimiter = detect_delimiter(&header_line);
     let headers = split_line(&header_line, delimiter);
     if headers.is_empty() {
-        return Err(ToolError::Validation("csv header has no fields".to_string()));
+        return Err(ToolError::Validation(
+            "csv header has no fields".to_string(),
+        ));
     }
 
     let mut rows: Vec<Vec<String>> = Vec::new();
     for line in lines {
-        let line = line
-            .map_err(|e| ToolError::Execution(format!("failed reading csv line: {e}")))?;
+        let line =
+            line.map_err(|e| ToolError::Execution(format!("failed reading csv line: {e}")))?;
         if line.trim().is_empty() {
             continue;
         }
@@ -1533,8 +1606,16 @@ impl Tool for AddPointCoordinatesToTableTool {
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector path.", required: true },
-                ToolParamSpec { name: "output", description: "Output vector path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -1593,8 +1674,16 @@ impl Tool for AddPointCoordinatesToTableTool {
         for field in input.schema.fields() {
             output.add_field(field.clone());
         }
-        output.add_field(FieldDef::new("XCOORD", FieldType::Float).width(18).precision(8));
-        output.add_field(FieldDef::new("YCOORD", FieldType::Float).width(18).precision(8));
+        output.add_field(
+            FieldDef::new("XCOORD", FieldType::Float)
+                .width(18)
+                .precision(8),
+        );
+        output.add_field(
+            FieldDef::new("YCOORD", FieldType::Float)
+                .width(18)
+                .precision(8),
+        );
 
         let total = input.features.len().max(1) as f64;
         let coalescer = PercentCoalescer::new(1, 99);
@@ -1621,7 +1710,11 @@ impl Tool for AddPointCoordinatesToTableTool {
                 .map(|(idx, field)| {
                     (
                         field.name.as_str(),
-                        feature.attributes.get(idx).cloned().unwrap_or(FieldValue::Null),
+                        feature
+                            .attributes
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or(FieldValue::Null),
                     )
                 })
                 .collect::<Vec<_>>();
@@ -1715,7 +1808,13 @@ impl Tool for CleanVectorTool {
                     .fields()
                     .iter()
                     .enumerate()
-                    .map(|(idx, _)| feature.attributes.get(idx).cloned().unwrap_or(FieldValue::Null))
+                    .map(|(idx, _)| {
+                        feature
+                            .attributes
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or(FieldValue::Null)
+                    })
                     .collect::<Vec<_>>();
                 (cleaned, attr_values)
             })
@@ -1735,9 +1834,9 @@ impl Tool for CleanVectorTool {
                         )
                     })
                     .collect::<Vec<_>>();
-                output
-                    .add_feature(Some(geometry), &attrs)
-                    .map_err(|e| ToolError::Execution(format!("failed adding output feature: {e}")))?;
+                output.add_feature(Some(geometry), &attrs).map_err(|e| {
+                    ToolError::Execution(format!("failed adding output feature: {e}"))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (feature_idx + 1) as f64 / total);
         }
@@ -1818,9 +1917,13 @@ impl Tool for FixDanglingArcsTool {
         ctx.progress.info("running fix_dangling_arcs");
         let coalescer = PercentCoalescer::new(1, 99);
         let input = read_vector_layer(&input_path, "input")?;
-        if !matches!(input.geom_type, Some(GeometryType::LineString | GeometryType::MultiLineString)) {
+        if !matches!(
+            input.geom_type,
+            Some(GeometryType::LineString | GeometryType::MultiLineString)
+        ) {
             return Err(ToolError::Validation(
-                "input vector layer must have LineString or MultiLineString geometry type".to_string(),
+                "input vector layer must have LineString or MultiLineString geometry type"
+                    .to_string(),
             ));
         }
 
@@ -1841,7 +1944,13 @@ impl Tool for FixDanglingArcsTool {
                         .fields()
                         .iter()
                         .enumerate()
-                        .map(|(idx, _)| feature.attributes.get(idx).cloned().unwrap_or(FieldValue::Null))
+                        .map(|(idx, _)| {
+                            feature
+                                .attributes
+                                .get(idx)
+                                .cloned()
+                                .unwrap_or(FieldValue::Null)
+                        })
                         .collect::<Vec<_>>();
                     (feature.geometry.clone(), attr_values)
                 })
@@ -1859,9 +1968,9 @@ impl Tool for FixDanglingArcsTool {
                         )
                     })
                     .collect::<Vec<_>>();
-                passthrough
-                    .add_feature(geometry, &attrs)
-                    .map_err(|e| ToolError::Execution(format!("failed adding output feature: {e}")))?;
+                passthrough.add_feature(geometry, &attrs).map_err(|e| {
+                    ToolError::Execution(format!("failed adding output feature: {e}"))
+                })?;
             }
             return write_vector_output(&passthrough, &output_path);
         }
@@ -1891,7 +2000,8 @@ impl Tool for FixDanglingArcsTool {
             let start = part[0].clone();
             let second = part[1].clone();
 
-            if let Some(candidate) = find_best_snap_candidate(&start, part_id, &segments, snap_dist) {
+            if let Some(candidate) = find_best_snap_candidate(&start, part_id, &segments, snap_dist)
+            {
                 if candidate.distance >= precision {
                     let d_current = point_to_segment_distance(&candidate.nearest, &start, &second);
                     if (d_current - candidate.distance).abs() <= precision {
@@ -1956,7 +2066,11 @@ impl Tool for FixDanglingArcsTool {
             }
 
             let cleaned = dedupe_consecutive_coords(&new_points, precision);
-            fixed_parts[part_id] = if cleaned.len() >= 2 { cleaned } else { part.clone() };
+            fixed_parts[part_id] = if cleaned.len() >= 2 {
+                cleaned
+            } else {
+                part.clone()
+            };
             coalescer.emit_unit_fraction(ctx.progress, (part_id + 1) as f64 / total_parts);
         }
 
@@ -2004,7 +2118,13 @@ impl Tool for FixDanglingArcsTool {
                     .fields()
                     .iter()
                     .enumerate()
-                    .map(|(idx, _)| feature.attributes.get(idx).cloned().unwrap_or(FieldValue::Null))
+                    .map(|(idx, _)| {
+                        feature
+                            .attributes
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or(FieldValue::Null)
+                    })
                     .collect::<Vec<_>>();
                 (out_geom, attr_values)
             })
@@ -2037,12 +2157,21 @@ impl Tool for TopologyValidationReportTool {
         ToolMetadata {
             id: "topology_validation_report",
             display_name: "TopologyValidationReport",
-            summary: "Audits a vector layer for topology issues and writes a per-feature CSV report.",
+            summary:
+                "Audits a vector layer for topology issues and writes a per-feature CSV report.",
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector path.", required: true },
-                ToolParamSpec { name: "output", description: "Output CSV path.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output CSV path.",
+                    required: true,
+                },
             ],
         }
     }
@@ -2059,43 +2188,63 @@ impl Tool for TopologyValidationReportTool {
         ToolManifest {
             id: "topology_validation_report".to_string(),
             display_name: "TopologyValidationReport".to_string(),
-            summary: "Audits a vector layer for topology issues and writes a per-feature CSV report.".to_string(),
+            summary:
+                "Audits a vector layer for topology issues and writes a per-feature CSV report."
+                    .to_string(),
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input vector path.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Output CSV path.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input vector path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Output CSV path.".to_string(),
+                    required: true,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_run".to_string(),
-                description: "Generate a CSV report of topology issues for a vector layer.".to_string(),
+                description: "Generate a CSV report of topology issues for a vector layer."
+                    .to_string(),
                 args: example_args,
             }],
-            tags: vec!["data-tools".to_string(), "vector".to_string(), "topology".to_string(), "qa".to_string()],
+            tags: vec![
+                "data-tools".to_string(),
+                "vector".to_string(),
+                "topology".to_string(),
+                "qa".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = parse_vector_path_arg(args, "input")?;
-        let output = parse_optional_output_path(args, "output")?
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'output'".to_string()))?;
+        let output = parse_optional_output_path(args, "output")?.ok_or_else(|| {
+            ToolError::Validation("missing required parameter 'output'".to_string())
+        })?;
         if output
             .extension()
             .and_then(|s| s.to_str())
             .map(|s| s.eq_ignore_ascii_case("csv"))
             != Some(true)
         {
-            return Err(ToolError::Validation("output must be a .csv path".to_string()));
+            return Err(ToolError::Validation(
+                "output must be a .csv path".to_string(),
+            ));
         }
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_vector_path_arg(args, "input")?;
-        let output_path = parse_optional_output_path(args, "output")?
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'output'".to_string()))?;
+        let output_path = parse_optional_output_path(args, "output")?.ok_or_else(|| {
+            ToolError::Validation("missing required parameter 'output'".to_string())
+        })?;
 
         ctx.progress.info("running topology_validation_report");
         let input = read_vector_layer(&input_path, "input")?;
@@ -2149,7 +2298,10 @@ impl Tool for TopologyValidationReportTool {
             .map_err(|e| ToolError::Execution(format!("failed writing topology report: {e}")))?;
 
         let mut outputs = BTreeMap::new();
-        outputs.insert("path".to_string(), json!(output_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(output_path.to_string_lossy().to_string()),
+        );
         Ok(ToolRunResult { outputs })
     }
 }
@@ -2172,7 +2324,9 @@ impl TopologyRuleType {
             Self::PolygonMustNotHaveGaps => "polygon_must_not_have_gaps",
             Self::LineMustNotHaveDangles => "line_must_not_have_dangles",
             Self::PointMustBeCoveredByLine => "point_must_be_covered_by_line",
-            Self::LineEndpointsMustSnapWithinTolerance => "line_endpoints_must_snap_within_tolerance",
+            Self::LineEndpointsMustSnapWithinTolerance => {
+                "line_endpoints_must_snap_within_tolerance"
+            }
         }
     }
 
@@ -2183,7 +2337,9 @@ impl TopologyRuleType {
             "polygon_must_not_have_gaps" => Some(Self::PolygonMustNotHaveGaps),
             "line_must_not_have_dangles" => Some(Self::LineMustNotHaveDangles),
             "point_must_be_covered_by_line" => Some(Self::PointMustBeCoveredByLine),
-            "line_endpoints_must_snap_within_tolerance" => Some(Self::LineEndpointsMustSnapWithinTolerance),
+            "line_endpoints_must_snap_within_tolerance" => {
+                Some(Self::LineEndpointsMustSnapWithinTolerance)
+            }
             _ => None,
         }
     }
@@ -2220,7 +2376,10 @@ fn build_indexed_polygon_features(input: &Layer) -> Result<Vec<IndexedPolygonFea
             let Some(geometry) = feature.geometry.as_ref() else {
                 return Ok(None);
             };
-            if !matches!(geometry, Geometry::Polygon { .. } | Geometry::MultiPolygon(_)) {
+            if !matches!(
+                geometry,
+                Geometry::Polygon { .. } | Geometry::MultiPolygon(_)
+            ) {
                 return Ok(None);
             }
             let Some(anchor) = geometry_anchor_coord(geometry) else {
@@ -2250,7 +2409,10 @@ fn build_indexed_line_features(input: &Layer) -> Result<Vec<IndexedLineFeature>,
             let Some(geometry) = feature.geometry.as_ref() else {
                 return Ok(None);
             };
-            if !matches!(geometry, Geometry::LineString(_) | Geometry::MultiLineString(_)) {
+            if !matches!(
+                geometry,
+                Geometry::LineString(_) | Geometry::MultiLineString(_)
+            ) {
                 return Ok(None);
             }
             let topo = topology_from_wkb(&geometry.to_wkb()).map_err(|e| {
@@ -2322,7 +2484,9 @@ fn geometry_anchor_coord(geometry: &Geometry) -> Option<Coord> {
     match geometry {
         Geometry::Point(coord) => Some(coord.clone()),
         Geometry::MultiPoint(coords) | Geometry::LineString(coords) => coords.first().cloned(),
-        Geometry::MultiLineString(parts) => parts.first().and_then(|coords| coords.first()).cloned(),
+        Geometry::MultiLineString(parts) => {
+            parts.first().and_then(|coords| coords.first()).cloned()
+        }
         Geometry::Polygon { exterior, .. } => exterior.0.first().cloned(),
         Geometry::MultiPolygon(polys) => polys
             .first()
@@ -2350,12 +2514,14 @@ fn parse_topology_rule_set(args: &ToolArgs) -> Result<Vec<TopologyRuleType>, Too
                     if !enabled {
                         continue;
                     }
-                    let rule_name = obj
-                        .get("rule_type")
-                        .and_then(|v| v.as_str())
-                        .ok_or_else(|| {
-                            ToolError::Validation("rule entries must include string rule_type".to_string())
-                        })?;
+                    let rule_name =
+                        obj.get("rule_type")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| {
+                                ToolError::Validation(
+                                    "rule entries must include string rule_type".to_string(),
+                                )
+                            })?;
                     let rule = TopologyRuleType::parse(rule_name).ok_or_else(|| {
                         ToolError::Validation(format!("unsupported rule_type '{}'", rule_name))
                     })?;
@@ -2390,7 +2556,9 @@ fn parse_topology_rule_set(args: &ToolArgs) -> Result<Vec<TopologyRuleType>, Too
         serde_json::Value::Array(values) => {
             let rules = parse_rule_array(values)?;
             if rules.is_empty() {
-                return Err(ToolError::Validation("rule_set resolved to zero enabled rules".to_string()));
+                return Err(ToolError::Validation(
+                    "rule_set resolved to zero enabled rules".to_string(),
+                ));
             }
             Ok(rules)
         }
@@ -2402,7 +2570,9 @@ fn parse_topology_rule_set(args: &ToolArgs) -> Result<Vec<TopologyRuleType>, Too
             };
             let rules = parse_rule_array(values)?;
             if rules.is_empty() {
-                return Err(ToolError::Validation("rule_set resolved to zero enabled rules".to_string()));
+                return Err(ToolError::Validation(
+                    "rule_set resolved to zero enabled rules".to_string(),
+                ));
             }
             Ok(rules)
         }
@@ -2414,7 +2584,10 @@ fn parse_topology_rule_set(args: &ToolArgs) -> Result<Vec<TopologyRuleType>, Too
 
             let source_text = if Path::new(trimmed).exists() {
                 std::fs::read_to_string(trimmed).map_err(|e| {
-                    ToolError::Validation(format!("failed reading rule_set file '{}': {e}", trimmed))
+                    ToolError::Validation(format!(
+                        "failed reading rule_set file '{}': {e}",
+                        trimmed
+                    ))
                 })?
             } else {
                 trimmed.to_string()
@@ -2425,7 +2598,9 @@ fn parse_topology_rule_set(args: &ToolArgs) -> Result<Vec<TopologyRuleType>, Too
                     serde_json::Value::Array(values) => {
                         let rules = parse_rule_array(&values)?;
                         if rules.is_empty() {
-                            Err(ToolError::Validation("rule_set resolved to zero enabled rules".to_string()))
+                            Err(ToolError::Validation(
+                                "rule_set resolved to zero enabled rules".to_string(),
+                            ))
                         } else {
                             Ok(rules)
                         }
@@ -2438,7 +2613,9 @@ fn parse_topology_rule_set(args: &ToolArgs) -> Result<Vec<TopologyRuleType>, Too
                         };
                         let rules = parse_rule_array(values)?;
                         if rules.is_empty() {
-                            Err(ToolError::Validation("rule_set resolved to zero enabled rules".to_string()))
+                            Err(ToolError::Validation(
+                                "rule_set resolved to zero enabled rules".to_string(),
+                            ))
                         } else {
                             Ok(rules)
                         }
@@ -2450,15 +2627,22 @@ fn parse_topology_rule_set(args: &ToolArgs) -> Result<Vec<TopologyRuleType>, Too
             }
 
             let mut rules = Vec::<TopologyRuleType>::new();
-            for token in source_text.split(',').map(|t| t.trim()).filter(|t| !t.is_empty()) {
-                let rule = TopologyRuleType::parse(token)
-                    .ok_or_else(|| ToolError::Validation(format!("unsupported rule_type '{}'", token)))?;
+            for token in source_text
+                .split(',')
+                .map(|t| t.trim())
+                .filter(|t| !t.is_empty())
+            {
+                let rule = TopologyRuleType::parse(token).ok_or_else(|| {
+                    ToolError::Validation(format!("unsupported rule_type '{}'", token))
+                })?;
                 if !rules.contains(&rule) {
                     rules.push(rule);
                 }
             }
             if rules.is_empty() {
-                Err(ToolError::Validation("rule_set resolved to zero enabled rules".to_string()))
+                Err(ToolError::Validation(
+                    "rule_set resolved to zero enabled rules".to_string(),
+                ))
             } else {
                 Ok(rules)
             }
@@ -2490,26 +2674,38 @@ impl Tool for TopologyRuleValidateTool {
     fn manifest(&self) -> ToolManifest {
         let mut defaults = ToolArgs::new();
         defaults.insert("input".to_string(), json!("input.gpkg"));
-        defaults.insert("rule_set".to_string(), json!([
-            "line_must_not_self_intersect",
-            "polygon_must_not_overlap",
-            "polygon_must_not_have_gaps",
-            "line_must_not_have_dangles",
-            "point_must_be_covered_by_line",
-            "line_endpoints_must_snap_within_tolerance"
-        ]));
+        defaults.insert(
+            "rule_set".to_string(),
+            json!([
+                "line_must_not_self_intersect",
+                "polygon_must_not_overlap",
+                "polygon_must_not_have_gaps",
+                "line_must_not_have_dangles",
+                "point_must_be_covered_by_line",
+                "line_endpoints_must_snap_within_tolerance"
+            ]),
+        );
         defaults.insert("snap_tolerance".to_string(), json!(1.0));
         defaults.insert("output".to_string(), json!("topology_rule_violations.gpkg"));
 
         let mut example_args = ToolArgs::new();
         example_args.insert("input".to_string(), json!("network.gpkg"));
-        example_args.insert("rule_set".to_string(), json!([
-            "line_must_not_self_intersect",
-            "line_endpoints_must_snap_within_tolerance"
-        ]));
+        example_args.insert(
+            "rule_set".to_string(),
+            json!([
+                "line_must_not_self_intersect",
+                "line_endpoints_must_snap_within_tolerance"
+            ]),
+        );
         example_args.insert("snap_tolerance".to_string(), json!(0.5));
-        example_args.insert("output".to_string(), json!("network_topology_violations.gpkg"));
-        example_args.insert("report".to_string(), json!("network_topology_violations.json"));
+        example_args.insert(
+            "output".to_string(),
+            json!("network_topology_violations.gpkg"),
+        );
+        example_args.insert(
+            "report".to_string(),
+            json!("network_topology_violations.json"),
+        );
 
         ToolManifest {
             id: "topology_rule_validate".to_string(),
@@ -2538,19 +2734,30 @@ impl Tool for TopologyRuleValidateTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let input_path = parse_vector_path_arg(args, "input")?;
         if std::fs::metadata(&input_path).is_err() {
-            return Err(ToolError::Validation(format!("input '{}' does not exist", input_path)));
+            return Err(ToolError::Validation(format!(
+                "input '{}' does not exist",
+                input_path
+            )));
         }
 
         let _ = parse_topology_rule_set(args)?;
 
         if let Some(output) = parse_optional_output_path(args, "output")? {
-            let _ = VectorFormat::detect(&output)
-                .map_err(|e| ToolError::Validation(format!("unsupported output vector path: {e}")))?;
+            let _ = VectorFormat::detect(&output).map_err(|e| {
+                ToolError::Validation(format!("unsupported output vector path: {e}"))
+            })?;
         }
 
         if let Some(report) = parse_optional_output_path(args, "report")? {
-            if report.extension().and_then(|s| s.to_str()).map(|s| s.eq_ignore_ascii_case("json")) != Some(true) {
-                return Err(ToolError::Validation("report must be a .json path".to_string()));
+            if report
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("json"))
+                != Some(true)
+            {
+                return Err(ToolError::Validation(
+                    "report must be a .json path".to_string(),
+                ));
             }
         }
 
@@ -2615,7 +2822,9 @@ impl Tool for TopologyRuleValidateTool {
         }
 
         if rules.contains(&TopologyRuleType::PolygonMustNotOverlap) {
-            let polygon_features = polygon_features.as_ref().expect("polygon features prepared");
+            let polygon_features = polygon_features
+                .as_ref()
+                .expect("polygon features prepared");
             let polygon_geometries = polygon_features
                 .iter()
                 .map(|feature| feature.topo.clone())
@@ -2683,10 +2892,13 @@ impl Tool for TopologyRuleValidateTool {
                         ))
                     })?;
 
-                    let covered = line_index
-                        .query_geometry(&point_topo)
-                        .into_iter()
-                        .any(|line_idx| geometry_distance(&point_topo, &line_features[line_idx].topo) < 1e-9);
+                    let covered =
+                        line_index
+                            .query_geometry(&point_topo)
+                            .into_iter()
+                            .any(|line_idx| {
+                                geometry_distance(&point_topo, &line_features[line_idx].topo) < 1e-9
+                            });
 
                     if covered {
                         Ok(None)
@@ -2710,7 +2922,9 @@ impl Tool for TopologyRuleValidateTool {
             let line_endpoints = line_endpoints.as_ref().expect("line endpoints prepared");
             let endpoint_geometries = line_endpoints
                 .iter()
-                .map(|endpoint| TopologyGeometry::Point(TopoCoord::xy(endpoint.coord.x, endpoint.coord.y)))
+                .map(|endpoint| {
+                    TopologyGeometry::Point(TopoCoord::xy(endpoint.coord.x, endpoint.coord.y))
+                })
                 .collect::<Vec<_>>();
             let endpoint_index = SpatialIndex::build_str(&endpoint_geometries, 16);
 
@@ -2741,7 +2955,10 @@ impl Tool for TopologyRuleValidateTool {
                         rule_type: TopologyRuleType::LineMustNotHaveDangles,
                         feature_fid: endpoint.fid as i64,
                         related_fid: None,
-                        detail: format!("endpoint at ({}, {}) does not connect to other lines", endpoint.coord.x, endpoint.coord.y),
+                        detail: format!(
+                            "endpoint at ({}, {}) does not connect to other lines",
+                            endpoint.coord.x, endpoint.coord.y
+                        ),
                         anchor: endpoint.coord.clone(),
                     });
                 }
@@ -2757,12 +2974,15 @@ impl Tool for TopologyRuleValidateTool {
             let line_endpoints = line_endpoints.as_ref().expect("line endpoints prepared");
             let endpoint_geometries = line_endpoints
                 .iter()
-                .map(|endpoint| TopologyGeometry::Point(TopoCoord::xy(endpoint.coord.x, endpoint.coord.y)))
+                .map(|endpoint| {
+                    TopologyGeometry::Point(TopoCoord::xy(endpoint.coord.x, endpoint.coord.y))
+                })
                 .collect::<Vec<_>>();
             let endpoint_index = SpatialIndex::build_str(&endpoint_geometries, 16);
 
             for (i, endpoint) in line_endpoints.iter().enumerate() {
-                let point_geom = TopologyGeometry::Point(TopoCoord::xy(endpoint.coord.x, endpoint.coord.y));
+                let point_geom =
+                    TopologyGeometry::Point(TopoCoord::xy(endpoint.coord.x, endpoint.coord.y));
                 let nearest_dist = endpoint_index
                     .nearest_k(&point_geom, 3)
                     .into_iter()
@@ -2775,7 +2995,10 @@ impl Tool for TopologyRuleValidateTool {
                         rule_type: TopologyRuleType::LineEndpointsMustSnapWithinTolerance,
                         feature_fid: endpoint.fid as i64,
                         related_fid: None,
-                        detail: format!("endpoint at ({}, {}) does not snap within tolerance {}", endpoint.coord.x, endpoint.coord.y, snap_tolerance),
+                        detail: format!(
+                            "endpoint at ({}, {}) does not snap within tolerance {}",
+                            endpoint.coord.x, endpoint.coord.y, snap_tolerance
+                        ),
                         anchor: endpoint.coord.clone(),
                     });
                 }
@@ -2785,7 +3008,9 @@ impl Tool for TopologyRuleValidateTool {
         if rules.contains(&TopologyRuleType::PolygonMustNotHaveGaps) {
             const GAP_DISTANCE_TOLERANCE: f64 = 0.001;
 
-            let polygon_features = polygon_features.as_ref().expect("polygon features prepared");
+            let polygon_features = polygon_features
+                .as_ref()
+                .expect("polygon features prepared");
             let polygon_geometries = polygon_features
                 .iter()
                 .map(|feature| feature.topo.clone())
@@ -2799,7 +3024,9 @@ impl Tool for TopologyRuleValidateTool {
                 let Some(envelope) = topo_a.envelope() else {
                     continue;
                 };
-                for j in polygon_index.query_envelope(expand_topology_envelope(envelope, GAP_DISTANCE_TOLERANCE)) {
+                for j in polygon_index
+                    .query_envelope(expand_topology_envelope(envelope, GAP_DISTANCE_TOLERANCE))
+                {
                     if j <= i {
                         continue;
                     }
@@ -2813,14 +3040,20 @@ impl Tool for TopologyRuleValidateTool {
                             rule_type: TopologyRuleType::PolygonMustNotHaveGaps,
                             feature_fid: fid_a as i64,
                             related_fid: Some(fid_b as i64),
-                            detail: format!("gap of approximately {:.6} units to feature {}", dist, fid_b),
+                            detail: format!(
+                                "gap of approximately {:.6} units to feature {}",
+                                dist, fid_b
+                            ),
                             anchor: anchor_a.clone(),
                         });
                         violations.push(TopologyRuleViolation {
                             rule_type: TopologyRuleType::PolygonMustNotHaveGaps,
                             feature_fid: fid_b as i64,
                             related_fid: Some(fid_a as i64),
-                            detail: format!("gap of approximately {:.6} units to feature {}", dist, fid_a),
+                            detail: format!(
+                                "gap of approximately {:.6} units to feature {}",
+                                dist, fid_a
+                            ),
                             anchor: anchor_b.clone(),
                         });
                     }
@@ -2831,18 +3064,38 @@ impl Tool for TopologyRuleValidateTool {
         let mut output = Layer::new(format!("{}_topology_rule_violations", input.name))
             .with_geom_type(GeometryType::Point);
         apply_input_crs_to_layer(&input, &mut output);
-        output.schema.add_field(FieldDef::new("RULE_ID", FieldType::Text));
-        output.schema.add_field(FieldDef::new("RULE_TYPE", FieldType::Text));
-        output.schema.add_field(FieldDef::new("SEVERITY", FieldType::Text));
-        output.schema.add_field(FieldDef::new("CONFIDENCE", FieldType::Float));
-        output.schema.add_field(FieldDef::new("FEATURE_FID", FieldType::Integer));
-        output.schema.add_field(FieldDef::new("RELATED_FID", FieldType::Integer));
-        output.schema.add_field(FieldDef::new("DETAIL", FieldType::Text));
+        output
+            .schema
+            .add_field(FieldDef::new("RULE_ID", FieldType::Text));
+        output
+            .schema
+            .add_field(FieldDef::new("RULE_TYPE", FieldType::Text));
+        output
+            .schema
+            .add_field(FieldDef::new("SEVERITY", FieldType::Text));
+        output
+            .schema
+            .add_field(FieldDef::new("CONFIDENCE", FieldType::Float));
+        output
+            .schema
+            .add_field(FieldDef::new("FEATURE_FID", FieldType::Integer));
+        output
+            .schema
+            .add_field(FieldDef::new("RELATED_FID", FieldType::Integer));
+        output
+            .schema
+            .add_field(FieldDef::new("DETAIL", FieldType::Text));
 
         for violation in &violations {
             let mut attrs = vec![
-                ("RULE_ID", FieldValue::Text(violation.rule_type.id().to_string())),
-                ("RULE_TYPE", FieldValue::Text(violation.rule_type.id().to_string())),
+                (
+                    "RULE_ID",
+                    FieldValue::Text(violation.rule_type.id().to_string()),
+                ),
+                (
+                    "RULE_TYPE",
+                    FieldValue::Text(violation.rule_type.id().to_string()),
+                ),
                 ("SEVERITY", FieldValue::Text("error".to_string())),
                 ("CONFIDENCE", FieldValue::Float(1.0)),
                 ("FEATURE_FID", FieldValue::Integer(violation.feature_fid)),
@@ -2856,13 +3109,17 @@ impl Tool for TopologyRuleValidateTool {
 
             output
                 .add_feature(Some(Geometry::Point(violation.anchor.clone())), &attrs)
-                .map_err(|e| ToolError::Execution(format!("failed adding violation feature: {e}")))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed adding violation feature: {e}"))
+                })?;
         }
 
         if let Some(report) = report_path {
             let mut by_rule = BTreeMap::<String, usize>::new();
             for violation in &violations {
-                *by_rule.entry(violation.rule_type.id().to_string()).or_insert(0) += 1;
+                *by_rule
+                    .entry(violation.rule_type.id().to_string())
+                    .or_insert(0) += 1;
             }
             let report_json = json!({
                 "total_violations": violations.len(),
@@ -2873,10 +3130,15 @@ impl Tool for TopologyRuleValidateTool {
                 }
             });
             ensure_parent_dir(&report)?;
-            let report_text = serde_json::to_string_pretty(&report_json)
-                .map_err(|e| ToolError::Execution(format!("failed serializing report JSON: {e}")))?;
-            std::fs::write(&report, report_text)
-                .map_err(|e| ToolError::Execution(format!("failed writing report '{}': {e}", report.to_string_lossy())))?;
+            let report_text = serde_json::to_string_pretty(&report_json).map_err(|e| {
+                ToolError::Execution(format!("failed serializing report JSON: {e}"))
+            })?;
+            std::fs::write(&report, report_text).map_err(|e| {
+                ToolError::Execution(format!(
+                    "failed writing report '{}': {e}",
+                    report.to_string_lossy()
+                ))
+            })?;
         }
 
         write_vector_output(&output, &output_path)
@@ -2930,19 +3192,25 @@ impl Tool for TopologyRuleAutoFixTool {
     fn manifest(&self) -> ToolManifest {
         let mut defaults = ToolArgs::new();
         defaults.insert("input".to_string(), json!("input.gpkg"));
-        defaults.insert("rule_set".to_string(), json!([
-            "line_endpoints_must_snap_within_tolerance",
-            "point_must_be_covered_by_line",
-            "polygon_must_not_have_gaps",
-            "line_must_not_have_dangles"
-        ]));
+        defaults.insert(
+            "rule_set".to_string(),
+            json!([
+                "line_endpoints_must_snap_within_tolerance",
+                "point_must_be_covered_by_line",
+                "polygon_must_not_have_gaps",
+                "line_must_not_have_dangles"
+            ]),
+        );
         defaults.insert("snap_tolerance".to_string(), json!(0.01));
         defaults.insert("dry_run".to_string(), json!(true));
         defaults.insert("output".to_string(), json!("topology_fixed.gpkg"));
 
         let mut example_args = ToolArgs::new();
         example_args.insert("input".to_string(), json!("network_violations.gpkg"));
-        example_args.insert("rule_set".to_string(), json!(["line_endpoints_must_snap_within_tolerance"]));
+        example_args.insert(
+            "rule_set".to_string(),
+            json!(["line_endpoints_must_snap_within_tolerance"]),
+        );
         example_args.insert("snap_tolerance".to_string(), json!(0.01));
         example_args.insert("dry_run".to_string(), json!(false));
         example_args.insert("output".to_string(), json!("network_fixed.gpkg"));
@@ -2976,19 +3244,30 @@ impl Tool for TopologyRuleAutoFixTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let input_path = parse_vector_path_arg(args, "input")?;
         if std::fs::metadata(&input_path).is_err() {
-            return Err(ToolError::Validation(format!("input '{}' does not exist", input_path)));
+            return Err(ToolError::Validation(format!(
+                "input '{}' does not exist",
+                input_path
+            )));
         }
 
         let _ = parse_topology_rule_set(args)?;
 
         if let Some(output) = parse_optional_output_path(args, "output")? {
-            let _ = VectorFormat::detect(&output)
-                .map_err(|e| ToolError::Validation(format!("unsupported output vector path: {e}")))?;
+            let _ = VectorFormat::detect(&output).map_err(|e| {
+                ToolError::Validation(format!("unsupported output vector path: {e}"))
+            })?;
         }
 
         if let Some(report) = parse_optional_output_path(args, "change_report")? {
-            if report.extension().and_then(|s| s.to_str()).map(|s| s.eq_ignore_ascii_case("json")) != Some(true) {
-                return Err(ToolError::Validation("change_report must be a .json path".to_string()));
+            if report
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("json"))
+                != Some(true)
+            {
+                return Err(ToolError::Validation(
+                    "change_report must be a .json path".to_string(),
+                ));
             }
         }
 
@@ -3035,11 +3314,20 @@ impl Tool for TopologyRuleAutoFixTool {
                             if updated == *coords {
                                 return None;
                             }
-                            let pre_hash = hash_string(&geom_to_hash_string(Some(&Geometry::line_string(coords.clone()))));
-                            let post_hash = hash_string(&geom_to_hash_string(Some(&Geometry::line_string(updated.clone()))));
+                            let pre_hash = hash_string(&geom_to_hash_string(Some(
+                                &Geometry::line_string(coords.clone()),
+                            )));
+                            let post_hash = hash_string(&geom_to_hash_string(Some(
+                                &Geometry::line_string(updated.clone()),
+                            )));
                             Some((
                                 Geometry::LineString(updated),
-                                vec![(feature.fid as i64, pre_hash, post_hash, "snapped linestring endpoints".to_string())],
+                                vec![(
+                                    feature.fid as i64,
+                                    pre_hash,
+                                    post_hash,
+                                    "snapped linestring endpoints".to_string(),
+                                )],
                             ))
                         }
                         Geometry::MultiLineString(parts) => {
@@ -3051,8 +3339,12 @@ impl Tool for TopologyRuleAutoFixTool {
                                 }
                                 let updated = snap_line_endpoints(part, snap_tolerance);
                                 if updated != *part {
-                                    let pre_hash = hash_string(&geom_to_hash_string(Some(&Geometry::line_string(part.clone()))));
-                                    let post_hash = hash_string(&geom_to_hash_string(Some(&Geometry::line_string(updated.clone()))));
+                                    let pre_hash = hash_string(&geom_to_hash_string(Some(
+                                        &Geometry::line_string(part.clone()),
+                                    )));
+                                    let post_hash = hash_string(&geom_to_hash_string(Some(
+                                        &Geometry::line_string(updated.clone()),
+                                    )));
                                     updated_parts[part_idx] = updated;
                                     feature_changes.push((
                                         feature.fid as i64,
@@ -3103,7 +3395,10 @@ impl Tool for TopologyRuleAutoFixTool {
                     let Some(geometry) = feature.geometry.as_ref() else {
                         return None;
                     };
-                    if matches!(geometry, Geometry::LineString(_) | Geometry::MultiLineString(_)) {
+                    if matches!(
+                        geometry,
+                        Geometry::LineString(_) | Geometry::MultiLineString(_)
+                    ) {
                         Some((feature.fid, geometry.clone()))
                     } else {
                         None
@@ -3124,7 +3419,9 @@ impl Tool for TopologyRuleAutoFixTool {
                         };
 
                         let pre_hash = hash_string(&geom_to_hash_string(Some(geometry)));
-                        let Some(snap_coord) = find_nearest_point_on_lines(coord, &lines, snap_tolerance) else {
+                        let Some(snap_coord) =
+                            find_nearest_point_on_lines(coord, &lines, snap_tolerance)
+                        else {
                             return None;
                         };
                         if coord_dist(
@@ -3135,8 +3432,15 @@ impl Tool for TopologyRuleAutoFixTool {
                             return None;
                         }
 
-                        let post_hash = hash_string(&geom_to_hash_string(Some(&Geometry::Point(snap_coord.clone()))));
-                        Some((Geometry::Point(snap_coord), feature.fid as i64, pre_hash, post_hash))
+                        let post_hash = hash_string(&geom_to_hash_string(Some(&Geometry::Point(
+                            snap_coord.clone(),
+                        ))));
+                        Some((
+                            Geometry::Point(snap_coord),
+                            feature.fid as i64,
+                            pre_hash,
+                            post_hash,
+                        ))
                     })
                     .collect::<Vec<_>>();
 
@@ -3186,8 +3490,9 @@ impl Tool for TopologyRuleAutoFixTool {
                 "change_log": change_log,
             });
             ensure_parent_dir(&report_path)?;
-            let report_text = serde_json::to_string_pretty(&report_json)
-                .map_err(|e| ToolError::Execution(format!("failed serializing change report JSON: {e}")))?;
+            let report_text = serde_json::to_string_pretty(&report_json).map_err(|e| {
+                ToolError::Execution(format!("failed serializing change report JSON: {e}"))
+            })?;
             std::fs::write(&report_path, report_text).map_err(|e| {
                 ToolError::Execution(format!(
                     "failed writing change report '{}': {e}",
@@ -3200,7 +3505,10 @@ impl Tool for TopologyRuleAutoFixTool {
             write_vector_output(&input, &output_path)
         } else {
             let mut result = BTreeMap::new();
-            result.insert("path".to_string(), json!(output_path.to_string_lossy().to_string()));
+            result.insert(
+                "path".to_string(),
+                json!(output_path.to_string_lossy().to_string()),
+            );
             result.insert("dry_run_mode".to_string(), json!(true));
             result.insert("total_changes".to_string(), json!(changes.len()));
             Ok(ToolRunResult { outputs: result })
@@ -3221,7 +3529,7 @@ fn snap_line_endpoints(coords: &[Coord], tolerance: f64) -> Vec<Coord> {
     // Check if endpoints should snap to each other
     let endpoint_dist = coord_dist(
         TopoCoord::xy(first.x, first.y),
-        TopoCoord::xy(last.x, last.y)
+        TopoCoord::xy(last.x, last.y),
     );
     if endpoint_dist > 1e-9 && endpoint_dist <= tolerance {
         // Snap both endpoints to midpoint
@@ -3234,7 +3542,11 @@ fn snap_line_endpoints(coords: &[Coord], tolerance: f64) -> Vec<Coord> {
     result
 }
 
-fn find_nearest_point_on_lines(point: &Coord, lines: &[(u64, Geometry)], tolerance: f64) -> Option<Coord> {
+fn find_nearest_point_on_lines(
+    point: &Coord,
+    lines: &[(u64, Geometry)],
+    tolerance: f64,
+) -> Option<Coord> {
     let mut nearest: Option<Coord> = None;
     let mut nearest_dist = f64::INFINITY;
 
@@ -3272,7 +3584,7 @@ fn closest_point_on_linestring(point: &Coord, coords: &[Coord]) -> Option<(Coord
     if coords.len() == 1 {
         let dist = coord_dist(
             TopoCoord::xy(point.x, point.y),
-            TopoCoord::xy(coords[0].x, coords[0].y)
+            TopoCoord::xy(coords[0].x, coords[0].y),
         );
         return Some((coords[0].clone(), dist));
     }
@@ -3293,7 +3605,11 @@ fn closest_point_on_linestring(point: &Coord, coords: &[Coord]) -> Option<(Coord
     closest
 }
 
-fn project_point_on_segment(point: &Coord, seg_start: &Coord, seg_end: &Coord) -> Option<(Coord, f64)> {
+fn project_point_on_segment(
+    point: &Coord,
+    seg_start: &Coord,
+    seg_end: &Coord,
+) -> Option<(Coord, f64)> {
     let dx = seg_end.x - seg_start.x;
     let dy = seg_end.y - seg_start.y;
     let seg_len_sq = dx * dx + dy * dy;
@@ -3301,7 +3617,7 @@ fn project_point_on_segment(point: &Coord, seg_start: &Coord, seg_end: &Coord) -
     if seg_len_sq < 1e-12 {
         let dist = coord_dist(
             TopoCoord::xy(point.x, point.y),
-            TopoCoord::xy(seg_start.x, seg_start.y)
+            TopoCoord::xy(seg_start.x, seg_start.y),
         );
         return Some((seg_start.clone(), dist));
     }
@@ -3314,7 +3630,7 @@ fn project_point_on_segment(point: &Coord, seg_start: &Coord, seg_end: &Coord) -
     let proj_y = seg_start.y + t * dy;
     let dist = coord_dist(
         TopoCoord::xy(point.x, point.y),
-        TopoCoord::xy(proj_x, proj_y)
+        TopoCoord::xy(proj_x, proj_y),
     );
 
     Some((Coord::xy(proj_x, proj_y), dist))
@@ -3336,7 +3652,8 @@ impl Tool for ConvertNodataToZeroTool {
                 },
                 ToolParamSpec {
                     name: "output",
-                    description: "Optional output raster path. If omitted, returns an in-memory raster.",
+                    description:
+                        "Optional output raster path. If omitted, returns an in-memory raster.",
                     required: false,
                 },
             ],
@@ -3355,7 +3672,8 @@ impl Tool for ConvertNodataToZeroTool {
         ToolManifest {
             id: "convert_nodata_to_zero".to_string(),
             display_name: "ConvertNodataToZero".to_string(),
-            summary: "Replaces raster nodata cells with 0 while leaving valid cells unchanged.".to_string(),
+            summary: "Replaces raster nodata cells with 0 while leaving valid cells unchanged."
+                .to_string(),
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
@@ -3366,7 +3684,9 @@ impl Tool for ConvertNodataToZeroTool {
                 },
                 ToolParamDescriptor {
                     name: "output".to_string(),
-                    description: "Optional output raster path. If omitted, returns an in-memory raster.".to_string(),
+                    description:
+                        "Optional output raster path. If omitted, returns an in-memory raster."
+                            .to_string(),
                     required: false,
                 },
             ],
@@ -3376,7 +3696,11 @@ impl Tool for ConvertNodataToZeroTool {
                 description: "Convert raster nodata cells to zero.".to_string(),
                 args: example_args,
             }],
-            tags: vec!["data-tools".to_string(), "raster".to_string(), "conversion".to_string()],
+            tags: vec![
+                "data-tools".to_string(),
+                "raster".to_string(),
+                "conversion".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3397,7 +3721,11 @@ impl Tool for ConvertNodataToZeroTool {
         let mut output = input.clone();
         output.par_fill_with(|i| {
             let value = input.data.get_f64(i);
-            if input.is_nodata(value) { 0.0 } else { value }
+            if input.is_nodata(value) {
+                0.0
+            } else {
+                value
+            }
         });
         ctx.progress.progress(1.0);
         write_raster_output(output, output_path, ctx)
@@ -3471,7 +3799,11 @@ impl Tool for ModifyNodataValueTool {
         let mut output = input.clone();
         output.par_fill_with(|i| {
             let value = input.data.get_f64(i);
-            if input.is_nodata(value) { new_value } else { value }
+            if input.is_nodata(value) {
+                new_value
+            } else {
+                value
+            }
         });
         output.nodata = new_value;
         ctx.progress.progress(1.0);
@@ -3538,9 +3870,13 @@ impl Tool for LinesToPolygonsTool {
 
         ctx.progress.info("running lines_to_polygons");
         let input = read_vector_layer(&input_path, "input")?;
-        if !matches!(input.geom_type, Some(GeometryType::LineString | GeometryType::MultiLineString)) {
+        if !matches!(
+            input.geom_type,
+            Some(GeometryType::LineString | GeometryType::MultiLineString)
+        ) {
             return Err(ToolError::Validation(
-                "input vector layer must have LineString or MultiLineString geometry type".to_string(),
+                "input vector layer must have LineString or MultiLineString geometry type"
+                    .to_string(),
             ));
         }
 
@@ -3629,10 +3965,27 @@ impl Tool for NewRasterFromBaseRasterTool {
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "base", description: "Base raster path.", required: true },
-                ToolParamSpec { name: "output", description: "Optional output raster path. If omitted, returns an in-memory raster.", required: false },
-                ToolParamSpec { name: "out_val", description: "Optional fill value. Defaults to raster nodata.", required: false },
-                ToolParamSpec { name: "data_type", description: "Optional data type: 'float', 'double', or 'integer'.", required: false },
+                ToolParamSpec {
+                    name: "base",
+                    description: "Base raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description:
+                        "Optional output raster path. If omitted, returns an in-memory raster.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "out_val",
+                    description: "Optional fill value. Defaults to raster nodata.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "data_type",
+                    description: "Optional data type: 'float', 'double', or 'integer'.",
+                    required: false,
+                },
             ],
         }
     }
@@ -3651,14 +4004,33 @@ impl Tool for NewRasterFromBaseRasterTool {
         ToolManifest {
             id: "new_raster_from_base_raster".to_string(),
             display_name: "NewRasterFromBaseRaster".to_string(),
-            summary: "Creates a new raster using the extent, dimensions, and CRS of a base raster.".to_string(),
+            summary: "Creates a new raster using the extent, dimensions, and CRS of a base raster."
+                .to_string(),
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "base".to_string(), description: "Base raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path. If omitted, returns an in-memory raster.".to_string(), required: false },
-                ToolParamDescriptor { name: "out_val".to_string(), description: "Optional fill value. Defaults to raster nodata.".to_string(), required: false },
-                ToolParamDescriptor { name: "data_type".to_string(), description: "Optional data type: 'float', 'double', or 'integer'.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "base".to_string(),
+                    description: "Base raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description:
+                        "Optional output raster path. If omitted, returns an in-memory raster."
+                            .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "out_val".to_string(),
+                    description: "Optional fill value. Defaults to raster nodata.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "data_type".to_string(),
+                    description: "Optional data type: 'float', 'double', or 'integer'.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -3666,7 +4038,11 @@ impl Tool for NewRasterFromBaseRasterTool {
                 description: "Create a new blank raster from a base raster.".to_string(),
                 args: example_args,
             }],
-            tags: vec!["data-tools".to_string(), "raster".to_string(), "creation".to_string()],
+            tags: vec![
+                "data-tools".to_string(),
+                "raster".to_string(),
+                "creation".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3683,7 +4059,9 @@ impl Tool for NewRasterFromBaseRasterTool {
         let base_path = parse_raster_path_arg(args, "base")?;
         let output_path = parse_optional_output_path(args, "output")?;
         let fill_value = parse_optional_f64(args, "out_val")?;
-        let data_type = parse_optional_string(args, "data_type")?.unwrap_or("float").to_ascii_lowercase();
+        let data_type = parse_optional_string(args, "data_type")?
+            .unwrap_or("float")
+            .to_ascii_lowercase();
 
         ctx.progress.info("running new_raster_from_base_raster");
         let base = Raster::read(&base_path)
@@ -3729,12 +4107,21 @@ impl Tool for PolygonsToLinesTool {
         ToolMetadata {
             id: "polygons_to_lines",
             display_name: "PolygonsToLines",
-            summary: "Converts polygon and multipolygon features into linework tracing their boundaries.",
+            summary:
+                "Converts polygon and multipolygon features into linework tracing their boundaries.",
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input polygon vector path.", required: true },
-                ToolParamSpec { name: "output", description: "Output line vector path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input polygon vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output line vector path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -3783,14 +4170,17 @@ impl Tool for PolygonsToLinesTool {
         ctx.progress.info("running polygons_to_lines");
         let input = read_vector_layer(&input_path, "input")?;
 
-        if !matches!(input.geom_type, Some(GeometryType::Polygon | GeometryType::MultiPolygon)) {
+        if !matches!(
+            input.geom_type,
+            Some(GeometryType::Polygon | GeometryType::MultiPolygon)
+        ) {
             return Err(ToolError::Validation(
                 "input vector layer must have Polygon or MultiPolygon geometry type".to_string(),
             ));
         }
 
-        let mut output = Layer::new(input.name.clone())
-            .with_geom_type(GeometryType::MultiLineString);
+        let mut output =
+            Layer::new(input.name.clone()).with_geom_type(GeometryType::MultiLineString);
         if let Some(epsg) = input.crs_epsg() {
             output = output.with_crs_epsg(epsg);
         }
@@ -3809,7 +4199,8 @@ impl Tool for PolygonsToLinesTool {
                 // Close each ring by appending the first coord if not already closed.
                 let close_ring = |coords: &[wbvector::Coord]| -> Vec<wbvector::Coord> {
                     let mut line = coords.to_vec();
-                    if let (Some(first), Some(last)) = (line.first().cloned(), line.last().cloned()) {
+                    if let (Some(first), Some(last)) = (line.first().cloned(), line.last().cloned())
+                    {
                         if first != last {
                             line.push(first);
                         }
@@ -3818,7 +4209,10 @@ impl Tool for PolygonsToLinesTool {
                 };
 
                 let geom = match &feature.geometry {
-                    Some(Geometry::Polygon { exterior, interiors }) => {
+                    Some(Geometry::Polygon {
+                        exterior,
+                        interiors,
+                    }) => {
                         let mut lines = vec![close_ring(&exterior.0)];
                         for ring in interiors {
                             lines.push(close_ring(&ring.0));
@@ -3837,7 +4231,8 @@ impl Tool for PolygonsToLinesTool {
                     }
                     Some(_) => {
                         return Err(ToolError::Validation(
-                            "encountered non-polygon geometry while converting polygons_to_lines".to_string(),
+                            "encountered non-polygon geometry while converting polygons_to_lines"
+                                .to_string(),
                         ));
                     }
                     None => None,
@@ -3848,7 +4243,13 @@ impl Tool for PolygonsToLinesTool {
                     .fields()
                     .iter()
                     .enumerate()
-                    .map(|(idx, _)| feature.attributes.get(idx).cloned().unwrap_or(FieldValue::Null))
+                    .map(|(idx, _)| {
+                        feature
+                            .attributes
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or(FieldValue::Null)
+                    })
                     .collect::<Vec<_>>();
                 Ok((geom, attr_values))
             })
@@ -3963,8 +4364,16 @@ impl Tool for ReinitializeAttributeTableTool {
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector path.", required: true },
-                ToolParamSpec { name: "output", description: "Output vector path. If omitted, overwrites the input path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector path. If omitted, overwrites the input path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -3981,12 +4390,22 @@ impl Tool for ReinitializeAttributeTableTool {
         ToolManifest {
             id: "reinitialize_attribute_table".to_string(),
             display_name: "ReinitializeAttributeTable".to_string(),
-            summary: "Creates a copy of a vector layer with only a regenerated FID attribute.".to_string(),
+            summary: "Creates a copy of a vector layer with only a regenerated FID attribute."
+                .to_string(),
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input vector path.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Output vector path. If omitted, overwrites the input path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input vector path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Output vector path. If omitted, overwrites the input path."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -3994,7 +4413,11 @@ impl Tool for ReinitializeAttributeTableTool {
                 description: "Reset the attribute table so only FID remains.".to_string(),
                 args: example_args,
             }],
-            tags: vec!["data-tools".to_string(), "vector".to_string(), "attributes".to_string()],
+            tags: vec![
+                "data-tools".to_string(),
+                "vector".to_string(),
+                "attributes".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -4112,7 +4535,11 @@ impl Tool for RasterToVectorPointsTool {
         .with_geom_type(GeometryType::Point);
         apply_raster_crs_to_layer(&input, &mut output);
         output.add_field(FieldDef::new("FID", FieldType::Integer));
-        output.add_field(FieldDef::new("VALUE", FieldType::Float).width(18).precision(8));
+        output.add_field(
+            FieldDef::new("VALUE", FieldType::Float)
+                .width(18)
+                .precision(8),
+        );
 
         let total_rows = input.rows.max(1) as f64;
         let row_records: Vec<Vec<(f64, f64, f64)>> = (0..input.rows as isize)
@@ -4141,7 +4568,9 @@ impl Tool for RasterToVectorPointsTool {
                             ("VALUE", FieldValue::Float(value)),
                         ],
                     )
-                    .map_err(|e| ToolError::Execution(format!("failed adding output feature: {e}")))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed adding output feature: {e}"))
+                    })?;
                 next_fid += 1;
             }
             coalescer.emit_unit_fraction(ctx.progress, (row_idx as f64 + 1.0) / total_rows);
@@ -4160,8 +4589,16 @@ impl Tool for RemovePolygonHolesTool {
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input polygon vector path.", required: true },
-                ToolParamSpec { name: "output", description: "Output polygon vector path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input polygon vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output polygon vector path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -4209,7 +4646,10 @@ impl Tool for RemovePolygonHolesTool {
 
         ctx.progress.info("running remove_polygon_holes");
         let input = read_vector_layer(&input_path, "input")?;
-        if !matches!(input.geom_type, Some(GeometryType::Polygon | GeometryType::MultiPolygon)) {
+        if !matches!(
+            input.geom_type,
+            Some(GeometryType::Polygon | GeometryType::MultiPolygon)
+        ) {
             return Err(ToolError::Validation(
                 "input vector layer must have Polygon or MultiPolygon geometry type".to_string(),
             ));
@@ -4237,7 +4677,13 @@ impl Tool for RemovePolygonHolesTool {
                     .fields()
                     .iter()
                     .enumerate()
-                    .map(|(idx, _)| feature.attributes.get(idx).cloned().unwrap_or(FieldValue::Null))
+                    .map(|(idx, _)| {
+                        feature
+                            .attributes
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or(FieldValue::Null)
+                    })
                     .collect::<Vec<_>>();
                 Ok((geometry, attr_values))
             })
@@ -4348,7 +4794,11 @@ impl Tool for SetNodataValueTool {
 
         output.par_fill_with(|i| {
             let value = input.data.get_f64(i);
-            if input.is_nodata(value) { back_value } else { value }
+            if input.is_nodata(value) {
+                back_value
+            } else {
+                value
+            }
         });
 
         ctx.progress.progress(1.0);
@@ -4425,7 +4875,10 @@ impl Tool for MultipartToSinglepartTool {
         ctx.progress.info("running multipart_to_singlepart");
         let input = read_vector_layer(&input_path, "input")?;
 
-        let out_geom_type = input.geom_type.map(single_part_geom_type).unwrap_or(GeometryType::Point);
+        let out_geom_type = input
+            .geom_type
+            .map(single_part_geom_type)
+            .unwrap_or(GeometryType::Point);
         let mut output = Layer::new(input.name.clone());
         output.geom_type = Some(out_geom_type);
         apply_input_crs_to_layer(&input, &mut output);
@@ -4452,7 +4905,12 @@ impl Tool for MultipartToSinglepartTool {
                             ("FID", FieldValue::Integer(0)), // placeholder, will be set sequentially
                         ]
                         .into_iter()
-                        .chain(src_attrs.iter().filter(|(name, _)| name.to_uppercase() != "FID").map(|(n, v)| (*n, v.clone())))
+                        .chain(
+                            src_attrs
+                                .iter()
+                                .filter(|(name, _)| name.to_uppercase() != "FID")
+                                .map(|(n, v)| (*n, v.clone())),
+                        )
                         .collect();
                         result.push((part_geom, attrs));
                     }
@@ -4559,10 +5017,9 @@ impl Tool for SinglepartToMultipartTool {
         output.add_field(FieldDef::new("FID", FieldType::Integer));
 
         if let Some(fname) = field_name {
-            let field_idx = input
-                .schema
-                .field_index(fname)
-                .ok_or_else(|| ToolError::Validation(format!("field '{fname}' not found in input layer")))?;
+            let field_idx = input.schema.field_index(fname).ok_or_else(|| {
+                ToolError::Validation(format!("field '{fname}' not found in input layer"))
+            })?;
 
             if let Some(fdef) = input.schema.field(fname) {
                 output.add_field(fdef.clone());
@@ -4590,12 +5047,18 @@ impl Tool for SinglepartToMultipartTool {
             for (group_idx, (key_str, feat_indices)) in groups.iter().enumerate() {
                 let geom = merge_to_multi(&input, feat_indices, input_geom_type)?;
                 let key_val: FieldValue = if let Some(f) = input.features.get(feat_indices[0]) {
-                    f.attributes.get(field_idx).cloned().unwrap_or(FieldValue::Null)
+                    f.attributes
+                        .get(field_idx)
+                        .cloned()
+                        .unwrap_or(FieldValue::Null)
                 } else {
                     FieldValue::Text(key_str.clone())
                 };
                 output
-                    .add_feature(Some(geom), &[("FID", FieldValue::Integer(fid)), (fname, key_val)])
+                    .add_feature(
+                        Some(geom),
+                        &[("FID", FieldValue::Integer(fid)), (fname, key_val)],
+                    )
                     .map_err(|e| ToolError::Execution(format!("failed adding feature: {e}")))?;
                 fid += 1;
                 coalescer.emit_unit_fraction(ctx.progress, (group_idx + 1) as f64 / total);
@@ -4632,11 +5095,17 @@ impl Tool for MergeVectorsTool {
 
     fn manifest(&self) -> ToolManifest {
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["layer1.geojson", "layer2.geojson"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["layer1.geojson", "layer2.geojson"]),
+        );
         defaults.insert("output".to_string(), json!("merged.geojson"));
 
         let mut example_args = ToolArgs::new();
-        example_args.insert("inputs".to_string(), json!(["roads_a.shp", "roads_b.shp", "roads_c.shp"]));
+        example_args.insert(
+            "inputs".to_string(),
+            json!(["roads_a.shp", "roads_b.shp", "roads_c.shp"]),
+        );
         example_args.insert("output".to_string(), json!("roads_merged.geojson"));
 
         ToolManifest {
@@ -4747,7 +5216,11 @@ impl Tool for MergeVectorsTool {
                 ];
                 for cf in &common_fields {
                     let val = if let Some(idx) = layer.schema.field_index(&cf.name) {
-                        feature.attributes.get(idx).cloned().unwrap_or(FieldValue::Null)
+                        feature
+                            .attributes
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or(FieldValue::Null)
                     } else {
                         FieldValue::Null
                     };
@@ -4835,7 +5308,10 @@ impl Tool for VectorLinesToRasterTool {
         let input_path = parse_vector_path_arg(args, "input")?;
         let output_path = parse_optional_output_path(args, "output")?;
         let field_name = parse_optional_string(args, "field")?.unwrap_or("FID");
-        let zero_background = args.get("zero_background").and_then(|v| v.as_bool()).unwrap_or(false);
+        let zero_background = args
+            .get("zero_background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let cell_size = parse_optional_f64(args, "cell_size")?.unwrap_or(0.0);
         let base_path = parse_optional_string(args, "base")?;
 
@@ -4848,7 +5324,8 @@ impl Tool for VectorLinesToRasterTool {
             && gt != GeometryType::MultiPolygon
         {
             return Err(ToolError::Validation(
-                "input vector must contain line or polygon geometries for vector_lines_to_raster".to_string(),
+                "input vector must contain line or polygon geometries for vector_lines_to_raster"
+                    .to_string(),
             ));
         }
 
@@ -4860,7 +5337,11 @@ impl Tool for VectorLinesToRasterTool {
         } else {
             input.schema.field_index(field_name)
         };
-        let data_type = if use_fid { DataType::I32 } else { DataType::F32 };
+        let data_type = if use_fid {
+            DataType::I32
+        } else {
+            DataType::F32
+        };
 
         let mut output = if let Some(base) = base_path {
             let base_raster = Raster::read(base)
@@ -4880,12 +5361,13 @@ impl Tool for VectorLinesToRasterTool {
             })
         } else {
             let mut input_for_bbox = input.clone();
-            let bbox = input_for_bbox
-                .bbox()
-                .ok_or_else(|| ToolError::Validation("input vector has no geometry extent".to_string()))?;
+            let bbox = input_for_bbox.bbox().ok_or_else(|| {
+                ToolError::Validation("input vector has no geometry extent".to_string())
+            })?;
             let mut auto_cs = cell_size;
             if auto_cs <= 0.0 {
-                auto_cs = ((bbox.max_x - bbox.min_x).max(bbox.max_y - bbox.min_y) / 500.0).max(1e-9);
+                auto_cs =
+                    ((bbox.max_x - bbox.min_x).max(bbox.max_y - bbox.min_y) / 500.0).max(1e-9);
             }
             let cols = ((bbox.max_x - bbox.min_x) / auto_cs).ceil().max(1.0) as usize;
             let rows = ((bbox.max_y - bbox.min_y) / auto_cs).ceil().max(1.0) as usize;
@@ -5035,7 +5517,9 @@ impl Tool for RasterToVectorPolygonsTool {
                 if visited[idx] {
                     continue;
                 }
-                let Some(v) = input.get_raw(0, row, col) else { continue };
+                let Some(v) = input.get_raw(0, row, col) else {
+                    continue;
+                };
                 if input.is_nodata(v) || v == 0.0 {
                     visited[idx] = true;
                     continue;
@@ -5056,7 +5540,9 @@ impl Tool for RasterToVectorPolygonsTool {
                         if visited[n_idx] {
                             continue;
                         }
-                        let Some(vn) = input.get_raw(0, rn, cn) else { continue };
+                        let Some(vn) = input.get_raw(0, rn, cn) else {
+                            continue;
+                        };
                         if !input.is_nodata(vn) && vn == v {
                             visited[n_idx] = true;
                             clumps[n_idx] = clump_val;
@@ -5066,7 +5552,8 @@ impl Tool for RasterToVectorPolygonsTool {
                 }
                 clump_val += 1;
             }
-            coalescer.emit_unit_fraction(ctx.progress, (row as f64 + 1.0) / rows.max(1) as f64 * 0.25);
+            coalescer
+                .emit_unit_fraction(ctx.progress, (row as f64 + 1.0) / rows.max(1) as f64 * 0.25);
         }
 
         let half_x = input.cell_size_x / 2.0;
@@ -5103,16 +5590,21 @@ impl Tool for RasterToVectorPolygonsTool {
                     let cy = input.row_center_y(row);
                     let p1 = (cx + edge_offsets_pt1_x[n], cy + edge_offsets_pt1_y[n]);
                     let p2 = (cx + edge_offsets_pt2_x[n], cy + edge_offsets_pt2_y[n]);
-                    tree.add([p1.0, p1.1], node_id)
-                        .map_err(|e| ToolError::Execution(format!("failed adding boundary node: {e}")))?;
+                    tree.add([p1.0, p1.1], node_id).map_err(|e| {
+                        ToolError::Execution(format!("failed adding boundary node: {e}"))
+                    })?;
                     node_id += 1;
-                    tree.add([p2.0, p2.1], node_id)
-                        .map_err(|e| ToolError::Execution(format!("failed adding boundary node: {e}")))?;
+                    tree.add([p2.0, p2.1], node_id).map_err(|e| {
+                        ToolError::Execution(format!("failed adding boundary node: {e}"))
+                    })?;
                     node_id += 1;
                     segments.push(PolygonTraceSegment { p1, p2, value: z });
                 }
             }
-            coalescer.emit_unit_fraction(ctx.progress, 0.25 + (row as f64 + 1.0) / rows.max(1) as f64 * 0.25);
+            coalescer.emit_unit_fraction(
+                ctx.progress,
+                0.25 + (row as f64 + 1.0) / rows.max(1) as f64 * 0.25,
+            );
         }
 
         let mut rings_by_clump: Vec<Vec<Vec<(f64, f64)>>> = vec![Vec::new(); clump_val as usize];
@@ -5141,7 +5633,9 @@ impl Tool for RasterToVectorPolygonsTool {
 
                 let ret = tree
                     .within(&[p1.0, p1.1], prec, &squared_euclidean)
-                    .map_err(|e| ToolError::Execution(format!("failed boundary node lookup: {e}")))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed boundary node lookup: {e}"))
+                    })?;
 
                 let mut connected_nodes: Vec<usize> = Vec::new();
                 for hit in &ret {
@@ -5223,7 +5717,8 @@ impl Tool for RasterToVectorPolygonsTool {
                     let p0 = points[i - 1];
                     let p1 = points[i];
                     let p2 = points[i + 1];
-                    let cross = ((p1.1 - p0.1) * (p2.0 - p1.0) - (p2.1 - p1.1) * (p1.0 - p0.0)).abs();
+                    let cross =
+                        ((p1.1 - p0.1) * (p2.0 - p1.0) - (p2.1 - p1.1) * (p1.0 - p0.0)).abs();
                     let dot = ((p1.0 - p0.0) * (p2.0 - p1.0) + (p1.1 - p0.1) * (p2.1 - p1.1)).abs();
                     if cross <= dot * prec {
                         points.remove(i);
@@ -5248,7 +5743,11 @@ impl Tool for RasterToVectorPolygonsTool {
         .with_geom_type(GeometryType::Polygon);
         apply_raster_crs_to_layer(&input, &mut output);
         output.add_field(FieldDef::new("FID", FieldType::Integer));
-        output.add_field(FieldDef::new("VALUE", FieldType::Float).width(18).precision(8));
+        output.add_field(
+            FieldDef::new("VALUE", FieldType::Float)
+                .width(18)
+                .precision(8),
+        );
 
         let mut next_fid = 1i64;
         let total_clumps = (clump_val as usize).saturating_sub(1).max(1) as f64;
@@ -5303,7 +5802,10 @@ impl Tool for RasterToVectorPolygonsTool {
                         .map(|(i, ext)| {
                             (
                                 Ring(normalize_ring(ext)),
-                                hole_groups[i].iter().map(|r| Ring(normalize_ring(r))).collect(),
+                                hole_groups[i]
+                                    .iter()
+                                    .map(|r| Ring(normalize_ring(r)))
+                                    .collect(),
                             )
                         })
                         .collect(),
@@ -5321,7 +5823,8 @@ impl Tool for RasterToVectorPolygonsTool {
                 .map_err(|e| ToolError::Execution(format!("failed adding output feature: {e}")))?;
             next_fid += 1;
 
-            coalescer.emit_unit_fraction(ctx.progress, 0.5 + (clump_id as f64 / total_clumps) * 0.5);
+            coalescer
+                .emit_unit_fraction(ctx.progress, 0.5 + (clump_id as f64 / total_clumps) * 0.5);
         }
 
         write_vector_output(&output, &output_path)
@@ -5333,12 +5836,21 @@ impl Tool for RasterToVectorLinesTool {
         ToolMetadata {
             id: "raster_to_vector_lines",
             display_name: "RasterToVectorLines",
-            summary: "Converts non-zero, non-nodata raster line cells into polyline vector features.",
+            summary:
+                "Converts non-zero, non-nodata raster line cells into polyline vector features.",
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input raster path (single-band).", required: true },
-                ToolParamSpec { name: "output", description: "Output vector path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input raster path (single-band).",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -5405,7 +5917,9 @@ impl Tool for RasterToVectorLinesTool {
 
         for row in 0..rows {
             for col in 0..cols {
-                let Some(v) = input.get_raw(0, row, col) else { continue };
+                let Some(v) = input.get_raw(0, row, col) else {
+                    continue;
+                };
                 if input.is_nodata(v) || v == 0.0 {
                     continue;
                 }
@@ -5427,7 +5941,8 @@ impl Tool for RasterToVectorLinesTool {
                     queue.push_back((row, col));
                 }
             }
-            coalescer.emit_unit_fraction(ctx.progress, (row as f64 + 1.0) / rows.max(1) as f64 * 0.2);
+            coalescer
+                .emit_unit_fraction(ctx.progress, (row as f64 + 1.0) / rows.max(1) as f64 * 0.2);
         }
 
         let mut output = Layer::new(
@@ -5439,7 +5954,11 @@ impl Tool for RasterToVectorLinesTool {
         .with_geom_type(GeometryType::LineString);
         apply_raster_crs_to_layer(&input, &mut output);
         output.add_field(FieldDef::new("FID", FieldType::Integer));
-        output.add_field(FieldDef::new("VALUE", FieldType::Float).width(18).precision(8));
+        output.add_field(
+            FieldDef::new("VALUE", FieldType::Float)
+                .width(18)
+                .precision(8),
+        );
 
         let mut next_fid = 1i64;
         let mut solved_cells = 0usize;
@@ -5474,7 +5993,9 @@ impl Tool for RasterToVectorLinesTool {
                     if visited[n_idx] != 0 {
                         continue;
                     }
-                    let Some(vn) = input.get_raw(0, rn, cn) else { continue };
+                    let Some(vn) = input.get_raw(0, rn, cn) else {
+                        continue;
+                    };
                     if input.is_nodata(vn) || vn != current_val {
                         continue;
                     }
@@ -5503,7 +6024,12 @@ impl Tool for RasterToVectorLinesTool {
             }
 
             if points.len() > 1 {
-                let geom = Geometry::line_string(points.into_iter().map(|(x, y)| wbvector::Coord::xy(x, y)).collect());
+                let geom = Geometry::line_string(
+                    points
+                        .into_iter()
+                        .map(|(x, y)| wbvector::Coord::xy(x, y))
+                        .collect(),
+                );
                 output
                     .add_feature(
                         Some(geom),
@@ -5512,7 +6038,9 @@ impl Tool for RasterToVectorLinesTool {
                             ("VALUE", FieldValue::Float(current_val)),
                         ],
                     )
-                    .map_err(|e| ToolError::Execution(format!("failed adding output feature: {e}")))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed adding output feature: {e}"))
+                    })?;
                 next_fid += 1;
             }
 
@@ -5555,7 +6083,9 @@ impl Tool for RasterToVectorLinesTool {
                         if visited[n_idx] != 0 {
                             continue;
                         }
-                        let Some(vn) = input.get_raw(0, rn, cn) else { continue };
+                        let Some(vn) = input.get_raw(0, rn, cn) else {
+                            continue;
+                        };
                         if input.is_nodata(vn) || vn != current_val {
                             continue;
                         }
@@ -5575,7 +6105,12 @@ impl Tool for RasterToVectorLinesTool {
                 }
 
                 if points.len() > 1 {
-                    let geom = Geometry::line_string(points.into_iter().map(|(x, y)| wbvector::Coord::xy(x, y)).collect());
+                    let geom = Geometry::line_string(
+                        points
+                            .into_iter()
+                            .map(|(x, y)| wbvector::Coord::xy(x, y))
+                            .collect(),
+                    );
                     output
                         .add_feature(
                             Some(geom),
@@ -5584,7 +6119,9 @@ impl Tool for RasterToVectorLinesTool {
                                 ("VALUE", FieldValue::Float(current_val)),
                             ],
                         )
-                        .map_err(|e| ToolError::Execution(format!("failed adding output feature: {e}")))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!("failed adding output feature: {e}"))
+                        })?;
                     next_fid += 1;
                 }
             }
@@ -5668,7 +6205,10 @@ impl Tool for VectorPointsToRasterTool {
         let output_path = parse_optional_output_path(args, "output")?;
         let field = parse_optional_string(args, "field")?.unwrap_or("FID");
         let assign = parse_assign_op(args);
-        let zero_background = args.get("zero_background").and_then(|v| v.as_bool()).unwrap_or(false);
+        let zero_background = args
+            .get("zero_background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let cell_size = parse_optional_f64(args, "cell_size")?.unwrap_or(0.0);
         let base_path = parse_optional_string(args, "base")?;
 
@@ -5745,7 +6285,8 @@ impl Tool for VectorPointsToRasterTool {
 
         let total = input.features.len().max(1) as f64;
         let coalescer = PercentCoalescer::new(1, 99);
-        let mut counts: Option<Vec<f64>> = if assign.contains("mean") || assign.contains("average") {
+        let mut counts: Option<Vec<f64>> = if assign.contains("mean") || assign.contains("average")
+        {
             Some(vec![0.0; output.rows * output.cols])
         } else {
             None
@@ -5772,57 +6313,56 @@ impl Tool for VectorPointsToRasterTool {
                     continue;
                 };
                 let existing = output.get(0, row, col);
-                let incoming = if assign.contains("num") {
-                    1.0
-                } else {
-                    value
-                };
+                let incoming = if assign.contains("num") { 1.0 } else { value };
 
                 if assign.contains("first") {
                     if output.is_nodata(existing) || existing == background {
-                        output
-                            .set(0, row, col, incoming)
-                            .map_err(|e| ToolError::Execution(format!("failed setting raster value: {e}")))?;
+                        output.set(0, row, col, incoming).map_err(|e| {
+                            ToolError::Execution(format!("failed setting raster value: {e}"))
+                        })?;
                     }
                 } else if assign.contains("min") {
                     if output.is_nodata(existing) || existing == background || incoming < existing {
-                        output
-                            .set(0, row, col, incoming)
-                            .map_err(|e| ToolError::Execution(format!("failed setting raster value: {e}")))?;
+                        output.set(0, row, col, incoming).map_err(|e| {
+                            ToolError::Execution(format!("failed setting raster value: {e}"))
+                        })?;
                     }
                 } else if assign.contains("max") {
                     if output.is_nodata(existing) || existing == background || incoming > existing {
-                        output
-                            .set(0, row, col, incoming)
-                            .map_err(|e| ToolError::Execution(format!("failed setting raster value: {e}")))?;
+                        output.set(0, row, col, incoming).map_err(|e| {
+                            ToolError::Execution(format!("failed setting raster value: {e}"))
+                        })?;
                     }
-                } else if assign.contains("sum") || assign.contains("total") || assign.contains("num") {
+                } else if assign.contains("sum")
+                    || assign.contains("total")
+                    || assign.contains("num")
+                {
                     let updated = if output.is_nodata(existing) || existing == background {
                         incoming
                     } else {
                         existing + incoming
                     };
-                    output
-                        .set(0, row, col, updated)
-                        .map_err(|e| ToolError::Execution(format!("failed setting raster value: {e}")))?;
+                    output.set(0, row, col, updated).map_err(|e| {
+                        ToolError::Execution(format!("failed setting raster value: {e}"))
+                    })?;
                 } else if assign.contains("mean") || assign.contains("average") {
                     let updated = if output.is_nodata(existing) || existing == background {
                         incoming
                     } else {
                         existing + incoming
                     };
-                    output
-                        .set(0, row, col, updated)
-                        .map_err(|e| ToolError::Execution(format!("failed setting raster value: {e}")))?;
+                    output.set(0, row, col, updated).map_err(|e| {
+                        ToolError::Execution(format!("failed setting raster value: {e}"))
+                    })?;
                     if let Some(ref mut n) = counts {
                         let idx = row as usize * output.cols + col as usize;
                         n[idx] += 1.0;
                     }
                 } else {
                     // default: last
-                    output
-                        .set(0, row, col, incoming)
-                        .map_err(|e| ToolError::Execution(format!("failed setting raster value: {e}")))?;
+                    output.set(0, row, col, incoming).map_err(|e| {
+                        ToolError::Execution(format!("failed setting raster value: {e}"))
+                    })?;
                 }
             }
 
@@ -5835,9 +6375,9 @@ impl Tool for VectorPointsToRasterTool {
                     let idx = row as usize * output.cols + col as usize;
                     if n[idx] > 0.0 {
                         let sum = output.get(0, row, col);
-                        output
-                            .set(0, row, col, sum / n[idx])
-                            .map_err(|e| ToolError::Execution(format!("failed finalizing mean value: {e}")))?;
+                        output.set(0, row, col, sum / n[idx]).map_err(|e| {
+                            ToolError::Execution(format!("failed finalizing mean value: {e}"))
+                        })?;
                     }
                 }
             }
@@ -5906,8 +6446,9 @@ impl Tool for NewRasterFromBaseVectorTool {
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = parse_vector_path_arg(args, "base")?;
-        let cell_size = parse_optional_f64(args, "cell_size")?
-            .ok_or_else(|| ToolError::Validation("parameter 'cell_size' is required".to_string()))?;
+        let cell_size = parse_optional_f64(args, "cell_size")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'cell_size' is required".to_string())
+        })?;
         if cell_size <= 0.0 {
             return Err(ToolError::Validation(
                 "parameter 'cell_size' must be greater than zero".to_string(),
@@ -5921,8 +6462,9 @@ impl Tool for NewRasterFromBaseVectorTool {
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let base_path = parse_vector_path_arg(args, "base")?;
-        let cell_size = parse_optional_f64(args, "cell_size")?
-            .ok_or_else(|| ToolError::Validation("parameter 'cell_size' is required".to_string()))?;
+        let cell_size = parse_optional_f64(args, "cell_size")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'cell_size' is required".to_string())
+        })?;
         if cell_size <= 0.0 {
             return Err(ToolError::Validation(
                 "parameter 'cell_size' must be greater than zero".to_string(),
@@ -5936,9 +6478,9 @@ impl Tool for NewRasterFromBaseVectorTool {
         ctx.progress.info("running new_raster_from_base_vector");
         let base = read_vector_layer(&base_path, "base")?;
         let mut base_for_bbox = base.clone();
-        let bbox = base_for_bbox
-            .bbox()
-            .ok_or_else(|| ToolError::Validation("base vector has no geometry extent".to_string()))?;
+        let bbox = base_for_bbox.bbox().ok_or_else(|| {
+            ToolError::Validation("base vector has no geometry extent".to_string())
+        })?;
 
         let west = bbox.min_x;
         let north = bbox.max_y;
@@ -6125,7 +6667,8 @@ impl Tool for RemoveRasterPolygonHolesTool {
                 clump_touches_edge.push(touches_edge);
                 next_label += 1;
             }
-            coalescer.emit_unit_fraction(ctx.progress, (row as f64 + 1.0) / rows.max(1) as f64 * 0.35);
+            coalescer
+                .emit_unit_fraction(ctx.progress, (row as f64 + 1.0) / rows.max(1) as f64 * 0.35);
         }
 
         let mut output = input.clone();
@@ -6171,9 +6714,8 @@ impl Tool for RemoveRasterPolygonHolesTool {
                 }
             }
 
-            let fill_value = if let Some((_, (v, _))) = value_counts
-                .iter()
-                .max_by_key(|(_, (_, count))| *count)
+            let fill_value = if let Some((_, (v, _))) =
+                value_counts.iter().max_by_key(|(_, (_, count))| *count)
             {
                 *v
             } else {
@@ -6201,11 +6743,31 @@ impl Tool for CsvPointsToVectorTool {
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input_file", description: "Input CSV file path.", required: true },
-                ToolParamSpec { name: "x_field_num", description: "Zero-based index for X coordinate field. Defaults to 0.", required: false },
-                ToolParamSpec { name: "y_field_num", description: "Zero-based index for Y coordinate field. Defaults to 1.", required: false },
-                ToolParamSpec { name: "epsg", description: "Optional EPSG code for output CRS.", required: false },
-                ToolParamSpec { name: "output", description: "Output vector path.", required: true },
+                ToolParamSpec {
+                    name: "input_file",
+                    description: "Input CSV file path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "x_field_num",
+                    description: "Zero-based index for X coordinate field. Defaults to 0.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "y_field_num",
+                    description: "Zero-based index for Y coordinate field. Defaults to 1.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "epsg",
+                    description: "Optional EPSG code for output CRS.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector path.",
+                    required: true,
+                },
             ],
         }
     }
@@ -6231,11 +6793,33 @@ impl Tool for CsvPointsToVectorTool {
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input_file".to_string(), description: "Input CSV file path.".to_string(), required: true },
-                ToolParamDescriptor { name: "x_field_num".to_string(), description: "Zero-based index for X coordinate field. Defaults to 0.".to_string(), required: false },
-                ToolParamDescriptor { name: "y_field_num".to_string(), description: "Zero-based index for Y coordinate field. Defaults to 1.".to_string(), required: false },
-                ToolParamDescriptor { name: "epsg".to_string(), description: "Optional EPSG code for output CRS.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Output vector path.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input_file".to_string(),
+                    description: "Input CSV file path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "x_field_num".to_string(),
+                    description: "Zero-based index for X coordinate field. Defaults to 0."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "y_field_num".to_string(),
+                    description: "Zero-based index for Y coordinate field. Defaults to 1."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "epsg".to_string(),
+                    description: "Optional EPSG code for output CRS.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Output vector path.".to_string(),
+                    required: true,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -6243,21 +6827,28 @@ impl Tool for CsvPointsToVectorTool {
                 description: "Import CSV points with explicit X/Y fields.".to_string(),
                 args: example,
             }],
-            tags: vec!["data-tools".to_string(), "csv".to_string(), "vector".to_string(), "points".to_string()],
+            tags: vec![
+                "data-tools".to_string(),
+                "csv".to_string(),
+                "vector".to_string(),
+                "points".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_optional_string(args, "input_file")?
-            .ok_or_else(|| ToolError::Validation("parameter 'input_file' is required".to_string()))?;
+        let _ = parse_optional_string(args, "input_file")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'input_file' is required".to_string())
+        })?;
         let _ = parse_vector_path_arg(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_file = parse_optional_string(args, "input_file")?
-            .ok_or_else(|| ToolError::Validation("parameter 'input_file' is required".to_string()))?;
+        let input_file = parse_optional_string(args, "input_file")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'input_file' is required".to_string())
+        })?;
         let output_path = PathBuf::from(parse_vector_path_arg(args, "output")?);
         let x_field = parse_optional_usize(args, "x_field_num")?.unwrap_or(0);
         let y_field = parse_optional_usize(args, "y_field_num")?.unwrap_or(1);
@@ -6265,7 +6856,9 @@ impl Tool for CsvPointsToVectorTool {
 
         let (headers, rows) = parse_csv_table(input_file)?;
         if headers.is_empty() || rows.is_empty() {
-            return Err(ToolError::Validation("csv file does not contain data rows".to_string()));
+            return Err(ToolError::Validation(
+                "csv file does not contain data rows".to_string(),
+            ));
         }
         if x_field >= headers.len() || y_field >= headers.len() {
             return Err(ToolError::Validation(
@@ -6300,10 +6893,16 @@ impl Tool for CsvPointsToVectorTool {
 
         for row in &rows {
             let x = row[x_field].trim().parse::<f64>().map_err(|_| {
-                ToolError::Validation(format!("failed parsing X coordinate '{}': expected numeric", row[x_field]))
+                ToolError::Validation(format!(
+                    "failed parsing X coordinate '{}': expected numeric",
+                    row[x_field]
+                ))
             })?;
             let y = row[y_field].trim().parse::<f64>().map_err(|_| {
-                ToolError::Validation(format!("failed parsing Y coordinate '{}': expected numeric", row[y_field]))
+                ToolError::Validation(format!(
+                    "failed parsing Y coordinate '{}': expected numeric",
+                    row[y_field]
+                ))
             })?;
 
             let attrs: Vec<(&str, FieldValue)> = headers
@@ -6330,9 +6929,21 @@ impl Tool for ExportTableToCsvTool {
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector path.", required: true },
-                ToolParamSpec { name: "output_csv_file", description: "Output CSV file path.", required: true },
-                ToolParamSpec { name: "headers", description: "Include header row in output. Defaults to true.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output_csv_file",
+                    description: "Output CSV file path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "headers",
+                    description: "Include header row in output. Defaults to true.",
+                    required: false,
+                },
             ],
         }
     }
@@ -6355,9 +6966,21 @@ impl Tool for ExportTableToCsvTool {
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input vector path.".to_string(), required: true },
-                ToolParamDescriptor { name: "output_csv_file".to_string(), description: "Output CSV file path.".to_string(), required: true },
-                ToolParamDescriptor { name: "headers".to_string(), description: "Include header row in output. Defaults to true.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input vector path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output_csv_file".to_string(),
+                    description: "Output CSV file path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "headers".to_string(),
+                    description: "Include header row in output. Defaults to true.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -6365,29 +6988,39 @@ impl Tool for ExportTableToCsvTool {
                 description: "Export attribute table to CSV.".to_string(),
                 args: example,
             }],
-            tags: vec!["data-tools".to_string(), "csv".to_string(), "attributes".to_string()],
+            tags: vec![
+                "data-tools".to_string(),
+                "csv".to_string(),
+                "attributes".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = parse_vector_path_arg(args, "input")?;
-        let _ = parse_optional_string(args, "output_csv_file")?
-            .ok_or_else(|| ToolError::Validation("parameter 'output_csv_file' is required".to_string()))?;
+        let _ = parse_optional_string(args, "output_csv_file")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'output_csv_file' is required".to_string())
+        })?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_vector_path_arg(args, "input")?;
         let mut output_csv = parse_optional_string(args, "output_csv_file")?
-            .ok_or_else(|| ToolError::Validation("parameter 'output_csv_file' is required".to_string()))?
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'output_csv_file' is required".to_string())
+            })?
             .to_string();
         if !output_csv.to_ascii_lowercase().ends_with(".csv") {
             output_csv.push_str(".csv");
         }
         let output_path = PathBuf::from(output_csv);
         ensure_parent_dir(&output_path)?;
-        let headers = args.get("headers").and_then(|v| v.as_bool()).unwrap_or(true);
+        let headers = args
+            .get("headers")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
 
         let input = read_vector_layer(&input_path, "input")?;
         let file = File::create(&output_path)
@@ -6432,7 +7065,10 @@ impl Tool for ExportTableToCsvTool {
         }
 
         let mut outputs = BTreeMap::new();
-        outputs.insert("path".to_string(), json!(output_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(output_path.to_string_lossy().to_string()),
+        );
         Ok(ToolRunResult { outputs })
     }
 }
@@ -6499,10 +7135,12 @@ impl Tool for JoinTablesTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = parse_vector_path_arg(args, "primary_vector")?;
         let _ = parse_vector_path_arg(args, "foreign_vector")?;
-        let _ = parse_optional_string(args, "primary_key_field")?
-            .ok_or_else(|| ToolError::Validation("parameter 'primary_key_field' is required".to_string()))?;
-        let _ = parse_optional_string(args, "foreign_key_field")?
-            .ok_or_else(|| ToolError::Validation("parameter 'foreign_key_field' is required".to_string()))?;
+        let _ = parse_optional_string(args, "primary_key_field")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'primary_key_field' is required".to_string())
+        })?;
+        let _ = parse_optional_string(args, "foreign_key_field")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'foreign_key_field' is required".to_string())
+        })?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
@@ -6510,10 +7148,12 @@ impl Tool for JoinTablesTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let primary_path = parse_vector_path_arg(args, "primary_vector")?;
         let foreign_path = parse_vector_path_arg(args, "foreign_vector")?;
-        let primary_key = parse_optional_string(args, "primary_key_field")?
-            .ok_or_else(|| ToolError::Validation("parameter 'primary_key_field' is required".to_string()))?;
-        let foreign_key = parse_optional_string(args, "foreign_key_field")?
-            .ok_or_else(|| ToolError::Validation("parameter 'foreign_key_field' is required".to_string()))?;
+        let primary_key = parse_optional_string(args, "primary_key_field")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'primary_key_field' is required".to_string())
+        })?;
+        let foreign_key = parse_optional_string(args, "foreign_key_field")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'foreign_key_field' is required".to_string())
+        })?;
         let import_field = parse_optional_string(args, "import_field")?;
         let output_path = parse_optional_output_path(args, "output")?
             .unwrap_or_else(|| PathBuf::from(IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH));
@@ -6533,7 +7173,9 @@ impl Tool for JoinTablesTool {
             vec![foreign
                 .schema
                 .field(import_name)
-                .ok_or_else(|| ToolError::Validation(format!("import field '{}' not found", import_name)))?
+                .ok_or_else(|| {
+                    ToolError::Validation(format!("import field '{}' not found", import_name))
+                })?
                 .clone()]
         } else {
             foreign
@@ -6561,7 +7203,10 @@ impl Tool for JoinTablesTool {
                     if idx == usize::MAX {
                         FieldValue::Null
                     } else {
-                        feat.attributes.get(idx).cloned().unwrap_or(FieldValue::Null)
+                        feat.attributes
+                            .get(idx)
+                            .cloned()
+                            .unwrap_or(FieldValue::Null)
                     }
                 })
                 .collect::<Vec<_>>();
@@ -6610,16 +7255,42 @@ impl Tool for MergeTableWithCsvTool {
         ToolMetadata {
             id: "merge_table_with_csv",
             display_name: "MergeTableWithCsv",
-            summary: "Merges attributes from a CSV table into a vector attribute table by key fields.",
+            summary:
+                "Merges attributes from a CSV table into a vector attribute table by key fields.",
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "primary_vector", description: "Primary vector path to receive merged fields.", required: true },
-                ToolParamSpec { name: "primary_key_field", description: "Primary key field in primary vector.", required: true },
-                ToolParamSpec { name: "foreign_csv_filename", description: "CSV file containing foreign table.", required: true },
-                ToolParamSpec { name: "foreign_key_field", description: "Foreign key field name in CSV header.", required: true },
-                ToolParamSpec { name: "import_field", description: "Optional single CSV field to import; defaults to all non-key fields.", required: false },
-                ToolParamSpec { name: "output", description: "Output vector path.", required: false },
+                ToolParamSpec {
+                    name: "primary_vector",
+                    description: "Primary vector path to receive merged fields.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "primary_key_field",
+                    description: "Primary key field in primary vector.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "foreign_csv_filename",
+                    description: "CSV file containing foreign table.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "foreign_key_field",
+                    description: "Foreign key field name in CSV header.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "import_field",
+                    description:
+                        "Optional single CSV field to import; defaults to all non-key fields.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -6628,13 +7299,19 @@ impl Tool for MergeTableWithCsvTool {
         let mut defaults = ToolArgs::new();
         defaults.insert("primary_vector".to_string(), json!("countries.gpkg"));
         defaults.insert("primary_key_field".to_string(), json!("COUNTRY"));
-        defaults.insert("foreign_csv_filename".to_string(), json!("country_stats.csv"));
+        defaults.insert(
+            "foreign_csv_filename".to_string(),
+            json!("country_stats.csv"),
+        );
         defaults.insert("foreign_key_field".to_string(), json!("COUNTRY"));
 
         let mut example = ToolArgs::new();
         example.insert("primary_vector".to_string(), json!("countries.gpkg"));
         example.insert("primary_key_field".to_string(), json!("COUNTRY"));
-        example.insert("foreign_csv_filename".to_string(), json!("country_stats.csv"));
+        example.insert(
+            "foreign_csv_filename".to_string(),
+            json!("country_stats.csv"),
+        );
         example.insert("foreign_key_field".to_string(), json!("COUNTRY"));
         example.insert("import_field".to_string(), json!("GDP"));
         example.insert("output".to_string(), json!("countries_merged.gpkg"));
@@ -6666,24 +7343,30 @@ impl Tool for MergeTableWithCsvTool {
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = parse_vector_path_arg(args, "primary_vector")?;
-        let _ = parse_optional_string(args, "primary_key_field")?
-            .ok_or_else(|| ToolError::Validation("parameter 'primary_key_field' is required".to_string()))?;
-        let _ = parse_optional_string(args, "foreign_csv_filename")?
-            .ok_or_else(|| ToolError::Validation("parameter 'foreign_csv_filename' is required".to_string()))?;
-        let _ = parse_optional_string(args, "foreign_key_field")?
-            .ok_or_else(|| ToolError::Validation("parameter 'foreign_key_field' is required".to_string()))?;
+        let _ = parse_optional_string(args, "primary_key_field")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'primary_key_field' is required".to_string())
+        })?;
+        let _ = parse_optional_string(args, "foreign_csv_filename")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'foreign_csv_filename' is required".to_string())
+        })?;
+        let _ = parse_optional_string(args, "foreign_key_field")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'foreign_key_field' is required".to_string())
+        })?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let primary_path = parse_vector_path_arg(args, "primary_vector")?;
-        let primary_key = parse_optional_string(args, "primary_key_field")?
-            .ok_or_else(|| ToolError::Validation("parameter 'primary_key_field' is required".to_string()))?;
-        let csv_path = parse_optional_string(args, "foreign_csv_filename")?
-            .ok_or_else(|| ToolError::Validation("parameter 'foreign_csv_filename' is required".to_string()))?;
-        let foreign_key = parse_optional_string(args, "foreign_key_field")?
-            .ok_or_else(|| ToolError::Validation("parameter 'foreign_key_field' is required".to_string()))?;
+        let primary_key = parse_optional_string(args, "primary_key_field")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'primary_key_field' is required".to_string())
+        })?;
+        let csv_path = parse_optional_string(args, "foreign_csv_filename")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'foreign_csv_filename' is required".to_string())
+        })?;
+        let foreign_key = parse_optional_string(args, "foreign_key_field")?.ok_or_else(|| {
+            ToolError::Validation("parameter 'foreign_key_field' is required".to_string())
+        })?;
         let import_field = parse_optional_string(args, "import_field")?;
         let output_path = parse_optional_output_path(args, "output")?
             .unwrap_or_else(|| PathBuf::from(IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH));
@@ -6698,13 +7381,23 @@ impl Tool for MergeTableWithCsvTool {
         let foreign_key_idx = headers
             .iter()
             .position(|h| h == foreign_key)
-            .ok_or_else(|| ToolError::Validation(format!("foreign key field '{}' not found in csv", foreign_key)))?;
+            .ok_or_else(|| {
+                ToolError::Validation(format!(
+                    "foreign key field '{}' not found in csv",
+                    foreign_key
+                ))
+            })?;
 
         let append_indices: Vec<usize> = if let Some(import_name) = import_field {
             vec![headers
                 .iter()
                 .position(|h| h == import_name)
-                .ok_or_else(|| ToolError::Validation(format!("import field '{}' not found in csv", import_name)))?]
+                .ok_or_else(|| {
+                    ToolError::Validation(format!(
+                        "import field '{}' not found in csv",
+                        import_name
+                    ))
+                })?]
         } else {
             headers
                 .iter()
@@ -6772,16 +7465,42 @@ impl Tool for VectorPolygonsToRasterTool {
         ToolMetadata {
             id: "vector_polygons_to_raster",
             display_name: "VectorPolygonsToRaster",
-            summary: "Rasterizes polygon vectors to a grid, supporting attribute-driven burn values.",
+            summary:
+                "Rasterizes polygon vectors to a grid, supporting attribute-driven burn values.",
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input polygon vector path.", required: true },
-                ToolParamSpec { name: "field", description: "Optional numeric field name for burn values (defaults to FID).", required: false },
-                ToolParamSpec { name: "zero_background", description: "When true, initializes output background to 0 instead of nodata.", required: false },
-                ToolParamSpec { name: "cell_size", description: "Output cell size when 'base' is not supplied.", required: false },
-                ToolParamSpec { name: "base", description: "Optional base raster path defining output grid and extent.", required: false },
-                ToolParamSpec { name: "output", description: "Optional output raster path. If omitted, output remains in memory.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input polygon vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Optional numeric field name for burn values (defaults to FID).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "zero_background",
+                    description: "When true, initializes output background to 0 instead of nodata.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "cell_size",
+                    description: "Output cell size when 'base' is not supplied.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "base",
+                    description: "Optional base raster path defining output grid and extent.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description:
+                        "Optional output raster path. If omitted, output remains in memory.",
+                    required: false,
+                },
             ],
         }
     }
@@ -6801,16 +7520,47 @@ impl Tool for VectorPolygonsToRasterTool {
         ToolManifest {
             id: "vector_polygons_to_raster".to_string(),
             display_name: "VectorPolygonsToRaster".to_string(),
-            summary: "Rasterizes polygon vectors to a grid, supporting attribute-driven burn values.".to_string(),
+            summary:
+                "Rasterizes polygon vectors to a grid, supporting attribute-driven burn values."
+                    .to_string(),
             category: ToolCategory::Conversion,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input polygon vector path.".to_string(), required: true },
-                ToolParamDescriptor { name: "field".to_string(), description: "Optional numeric field name for burn values (defaults to FID).".to_string(), required: false },
-                ToolParamDescriptor { name: "zero_background".to_string(), description: "When true, initializes output background to 0 instead of nodata.".to_string(), required: false },
-                ToolParamDescriptor { name: "cell_size".to_string(), description: "Output cell size when 'base' is not supplied.".to_string(), required: false },
-                ToolParamDescriptor { name: "base".to_string(), description: "Optional base raster path defining output grid and extent.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path. If omitted, output remains in memory.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input polygon vector path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "field".to_string(),
+                    description: "Optional numeric field name for burn values (defaults to FID)."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "zero_background".to_string(),
+                    description: "When true, initializes output background to 0 instead of nodata."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "cell_size".to_string(),
+                    description: "Output cell size when 'base' is not supplied.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "base".to_string(),
+                    description: "Optional base raster path defining output grid and extent."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description:
+                        "Optional output raster path. If omitted, output remains in memory."
+                            .to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -6818,7 +7568,12 @@ impl Tool for VectorPolygonsToRasterTool {
                 description: "Rasterize polygons to a base grid.".to_string(),
                 args: example,
             }],
-            tags: vec!["data-tools".to_string(), "vector".to_string(), "raster".to_string(), "polygons".to_string()],
+            tags: vec![
+                "data-tools".to_string(),
+                "vector".to_string(),
+                "raster".to_string(),
+                "polygons".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6835,7 +7590,10 @@ impl Tool for VectorPolygonsToRasterTool {
         let input_path = parse_vector_path_arg(args, "input")?;
         let output_path = parse_optional_output_path(args, "output")?;
         let field_name = parse_optional_string(args, "field")?.unwrap_or("FID");
-        let zero_background = args.get("zero_background").and_then(|v| v.as_bool()).unwrap_or(false);
+        let zero_background = args
+            .get("zero_background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let cell_size = parse_optional_f64(args, "cell_size")?.unwrap_or(0.0);
         let base_path = parse_optional_string(args, "base")?;
 
@@ -6862,7 +7620,11 @@ impl Tool for VectorPolygonsToRasterTool {
         } else {
             input.schema.field_index(field_name)
         };
-        let data_type = if use_fid { DataType::I32 } else { DataType::F32 };
+        let data_type = if use_fid {
+            DataType::I32
+        } else {
+            DataType::F32
+        };
 
         let mut output = if let Some(base) = base_path {
             let base_raster = Raster::read(base)
@@ -6882,9 +7644,9 @@ impl Tool for VectorPolygonsToRasterTool {
             })
         } else {
             let mut input_for_bbox = input.clone();
-            let bbox = input_for_bbox
-                .bbox()
-                .ok_or_else(|| ToolError::Validation("input vector has no geometry extent".to_string()))?;
+            let bbox = input_for_bbox.bbox().ok_or_else(|| {
+                ToolError::Validation("input vector has no geometry extent".to_string())
+            })?;
             let cols = ((bbox.max_x - bbox.min_x) / cell_size).ceil().max(1.0) as usize;
             let rows = ((bbox.max_y - bbox.min_y) / cell_size).ceil().max(1.0) as usize;
             Raster::new(RasterConfig {
@@ -6925,7 +7687,10 @@ impl Tool for VectorPolygonsToRasterTool {
             };
 
             let polygons: Vec<(Ring, Vec<Ring>)> = match geometry {
-                Geometry::Polygon { exterior, interiors } => vec![(exterior.clone(), interiors.clone())],
+                Geometry::Polygon {
+                    exterior,
+                    interiors,
+                } => vec![(exterior.clone(), interiors.clone())],
                 Geometry::MultiPolygon(polys) => polys.clone(),
                 _ => Vec::new(),
             };
@@ -6935,9 +7700,17 @@ impl Tool for VectorPolygonsToRasterTool {
                     continue;
                 }
                 let min_x = exterior.0.iter().map(|c| c.x).fold(f64::INFINITY, f64::min);
-                let max_x = exterior.0.iter().map(|c| c.x).fold(f64::NEG_INFINITY, f64::max);
+                let max_x = exterior
+                    .0
+                    .iter()
+                    .map(|c| c.x)
+                    .fold(f64::NEG_INFINITY, f64::max);
                 let min_y = exterior.0.iter().map(|c| c.y).fold(f64::INFINITY, f64::min);
-                let max_y = exterior.0.iter().map(|c| c.y).fold(f64::NEG_INFINITY, f64::max);
+                let max_y = exterior
+                    .0
+                    .iter()
+                    .map(|c| c.y)
+                    .fold(f64::NEG_INFINITY, f64::max);
 
                 let (min_col, min_row) = output.world_to_pixel(min_x, max_y).unwrap_or((0, 0));
                 let (max_col, max_row) = output
@@ -6970,9 +7743,9 @@ impl Tool for VectorPolygonsToRasterTool {
                             }
                         }
                         if !in_hole {
-                            output
-                                .set(0, row, col, burn)
-                                .map_err(|e| ToolError::Execution(format!("failed raster write: {e}")))?;
+                            output.set(0, row, col, burn).map_err(|e| {
+                                ToolError::Execution(format!("failed raster write: {e}"))
+                            })?;
                         }
                     }
                 }
