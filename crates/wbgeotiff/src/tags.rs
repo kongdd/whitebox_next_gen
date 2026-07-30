@@ -95,15 +95,15 @@ impl DataType {
     /// Try to parse a u16 into a `DataType`.
     pub fn from_u16(v: u16) -> Option<Self> {
         Some(match v {
-            1  => Self::Byte,
-            2  => Self::Ascii,
-            3  => Self::Short,
-            4  => Self::Long,
-            5  => Self::Rational,
-            6  => Self::SByte,
-            7  => Self::Undefined,
-            8  => Self::SShort,
-            9  => Self::SLong,
+            1 => Self::Byte,
+            2 => Self::Ascii,
+            3 => Self::Short,
+            4 => Self::Long,
+            5 => Self::Rational,
+            6 => Self::SByte,
+            7 => Self::Undefined,
+            8 => Self::SShort,
+            9 => Self::SLong,
             10 => Self::SRational,
             11 => Self::Float,
             12 => Self::Double,
@@ -347,6 +347,10 @@ impl PlanarConfig {
 
     /// Parse from TIFF tag value.
     pub fn from_tag(v: u16) -> Self {
-        if v == 2 { Self::Planar } else { Self::Chunky }
+        if v == 2 {
+            Self::Planar
+        } else {
+            Self::Chunky
+        }
     }
 }

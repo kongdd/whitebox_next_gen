@@ -100,7 +100,11 @@ pub enum RasterType {
 impl RasterType {
     /// Parse from a GeoKey value.
     pub fn from_value(v: u16) -> Self {
-        if v == 2 { Self::PixelIsPoint } else { Self::PixelIsArea }
+        if v == 2 {
+            Self::PixelIsPoint
+        } else {
+            Self::PixelIsArea
+        }
     }
 }
 
@@ -200,7 +204,10 @@ impl GeoKeyDirectory {
                     if end > ascii.len() {
                         return Err(GeoTiffError::InvalidGeoKey(format!(
                             "GeoKey {}: ASCII offset {} + count {} out of range ({})",
-                            key_id, value_offset, count, ascii.len()
+                            key_id,
+                            value_offset,
+                            count,
+                            ascii.len()
                         )));
                     }
                     let s = &ascii[start..end];
@@ -219,27 +226,43 @@ impl GeoKeyDirectory {
             entries.push(GeoKeyEntry { key_id, value });
         }
 
-        Ok(Self { version, key_revision, minor_revision, entries })
+        Ok(Self {
+            version,
+            key_revision,
+            minor_revision,
+            entries,
+        })
     }
 
     // ── Convenience accessors ────────────────────────────────────────────────
 
     /// Look up a key and return its value, if present.
     pub fn get(&self, key_id: u16) -> Option<&GeoKeyValue> {
-        self.entries.iter().find(|e| e.key_id == key_id).map(|e| &e.value)
+        self.entries
+            .iter()
+            .find(|e| e.key_id == key_id)
+            .map(|e| &e.value)
     }
 
     /// Get the `GTModelTypeGeoKey` value.
     pub fn model_type(&self) -> Option<ModelType> {
         self.get(key::GTModelTypeGeoKey).and_then(|v| {
-            if let GeoKeyValue::Short(n) = v { Some(ModelType::from_value(*n)) } else { None }
+            if let GeoKeyValue::Short(n) = v {
+                Some(ModelType::from_value(*n))
+            } else {
+                None
+            }
         })
     }
 
     /// Get the `GTRasterTypeGeoKey` value.
     pub fn raster_type(&self) -> Option<RasterType> {
         self.get(key::GTRasterTypeGeoKey).and_then(|v| {
-            if let GeoKeyValue::Short(n) = v { Some(RasterType::from_value(*n)) } else { None }
+            if let GeoKeyValue::Short(n) = v {
+                Some(RasterType::from_value(*n))
+            } else {
+                None
+            }
         })
     }
 
@@ -247,10 +270,14 @@ impl GeoKeyDirectory {
     /// or for the geographic CRS (`GeographicTypeGeoKey`), whichever is set.
     pub fn epsg(&self) -> Option<u16> {
         if let Some(GeoKeyValue::Short(n)) = self.get(key::ProjectedCSTypeGeoKey) {
-            if *n != 32767 { return Some(*n); }
+            if *n != 32767 {
+                return Some(*n);
+            }
         }
         if let Some(GeoKeyValue::Short(n)) = self.get(key::GeographicTypeGeoKey) {
-            if *n != 32767 { return Some(*n); }
+            if *n != 32767 {
+                return Some(*n);
+            }
         }
         None
     }
@@ -313,19 +340,28 @@ impl GeoKeyBuilder {
 
     /// Add a short (u16) key.
     pub fn short(mut self, key_id: u16, value: u16) -> Self {
-        self.entries.push(GeoKeyEntry { key_id, value: GeoKeyValue::Short(value) });
+        self.entries.push(GeoKeyEntry {
+            key_id,
+            value: GeoKeyValue::Short(value),
+        });
         self
     }
 
     /// Add a double key.
     pub fn double(mut self, key_id: u16, value: f64) -> Self {
-        self.entries.push(GeoKeyEntry { key_id, value: GeoKeyValue::Doubles(vec![value]) });
+        self.entries.push(GeoKeyEntry {
+            key_id,
+            value: GeoKeyValue::Doubles(vec![value]),
+        });
         self
     }
 
     /// Add an ASCII key.
     pub fn ascii(mut self, key_id: u16, value: impl Into<String>) -> Self {
-        self.entries.push(GeoKeyEntry { key_id, value: GeoKeyValue::Ascii(value.into()) });
+        self.entries.push(GeoKeyEntry {
+            key_id,
+            value: GeoKeyValue::Ascii(value.into()),
+        });
         self
     }
 

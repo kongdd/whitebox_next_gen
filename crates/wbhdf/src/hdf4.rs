@@ -917,9 +917,9 @@ pub fn assess_hdf4_sds_i16_decode_readiness_in_file(
             }
         }
         Err(err) => {
-            readiness.blockers.push(format!(
-                "descriptor candidate scan failed: {err}"
-            ));
+            readiness
+                .blockers
+                .push(format!("descriptor candidate scan failed: {err}"));
         }
     }
 
@@ -939,9 +939,7 @@ pub fn decode_hdf4_sds_i16_in_file(path: &Path, dataset_path: &str) -> WbhdfResu
     if resolved.data_type.as_deref() != Some("DFNT_INT16") {
         return Err(WbhdfError::UnsupportedLayout(format!(
             "HDF4 SDS i16 decode requires DFNT_INT16 but found {:?} at '{}'; resolved shape={:?}",
-            resolved.data_type,
-            readiness.dataset_path,
-            resolved.shape
+            resolved.data_type, readiness.dataset_path, resolved.shape
         )));
     }
 
@@ -1131,24 +1129,20 @@ fn decode_i16_window_from_descriptor(
         }
 
         if signature_hint == "gzip" {
-            decompress_gzip(payload).map_err(|err| {
-                WbhdfError::FilterFailure {
-                    dataset_path: dataset_path.to_string(),
-                    chunk_coordinate: Some(chunk_coordinate.clone()),
-                    file_offset: descriptor.offset as u64,
-                    filter: "gzip".to_string(),
-                    detail: err.to_string(),
-                }
+            decompress_gzip(payload).map_err(|err| WbhdfError::FilterFailure {
+                dataset_path: dataset_path.to_string(),
+                chunk_coordinate: Some(chunk_coordinate.clone()),
+                file_offset: descriptor.offset as u64,
+                filter: "gzip".to_string(),
+                detail: err.to_string(),
             })?
         } else {
-            decompress_zlib(payload).map_err(|err| {
-                WbhdfError::FilterFailure {
-                    dataset_path: dataset_path.to_string(),
-                    chunk_coordinate: Some(chunk_coordinate.clone()),
-                    file_offset: descriptor.offset as u64,
-                    filter: "zlib".to_string(),
-                    detail: err.to_string(),
-                }
+            decompress_zlib(payload).map_err(|err| WbhdfError::FilterFailure {
+                dataset_path: dataset_path.to_string(),
+                chunk_coordinate: Some(chunk_coordinate.clone()),
+                file_offset: descriptor.offset as u64,
+                filter: "zlib".to_string(),
+                detail: err.to_string(),
             })?
         }
     } else {
@@ -1283,7 +1277,11 @@ fn ensure_grid(grids: &mut Vec<Hdf4GridSummary>, name: &str) {
 fn ensure_data_field(grids: &mut Vec<Hdf4GridSummary>, grid_name: &str, field_name: &str) {
     ensure_grid(grids, grid_name);
     if let Some(grid) = grids.iter_mut().find(|grid| grid.name == grid_name) {
-        if !grid.data_fields.iter().any(|field| field.name == field_name) {
+        if !grid
+            .data_fields
+            .iter()
+            .any(|field| field.name == field_name)
+        {
             grid.data_fields.push(Hdf4DataFieldSummary {
                 name: field_name.to_string(),
                 data_type: None,
@@ -1301,7 +1299,11 @@ fn find_data_field_mut<'a>(
     grids
         .iter_mut()
         .find(|grid| grid.name == grid_name)
-        .and_then(|grid| grid.data_fields.iter_mut().find(|field| field.name == field_name))
+        .and_then(|grid| {
+            grid.data_fields
+                .iter_mut()
+                .find(|field| field.name == field_name)
+        })
 }
 
 fn push_unique(values: &mut Vec<String>, value: String) {
@@ -1479,16 +1481,14 @@ fn select_preferred_i16_preview<'a>(
 mod tests {
     use super::{
         assess_hdf4_sds_i16_decode_readiness, attempt_decode_hdf4_sds_i16_window_in_file,
+        decode_hdf4_sds_i16_in_file, decode_hdf4_sds_i16_window_at_in_file,
+        derive_hdf4_grid_geometry, derive_hdf4_grid_geometry_for_dataset,
+        enumerate_hdf4_dataset_paths, find_hdf4_sds_i16_payload_candidates,
+        map_hdf4_sds_i16_descriptor_heuristic, parse_hdf4_data_descriptors,
+        prepare_hdf4_sds_decode_attempt, probe_hdf4_eos_metadata,
+        probe_hdf4_sds_i16_payload_window, rank_hdf4_sds_i16_payload_candidates,
+        resolve_hdf4_dataset_path, resolve_hdf4_grid_field, select_preferred_i16_preview,
         HDF4_MAGIC, MAX_COMPRESSED_WINDOW_DECODE_BYTES,
-        decode_hdf4_sds_i16_window_at_in_file,
-        decode_hdf4_sds_i16_in_file, derive_hdf4_grid_geometry,
-        derive_hdf4_grid_geometry_for_dataset, enumerate_hdf4_dataset_paths,
-        find_hdf4_sds_i16_payload_candidates, parse_hdf4_data_descriptors,
-        map_hdf4_sds_i16_descriptor_heuristic,
-        probe_hdf4_sds_i16_payload_window,
-        prepare_hdf4_sds_decode_attempt, probe_hdf4_eos_metadata, resolve_hdf4_dataset_path,
-        resolve_hdf4_grid_field, rank_hdf4_sds_i16_payload_candidates,
-        select_preferred_i16_preview,
     };
 
     #[test]
@@ -1500,15 +1500,24 @@ mod tests {
 
         let summary = probe_hdf4_eos_metadata(&bytes).expect("HDF4 metadata probe should parse");
         assert_eq!(summary.struct_metadata_markers, 1);
-        assert_eq!(summary.grid_names, vec!["MOD_Grid_500m_Surface_Reflectance"]);
-        assert_eq!(summary.data_field_names, vec!["sur_refl_b01", "sur_refl_b02"]);
+        assert_eq!(
+            summary.grid_names,
+            vec!["MOD_Grid_500m_Surface_Reflectance"]
+        );
+        assert_eq!(
+            summary.data_field_names,
+            vec!["sur_refl_b01", "sur_refl_b02"]
+        );
         assert_eq!(summary.grids.len(), 1);
         assert_eq!(summary.grids[0].name, "MOD_Grid_500m_Surface_Reflectance");
         assert_eq!(summary.grids[0].dim_sizes.get("XDim"), Some(&2400));
         assert_eq!(summary.grids[0].dim_sizes.get("YDim"), Some(&2400));
         assert_eq!(summary.grids[0].projection.as_deref(), Some("GCTP_SNSOID"));
         assert_eq!(summary.grids[0].sphere_code, Some(-1));
-        assert_eq!(summary.grids[0].upper_left_mtrs, Some((-15567307.275333, 0.0)));
+        assert_eq!(
+            summary.grids[0].upper_left_mtrs,
+            Some((-15567307.275333, 0.0))
+        );
         assert_eq!(
             summary.grids[0].lower_right_mtrs,
             Some((-14455356.755667, -1111950.519667))
@@ -1521,7 +1530,10 @@ mod tests {
             summary.grids[0].data_fields[0].data_type.as_deref(),
             Some("DFNT_INT16")
         );
-        assert_eq!(summary.grids[0].data_fields[0].dim_list, vec!["YDim", "XDim"]);
+        assert_eq!(
+            summary.grids[0].data_fields[0].dim_list,
+            vec!["YDim", "XDim"]
+        );
 
         let resolved = resolve_hdf4_grid_field(
             &summary,
@@ -1597,7 +1609,10 @@ mod tests {
             .expect("decode attempt should resolve canonical path");
         assert_eq!(attempt.dataset_path, "/GridA/FieldA");
         assert_eq!(attempt.resolved_field.shape, vec![2, 2]);
-        assert_eq!(attempt.resolved_field.data_type.as_deref(), Some("DFNT_INT16"));
+        assert_eq!(
+            attempt.resolved_field.data_type.as_deref(),
+            Some("DFNT_INT16")
+        );
     }
 
     #[test]
@@ -1644,12 +1659,17 @@ mod tests {
         let mut bytes = vec![0x0E, 0x03, 0x13, 0x01];
         bytes.extend_from_slice(&[0x00, 0x02]); // descriptor count
         bytes.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // next block
-        // Descriptor 1: tag=0x02BD, ref=1, offset=100, length=200
-        bytes.extend_from_slice(&[0x02, 0xBD, 0x00, 0x01, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0xC8]);
+                                                            // Descriptor 1: tag=0x02BD, ref=1, offset=100, length=200
+        bytes.extend_from_slice(&[
+            0x02, 0xBD, 0x00, 0x01, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x00, 0xC8,
+        ]);
         // Descriptor 2: tag=0x02BE, ref=2, offset=300, length=400
-        bytes.extend_from_slice(&[0x02, 0xBE, 0x00, 0x02, 0x00, 0x00, 0x01, 0x2C, 0x00, 0x00, 0x01, 0x90]);
+        bytes.extend_from_slice(&[
+            0x02, 0xBE, 0x00, 0x02, 0x00, 0x00, 0x01, 0x2C, 0x00, 0x00, 0x01, 0x90,
+        ]);
 
-        let descriptors = parse_hdf4_data_descriptors(&bytes).expect("descriptor parse should succeed");
+        let descriptors =
+            parse_hdf4_data_descriptors(&bytes).expect("descriptor parse should succeed");
         assert_eq!(descriptors.len(), 2);
         assert_eq!(descriptors[0].tag, 0x02BD);
         assert_eq!(descriptors[0].reference, 1);
@@ -1664,10 +1684,14 @@ mod tests {
         let mut bytes = vec![0x0E, 0x03, 0x13, 0x01];
         bytes.extend_from_slice(&[0x00, 0x02]); // descriptor count
         bytes.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // next block
-        // Candidate length = 8 bytes for 2x2 i16
-        bytes.extend_from_slice(&[0x02, 0xBE, 0x00, 0x01, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x08]);
+                                                            // Candidate length = 8 bytes for 2x2 i16
+        bytes.extend_from_slice(&[
+            0x02, 0xBE, 0x00, 0x01, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x08,
+        ]);
         // Non-candidate
-        bytes.extend_from_slice(&[0x02, 0xBE, 0x00, 0x02, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x10]);
+        bytes.extend_from_slice(&[
+            0x02, 0xBE, 0x00, 0x02, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x10,
+        ]);
         bytes.resize(0x80, 0);
 
         let mut metadata = vec![0x0E, 0x03, 0x13, 0x01];
@@ -1688,7 +1712,7 @@ mod tests {
         let mut bytes = vec![0x0E, 0x03, 0x13, 0x01];
         bytes.extend_from_slice(&[0x00, 0x03]); // descriptor count
         bytes.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]); // next block
-        // length 12 (delta 4 from expected 8)
+                                                            // length 12 (delta 4 from expected 8)
         bytes.extend_from_slice(&[
             0x02, 0xBE, 0x00, 0x01, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x0C,
         ]);
@@ -1878,8 +1902,8 @@ mod tests {
         bytes.resize(0x90, 0);
         // Little-endian i16 values: 1..=8
         bytes[0x80..0x90].copy_from_slice(&[
-            0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04, 0x00,
-            0x05, 0x00, 0x06, 0x00, 0x07, 0x00, 0x08, 0x00,
+            0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04, 0x00, 0x05, 0x00, 0x06, 0x00, 0x07, 0x00,
+            0x08, 0x00,
         ]);
 
         let mut metadata = vec![0x0E, 0x03, 0x13, 0x01];
@@ -1973,7 +1997,9 @@ mod tests {
         tmp.write_all(&bytes).expect("temp file should be written");
 
         let decoded = decode_hdf4_sds_i16_window_at_in_file(tmp.path(), "/GridA/FieldA", 0, 4)
-            .expect("decode should use binary exact candidate even when ascii exact candidate exists");
+            .expect(
+                "decode should use binary exact candidate even when ascii exact candidate exists",
+            );
         assert_eq!(decoded, vec![1, 2, -3, 4]);
     }
 

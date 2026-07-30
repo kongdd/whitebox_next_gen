@@ -175,13 +175,19 @@ pub fn parse_v1_object_header_in_file(path: &Path, offset: usize) -> WbhdfResult
 ///
 /// This utility is intentionally conservative and favors safety over exhaustive
 /// parsing. It returns up to `max_results` candidate headers ordered by byte offset.
-pub fn discover_v1_object_headers_in_file(path: &Path, max_results: usize) -> WbhdfResult<Vec<ObjectHeaderV1>> {
+pub fn discover_v1_object_headers_in_file(
+    path: &Path,
+    max_results: usize,
+) -> WbhdfResult<Vec<ObjectHeaderV1>> {
     let bytes = fs::read(path)?;
     discover_v1_object_headers(&bytes, max_results)
 }
 
 /// Discovers parsable v1 object headers from raw bytes using a bounded scan.
-pub fn discover_v1_object_headers(bytes: &[u8], max_results: usize) -> WbhdfResult<Vec<ObjectHeaderV1>> {
+pub fn discover_v1_object_headers(
+    bytes: &[u8],
+    max_results: usize,
+) -> WbhdfResult<Vec<ObjectHeaderV1>> {
     if max_results == 0 {
         return Err(WbhdfError::InvalidInput(
             "v1 object-header discovery requires max_results >= 1".to_string(),
@@ -244,7 +250,10 @@ pub fn parse_continuation_chunk_in_file(
     parse_continuation_chunk(&bytes, continuation)
 }
 
-pub fn read_contiguous_layout_bytes_in_file(path: &Path, layout: &LayoutMessage) -> WbhdfResult<Vec<u8>> {
+pub fn read_contiguous_layout_bytes_in_file(
+    path: &Path,
+    layout: &LayoutMessage,
+) -> WbhdfResult<Vec<u8>> {
     let bytes = fs::read(path)?;
     let start = layout.data_address as usize;
     let size = layout.data_size as usize;
@@ -325,9 +334,9 @@ fn parse_v1_object_header(bytes: &[u8], offset: usize) -> WbhdfResult<ObjectHead
 
     let version = bytes[offset];
     if version != 1 {
-        return Err(WbhdfError::UnsupportedLayout(
-            format!("unsupported v1 object header version byte: {version}"),
-        ));
+        return Err(WbhdfError::UnsupportedLayout(format!(
+            "unsupported v1 object header version byte: {version}"
+        )));
     }
 
     let message_count = u16::from_le_bytes([bytes[offset + 2], bytes[offset + 3]]);
@@ -586,7 +595,10 @@ fn parse_chunk_messages(
     messages
 }
 
-fn parse_layout_messages(bytes: &[u8], messages: &[ObjectHeaderMessageHeader]) -> Vec<LayoutMessage> {
+fn parse_layout_messages(
+    bytes: &[u8],
+    messages: &[ObjectHeaderMessageHeader],
+) -> Vec<LayoutMessage> {
     messages
         .iter()
         .filter(|message| message.type_id == 0x08 && message.size >= 18)
@@ -642,7 +654,9 @@ fn parse_v1_dataspace_messages(
                 if cursor + 8 > body_end {
                     return None;
                 }
-                dimensions.push(u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().ok()?));
+                dimensions.push(u64::from_le_bytes(
+                    bytes[cursor..cursor + 8].try_into().ok()?,
+                ));
                 cursor += 8;
             }
 
@@ -652,7 +666,9 @@ fn parse_v1_dataspace_messages(
                     if cursor + 8 > body_end {
                         return None;
                     }
-                    max_dimensions.push(u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().ok()?));
+                    max_dimensions.push(u64::from_le_bytes(
+                        bytes[cursor..cursor + 8].try_into().ok()?,
+                    ));
                     cursor += 8;
                 }
             }
@@ -742,7 +758,9 @@ fn parse_v1_filter_pipeline_messages(
                     if cursor + 4 > body_end {
                         return None;
                     }
-                    client_data.push(u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().ok()?));
+                    client_data.push(u32::from_le_bytes(
+                        bytes[cursor..cursor + 4].try_into().ok()?,
+                    ));
                     cursor += 4;
                 }
                 if cursor % 8 != 0 {
@@ -789,7 +807,9 @@ fn parse_v1_chunked_layout_messages(
                 if cursor + 4 > body_end {
                     return None;
                 }
-                chunk_dimensions.push(u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().ok()?));
+                chunk_dimensions.push(u32::from_le_bytes(
+                    bytes[cursor..cursor + 4].try_into().ok()?,
+                ));
                 cursor += 4;
             }
 
@@ -817,8 +837,16 @@ fn parse_v1_continuations(
                 return None;
             }
 
-            let address = u64::from_le_bytes(bytes[message.data_offset..message.data_offset + 8].try_into().ok()?);
-            let size = u64::from_le_bytes(bytes[message.data_offset + 8..message.data_offset + 16].try_into().ok()?);
+            let address = u64::from_le_bytes(
+                bytes[message.data_offset..message.data_offset + 8]
+                    .try_into()
+                    .ok()?,
+            );
+            let size = u64::from_le_bytes(
+                bytes[message.data_offset + 8..message.data_offset + 16]
+                    .try_into()
+                    .ok()?,
+            );
             Some(ObjectHeaderContinuation { address, size })
         })
         .collect()
@@ -847,7 +875,9 @@ fn parse_dataspace_messages(
                 if cursor + 8 > body_end {
                     return None;
                 }
-                dimensions.push(u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().ok()?));
+                dimensions.push(u64::from_le_bytes(
+                    bytes[cursor..cursor + 8].try_into().ok()?,
+                ));
                 cursor += 8;
             }
 
@@ -857,7 +887,9 @@ fn parse_dataspace_messages(
                     if cursor + 8 > body_end {
                         return None;
                     }
-                    max_dimensions.push(u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().ok()?));
+                    max_dimensions.push(u64::from_le_bytes(
+                        bytes[cursor..cursor + 8].try_into().ok()?,
+                    ));
                     cursor += 8;
                 }
             }
@@ -923,7 +955,8 @@ mod tests {
     #[test]
     fn parse_rejects_missing_object_header_signatures() {
         let bytes = b"no signatures here";
-        let err = ObjectHeader::parse(bytes).expect_err("parse should fail without OHDR signatures");
+        let err =
+            ObjectHeader::parse(bytes).expect_err("parse should fail without OHDR signatures");
         let msg = format!("{err}");
         assert!(msg.contains("no object header signatures"));
     }
@@ -976,11 +1009,9 @@ mod tests {
     #[test]
     fn parse_extracts_dataspace_message() {
         let bytes = [
-            b'O', b'H', b'D', b'R', 2, 0, 0x18,
-            0x01, 0x14, 0x00, 0x00,
-            0x02, 0x01, 0x01, 0x01,
-            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            b'O', b'H', b'D', b'R', 2, 0, 0x18, 0x01, 0x14, 0x00, 0x00, 0x02, 0x01, 0x01, 0x01,
+            0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
         ];
 
         let parsed = ObjectHeader::parse(&bytes).expect("parse should succeed");
@@ -1000,9 +1031,8 @@ mod tests {
     #[test]
     fn parse_extracts_datatype_message() {
         let bytes = [
-            b'O', b'H', b'D', b'R', 2, 0, 0x0c,
-            0x03, 0x08, 0x00, 0x01,
-            0x13, 0x01, 0x00, 0x00, 0x46, 0x97, 0x00, 0x00,
+            b'O', b'H', b'D', b'R', 2, 0, 0x0c, 0x03, 0x08, 0x00, 0x01, 0x13, 0x01, 0x00, 0x00,
+            0x46, 0x97, 0x00, 0x00,
         ];
 
         let parsed = ObjectHeader::parse(&bytes).expect("parse should succeed");
@@ -1023,12 +1053,9 @@ mod tests {
     #[test]
     fn parse_extracts_continuation_chunk_message_headers() {
         let bytes = [
-            b'O', b'C', b'H', b'K',
-            0x10, 0x10, 0x00, 0x00,
-            0x07, 0x57, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0xa0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x15, 0x12, 0x00, 0x04,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            b'O', b'C', b'H', b'K', 0x10, 0x10, 0x00, 0x00, 0x07, 0x57, 0x02, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0xa0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x15, 0x12, 0x00, 0x04, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         ];
         let continuation = ObjectHeaderContinuation {
             address: 0,
@@ -1047,11 +1074,8 @@ mod tests {
     #[test]
     fn parse_extracts_layout_message_from_continuation_chunk() {
         let bytes = [
-            b'O', b'C', b'H', b'K',
-            0x08, 0x12, 0x00, 0x00,
-            0x03, 0x01,
-            0xaa, 0xb3, 0x81, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x46, 0x97, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            b'O', b'C', b'H', b'K', 0x08, 0x12, 0x00, 0x00, 0x03, 0x01, 0xaa, 0xb3, 0x81, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x46, 0x97, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
         let continuation = ObjectHeaderContinuation {
             address: 0,
@@ -1098,16 +1122,11 @@ mod tests {
     fn parse_extracts_v1_chunked_layout_and_filter_pipeline() {
         let bytes = [
             0x01, 0x00, 0x02, 0x00, 0x01, 0x00, 0x00, 0x00, 0x53, 0x00, 0x00, 0x00, 0, 0, 0, 0,
-            0x0b, 0x00, 0x20, 0x00, 0x01, 0, 0, 0,
-            0x01, 0x01, 0, 0, 0, 0, 0, 0,
-            0x01, 0x00, 0x08, 0x00, 0x01, 0x00, 0x01, 0x00,
-            b'd', b'e', b'f', b'l', b'a', b't', b'e', 0,
-            0x06, 0x00, 0x00, 0x00, 0, 0, 0, 0,
-            0x08, 0x00, 0x13, 0x00, 0x00, 0, 0, 0,
-            0x03, 0x02, 0x02,
-            0x71, 0xf9, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x10, 0x27, 0x00, 0x00,
-            0x04, 0x00, 0x00, 0x00,
+            0x0b, 0x00, 0x20, 0x00, 0x01, 0, 0, 0, 0x01, 0x01, 0, 0, 0, 0, 0, 0, 0x01, 0x00, 0x08,
+            0x00, 0x01, 0x00, 0x01, 0x00, b'd', b'e', b'f', b'l', b'a', b't', b'e', 0, 0x06, 0x00,
+            0x00, 0x00, 0, 0, 0, 0, 0x08, 0x00, 0x13, 0x00, 0x00, 0, 0, 0, 0x03, 0x02, 0x02, 0x71,
+            0xf9, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x27, 0x00, 0x00, 0x04, 0x00, 0x00,
+            0x00,
         ];
 
         let parsed = parse_v1_object_header(&bytes, 0).expect("v1 object header should parse");
@@ -1139,9 +1158,7 @@ mod tests {
     fn parse_extracts_v1_fill_value_message() {
         let bytes = [
             0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x24, 0x00, 0x00, 0x00, 0, 0, 0, 0,
-            0x04, 0x00, 0x0c, 0x00, 0x01, 0, 0, 0,
-            0x04, 0x02, 0x02, 0x01,
-            0x04, 0x00, 0x00, 0x00,
+            0x04, 0x00, 0x0c, 0x00, 0x01, 0, 0, 0, 0x04, 0x02, 0x02, 0x01, 0x04, 0x00, 0x00, 0x00,
             0xff, 0xff, 0x7f, 0x7f,
         ];
 

@@ -116,9 +116,13 @@ impl GeoTiff {
         let is_bigtiff = tiff.variant.is_bigtiff();
 
         // Load entire file into memory for fast random access during tile/strip reads
-        tiff.inner_mut().seek(std::io::SeekFrom::Start(0)).map_err(GeoTiffError::Io)?;
+        tiff.inner_mut()
+            .seek(std::io::SeekFrom::Start(0))
+            .map_err(GeoTiffError::Io)?;
         let mut data = Vec::new();
-        tiff.inner_mut().read_to_end(&mut data).map_err(GeoTiffError::Io)?;
+        tiff.inner_mut()
+            .read_to_end(&mut data)
+            .map_err(GeoTiffError::Io)?;
 
         // Parse the first IFD (GeoTIFFs typically only have one)
         let ifd = tiff.read_ifd(tiff.first_ifd_offset)?;
@@ -128,7 +132,14 @@ impl GeoTiff {
         let geo_keys = Self::parse_geo_keys(&ifd)?;
         let value_transform = Self::parse_value_transform(&ifd);
 
-        Ok(Self { info, geo_transform, geo_keys, value_transform, is_bigtiff, data })
+        Ok(Self {
+            info,
+            geo_transform,
+            geo_keys,
+            value_transform,
+            is_bigtiff,
+            data,
+        })
     }
 
     // ── IFD parsing helpers ───────────────────────────────────────────────────
@@ -174,15 +185,19 @@ impl GeoTiff {
         let no_data = Self::parse_no_data(ifd);
 
         // Determine layout: tiled or stripped
-        let layout = if let (Some(tw_entry), Some(th_entry)) = (
-            ifd.get(tag::TileWidth),
-            ifd.get(tag::TileLength),
-        ) {
+        let layout = if let (Some(tw_entry), Some(th_entry)) =
+            (ifd.get(tag::TileWidth), ifd.get(tag::TileLength))
+        {
             let tile_width = tw_entry.value.as_u64().unwrap_or(256) as u32;
             let tile_height = th_entry.value.as_u64().unwrap_or(256) as u32;
             let offsets = ifd.require_u64_vec(tag::TileOffsets, "TileOffsets")?;
             let byte_counts = ifd.require_u64_vec(tag::TileByteCounts, "TileByteCounts")?;
-            ImageLayout::Tiled { tile_width, tile_height, offsets, byte_counts }
+            ImageLayout::Tiled {
+                tile_width,
+                tile_height,
+                offsets,
+                byte_counts,
+            }
         } else {
             let rows_per_strip = ifd
                 .get(tag::RowsPerStrip)
@@ -190,7 +205,11 @@ impl GeoTiff {
                 .unwrap_or(height as u64) as u32;
             let offsets = ifd.require_u64_vec(tag::StripOffsets, "StripOffsets")?;
             let byte_counts = ifd.require_u64_vec(tag::StripByteCounts, "StripByteCounts")?;
-            ImageLayout::Stripped { rows_per_strip, offsets, byte_counts }
+            ImageLayout::Stripped {
+                rows_per_strip,
+                offsets,
+                byte_counts,
+            }
         };
 
         if width == 0 || height == 0 || samples_per_pixel == 0 {
@@ -268,29 +287,28 @@ impl GeoTiff {
     }
 
     fn parse_value_transform(ifd: &Ifd) -> Option<ValueTransform> {
-        let metadata = ifd
-            .get(tag::GdalMetadata)
-            .and_then(|e| e.value.as_str().map(|s| s.to_owned()).or_else(|| {
+        let metadata = ifd.get(tag::GdalMetadata).and_then(|e| {
+            e.value.as_str().map(|s| s.to_owned()).or_else(|| {
                 e.value
                     .as_bytes()
                     .map(|b| String::from_utf8_lossy(b).to_string())
-            }));
+            })
+        });
 
         let metadata = metadata?;
 
-        let scale = Self::parse_named_numeric(&metadata, &[
-            "scale",
-            "scalefactor",
-            "scale_factor",
-            "multiplicative_factor",
-        ])
+        let scale = Self::parse_named_numeric(
+            &metadata,
+            &[
+                "scale",
+                "scalefactor",
+                "scale_factor",
+                "multiplicative_factor",
+            ],
+        )
         .unwrap_or(1.0);
-        let offset = Self::parse_named_numeric(&metadata, &[
-            "offset",
-            "add_offset",
-            "data_offset",
-        ])
-        .unwrap_or(0.0);
+        let offset = Self::parse_named_numeric(&metadata, &["offset", "add_offset", "data_offset"])
+            .unwrap_or(0.0);
 
         if !scale.is_finite() || !offset.is_finite() {
             return None;
@@ -350,12 +368,18 @@ impl GeoTiff {
 
             let token_lower = token.to_ascii_lowercase();
             if let Some(value) = token_lower.strip_prefix(&(lower_name.clone() + "=")) {
-                if let Ok(v) = value.trim_matches(|c| c == '"' || c == '\'' || c == '\0').parse::<f64>() {
+                if let Ok(v) = value
+                    .trim_matches(|c| c == '"' || c == '\'' || c == '\0')
+                    .parse::<f64>()
+                {
                     return Some(v);
                 }
             }
             if let Some(value) = token_lower.strip_prefix(&(lower_name.clone() + ":")) {
-                if let Ok(v) = value.trim_matches(|c| c == '"' || c == '\'' || c == '\0').parse::<f64>() {
+                if let Ok(v) = value
+                    .trim_matches(|c| c == '"' || c == '\'' || c == '\0')
+                    .parse::<f64>()
+                {
                     return Some(v);
                 }
             }
@@ -373,7 +397,8 @@ impl GeoTiff {
             return Some(v);
         }
 
-        for token in cleaned.split(|c: char| c == '|' || c == ',' || c == ';' || c.is_whitespace()) {
+        for token in cleaned.split(|c: char| c == '|' || c == ',' || c == ';' || c.is_whitespace())
+        {
             let token = token.trim_matches('\0');
             if token.is_empty() {
                 continue;
@@ -385,7 +410,16 @@ impl GeoTiff {
 
         if let Some(pos) = cleaned.find("NODATA") {
             let tail = &cleaned[pos..];
-            for token in tail.split(|c: char| c == '<' || c == '>' || c == '"' || c == '=' || c == '|' || c == ',' || c == ';' || c.is_whitespace()) {
+            for token in tail.split(|c: char| {
+                c == '<'
+                    || c == '>'
+                    || c == '"'
+                    || c == '='
+                    || c == '|'
+                    || c == ','
+                    || c == ';'
+                    || c.is_whitespace()
+            }) {
                 if let Ok(v) = token.parse::<f64>() {
                     return Some(v);
                 }
@@ -398,34 +432,54 @@ impl GeoTiff {
     // ── Public metadata accessors ─────────────────────────────────────────────
 
     /// Image width in pixels.
-    pub fn width(&self) -> u32 { self.info.width }
+    pub fn width(&self) -> u32 {
+        self.info.width
+    }
 
     /// Image height in pixels.
-    pub fn height(&self) -> u32 { self.info.height }
+    pub fn height(&self) -> u32 {
+        self.info.height
+    }
 
     /// Number of bands (samples per pixel).
-    pub fn band_count(&self) -> usize { self.info.samples_per_pixel as usize }
+    pub fn band_count(&self) -> usize {
+        self.info.samples_per_pixel as usize
+    }
 
     /// Bits per sample.
-    pub fn bits_per_sample(&self) -> u16 { self.info.bits_per_sample }
+    pub fn bits_per_sample(&self) -> u16 {
+        self.info.bits_per_sample
+    }
 
     /// Sample format.
-    pub fn sample_format(&self) -> SampleFormat { self.info.sample_format }
+    pub fn sample_format(&self) -> SampleFormat {
+        self.info.sample_format
+    }
 
     /// Compression codec used.
-    pub fn compression(&self) -> Compression { self.info.compression }
+    pub fn compression(&self) -> Compression {
+        self.info.compression
+    }
 
     /// Photometric interpretation.
-    pub fn photometric(&self) -> PhotometricInterpretation { self.info.photometric }
+    pub fn photometric(&self) -> PhotometricInterpretation {
+        self.info.photometric
+    }
 
     /// No-data value (if set via GDAL NODATA tag).
-    pub fn no_data(&self) -> Option<f64> { self.info.no_data }
+    pub fn no_data(&self) -> Option<f64> {
+        self.info.no_data
+    }
 
     /// The affine geo-transform, if present.
-    pub fn geo_transform(&self) -> Option<&GeoTransform> { self.geo_transform.as_ref() }
+    pub fn geo_transform(&self) -> Option<&GeoTransform> {
+        self.geo_transform.as_ref()
+    }
 
     /// The decoded GeoKey directory, if present.
-    pub fn geo_keys(&self) -> Option<&GeoKeyDirectory> { self.geo_keys.as_ref() }
+    pub fn geo_keys(&self) -> Option<&GeoKeyDirectory> {
+        self.geo_keys.as_ref()
+    }
 
     /// EPSG code derived from the GeoKey directory.
     pub fn epsg(&self) -> Option<u16> {
@@ -447,7 +501,12 @@ impl GeoTiff {
         let t = self.geo_transform.as_ref()?;
         let (x0, y0) = t.pixel_to_geo(0.0, 0.0);
         let (x1, y1) = t.pixel_to_geo(self.info.width as f64, self.info.height as f64);
-        Some(BoundingBox::new(x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)))
+        Some(BoundingBox::new(
+            x0.min(x1),
+            y0.min(y1),
+            x0.max(x1),
+            y0.max(y1),
+        ))
     }
 
     // ── Data access ───────────────────────────────────────────────────────────
@@ -483,7 +542,8 @@ impl GeoTiff {
     pub fn read_band_u16(&self, band: usize) -> Result<Vec<u16>> {
         self.validate_sample_type(SampleFormat::Uint, 16)?;
         let bytes = self.read_band_bytes(band)?;
-        Ok(bytes.chunks_exact(2)
+        Ok(bytes
+            .chunks_exact(2)
             .map(|c| u16::from_le_bytes(c.try_into().unwrap()))
             .collect())
     }
@@ -492,7 +552,8 @@ impl GeoTiff {
     pub fn read_band_u32(&self, band: usize) -> Result<Vec<u32>> {
         self.validate_sample_type(SampleFormat::Uint, 32)?;
         let bytes = self.read_band_bytes(band)?;
-        Ok(bytes.chunks_exact(4)
+        Ok(bytes
+            .chunks_exact(4)
             .map(|c| u32::from_le_bytes(c.try_into().unwrap()))
             .collect())
     }
@@ -501,7 +562,8 @@ impl GeoTiff {
     pub fn read_band_u64(&self, band: usize) -> Result<Vec<u64>> {
         self.validate_sample_type(SampleFormat::Uint, 64)?;
         let bytes = self.read_band_bytes(band)?;
-        Ok(bytes.chunks_exact(8)
+        Ok(bytes
+            .chunks_exact(8)
             .map(|c| u64::from_le_bytes(c.try_into().unwrap()))
             .collect())
     }
@@ -517,7 +579,8 @@ impl GeoTiff {
     pub fn read_band_i16(&self, band: usize) -> Result<Vec<i16>> {
         self.validate_sample_type(SampleFormat::Int, 16)?;
         let bytes = self.read_band_bytes(band)?;
-        Ok(bytes.chunks_exact(2)
+        Ok(bytes
+            .chunks_exact(2)
             .map(|c| i16::from_le_bytes(c.try_into().unwrap()))
             .collect())
     }
@@ -526,7 +589,8 @@ impl GeoTiff {
     pub fn read_band_i32(&self, band: usize) -> Result<Vec<i32>> {
         self.validate_sample_type(SampleFormat::Int, 32)?;
         let bytes = self.read_band_bytes(band)?;
-        Ok(bytes.chunks_exact(4)
+        Ok(bytes
+            .chunks_exact(4)
             .map(|c| i32::from_le_bytes(c.try_into().unwrap()))
             .collect())
     }
@@ -535,7 +599,8 @@ impl GeoTiff {
     pub fn read_band_i64(&self, band: usize) -> Result<Vec<i64>> {
         self.validate_sample_type(SampleFormat::Int, 64)?;
         let bytes = self.read_band_bytes(band)?;
-        Ok(bytes.chunks_exact(8)
+        Ok(bytes
+            .chunks_exact(8)
             .map(|c| i64::from_le_bytes(c.try_into().unwrap()))
             .collect())
     }
@@ -544,7 +609,8 @@ impl GeoTiff {
     pub fn read_band_f32(&self, band: usize) -> Result<Vec<f32>> {
         self.validate_sample_type(SampleFormat::IeeeFloat, 32)?;
         let bytes = self.read_band_bytes(band)?;
-        Ok(bytes.chunks_exact(4)
+        Ok(bytes
+            .chunks_exact(4)
             .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
             .collect())
     }
@@ -553,7 +619,8 @@ impl GeoTiff {
     pub fn read_band_f64(&self, band: usize) -> Result<Vec<f64>> {
         self.validate_sample_type(SampleFormat::IeeeFloat, 64)?;
         let bytes = self.read_band_bytes(band)?;
-        Ok(bytes.chunks_exact(8)
+        Ok(bytes
+            .chunks_exact(8)
             .map(|c| f64::from_le_bytes(c.try_into().unwrap()))
             .collect())
     }
@@ -593,7 +660,11 @@ impl GeoTiff {
         let expected_total = self.info.row_bytes() * self.info.height as usize;
 
         match &self.info.layout {
-            ImageLayout::Stripped { rows_per_strip, offsets, byte_counts } => {
+            ImageLayout::Stripped {
+                rows_per_strip,
+                offsets,
+                byte_counts,
+            } => {
                 let mut out = Vec::with_capacity(expected_total);
                 let rps = *rows_per_strip as usize;
                 let row_bytes = self.info.row_bytes();
@@ -604,7 +675,12 @@ impl GeoTiff {
                     if end > self.data.len() {
                         return Err(GeoTiffError::CorruptData {
                             location: format!("strip {}", i),
-                            message: format!("offset {} + count {} > file size {}", off, bc, self.data.len()),
+                            message: format!(
+                                "offset {} + count {} > file size {}",
+                                off,
+                                bc,
+                                self.data.len()
+                            ),
                         });
                     }
                     let compressed = &self.data[start..end];
@@ -617,7 +693,12 @@ impl GeoTiff {
                 Ok(out)
             }
 
-            ImageLayout::Tiled { tile_width, tile_height, offsets, byte_counts } => {
+            ImageLayout::Tiled {
+                tile_width,
+                tile_height,
+                offsets,
+                byte_counts,
+            } => {
                 let tw = *tile_width as usize;
                 let th = *tile_height as usize;
                 let w = self.info.width as usize;
@@ -643,8 +724,11 @@ impl GeoTiff {
                             });
                         }
                         let compressed = &self.data[off..off + bc];
-                        let decompressed =
-                            compression::decompress(self.info.compression, compressed, tile_bytes_raw)?;
+                        let decompressed = compression::decompress(
+                            self.info.compression,
+                            compressed,
+                            tile_bytes_raw,
+                        )?;
 
                         // Copy tile into the output buffer, clipping at image edges
                         let img_x0 = tx * tw;
@@ -712,10 +796,10 @@ fn sample_to_f64(bytes: &[u8], fmt: SampleFormat) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::super::writer::GeoTiffWriter;
-    use super::super::types::GeoTransform;
     use super::super::tags::Compression;
+    use super::super::types::GeoTransform;
+    use super::super::writer::GeoTiffWriter;
+    use super::*;
     use tempfile::NamedTempFile;
 
     fn make_tiff(compression: Compression) -> Vec<u8> {
@@ -823,7 +907,8 @@ mod tests {
         let read_back = tiff.read_band_u8(0).unwrap();
         assert_eq!(read_back.len(), data.len());
 
-        let max_abs_err = data.iter()
+        let max_abs_err = data
+            .iter()
             .zip(read_back.iter())
             .map(|(a, b)| (*a as i16 - *b as i16).abs() as u8)
             .max()
@@ -844,7 +929,10 @@ mod tests {
             .bigtiff(true)
             .compression(Compression::Jpeg)
             .jpeg_quality(90)
-            .layout(super::super::writer::WriteLayout::Tiled { tile_width: 32, tile_height: 32 })
+            .layout(super::super::writer::WriteLayout::Tiled {
+                tile_width: 32,
+                tile_height: 32,
+            })
             .write_u8(path, &data)
             .unwrap();
 
@@ -904,7 +992,10 @@ mod tests {
             .bigtiff(true)
             .compression(Compression::WebP)
             .jpeg_quality(85)
-            .layout(super::super::writer::WriteLayout::Tiled { tile_width: 32, tile_height: 32 })
+            .layout(super::super::writer::WriteLayout::Tiled {
+                tile_width: 32,
+                tile_height: 32,
+            })
             .write_u8(path, &data)
             .unwrap();
 
@@ -933,7 +1024,10 @@ mod tests {
         GeoTiffWriter::new(w, h, 4)
             .compression(Compression::WebP)
             .jpeg_quality(80)
-            .layout(super::super::writer::WriteLayout::Tiled { tile_width: 32, tile_height: 32 })
+            .layout(super::super::writer::WriteLayout::Tiled {
+                tile_width: 32,
+                tile_height: 32,
+            })
             .write_u8(path, &data)
             .unwrap();
 
@@ -996,7 +1090,10 @@ mod tests {
             .bigtiff(true)
             .compression(Compression::JpegXl)
             .jpeg_quality(90)
-            .layout(super::super::writer::WriteLayout::Tiled { tile_width: 32, tile_height: 32 })
+            .layout(super::super::writer::WriteLayout::Tiled {
+                tile_width: 32,
+                tile_height: 32,
+            })
             .write_u8(path, &data)
             .unwrap();
 
@@ -1021,7 +1118,16 @@ mod tests {
 
         let file_u32 = NamedTempFile::new().unwrap();
         let path_u32 = file_u32.path();
-        let data_u32: Vec<u32> = vec![0, 1, 255, 65_535, 100_000, 1_000_000, u32::MAX - 1, u32::MAX];
+        let data_u32: Vec<u32> = vec![
+            0,
+            1,
+            255,
+            65_535,
+            100_000,
+            1_000_000,
+            u32::MAX - 1,
+            u32::MAX,
+        ];
         GeoTiffWriter::new(4, 2, 1)
             .write_u32(path_u32, &data_u32)
             .unwrap();
@@ -1039,7 +1145,16 @@ mod tests {
 
         let file_u64 = NamedTempFile::new().unwrap();
         let path_u64 = file_u64.path();
-        let data_u64: Vec<u64> = vec![0, 1, 255, 65_535, 1_000_000, 9_007_199_254_740_991, u64::MAX - 1, u64::MAX];
+        let data_u64: Vec<u64> = vec![
+            0,
+            1,
+            255,
+            65_535,
+            1_000_000,
+            9_007_199_254_740_991,
+            u64::MAX - 1,
+            u64::MAX,
+        ];
         GeoTiffWriter::new(4, 2, 1)
             .write_u64(path_u64, &data_u64)
             .unwrap();
@@ -1048,7 +1163,16 @@ mod tests {
 
         let file_i64 = NamedTempFile::new().unwrap();
         let path_i64 = file_i64.path();
-        let data_i64: Vec<i64> = vec![i64::MIN, -9_007_199_254_740_991, -1_000_000, -1, 0, 1, 9_007_199_254_740_991, i64::MAX];
+        let data_i64: Vec<i64> = vec![
+            i64::MIN,
+            -9_007_199_254_740_991,
+            -1_000_000,
+            -1,
+            0,
+            1,
+            9_007_199_254_740_991,
+            i64::MAX,
+        ];
         GeoTiffWriter::new(4, 2, 1)
             .write_i64(path_i64, &data_i64)
             .unwrap();

@@ -24,15 +24,12 @@ pub fn parse_raster_path_value(value: &Value, param: &str) -> Result<String, Too
 
     if let Some(obj) = value.as_object() {
         if obj.get("__wbw_type__").and_then(Value::as_str) == Some("raster") {
-            let path = obj
-                .get("path")
-                .and_then(Value::as_str)
-                .ok_or_else(|| {
-                    ToolError::Validation(format!(
-                        "typed raster '{}' requires string field 'path'",
-                        param
-                    ))
-                })?;
+            let path = obj.get("path").and_then(Value::as_str).ok_or_else(|| {
+                ToolError::Validation(format!(
+                    "typed raster '{}' requires string field 'path'",
+                    param
+                ))
+            })?;
             return Ok(path.to_string());
         }
     }
@@ -54,15 +51,12 @@ pub fn parse_vector_path_value(value: &Value, param: &str) -> Result<String, Too
 
     if let Some(obj) = value.as_object() {
         if obj.get("__wbw_type__").and_then(Value::as_str) == Some("vector") {
-            let path = obj
-                .get("path")
-                .and_then(Value::as_str)
-                .ok_or_else(|| {
-                    ToolError::Validation(format!(
-                        "typed vector '{}' requires string field 'path'",
-                        param
-                    ))
-                })?;
+            let path = obj.get("path").and_then(Value::as_str).ok_or_else(|| {
+                ToolError::Validation(format!(
+                    "typed vector '{}' requires string field 'path'",
+                    param
+                ))
+            })?;
             return Ok(path.to_string());
         }
     }
@@ -79,9 +73,9 @@ pub fn parse_vector_path_value(value: &Value, param: &str) -> Result<String, Too
 /// Equivalent to extracting `args[param]` and then calling
 /// [`parse_raster_path_value`].
 pub fn parse_raster_path_arg(args: &ToolArgs, param: &str) -> Result<String, ToolError> {
-    let val = args.get(param).ok_or_else(|| {
-        ToolError::Validation(format!("missing required parameter '{}'", param))
-    })?;
+    let val = args
+        .get(param)
+        .ok_or_else(|| ToolError::Validation(format!("missing required parameter '{}'", param)))?;
     parse_raster_path_value(val, param)
 }
 

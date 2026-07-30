@@ -6,12 +6,8 @@ use std::sync::Mutex;
 
 pub mod tool_args_ext;
 pub use tool_args_ext::{
-    parse_optional_output_path,
-    parse_raster_path_arg,
-    parse_raster_path_value,
-    parse_vector_path_arg,
-    parse_vector_path_value,
-    IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH,
+    parse_optional_output_path, parse_raster_path_arg, parse_raster_path_value,
+    parse_vector_path_arg, parse_vector_path_value, IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH,
 };
 
 pub type ToolArgs = BTreeMap<String, Value>;
@@ -264,7 +260,12 @@ impl ToolParamSchema {
         match self {
             Self::Input(_) => Some(ToolIoRole::Input),
             Self::Output(_) => Some(ToolIoRole::Output),
-            Self::Scalar { .. } | Self::Enum(_) | Self::Bool | Self::String | Self::Field(_) | Self::FieldDefinition => None,
+            Self::Scalar { .. }
+            | Self::Enum(_)
+            | Self::Bool
+            | Self::String
+            | Self::Field(_)
+            | Self::FieldDefinition => None,
         }
     }
 
@@ -273,7 +274,9 @@ impl ToolParamSchema {
             Self::Input(schema) => schema.dataset.coarse_data_kind(),
             Self::Output(schema) => schema.dataset.coarse_data_kind(),
             Self::Scalar { .. } => ToolDataKind::Number,
-            Self::Enum(_) | Self::String | Self::Field(_) | Self::FieldDefinition => ToolDataKind::String,
+            Self::Enum(_) | Self::String | Self::Field(_) | Self::FieldDefinition => {
+                ToolDataKind::String
+            }
             Self::Bool => ToolDataKind::Bool,
         }
     }
@@ -568,7 +571,11 @@ fn looks_like_output_param(name: &str, description: &str) -> bool {
 }
 
 fn infer_data_kind(name: &str, description: &str, role: &ToolIoRole) -> ToolDataKind {
-    let text = format!("{} {}", name.to_ascii_lowercase(), description.to_ascii_lowercase());
+    let text = format!(
+        "{} {}",
+        name.to_ascii_lowercase(),
+        description.to_ascii_lowercase()
+    );
 
     if text.contains("raster")
         || text.contains("dem")
@@ -605,7 +612,11 @@ fn infer_data_kind(name: &str, description: &str, role: &ToolIoRole) -> ToolData
     if text.contains("json") {
         return ToolDataKind::Json;
     }
-    if text.contains("txt") || text.contains("text") || text.contains("html") || text.contains("xml") {
+    if text.contains("txt")
+        || text.contains("text")
+        || text.contains("html")
+        || text.contains("xml")
+    {
         return ToolDataKind::Text;
     }
 
@@ -619,7 +630,10 @@ fn role_and_kind_from_schema(schema: &ToolParamSchema) -> (Option<ToolIoRole>, T
     (schema.io_role(), schema.coarse_data_kind())
 }
 
-fn schema_from_role_and_kind(role: Option<ToolIoRole>, kind: ToolDataKind) -> Option<ToolParamSchema> {
+fn schema_from_role_and_kind(
+    role: Option<ToolIoRole>,
+    kind: ToolDataKind,
+) -> Option<ToolParamSchema> {
     let dataset_from_kind = |k: ToolDataKind| -> Option<ToolDatasetSchema> {
         match k {
             ToolDataKind::Raster => Some(ToolDatasetSchema::Raster),
@@ -776,8 +790,7 @@ pub fn manifest_with_param_schema_json(
         if let Some(role) = role {
             po.insert(
                 "io_role".to_string(),
-                serde_json::to_value(role)
-                    .unwrap_or_else(|_| Value::String("input".to_string())),
+                serde_json::to_value(role).unwrap_or_else(|_| Value::String("input".to_string())),
             );
         }
 
@@ -829,7 +842,11 @@ pub struct ToolManifest {
 
 impl From<ToolMetadata> for ToolDescriptor {
     fn from(m: ToolMetadata) -> Self {
-        let params = m.params.into_iter().map(ToolParamDescriptor::from).collect();
+        let params = m
+            .params
+            .into_iter()
+            .map(ToolParamDescriptor::from)
+            .collect();
 
         Self {
             id: m.id.to_string(),
@@ -857,7 +874,11 @@ impl From<ToolManifest> for ToolDescriptor {
 
 impl From<ToolMetadata> for ToolManifest {
     fn from(m: ToolMetadata) -> Self {
-        let params = m.params.into_iter().map(ToolParamDescriptor::from).collect();
+        let params = m
+            .params
+            .into_iter()
+            .map(ToolParamDescriptor::from)
+            .collect();
 
         Self {
             id: m.id.to_string(),
@@ -890,9 +911,17 @@ pub struct ExecuteResponse {
 pub trait ToolRuntimeRegistry: Send + Sync {
     fn list_tools(&self) -> Vec<ToolMetadata>;
     fn list_manifests(&self) -> Vec<ToolManifest> {
-        self.list_tools().into_iter().map(ToolManifest::from).collect()
+        self.list_tools()
+            .into_iter()
+            .map(ToolManifest::from)
+            .collect()
     }
-    fn run_tool(&self, id: &str, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError>;
+    fn run_tool(
+        &self,
+        id: &str,
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError>;
 }
 
 pub struct ToolRuntime<'a, R, C>
@@ -1130,7 +1159,9 @@ where
         progress: &dyn ProgressSink,
     ) -> Result<ExecuteResponse, ToolError> {
         if req.tool_id.trim().is_empty() {
-            return Err(ToolError::InvalidRequest("tool_id cannot be empty".to_string()));
+            return Err(ToolError::InvalidRequest(
+                "tool_id cannot be empty".to_string(),
+            ));
         }
 
         let recorded = RecordingProgressSink::new();
@@ -1186,23 +1217,31 @@ mod tests {
                         name: "input",
                         description: "Input values",
                         required: true,
-                            ..Default::default()
+                        ..Default::default()
                     },
                     ToolParamSpec {
                         name: "constant",
                         description: "Added value",
                         required: true,
-                            ..Default::default()
+                        ..Default::default()
                     },
                 ],
             }]
         }
 
-        fn run_tool(&self, id: &str, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+        fn run_tool(
+            &self,
+            id: &str,
+            args: &ToolArgs,
+            ctx: &ToolContext,
+        ) -> Result<ToolRunResult, ToolError> {
             if id != "demo_add" {
                 return Err(ToolError::NotFound(id.to_string()));
             }
-            if !ctx.capabilities.has_tool_access("demo_add", LicenseTier::Open) {
+            if !ctx
+                .capabilities
+                .has_tool_access("demo_add", LicenseTier::Open)
+            {
                 return Err(ToolError::LicenseDenied("demo_add".to_string()));
             }
 
@@ -1222,7 +1261,8 @@ mod tests {
                     .as_f64()
                     .ok_or_else(|| ToolError::Validation("non-numeric input".to_string()))?;
                 out.push(n + c);
-                ctx.progress.progress((i + 1) as f64 / input.len().max(1) as f64);
+                ctx.progress
+                    .progress((i + 1) as f64 / input.len().max(1) as f64);
             }
 
             let mut outputs = BTreeMap::new();

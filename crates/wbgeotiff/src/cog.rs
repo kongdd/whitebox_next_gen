@@ -38,9 +38,9 @@
 
 #![allow(dead_code)]
 
+use std::fs::File;
 use std::io::{Seek, Write};
 use std::path::Path;
-use std::fs::File;
 
 use super::compression;
 use super::error::{GeoTiffError, Result};
@@ -49,8 +49,8 @@ use super::ifd::ByteOrder;
 use super::tags::{tag, Compression, PhotometricInterpretation, SampleFormat};
 use super::types::GeoTransform;
 use super::writer::{
-    push_ascii, push_doubles, push_long, push_longs,
-    push_short, push_shorts, push_shorts_u16, TiffTag,
+    push_ascii, push_doubles, push_long, push_longs, push_short, push_shorts, push_shorts_u16,
+    TiffTag,
 };
 
 const BO: ByteOrder = ByteOrder::LittleEndian;
@@ -71,22 +71,22 @@ pub enum Resampling {
 
 /// Builder for writing Cloud Optimized GeoTIFF files.
 pub struct CogWriter {
-    width:           u32,
-    height:          u32,
-    bands:           u16,
+    width: u32,
+    height: u32,
+    bands: u16,
     bits_per_sample: u16,
-    sample_format:   SampleFormat,
-    compression:     Compression,
-    photometric:     PhotometricInterpretation,
-    tile_size:       u32,
-    geo_transform:   Option<GeoTransform>,
-    geo_keys:        Option<GeoKeyDirectory>,
-    no_data:         Option<f64>,
-    jpeg_quality:    u8,
-    resampling:      Resampling,
+    sample_format: SampleFormat,
+    compression: Compression,
+    photometric: PhotometricInterpretation,
+    tile_size: u32,
+    geo_transform: Option<GeoTransform>,
+    geo_keys: Option<GeoKeyDirectory>,
+    no_data: Option<f64>,
+    jpeg_quality: u8,
+    resampling: Resampling,
     /// Explicit overview levels; `None` = auto-generate power-of-two levels.
     overview_levels: Option<Vec<u32>>,
-    bigtiff:         bool,
+    bigtiff: bool,
 }
 
 #[allow(missing_docs)]
@@ -94,43 +94,78 @@ impl CogWriter {
     /// Create a new COG writer for a `width × height × bands` raster.
     pub fn new(width: u32, height: u32, bands: u16) -> Self {
         Self {
-            width, height, bands,
+            width,
+            height,
+            bands,
             bits_per_sample: 8,
-            sample_format:   SampleFormat::Uint,
-            compression:     Compression::Deflate,
-            photometric:     PhotometricInterpretation::MinIsBlack,
-            tile_size:       512,
-            geo_transform:   None,
-            geo_keys:        None,
-            no_data:         None,
-            jpeg_quality:    85,
-            resampling:      Resampling::Average,
+            sample_format: SampleFormat::Uint,
+            compression: Compression::Deflate,
+            photometric: PhotometricInterpretation::MinIsBlack,
+            tile_size: 512,
+            geo_transform: None,
+            geo_keys: None,
+            no_data: None,
+            jpeg_quality: 85,
+            resampling: Resampling::Average,
             overview_levels: None,
-            bigtiff:         false,
+            bigtiff: false,
         }
     }
 
     // ── Builder setters ───────────────────────────────────────────────────────
 
-    pub fn compression(mut self, c: Compression) -> Self { self.compression = c; self }
-    pub fn sample_format(mut self, sf: SampleFormat) -> Self { self.sample_format = sf; self }
-    pub fn bits_per_sample(mut self, bps: u16) -> Self { self.bits_per_sample = bps; self }
-    pub fn photometric(mut self, p: PhotometricInterpretation) -> Self { self.photometric = p; self }
-    pub fn tile_size(mut self, sz: u32) -> Self { self.tile_size = sz; self }
-    pub fn geo_transform(mut self, gt: GeoTransform) -> Self { self.geo_transform = Some(gt); self }
-    pub fn geo_key_directory(mut self, gkd: GeoKeyDirectory) -> Self { self.geo_keys = Some(gkd); self }
-    pub fn no_data(mut self, v: f64) -> Self { self.no_data = Some(v); self }
+    pub fn compression(mut self, c: Compression) -> Self {
+        self.compression = c;
+        self
+    }
+    pub fn sample_format(mut self, sf: SampleFormat) -> Self {
+        self.sample_format = sf;
+        self
+    }
+    pub fn bits_per_sample(mut self, bps: u16) -> Self {
+        self.bits_per_sample = bps;
+        self
+    }
+    pub fn photometric(mut self, p: PhotometricInterpretation) -> Self {
+        self.photometric = p;
+        self
+    }
+    pub fn tile_size(mut self, sz: u32) -> Self {
+        self.tile_size = sz;
+        self
+    }
+    pub fn geo_transform(mut self, gt: GeoTransform) -> Self {
+        self.geo_transform = Some(gt);
+        self
+    }
+    pub fn geo_key_directory(mut self, gkd: GeoKeyDirectory) -> Self {
+        self.geo_keys = Some(gkd);
+        self
+    }
+    pub fn no_data(mut self, v: f64) -> Self {
+        self.no_data = Some(v);
+        self
+    }
     /// Set JPEG quality in range 1..=100 (used when `Compression::Jpeg` is selected).
     pub fn jpeg_quality(mut self, quality: u8) -> Self {
         self.jpeg_quality = quality.clamp(1, 100);
         self
     }
     /// Set the overview resampling method used when generating reduced-resolution levels.
-    pub fn resampling(mut self, r: Resampling) -> Self { self.resampling = r; self }
+    pub fn resampling(mut self, r: Resampling) -> Self {
+        self.resampling = r;
+        self
+    }
     /// Enable or disable BigTIFF output (8-byte offsets).
-    pub fn bigtiff(mut self, b: bool) -> Self { self.bigtiff = b; self }
+    pub fn bigtiff(mut self, b: bool) -> Self {
+        self.bigtiff = b;
+        self
+    }
     /// Override the automatically-derived overview levels.
-    pub fn overview_levels(mut self, levels: Vec<u32>) -> Self { self.overview_levels = Some(levels); self }
+    pub fn overview_levels(mut self, levels: Vec<u32>) -> Self {
+        self.overview_levels = Some(levels);
+        self
+    }
 
     /// Convenience: set EPSG code.
     pub fn epsg(mut self, epsg: u16) -> Self {
@@ -147,7 +182,8 @@ impl CogWriter {
 
     /// Write `u8` raster data as a Cloud Optimized GeoTIFF.
     pub fn write_u8<P: AsRef<Path>>(mut self, path: P, data: &[u8]) -> Result<()> {
-        self.bits_per_sample = 8; self.sample_format = SampleFormat::Uint;
+        self.bits_per_sample = 8;
+        self.sample_format = SampleFormat::Uint;
         let bytes = data.to_vec();
         let mut f = File::create(path).map_err(GeoTiffError::Io)?;
         self.write_cog(&mut f, bytes)
@@ -155,7 +191,8 @@ impl CogWriter {
 
     /// Write `i8` raster data as a Cloud Optimized GeoTIFF.
     pub fn write_i8<P: AsRef<Path>>(mut self, path: P, data: &[i8]) -> Result<()> {
-        self.bits_per_sample = 8; self.sample_format = SampleFormat::Int;
+        self.bits_per_sample = 8;
+        self.sample_format = SampleFormat::Int;
         let bytes: Vec<u8> = data.iter().map(|v| *v as u8).collect();
         let mut f = File::create(path).map_err(GeoTiffError::Io)?;
         self.write_cog(&mut f, bytes)
@@ -163,7 +200,8 @@ impl CogWriter {
 
     /// Write `u16` raster data as a Cloud Optimized GeoTIFF.
     pub fn write_u16<P: AsRef<Path>>(mut self, path: P, data: &[u16]) -> Result<()> {
-        self.bits_per_sample = 16; self.sample_format = SampleFormat::Uint;
+        self.bits_per_sample = 16;
+        self.sample_format = SampleFormat::Uint;
         let bytes: Vec<u8> = data.iter().flat_map(|v| v.to_le_bytes()).collect();
         let mut f = File::create(path).map_err(GeoTiffError::Io)?;
         self.write_cog(&mut f, bytes)
@@ -171,7 +209,8 @@ impl CogWriter {
 
     /// Write `i16` raster data as a Cloud Optimized GeoTIFF.
     pub fn write_i16<P: AsRef<Path>>(mut self, path: P, data: &[i16]) -> Result<()> {
-        self.bits_per_sample = 16; self.sample_format = SampleFormat::Int;
+        self.bits_per_sample = 16;
+        self.sample_format = SampleFormat::Int;
         let bytes: Vec<u8> = data.iter().flat_map(|v| v.to_le_bytes()).collect();
         let mut f = File::create(path).map_err(GeoTiffError::Io)?;
         self.write_cog(&mut f, bytes)
@@ -179,7 +218,8 @@ impl CogWriter {
 
     /// Write `u32` raster data as a Cloud Optimized GeoTIFF.
     pub fn write_u32<P: AsRef<Path>>(mut self, path: P, data: &[u32]) -> Result<()> {
-        self.bits_per_sample = 32; self.sample_format = SampleFormat::Uint;
+        self.bits_per_sample = 32;
+        self.sample_format = SampleFormat::Uint;
         let bytes: Vec<u8> = data.iter().flat_map(|v| v.to_le_bytes()).collect();
         let mut f = File::create(path).map_err(GeoTiffError::Io)?;
         self.write_cog(&mut f, bytes)
@@ -187,7 +227,8 @@ impl CogWriter {
 
     /// Write `u64` raster data as a Cloud Optimized GeoTIFF.
     pub fn write_u64<P: AsRef<Path>>(mut self, path: P, data: &[u64]) -> Result<()> {
-        self.bits_per_sample = 64; self.sample_format = SampleFormat::Uint;
+        self.bits_per_sample = 64;
+        self.sample_format = SampleFormat::Uint;
         let bytes: Vec<u8> = data.iter().flat_map(|v| v.to_le_bytes()).collect();
         let mut f = File::create(path).map_err(GeoTiffError::Io)?;
         self.write_cog(&mut f, bytes)
@@ -195,7 +236,8 @@ impl CogWriter {
 
     /// Write `i32` raster data as a Cloud Optimized GeoTIFF.
     pub fn write_i32<P: AsRef<Path>>(mut self, path: P, data: &[i32]) -> Result<()> {
-        self.bits_per_sample = 32; self.sample_format = SampleFormat::Int;
+        self.bits_per_sample = 32;
+        self.sample_format = SampleFormat::Int;
         let bytes: Vec<u8> = data.iter().flat_map(|v| v.to_le_bytes()).collect();
         let mut f = File::create(path).map_err(GeoTiffError::Io)?;
         self.write_cog(&mut f, bytes)
@@ -203,7 +245,8 @@ impl CogWriter {
 
     /// Write `i64` raster data as a Cloud Optimized GeoTIFF.
     pub fn write_i64<P: AsRef<Path>>(mut self, path: P, data: &[i64]) -> Result<()> {
-        self.bits_per_sample = 64; self.sample_format = SampleFormat::Int;
+        self.bits_per_sample = 64;
+        self.sample_format = SampleFormat::Int;
         let bytes: Vec<u8> = data.iter().flat_map(|v| v.to_le_bytes()).collect();
         let mut f = File::create(path).map_err(GeoTiffError::Io)?;
         self.write_cog(&mut f, bytes)
@@ -211,7 +254,8 @@ impl CogWriter {
 
     /// Write `f32` raster data as a Cloud Optimized GeoTIFF.
     pub fn write_f32<P: AsRef<Path>>(mut self, path: P, data: &[f32]) -> Result<()> {
-        self.bits_per_sample = 32; self.sample_format = SampleFormat::IeeeFloat;
+        self.bits_per_sample = 32;
+        self.sample_format = SampleFormat::IeeeFloat;
         let bytes: Vec<u8> = data.iter().flat_map(|v| v.to_le_bytes()).collect();
         let mut f = File::create(path).map_err(GeoTiffError::Io)?;
         self.write_cog(&mut f, bytes)
@@ -219,7 +263,8 @@ impl CogWriter {
 
     /// Write `f64` raster data as a Cloud Optimized GeoTIFF.
     pub fn write_f64<P: AsRef<Path>>(mut self, path: P, data: &[f64]) -> Result<()> {
-        self.bits_per_sample = 64; self.sample_format = SampleFormat::IeeeFloat;
+        self.bits_per_sample = 64;
+        self.sample_format = SampleFormat::IeeeFloat;
         let bytes: Vec<u8> = data.iter().flat_map(|v| v.to_le_bytes()).collect();
         let mut f = File::create(path).map_err(GeoTiffError::Io)?;
         self.write_cog(&mut f, bytes)
@@ -229,8 +274,8 @@ impl CogWriter {
 
     fn write_cog<W: Write + Seek>(&self, w: &mut W, pixel_bytes: Vec<u8>) -> Result<()> {
         let bps_b = (self.bits_per_sample as usize + 7) / 8;
-        let spp   = self.bands as usize;
-        let ts    = self.tile_size as usize;
+        let spp = self.bands as usize;
+        let ts = self.tile_size as usize;
 
         self.validate_compression_settings(spp)?;
 
@@ -245,9 +290,8 @@ impl CogWriter {
         for &factor in &levels {
             let ov_w = (prev_w + factor - 1) / factor;
             let ov_h = (prev_h + factor - 1) / factor;
-            let resampled = self.resample_overview(
-                prev_bytes, prev_w, prev_h, spp, bps_b, ov_w, ov_h, factor,
-            )?;
+            let resampled =
+                self.resample_overview(prev_bytes, prev_w, prev_h, spp, bps_b, ov_w, ov_h, factor)?;
             overview_pixels.push((ov_w, ov_h, resampled.clone()));
             storage.push(resampled);
             prev_w = ov_w;
@@ -260,15 +304,24 @@ impl CogWriter {
         let mut encoded_levels: Vec<EncodedLevel> = Vec::new();
 
         // Full resolution (first)
-        let full_tiles = self.encode_tile_set(&pixel_bytes, self.width, self.height, spp, bps_b, ts)?;
+        let full_tiles =
+            self.encode_tile_set(&pixel_bytes, self.width, self.height, spp, bps_b, ts)?;
         encoded_levels.push(EncodedLevel {
-            width: self.width, height: self.height, tiles: full_tiles, is_overview: false,
+            width: self.width,
+            height: self.height,
+            tiles: full_tiles,
+            is_overview: false,
         });
 
         // Overviews (lowest-res → highest-res)
         for (ov_w, ov_h, ov_bytes) in overview_pixels.iter().rev() {
             let tiles = self.encode_tile_set(ov_bytes, *ov_w, *ov_h, spp, bps_b, ts)?;
-            encoded_levels.push(EncodedLevel { width: *ov_w, height: *ov_h, tiles, is_overview: true });
+            encoded_levels.push(EncodedLevel {
+                width: *ov_w,
+                height: *ov_h,
+                tiles,
+                is_overview: true,
+            });
         }
 
         // ── 3. Serialise to a temporary buffer so we know all offsets ─────────
@@ -297,7 +350,7 @@ impl CogWriter {
 
         // ── Compute full file layout ──────────────────────────────────────────
         let header_size: u64 = if self.bigtiff { 16 } else { 8 };
-        let ghost_size   = ghost.len() as u64;
+        let ghost_size = ghost.len() as u64;
 
         // Build IFD list: full-res first (IFD0), then overviews
         let num_ifds = levels.len();
@@ -311,8 +364,11 @@ impl CogWriter {
         let mut ifd_blobs: Vec<Vec<u8>> = Vec::with_capacity(num_ifds);
         for level in levels.iter() {
             let blob = self.build_ifd_blob(
-                level, bps, spp, geo_keys_enc,
-                !level.is_overview,       // only full-res gets geo tags
+                level,
+                bps,
+                spp,
+                geo_keys_enc,
+                !level.is_overview, // only full-res gets geo tags
                 level.is_overview,
                 0, // tile offsets placeholder
                 0, // next IFD placeholder
@@ -327,7 +383,9 @@ impl CogWriter {
         for blob in &ifd_blobs {
             ifd_offsets.push(cursor);
             cursor += blob.len() as u64;
-            if cursor % 2 != 0 { cursor += 1; }
+            if cursor % 2 != 0 {
+                cursor += 1;
+            }
         }
 
         // Tile data section follows `levels` order.
@@ -347,7 +405,10 @@ impl CogWriter {
             let is_last_ifd = i == num_ifds - 1;
             let next_ifd = if is_last_ifd { 0 } else { ifd_offsets[i + 1] };
             let blob = self.build_ifd_blob_full(
-                level, bps, spp, geo_keys_enc,
+                level,
+                bps,
+                spp,
+                geo_keys_enc,
                 !level.is_overview,
                 level.is_overview,
                 &tile_start_offsets[i],
@@ -377,7 +438,9 @@ impl CogWriter {
         // ── Write IFD blobs ───────────────────────────────────────────────────
         for blob in &ifd_blobs {
             buf.extend_from_slice(blob);
-            if buf.len() % 2 != 0 { buf.push(0); }
+            if buf.len() % 2 != 0 {
+                buf.push(0);
+            }
         }
 
         // ── Write tile data ───────────────────────────────────────────────────
@@ -407,13 +470,14 @@ impl CogWriter {
 
         let inner = format!(
             "LAYOUT=COG\nOVERVIEW_COUNT={}\nCOMPRESSION={}\nTILE_SIZE={}\n",
-            num_overviews,
-            codec_name,
-            self.tile_size,
+            num_overviews, codec_name, self.tile_size,
         );
         // Header line includes total size (header line itself + inner)
         let size_field_placeholder = inner.len() + 40; // rough size for the header line
-        let header_line = format!("GDAL_STRUCTURAL_METADATA_SIZE={:06} bytes\n", size_field_placeholder);
+        let header_line = format!(
+            "GDAL_STRUCTURAL_METADATA_SIZE={:06} bytes\n",
+            size_field_placeholder
+        );
         let total = header_line.len() + inner.len();
         // Re-do with accurate size
         let header_line = format!("GDAL_STRUCTURAL_METADATA_SIZE={:06} bytes\n", total);
@@ -421,7 +485,9 @@ impl CogWriter {
         let mut block = header_line.into_bytes();
         block.extend_from_slice(inner.as_bytes());
         // Pad to even length
-        if block.len() % 2 != 0 { block.push(0); }
+        if block.len() % 2 != 0 {
+            block.push(0);
+        }
         block
     }
 
@@ -441,8 +507,16 @@ impl CogWriter {
     ) -> Vec<u8> {
         // Minimal blob for sizing — real one built by build_ifd_blob_full
         self.build_ifd_blob_full(
-            level, bps, spp, geo_keys_enc, include_geo, is_overview,
-            &vec![0u64; level.tiles.len()], 0, self.bigtiff, ifd_base_offset,
+            level,
+            bps,
+            spp,
+            geo_keys_enc,
+            include_geo,
+            is_overview,
+            &vec![0u64; level.tiles.len()],
+            0,
+            self.bigtiff,
+            ifd_base_offset,
         )
     }
 
@@ -467,45 +541,75 @@ impl CogWriter {
             push_long(&mut tags, tag::NewSubFileType, 1); // reduced-resolution
         }
 
-        push_long(&mut tags, tag::ImageWidth,  level.width);
+        push_long(&mut tags, tag::ImageWidth, level.width);
         push_long(&mut tags, tag::ImageLength, level.height);
         push_shorts(&mut tags, tag::BitsPerSample, &vec![bps; spp]);
-        push_short(&mut tags, tag::Compression, self.compression.tag_value() as u32);
+        push_short(
+            &mut tags,
+            tag::Compression,
+            self.compression.tag_value() as u32,
+        );
         push_short(
             &mut tags,
             tag::PhotometricInterpretation,
             self.effective_photometric(spp).tag_value() as u32,
         );
-        if (self.compression == Compression::WebP || self.compression == Compression::JpegXl) && spp == 4 {
+        if (self.compression == Compression::WebP || self.compression == Compression::JpegXl)
+            && spp == 4
+        {
             push_short(&mut tags, tag::ExtraSamples, 2);
         }
         push_short(&mut tags, tag::SamplesPerPixel, spp as u32);
-        push_long(&mut tags, tag::TileWidth,  ts);
+        push_long(&mut tags, tag::TileWidth, ts);
         push_long(&mut tags, tag::TileLength, ts);
 
         // TileOffsets (LONG8 for bigtiff, LONG for classic)
         if bigtiff {
             let bytes: Vec<u8> = tile_offsets.iter().flat_map(|&v| BO.u64_bytes(v)).collect();
-            tags.push(TiffTag { code: tag::TileOffsets, data_type: 16, count: tile_offsets.len() as u32, extra_data: bytes, extra_offset64: 0 });
-            let bc_bytes: Vec<u8> = level.tiles.iter().flat_map(|t| BO.u64_bytes(t.len() as u64)).collect();
-            tags.push(TiffTag { code: tag::TileByteCounts, data_type: 16, count: level.tiles.len() as u32, extra_data: bc_bytes, extra_offset64: 0 });
+            tags.push(TiffTag {
+                code: tag::TileOffsets,
+                data_type: 16,
+                count: tile_offsets.len() as u32,
+                extra_data: bytes,
+                extra_offset64: 0,
+            });
+            let bc_bytes: Vec<u8> = level
+                .tiles
+                .iter()
+                .flat_map(|t| BO.u64_bytes(t.len() as u64))
+                .collect();
+            tags.push(TiffTag {
+                code: tag::TileByteCounts,
+                data_type: 16,
+                count: level.tiles.len() as u32,
+                extra_data: bc_bytes,
+                extra_offset64: 0,
+            });
         } else {
             let longs: Vec<u32> = tile_offsets.iter().map(|&v| v as u32).collect();
             push_longs(&mut tags, tag::TileOffsets, &longs);
             push_longs(&mut tags, tag::TileByteCounts, &tile_bc_u32);
         }
         push_short(&mut tags, tag::PlanarConfiguration, 1);
-        push_short(&mut tags, tag::SampleFormat, self.sample_format.tag_value() as u32);
+        push_short(
+            &mut tags,
+            tag::SampleFormat,
+            self.sample_format.tag_value() as u32,
+        );
 
         if include_geo {
             if let Some(gt) = &self.geo_transform {
                 push_doubles(&mut tags, tag::ModelPixelScaleTag, &gt.to_pixel_scale());
-                push_doubles(&mut tags, tag::ModelTiepointTag,   &gt.to_tiepoint());
+                push_doubles(&mut tags, tag::ModelTiepointTag, &gt.to_tiepoint());
             }
             if let Some((dir, dbl, asc)) = geo_keys_enc {
                 push_shorts_u16(&mut tags, tag::GeoKeyDirectoryTag, dir);
-                if !dbl.is_empty() { push_doubles(&mut tags, tag::GeoDoubleParamsTag, dbl); }
-                if !asc.is_empty() { push_ascii(&mut tags, tag::GeoAsciiParamsTag, asc); }
+                if !dbl.is_empty() {
+                    push_doubles(&mut tags, tag::GeoDoubleParamsTag, dbl);
+                }
+                if !asc.is_empty() {
+                    push_ascii(&mut tags, tag::GeoAsciiParamsTag, asc);
+                }
             }
             if let Some(nd) = self.no_data {
                 push_ascii(&mut tags, tag::GdalNodata, &format!("{}", nd));
@@ -525,7 +629,7 @@ impl CogWriter {
 
         // First pass: compute extra-data offsets relative to blob start
         let header_len = if bigtiff { 8u64 } else { 2u64 };
-        let entry_len  = if bigtiff { 20u64 } else { 12u64 };
+        let entry_len = if bigtiff { 20u64 } else { 12u64 };
         let footer_len = if bigtiff { 8u64 } else { 4u64 };
         let inline_max = if bigtiff { 8usize } else { 4usize };
 
@@ -537,7 +641,9 @@ impl CogWriter {
             if t.extra_data.len() > inline_max {
                 extra_offsets.push(extra_cur + ifd_base_offset);
                 extra_cur += t.extra_data.len() as u64;
-                if extra_cur % 2 != 0 { extra_cur += 1; }
+                if extra_cur % 2 != 0 {
+                    extra_cur += 1;
+                }
             } else {
                 extra_offsets.push(0);
             }
@@ -587,7 +693,9 @@ impl CogWriter {
         for (t, &_ex_off) in tags.iter().zip(extra_offsets.iter()) {
             if t.extra_data.len() > inline_max {
                 blob.extend_from_slice(&t.extra_data);
-                if t.extra_data.len() % 2 != 0 { blob.push(0); }
+                if t.extra_data.len() % 2 != 0 {
+                    blob.push(0);
+                }
             }
         }
 
@@ -681,7 +789,13 @@ impl CogWriter {
         Ok(())
     }
 
-    fn compress_chunk(&self, raw: &[u8], chunk_w: u32, chunk_h: u32, spp: usize) -> Result<Vec<u8>> {
+    fn compress_chunk(
+        &self,
+        raw: &[u8],
+        chunk_w: u32,
+        chunk_h: u32,
+        spp: usize,
+    ) -> Result<Vec<u8>> {
         if self.compression == Compression::Jpeg {
             let width = u16::try_from(chunk_w).map_err(|_| GeoTiffError::CompressionError {
                 codec: "JPEG",
@@ -792,7 +906,11 @@ impl CogWriter {
                             }
                             let avg = acc / count;
                             let dst_off = (dy * dw + dx) * spp * bps_b + band * bps_b;
-                            f64_to_bytes(avg, self.sample_format, &mut out[dst_off..dst_off + bps_b]);
+                            f64_to_bytes(
+                                avg,
+                                self.sample_format,
+                                &mut out[dst_off..dst_off + bps_b],
+                            );
                         }
                     }
                 }
@@ -805,9 +923,9 @@ impl CogWriter {
 // ── EncodedLevel ─────────────────────────────────────────────────────────────
 
 struct EncodedLevel {
-    width:       u32,
-    height:      u32,
-    tiles:       Vec<Vec<u8>>,
+    width: u32,
+    height: u32,
+    tiles: Vec<Vec<u8>>,
     is_overview: bool,
 }
 
@@ -815,30 +933,44 @@ struct EncodedLevel {
 
 fn bytes_to_f64(bytes: &[u8], fmt: SampleFormat) -> f64 {
     match (fmt, bytes.len()) {
-        (SampleFormat::Uint,      1) => bytes[0] as f64,
-        (SampleFormat::Uint,      2) => u16::from_le_bytes(bytes.try_into().unwrap_or([0;2])) as f64,
-        (SampleFormat::Uint,      4) => u32::from_le_bytes(bytes.try_into().unwrap_or([0;4])) as f64,
-        (SampleFormat::Uint,      8) => u64::from_le_bytes(bytes.try_into().unwrap_or([0;8])) as f64,
-        (SampleFormat::Int,       1) => bytes[0] as i8 as f64,
-        (SampleFormat::Int,       2) => i16::from_le_bytes(bytes.try_into().unwrap_or([0;2])) as f64,
-        (SampleFormat::Int,       4) => i32::from_le_bytes(bytes.try_into().unwrap_or([0;4])) as f64,
-        (SampleFormat::Int,       8) => i64::from_le_bytes(bytes.try_into().unwrap_or([0;8])) as f64,
-        (SampleFormat::IeeeFloat, 4) => f32::from_le_bytes(bytes.try_into().unwrap_or([0;4])) as f64,
-        (SampleFormat::IeeeFloat, 8) => f64::from_le_bytes(bytes.try_into().unwrap_or([0;8])),
+        (SampleFormat::Uint, 1) => bytes[0] as f64,
+        (SampleFormat::Uint, 2) => u16::from_le_bytes(bytes.try_into().unwrap_or([0; 2])) as f64,
+        (SampleFormat::Uint, 4) => u32::from_le_bytes(bytes.try_into().unwrap_or([0; 4])) as f64,
+        (SampleFormat::Uint, 8) => u64::from_le_bytes(bytes.try_into().unwrap_or([0; 8])) as f64,
+        (SampleFormat::Int, 1) => bytes[0] as i8 as f64,
+        (SampleFormat::Int, 2) => i16::from_le_bytes(bytes.try_into().unwrap_or([0; 2])) as f64,
+        (SampleFormat::Int, 4) => i32::from_le_bytes(bytes.try_into().unwrap_or([0; 4])) as f64,
+        (SampleFormat::Int, 8) => i64::from_le_bytes(bytes.try_into().unwrap_or([0; 8])) as f64,
+        (SampleFormat::IeeeFloat, 4) => {
+            f32::from_le_bytes(bytes.try_into().unwrap_or([0; 4])) as f64
+        }
+        (SampleFormat::IeeeFloat, 8) => f64::from_le_bytes(bytes.try_into().unwrap_or([0; 8])),
         _ => 0.0,
     }
 }
 
 fn f64_to_bytes(v: f64, fmt: SampleFormat, out: &mut [u8]) {
     match (fmt, out.len()) {
-        (SampleFormat::Uint,      1) => out[0] = v.clamp(0.0, 255.0) as u8,
-        (SampleFormat::Uint,      2) => out.copy_from_slice(&(v.clamp(0.0, 65535.0) as u16).to_le_bytes()),
-        (SampleFormat::Uint,      4) => out.copy_from_slice(&(v.clamp(0.0, u32::MAX as f64) as u32).to_le_bytes()),
-        (SampleFormat::Uint,      8) => out.copy_from_slice(&(v.clamp(0.0, u64::MAX as f64) as u64).to_le_bytes()),
-        (SampleFormat::Int,       1) => out[0] = v.clamp(-128.0, 127.0) as i8 as u8,
-        (SampleFormat::Int,       2) => out.copy_from_slice(&(v.clamp(-32768.0, 32767.0) as i16).to_le_bytes()),
-        (SampleFormat::Int,       4) => out.copy_from_slice(&(v.clamp(i32::MIN as f64, i32::MAX as f64) as i32).to_le_bytes()),
-        (SampleFormat::Int,       8) => out.copy_from_slice(&(v.clamp(i64::MIN as f64, i64::MAX as f64) as i64).to_le_bytes()),
+        (SampleFormat::Uint, 1) => out[0] = v.clamp(0.0, 255.0) as u8,
+        (SampleFormat::Uint, 2) => {
+            out.copy_from_slice(&(v.clamp(0.0, 65535.0) as u16).to_le_bytes())
+        }
+        (SampleFormat::Uint, 4) => {
+            out.copy_from_slice(&(v.clamp(0.0, u32::MAX as f64) as u32).to_le_bytes())
+        }
+        (SampleFormat::Uint, 8) => {
+            out.copy_from_slice(&(v.clamp(0.0, u64::MAX as f64) as u64).to_le_bytes())
+        }
+        (SampleFormat::Int, 1) => out[0] = v.clamp(-128.0, 127.0) as i8 as u8,
+        (SampleFormat::Int, 2) => {
+            out.copy_from_slice(&(v.clamp(-32768.0, 32767.0) as i16).to_le_bytes())
+        }
+        (SampleFormat::Int, 4) => {
+            out.copy_from_slice(&(v.clamp(i32::MIN as f64, i32::MAX as f64) as i32).to_le_bytes())
+        }
+        (SampleFormat::Int, 8) => {
+            out.copy_from_slice(&(v.clamp(i64::MIN as f64, i64::MAX as f64) as i64).to_le_bytes())
+        }
         (SampleFormat::IeeeFloat, 4) => out.copy_from_slice(&(v as f32).to_le_bytes()),
         (SampleFormat::IeeeFloat, 8) => out.copy_from_slice(&v.to_le_bytes()),
         _ => {}
@@ -847,9 +979,9 @@ fn f64_to_bytes(v: f64, fmt: SampleFormat, out: &mut [u8]) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::reader::GeoTiff;
     use super::super::types::GeoTransform;
+    use super::*;
     use tempfile::NamedTempFile;
 
     #[test]
@@ -1034,7 +1166,17 @@ mod tests {
 
         let file_u32 = NamedTempFile::new().unwrap();
         let path_u32 = file_u32.path().to_path_buf();
-        let data_u32: Vec<u32> = vec![0, 1, 255, 65_535, 100_000, 1_000_000, u32::MAX - 1, u32::MAX, 77];
+        let data_u32: Vec<u32> = vec![
+            0,
+            1,
+            255,
+            65_535,
+            100_000,
+            1_000_000,
+            u32::MAX - 1,
+            u32::MAX,
+            77,
+        ];
         CogWriter::new(3, 3, 1)
             .compression(Compression::Deflate)
             .tile_size(64)
@@ -1045,7 +1187,17 @@ mod tests {
 
         let file_i32 = NamedTempFile::new().unwrap();
         let path_i32 = file_i32.path().to_path_buf();
-        let data_i32: Vec<i32> = vec![i32::MIN, -1_000_000, -32_768, -1, 0, 1, 32_767, 1_000_000, i32::MAX];
+        let data_i32: Vec<i32> = vec![
+            i32::MIN,
+            -1_000_000,
+            -32_768,
+            -1,
+            0,
+            1,
+            32_767,
+            1_000_000,
+            i32::MAX,
+        ];
         CogWriter::new(3, 3, 1)
             .compression(Compression::Deflate)
             .tile_size(64)
@@ -1056,7 +1208,17 @@ mod tests {
 
         let file_u64 = NamedTempFile::new().unwrap();
         let path_u64 = file_u64.path().to_path_buf();
-        let data_u64: Vec<u64> = vec![0, 1, 255, 65_535, 1_000_000, 9_007_199_254_740_991, u64::MAX - 1, u64::MAX, 77];
+        let data_u64: Vec<u64> = vec![
+            0,
+            1,
+            255,
+            65_535,
+            1_000_000,
+            9_007_199_254_740_991,
+            u64::MAX - 1,
+            u64::MAX,
+            77,
+        ];
         CogWriter::new(3, 3, 1)
             .compression(Compression::Deflate)
             .tile_size(64)
@@ -1067,7 +1229,17 @@ mod tests {
 
         let file_i64 = NamedTempFile::new().unwrap();
         let path_i64 = file_i64.path().to_path_buf();
-        let data_i64: Vec<i64> = vec![i64::MIN, -1_000_000, -32_768, -1, 0, 1, 32_767, 9_007_199_254_740_991, i64::MAX];
+        let data_i64: Vec<i64> = vec![
+            i64::MIN,
+            -1_000_000,
+            -32_768,
+            -1,
+            0,
+            1,
+            32_767,
+            9_007_199_254_740_991,
+            i64::MAX,
+        ];
         CogWriter::new(3, 3, 1)
             .compression(Compression::Deflate)
             .tile_size(64)

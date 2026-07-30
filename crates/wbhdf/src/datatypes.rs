@@ -87,7 +87,10 @@ pub fn decode_u16_slice(bytes: &[u8], endianness: Endianness) -> Result<Vec<u16>
 }
 
 pub fn decode_fixed_string(bytes: &[u8]) -> Result<String, String> {
-    let end = bytes.iter().position(|byte| *byte == 0).unwrap_or(bytes.len());
+    let end = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
     std::str::from_utf8(&bytes[..end])
         .map(|value| value.to_string())
         .map_err(|err| format!("fixed string decode requires valid UTF-8: {err}"))
@@ -162,7 +165,8 @@ mod tests {
 
     #[test]
     fn decodes_fixed_string_and_trims_null_padding() {
-        let value = decode_fixed_string(b"ISO 19139 Series XML\0\0").expect("fixed string should decode");
+        let value =
+            decode_fixed_string(b"ISO 19139 Series XML\0\0").expect("fixed string should decode");
         assert_eq!(value, "ISO 19139 Series XML");
     }
 }

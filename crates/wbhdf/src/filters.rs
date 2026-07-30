@@ -7,9 +7,9 @@ use std::io::Read;
 pub fn decompress_gzip(compressed: &[u8]) -> WbhdfResult<Vec<u8>> {
     let mut decoder = GzDecoder::new(compressed);
     let mut decompressed = Vec::new();
-    decoder.read_to_end(&mut decompressed).map_err(|err| {
-        WbhdfError::UnsupportedFilter(format!("GZIP decode failed: {err}"))
-    })?;
+    decoder
+        .read_to_end(&mut decompressed)
+        .map_err(|err| WbhdfError::UnsupportedFilter(format!("GZIP decode failed: {err}")))?;
     Ok(decompressed)
 }
 
@@ -19,9 +19,9 @@ pub fn decompress_gzip(compressed: &[u8]) -> WbhdfResult<Vec<u8>> {
 pub fn decompress_zlib(compressed: &[u8]) -> WbhdfResult<Vec<u8>> {
     let mut decoder = ZlibDecoder::new(compressed);
     let mut decompressed = Vec::new();
-    decoder.read_to_end(&mut decompressed).map_err(|err| {
-        WbhdfError::UnsupportedFilter(format!("zlib decode failed: {err}"))
-    })?;
+    decoder
+        .read_to_end(&mut decompressed)
+        .map_err(|err| WbhdfError::UnsupportedFilter(format!("zlib decode failed: {err}")))?;
     Ok(decompressed)
 }
 

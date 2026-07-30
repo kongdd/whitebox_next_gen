@@ -128,24 +128,16 @@ mod tests {
 
     #[test]
     fn reports_toleranced_match_when_diffs_are_small() {
-        let summary = compare_f32_with_tolerance(
-            &[1.0, 2.001, 3.0],
-            &[1.0, 2.0, 2.9995],
-            0.01,
-        )
-        .unwrap();
+        let summary =
+            compare_f32_with_tolerance(&[1.0, 2.001, 3.0], &[1.0, 2.0, 2.9995], 0.01).unwrap();
         assert_eq!(summary.mismatches, 0);
         assert!(summary.max_abs_diff > 0.0);
     }
 
     #[test]
     fn reports_mismatches_and_first_index() {
-        let summary = compare_f32_with_tolerance(
-            &[1.0, 2.5, 3.0, 4.25],
-            &[1.0, 2.0, 3.0, 4.0],
-            0.1,
-        )
-        .unwrap();
+        let summary =
+            compare_f32_with_tolerance(&[1.0, 2.5, 3.0, 4.25], &[1.0, 2.0, 3.0, 4.0], 0.1).unwrap();
         assert_eq!(summary.mismatches, 2);
         assert_eq!(summary.first_mismatch_index, Some(1));
         assert!(summary.max_abs_diff >= 0.25);
@@ -176,24 +168,17 @@ mod tests {
 
     #[test]
     fn reports_f64_toleranced_match_when_diffs_are_small() {
-        let summary = compare_f64_with_tolerance(
-            &[1.0, 2.0000001, 3.0],
-            &[1.0, 2.0, 2.9999999],
-            1e-6,
-        )
-        .unwrap();
+        let summary =
+            compare_f64_with_tolerance(&[1.0, 2.0000001, 3.0], &[1.0, 2.0, 2.9999999], 1e-6)
+                .unwrap();
         assert_eq!(summary.mismatches, 0);
         assert!(summary.max_abs_diff > 0.0);
     }
 
     #[test]
     fn reports_f64_mismatches_and_first_index() {
-        let summary = compare_f64_with_tolerance(
-            &[1.0, 2.5, 3.0, 4.25],
-            &[1.0, 2.0, 3.0, 4.0],
-            0.1,
-        )
-        .unwrap();
+        let summary =
+            compare_f64_with_tolerance(&[1.0, 2.5, 3.0, 4.25], &[1.0, 2.0, 3.0, 4.0], 0.1).unwrap();
         assert_eq!(summary.mismatches, 2);
         assert_eq!(summary.first_mismatch_index, Some(1));
         assert!(summary.max_abs_diff >= 0.25);

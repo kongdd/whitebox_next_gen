@@ -103,9 +103,9 @@ pub fn parse_internal_records(bytes: &[u8], count: usize) -> WbhdfResult<Vec<Int
 }
 
 pub fn parse_leaf_records(bytes: &[u8], count: usize) -> WbhdfResult<Vec<LeafRecord>> {
-    let required = count.checked_mul(16).ok_or_else(|| {
-        WbhdfError::InvalidInput("leaf record byte count overflow".to_string())
-    })?;
+    let required = count
+        .checked_mul(16)
+        .ok_or_else(|| WbhdfError::InvalidInput("leaf record byte count overflow".to_string()))?;
     if bytes.len() < required {
         return Err(WbhdfError::InvalidInput(format!(
             "leaf record buffer too short: expected {required} bytes"
@@ -193,11 +193,9 @@ pub fn parse_first_chunked_storage_leaf_record(
     for i in 0..num_dimensions {
         let start = first_record_key_start + 8 + i * 8;
         let end = start + 8;
-        let value = u64::from_le_bytes(
-            bytes[start..end].try_into().map_err(|_| {
-                WbhdfError::UnsupportedLayout("failed to parse chunk offset".to_string())
-            })?,
-        );
+        let value = u64::from_le_bytes(bytes[start..end].try_into().map_err(|_| {
+            WbhdfError::UnsupportedLayout("failed to parse chunk offset".to_string())
+        })?);
         chunk_offsets.push(value);
     }
 
@@ -266,11 +264,9 @@ pub fn parse_chunked_storage_leaf_records(
         .checked_add(8)
         .ok_or_else(|| WbhdfError::InvalidInput("chunk record length overflow".to_string()))?;
     let required_len = NODE_HEADER_LEN
-        .checked_add(
-            record_len
-                .checked_mul(entries_used)
-                .ok_or_else(|| WbhdfError::InvalidInput("chunk record byte count overflow".to_string()))?,
-        )
+        .checked_add(record_len.checked_mul(entries_used).ok_or_else(|| {
+            WbhdfError::InvalidInput("chunk record byte count overflow".to_string())
+        })?)
         .ok_or_else(|| WbhdfError::InvalidInput("chunk node length overflow".to_string()))?;
     if required_len > bytes.len() {
         return Err(WbhdfError::UnsupportedLayout(
@@ -281,29 +277,25 @@ pub fn parse_chunked_storage_leaf_records(
     let mut records = Vec::with_capacity(entries_used);
     let mut cursor = NODE_HEADER_LEN;
     for _ in 0..entries_used {
-        let chunk_size = u64::from_le_bytes(
-            bytes[cursor..cursor + 8]
-                .try_into()
-                .map_err(|_| WbhdfError::UnsupportedLayout("failed to parse chunk size".to_string()))?,
-        );
+        let chunk_size =
+            u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().map_err(|_| {
+                WbhdfError::UnsupportedLayout("failed to parse chunk size".to_string())
+            })?);
         cursor += 8;
 
         let mut chunk_offsets = Vec::with_capacity(num_dimensions);
         for _ in 0..num_dimensions {
-            let value = u64::from_le_bytes(
-                bytes[cursor..cursor + 8].try_into().map_err(|_| {
-                    WbhdfError::UnsupportedLayout("failed to parse chunk offset".to_string())
-                })?,
-            );
+            let value = u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().map_err(|_| {
+                WbhdfError::UnsupportedLayout("failed to parse chunk offset".to_string())
+            })?);
             cursor += 8;
             chunk_offsets.push(value);
         }
 
-        let chunk_address = u64::from_le_bytes(
-            bytes[cursor..cursor + 8].try_into().map_err(|_| {
+        let chunk_address =
+            u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().map_err(|_| {
                 WbhdfError::UnsupportedLayout("failed to parse chunk address".to_string())
-            })?,
-        );
+            })?);
         cursor += 8;
 
         records.push(ChunkedStorageLeafRecord {
@@ -366,19 +358,19 @@ pub fn parse_chunked_storage_internal_records(
         entries_used: usize,
         key_components: usize,
     ) -> WbhdfResult<Vec<ChunkedStorageInternalRecord>> {
-        let key_len = 8usize
-            .checked_mul(key_components)
-            .ok_or_else(|| WbhdfError::InvalidInput("chunk internal key length overflow".to_string()))?;
-        let record_len = key_len
-            .checked_add(8)
-            .ok_or_else(|| WbhdfError::InvalidInput("chunk internal record length overflow".to_string()))?;
+        let key_len = 8usize.checked_mul(key_components).ok_or_else(|| {
+            WbhdfError::InvalidInput("chunk internal key length overflow".to_string())
+        })?;
+        let record_len = key_len.checked_add(8).ok_or_else(|| {
+            WbhdfError::InvalidInput("chunk internal record length overflow".to_string())
+        })?;
         let required_len = NODE_HEADER_LEN
-            .checked_add(
-                record_len
-                    .checked_mul(entries_used)
-                    .ok_or_else(|| WbhdfError::InvalidInput("chunk internal byte count overflow".to_string()))?,
-            )
-            .ok_or_else(|| WbhdfError::InvalidInput("chunk internal node length overflow".to_string()))?;
+            .checked_add(record_len.checked_mul(entries_used).ok_or_else(|| {
+                WbhdfError::InvalidInput("chunk internal byte count overflow".to_string())
+            })?)
+            .ok_or_else(|| {
+                WbhdfError::InvalidInput("chunk internal node length overflow".to_string())
+            })?;
         if required_len > bytes.len() {
             return Err(WbhdfError::UnsupportedLayout(
                 "chunked-storage internal node records extend beyond provided bytes".to_string(),
@@ -389,34 +381,33 @@ pub fn parse_chunked_storage_internal_records(
         let mut cursor = NODE_HEADER_LEN;
         for _ in 0..entries_used {
             if key_components == num_dimensions + 1 {
-                let _chunk_size_upper_bound = u64::from_le_bytes(
-                    bytes[cursor..cursor + 8].try_into().map_err(|_| {
+                let _chunk_size_upper_bound =
+                    u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().map_err(|_| {
                         WbhdfError::UnsupportedLayout(
                             "failed to parse internal chunk-size upper bound".to_string(),
                         )
-                    })?,
-                );
+                    })?);
                 cursor += 8;
             }
 
             let mut upper_bound_offsets = Vec::with_capacity(num_dimensions);
             for _ in 0..num_dimensions {
-                let value = u64::from_le_bytes(
-                    bytes[cursor..cursor + 8].try_into().map_err(|_| {
+                let value =
+                    u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().map_err(|_| {
                         WbhdfError::UnsupportedLayout(
                             "failed to parse internal upper-bound offset".to_string(),
                         )
-                    })?,
-                );
+                    })?);
                 cursor += 8;
                 upper_bound_offsets.push(value);
             }
 
-            let child_address = u64::from_le_bytes(
-                bytes[cursor..cursor + 8].try_into().map_err(|_| {
-                    WbhdfError::UnsupportedLayout("failed to parse internal child address".to_string())
-                })?,
-            );
+            let child_address =
+                u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().map_err(|_| {
+                    WbhdfError::UnsupportedLayout(
+                        "failed to parse internal child address".to_string(),
+                    )
+                })?);
             cursor += 8;
 
             records.push(ChunkedStorageInternalRecord {
@@ -432,8 +423,10 @@ pub fn parse_chunked_storage_internal_records(
         records
             .iter()
             .map(|record| {
-                let addr_score = usize::from(record.child_address != 0 && record.child_address != u64::MAX);
-                let offset_score = usize::from(record.upper_bound_offsets.iter().any(|value| *value != 0));
+                let addr_score =
+                    usize::from(record.child_address != 0 && record.child_address != u64::MAX);
+                let offset_score =
+                    usize::from(record.upper_bound_offsets.iter().any(|value| *value != 0));
                 addr_score + offset_score
             })
             .sum()
@@ -441,8 +434,10 @@ pub fn parse_chunked_storage_internal_records(
 
     // Prefer parsing keys with a leading chunk-size bound, but keep compatibility
     // with legacy synthetic fixtures that only encode per-dimension bounds.
-    let with_chunk_size = parse_with_key_components(bytes, num_dimensions, entries_used, num_dimensions + 1);
-    let without_chunk_size = parse_with_key_components(bytes, num_dimensions, entries_used, num_dimensions);
+    let with_chunk_size =
+        parse_with_key_components(bytes, num_dimensions, entries_used, num_dimensions + 1);
+    let without_chunk_size =
+        parse_with_key_components(bytes, num_dimensions, entries_used, num_dimensions);
 
     match (with_chunk_size, without_chunk_size) {
         (Ok(a), Ok(b)) => {
@@ -512,13 +507,12 @@ pub fn read_chunked_storage_leaf_records_in_file(
     let record_len = key_len
         .checked_add(8)
         .ok_or_else(|| WbhdfError::InvalidInput("chunk record length overflow".to_string()))?;
-    let node_len = NODE_HEADER_LEN
-        .checked_add(
-            record_len
-                .checked_mul(entries_used)
-                .ok_or_else(|| WbhdfError::InvalidInput("chunk node length overflow".to_string()))?,
-        )
-        .ok_or_else(|| WbhdfError::InvalidInput("chunk node length overflow".to_string()))?;
+    let node_len =
+        NODE_HEADER_LEN
+            .checked_add(record_len.checked_mul(entries_used).ok_or_else(|| {
+                WbhdfError::InvalidInput("chunk node length overflow".to_string())
+            })?)
+            .ok_or_else(|| WbhdfError::InvalidInput("chunk node length overflow".to_string()))?;
     let end = start
         .checked_add(node_len)
         .ok_or_else(|| WbhdfError::InvalidInput("chunk node range overflow".to_string()))?;
@@ -547,16 +541,12 @@ fn parse_chunked_storage_node_header(bytes: &[u8]) -> WbhdfResult<BTreeNodeHeade
         node_type: bytes[4],
         node_level: bytes[5],
         entries_used: u16::from_le_bytes([bytes[6], bytes[7]]),
-        left_sibling: u64::from_le_bytes(
-            bytes[8..16]
-                .try_into()
-                .map_err(|_| WbhdfError::UnsupportedLayout("failed to parse left sibling".to_string()))?,
-        ),
-        right_sibling: u64::from_le_bytes(
-            bytes[16..24]
-                .try_into()
-                .map_err(|_| WbhdfError::UnsupportedLayout("failed to parse right sibling".to_string()))?,
-        ),
+        left_sibling: u64::from_le_bytes(bytes[8..16].try_into().map_err(|_| {
+            WbhdfError::UnsupportedLayout("failed to parse left sibling".to_string())
+        })?),
+        right_sibling: u64::from_le_bytes(bytes[16..24].try_into().map_err(|_| {
+            WbhdfError::UnsupportedLayout("failed to parse right sibling".to_string())
+        })?),
     })
 }
 
@@ -584,9 +574,9 @@ pub fn read_chunked_storage_leaf_chain_records_in_file(
 
     for _ in 0..max_leaf_nodes {
         let start = current_address as usize;
-        let header_end = start
-            .checked_add(NODE_HEADER_LEN)
-            .ok_or_else(|| WbhdfError::InvalidInput("chunk node header range overflow".to_string()))?;
+        let header_end = start.checked_add(NODE_HEADER_LEN).ok_or_else(|| {
+            WbhdfError::InvalidInput("chunk node header range overflow".to_string())
+        })?;
         if header_end > bytes.len() {
             return Err(WbhdfError::UnsupportedLayout(
                 "chunked-storage node header extends beyond file bytes".to_string(),
@@ -617,7 +607,9 @@ pub fn read_chunked_storage_leaf_chain_records_in_file(
             .checked_add(
                 record_len
                     .checked_mul(header.entries_used as usize)
-                    .ok_or_else(|| WbhdfError::InvalidInput("chunk node length overflow".to_string()))?,
+                    .ok_or_else(|| {
+                        WbhdfError::InvalidInput("chunk node length overflow".to_string())
+                    })?,
             )
             .ok_or_else(|| WbhdfError::InvalidInput("chunk node length overflow".to_string()))?;
         let end = start
@@ -755,7 +747,8 @@ fn read_chunked_storage_records_bounded_at_level_with_path(
     traversal_path.push(start_node_address);
 
     let result = (|| {
-        let internal_records = parse_chunked_storage_internal_records(&bytes[start..], num_dimensions)?;
+        let internal_records =
+            parse_chunked_storage_internal_records(&bytes[start..], num_dimensions)?;
         let mut all_records = Vec::<ChunkedStorageLeafRecord>::new();
         for internal_record in internal_records {
             if all_records.len() >= max_records {
@@ -854,11 +847,12 @@ pub fn lookup_chunk_address(
 mod tests {
     use super::{
         lookup_chunk_address, parse_chunked_storage_internal_records,
-        parse_chunked_storage_leaf_records, read_chunked_storage_leaf_chain_records_in_file,
+        parse_chunked_storage_leaf_records, parse_first_chunked_storage_leaf_record,
+        parse_internal_records, parse_leaf_records, parse_node_header,
+        read_chunked_storage_leaf_chain_records_in_file,
         read_chunked_storage_records_bounded_at_level,
-        read_chunked_storage_records_bounded_in_file,
-        parse_first_chunked_storage_leaf_record, parse_internal_records, parse_leaf_records,
-        parse_node_header, route_child_for_key, ChunkIndex, InternalRecord,
+        read_chunked_storage_records_bounded_in_file, route_child_for_key, ChunkIndex,
+        InternalRecord,
     };
     use std::fs;
     use tempfile::NamedTempFile;
@@ -938,13 +932,10 @@ mod tests {
     #[test]
     fn parses_first_chunked_storage_leaf_record() {
         let bytes = [
-            b'T', b'R', b'E', b'E', 0x01, 0x00, 0x01, 0x00,
-            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-            0xb6, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0xe5, 0xcc, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00,
+            b'T', b'R', b'E', b'E', 0x01, 0x00, 0x01, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xb6, 0x34, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xe5, 0xcc, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00,
         ];
 
         let record = parse_first_chunked_storage_leaf_record(&bytes, 2)
@@ -957,17 +948,13 @@ mod tests {
     #[test]
     fn parses_multiple_chunked_storage_leaf_records() {
         let bytes = [
-            b'T', b'R', b'E', b'E', 0x01, 0x00, 0x02, 0x00,
-            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-            0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x88, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x98, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            b'T', b'R', b'E', b'E', 0x01, 0x00, 0x02, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x10, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x88, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x98, 0x13, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00,
         ];
 
         let records = parse_chunked_storage_leaf_records(&bytes, 2)
@@ -992,7 +979,8 @@ mod tests {
         bytes[first_offset + 5] = 0;
         bytes[first_offset + 6..first_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
         bytes[first_offset + 8..first_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[first_offset + 16..first_offset + 24].copy_from_slice(&(second_offset as u64).to_le_bytes());
+        bytes[first_offset + 16..first_offset + 24]
+            .copy_from_slice(&(second_offset as u64).to_le_bytes());
         let mut cursor = first_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1006,7 +994,8 @@ mod tests {
         bytes[second_offset + 4] = 1;
         bytes[second_offset + 5] = 0;
         bytes[second_offset + 6..second_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[second_offset + 8..second_offset + 16].copy_from_slice(&(first_offset as u64).to_le_bytes());
+        bytes[second_offset + 8..second_offset + 16]
+            .copy_from_slice(&(first_offset as u64).to_le_bytes());
         bytes[second_offset + 16..second_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = second_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
@@ -1019,8 +1008,14 @@ mod tests {
 
         fs::write(tmp.path(), &bytes).expect("temp bytes should be writable");
 
-        let records = read_chunked_storage_leaf_chain_records_in_file(tmp.path(), first_offset as u64, 2, 4, 2)
-            .expect("leaf chain records should parse");
+        let records = read_chunked_storage_leaf_chain_records_in_file(
+            tmp.path(),
+            first_offset as u64,
+            2,
+            4,
+            2,
+        )
+        .expect("leaf chain records should parse");
         assert_eq!(records.len(), 2);
         assert_eq!(records[0].chunk_offsets, vec![0, 0]);
         assert_eq!(records[1].chunk_offsets, vec![0, 2]);
@@ -1029,15 +1024,12 @@ mod tests {
     #[test]
     fn parses_chunked_storage_internal_records() {
         let bytes = [
-            b'T', b'R', b'E', b'E', 0x01, 0x01, 0x02, 0x00,
-            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x88, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x98, 0x13, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            b'T', b'R', b'E', b'E', 0x01, 0x01, 0x02, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+            0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x88, 0x13,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x98, 0x13, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
         ];
 
         let records = parse_chunked_storage_internal_records(&bytes, 2)
@@ -1080,8 +1072,10 @@ mod tests {
         bytes[first_leaf_offset + 4] = 1;
         bytes[first_leaf_offset + 5] = 0;
         bytes[first_leaf_offset + 6..first_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[first_leaf_offset + 8..first_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[first_leaf_offset + 16..first_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_leaf_offset + 8..first_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_leaf_offset + 16..first_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = first_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1094,9 +1088,12 @@ mod tests {
         bytes[second_leaf_offset..second_leaf_offset + 4].copy_from_slice(b"TREE");
         bytes[second_leaf_offset + 4] = 1;
         bytes[second_leaf_offset + 5] = 0;
-        bytes[second_leaf_offset + 6..second_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[second_leaf_offset + 8..second_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[second_leaf_offset + 16..second_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_leaf_offset + 6..second_leaf_offset + 8]
+            .copy_from_slice(&(1u16).to_le_bytes());
+        bytes[second_leaf_offset + 8..second_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_leaf_offset + 16..second_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = second_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1108,8 +1105,9 @@ mod tests {
 
         fs::write(tmp.path(), &bytes).expect("temp bytes should be writable");
 
-        let records = read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 4, 2)
-            .expect("bounded chunked traversal should read leaf records through internal root");
+        let records =
+            read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 4, 2)
+                .expect("bounded chunked traversal should read leaf records through internal root");
         assert_eq!(records.len(), 2);
         assert_eq!(records[0].chunk_offsets, vec![0, 0]);
         assert_eq!(records[1].chunk_offsets, vec![0, 2]);
@@ -1136,8 +1134,9 @@ mod tests {
 
         fs::write(tmp.path(), &bytes).expect("temp bytes should be writable");
 
-        let err = read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 4, 2)
-            .expect_err("multi-level root should be rejected by bounded traversal");
+        let err =
+            read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 4, 2)
+                .expect_err("multi-level root should be rejected by bounded traversal");
         let msg = format!("{err}");
         assert!(msg.contains("B-tree node is missing TREE signature"));
     }
@@ -1187,8 +1186,10 @@ mod tests {
         bytes[first_leaf_offset + 4] = 1;
         bytes[first_leaf_offset + 5] = 0;
         bytes[first_leaf_offset + 6..first_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[first_leaf_offset + 8..first_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[first_leaf_offset + 16..first_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_leaf_offset + 8..first_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_leaf_offset + 16..first_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = first_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1201,9 +1202,12 @@ mod tests {
         bytes[second_leaf_offset..second_leaf_offset + 4].copy_from_slice(b"TREE");
         bytes[second_leaf_offset + 4] = 1;
         bytes[second_leaf_offset + 5] = 0;
-        bytes[second_leaf_offset + 6..second_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[second_leaf_offset + 8..second_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[second_leaf_offset + 16..second_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_leaf_offset + 6..second_leaf_offset + 8]
+            .copy_from_slice(&(1u16).to_le_bytes());
+        bytes[second_leaf_offset + 8..second_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_leaf_offset + 16..second_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = second_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1215,8 +1219,9 @@ mod tests {
 
         fs::write(tmp.path(), &bytes).expect("temp bytes should be writable");
 
-        let records = read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 4, 2)
-            .expect("bounded chunked traversal should read records through multilevel root");
+        let records =
+            read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 4, 2)
+                .expect("bounded chunked traversal should read records through multilevel root");
         assert_eq!(records.len(), 2);
         assert_eq!(records[0].chunk_offsets, vec![0, 0]);
         assert_eq!(records[1].chunk_offsets, vec![0, 2]);
@@ -1255,9 +1260,12 @@ mod tests {
         bytes[first_internal_offset..first_internal_offset + 4].copy_from_slice(b"TREE");
         bytes[first_internal_offset + 4] = 1;
         bytes[first_internal_offset + 5] = 1;
-        bytes[first_internal_offset + 6..first_internal_offset + 8].copy_from_slice(&(2u16).to_le_bytes());
-        bytes[first_internal_offset + 8..first_internal_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[first_internal_offset + 16..first_internal_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_internal_offset + 6..first_internal_offset + 8]
+            .copy_from_slice(&(2u16).to_le_bytes());
+        bytes[first_internal_offset + 8..first_internal_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_internal_offset + 16..first_internal_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = first_internal_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         cursor += 8;
@@ -1274,9 +1282,12 @@ mod tests {
         bytes[second_internal_offset..second_internal_offset + 4].copy_from_slice(b"TREE");
         bytes[second_internal_offset + 4] = 1;
         bytes[second_internal_offset + 5] = 1;
-        bytes[second_internal_offset + 6..second_internal_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[second_internal_offset + 8..second_internal_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[second_internal_offset + 16..second_internal_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_internal_offset + 6..second_internal_offset + 8]
+            .copy_from_slice(&(1u16).to_le_bytes());
+        bytes[second_internal_offset + 8..second_internal_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_internal_offset + 16..second_internal_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = second_internal_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         cursor += 8;
@@ -1288,8 +1299,10 @@ mod tests {
         bytes[first_leaf_offset + 4] = 1;
         bytes[first_leaf_offset + 5] = 0;
         bytes[first_leaf_offset + 6..first_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[first_leaf_offset + 8..first_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[first_leaf_offset + 16..first_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_leaf_offset + 8..first_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_leaf_offset + 16..first_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = first_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1302,9 +1315,12 @@ mod tests {
         bytes[second_leaf_offset..second_leaf_offset + 4].copy_from_slice(b"TREE");
         bytes[second_leaf_offset + 4] = 1;
         bytes[second_leaf_offset + 5] = 0;
-        bytes[second_leaf_offset + 6..second_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[second_leaf_offset + 8..second_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[second_leaf_offset + 16..second_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_leaf_offset + 6..second_leaf_offset + 8]
+            .copy_from_slice(&(1u16).to_le_bytes());
+        bytes[second_leaf_offset + 8..second_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_leaf_offset + 16..second_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = second_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1318,8 +1334,10 @@ mod tests {
         bytes[third_leaf_offset + 4] = 1;
         bytes[third_leaf_offset + 5] = 0;
         bytes[third_leaf_offset + 6..third_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[third_leaf_offset + 8..third_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[third_leaf_offset + 16..third_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[third_leaf_offset + 8..third_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[third_leaf_offset + 16..third_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = third_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1331,8 +1349,11 @@ mod tests {
 
         fs::write(tmp.path(), &bytes).expect("temp bytes should be writable");
 
-        let records = read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 6, 3)
-            .expect("bounded chunked traversal should read records through multilevel internal fanout");
+        let records =
+            read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 6, 3)
+                .expect(
+                "bounded chunked traversal should read records through multilevel internal fanout",
+            );
         assert_eq!(records.len(), 3);
         assert_eq!(records[0].chunk_offsets, vec![0, 0]);
         assert_eq!(records[1].chunk_offsets, vec![0, 2]);
@@ -1371,9 +1392,12 @@ mod tests {
         bytes[first_internal_offset..first_internal_offset + 4].copy_from_slice(b"TREE");
         bytes[first_internal_offset + 4] = 1;
         bytes[first_internal_offset + 5] = 1;
-        bytes[first_internal_offset + 6..first_internal_offset + 8].copy_from_slice(&(2u16).to_le_bytes());
-        bytes[first_internal_offset + 8..first_internal_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[first_internal_offset + 16..first_internal_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_internal_offset + 6..first_internal_offset + 8]
+            .copy_from_slice(&(2u16).to_le_bytes());
+        bytes[first_internal_offset + 8..first_internal_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_internal_offset + 16..first_internal_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = first_internal_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         cursor += 8;
@@ -1391,8 +1415,10 @@ mod tests {
         bytes[first_leaf_offset + 4] = 1;
         bytes[first_leaf_offset + 5] = 0;
         bytes[first_leaf_offset + 6..first_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[first_leaf_offset + 8..first_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[first_leaf_offset + 16..first_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_leaf_offset + 8..first_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_leaf_offset + 16..first_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = first_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1405,9 +1431,12 @@ mod tests {
         bytes[second_leaf_offset..second_leaf_offset + 4].copy_from_slice(b"TREE");
         bytes[second_leaf_offset + 4] = 1;
         bytes[second_leaf_offset + 5] = 0;
-        bytes[second_leaf_offset + 6..second_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[second_leaf_offset + 8..second_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[second_leaf_offset + 16..second_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_leaf_offset + 6..second_leaf_offset + 8]
+            .copy_from_slice(&(1u16).to_le_bytes());
+        bytes[second_leaf_offset + 8..second_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_leaf_offset + 16..second_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = second_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1419,8 +1448,9 @@ mod tests {
 
         fs::write(tmp.path(), &bytes).expect("temp bytes should be writable");
 
-        let err = read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 6, 3)
-            .expect_err("malformed multilevel internal fanout should fail explicitly");
+        let err =
+            read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 6, 3)
+                .expect_err("malformed multilevel internal fanout should fail explicitly");
         assert!(format!("{err}").contains("B-tree node is missing TREE signature"));
     }
 
@@ -1457,9 +1487,12 @@ mod tests {
         bytes[first_internal_offset..first_internal_offset + 4].copy_from_slice(b"TREE");
         bytes[first_internal_offset + 4] = 1;
         bytes[first_internal_offset + 5] = 1;
-        bytes[first_internal_offset + 6..first_internal_offset + 8].copy_from_slice(&(2u16).to_le_bytes());
-        bytes[first_internal_offset + 8..first_internal_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[first_internal_offset + 16..first_internal_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_internal_offset + 6..first_internal_offset + 8]
+            .copy_from_slice(&(2u16).to_le_bytes());
+        bytes[first_internal_offset + 8..first_internal_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_internal_offset + 16..first_internal_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = first_internal_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         cursor += 8;
@@ -1476,9 +1509,12 @@ mod tests {
         bytes[second_internal_offset..second_internal_offset + 4].copy_from_slice(b"TREE");
         bytes[second_internal_offset + 4] = 1;
         bytes[second_internal_offset + 5] = 1;
-        bytes[second_internal_offset + 6..second_internal_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[second_internal_offset + 8..second_internal_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[second_internal_offset + 16..second_internal_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_internal_offset + 6..second_internal_offset + 8]
+            .copy_from_slice(&(1u16).to_le_bytes());
+        bytes[second_internal_offset + 8..second_internal_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_internal_offset + 16..second_internal_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = second_internal_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&0u64.to_le_bytes());
         cursor += 8;
@@ -1490,8 +1526,10 @@ mod tests {
         bytes[first_leaf_offset + 4] = 1;
         bytes[first_leaf_offset + 5] = 0;
         bytes[first_leaf_offset + 6..first_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[first_leaf_offset + 8..first_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[first_leaf_offset + 16..first_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_leaf_offset + 8..first_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[first_leaf_offset + 16..first_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = first_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1504,9 +1542,12 @@ mod tests {
         bytes[second_leaf_offset..second_leaf_offset + 4].copy_from_slice(b"TREE");
         bytes[second_leaf_offset + 4] = 1;
         bytes[second_leaf_offset + 5] = 0;
-        bytes[second_leaf_offset + 6..second_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[second_leaf_offset + 8..second_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[second_leaf_offset + 16..second_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_leaf_offset + 6..second_leaf_offset + 8]
+            .copy_from_slice(&(1u16).to_le_bytes());
+        bytes[second_leaf_offset + 8..second_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[second_leaf_offset + 16..second_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = second_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1520,8 +1561,10 @@ mod tests {
         bytes[third_leaf_offset + 4] = 1;
         bytes[third_leaf_offset + 5] = 0;
         bytes[third_leaf_offset + 6..third_leaf_offset + 8].copy_from_slice(&(1u16).to_le_bytes());
-        bytes[third_leaf_offset + 8..third_leaf_offset + 16].copy_from_slice(&u64::MAX.to_le_bytes());
-        bytes[third_leaf_offset + 16..third_leaf_offset + 24].copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[third_leaf_offset + 8..third_leaf_offset + 16]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
+        bytes[third_leaf_offset + 16..third_leaf_offset + 24]
+            .copy_from_slice(&u64::MAX.to_le_bytes());
         let mut cursor = third_leaf_offset + 24;
         bytes[cursor..cursor + 8].copy_from_slice(&(16u64).to_le_bytes());
         cursor += 8;
@@ -1566,8 +1609,9 @@ mod tests {
 
         fs::write(tmp.path(), &bytes).expect("temp bytes should be writable");
 
-        let err = read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 4, 2)
-            .expect_err("internal-node cycle should fail explicitly");
+        let err =
+            read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 4, 2)
+                .expect_err("internal-node cycle should fail explicitly");
         assert!(
             format!("{err}").contains("internal-node cycle"),
             "unexpected error: {err}"
@@ -1595,8 +1639,9 @@ mod tests {
 
         fs::write(tmp.path(), &bytes).expect("temp bytes should be writable");
 
-        let err = read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 4, 2)
-            .expect_err("internal node with invalid child address should fail explicitly");
+        let err =
+            read_chunked_storage_records_bounded_in_file(tmp.path(), root_offset as u64, 2, 4, 2)
+                .expect_err("internal node with invalid child address should fail explicitly");
         assert!(
             format!("{err}").contains("invalid child address"),
             "unexpected error: {err}"

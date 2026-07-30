@@ -15,7 +15,12 @@ fn main() -> Result<(), Box<dyn Error>> {
         .compression(Compression::Deflate)
         .tile_size(512)
         .resampling(Resampling::Average)
-        .geo_transform(GeoTransform::north_up(-180.0, 0.087890625, 90.0, -0.087890625))
+        .geo_transform(GeoTransform::north_up(
+            -180.0,
+            0.087890625,
+            90.0,
+            -0.087890625,
+        ))
         .epsg(4326)
         .write_f32(&output, &data)?;
 

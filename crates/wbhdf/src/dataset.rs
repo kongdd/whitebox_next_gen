@@ -46,7 +46,10 @@ pub fn resolve_dataset(path: &str) -> WbhdfResult<DatasetDescriptor> {
 }
 
 /// Resolves a dataset descriptor and verifies that the path is discoverable in a container file.
-pub fn resolve_dataset_in_file(container_path: &Path, dataset_path: &str) -> WbhdfResult<DatasetDescriptor> {
+pub fn resolve_dataset_in_file(
+    container_path: &Path,
+    dataset_path: &str,
+) -> WbhdfResult<DatasetDescriptor> {
     let descriptor = resolve_dataset(dataset_path)?;
     let bytes = fs::read(container_path)?;
 
@@ -178,13 +181,16 @@ pub fn decode_chunked_i16_row_prefix_in_file(
     else {
         return Err(WbhdfError::InvalidChunk {
             dataset_path: dataset_path.to_string(),
-            chunk_coordinate: Some(format!("row_dim={row_dimension_index}, row_offset={row_offset}")),
+            chunk_coordinate: Some(format!(
+                "row_dim={row_dimension_index}, row_offset={row_offset}"
+            )),
             file_offset: chunk_index_address,
             detail: "no chunk record matched requested row offset".to_string(),
         });
     };
 
-    let compressed = read_chunk_payload_in_file(container_path, record.chunk_address, record.chunk_size)?;
+    let compressed =
+        read_chunk_payload_in_file(container_path, record.chunk_address, record.chunk_size)?;
     let decompressed = decompress_zlib(&compressed).map_err(|err| match err {
         WbhdfError::UnsupportedFilter(detail) => WbhdfError::FilterFailure {
             dataset_path: dataset_path.to_string(),
@@ -196,12 +202,13 @@ pub fn decode_chunked_i16_row_prefix_in_file(
         other => other,
     })?;
 
-    let mut values = decode_i16_slice(&decompressed, endianness).map_err(|detail| WbhdfError::InvalidChunk {
-        dataset_path: dataset_path.to_string(),
-        chunk_coordinate: Some(format!("{:?}", record.chunk_offsets)),
-        file_offset: record.chunk_address,
-        detail: format!("chunk i16 decode failed: {detail}"),
-    })?;
+    let mut values =
+        decode_i16_slice(&decompressed, endianness).map_err(|detail| WbhdfError::InvalidChunk {
+            dataset_path: dataset_path.to_string(),
+            chunk_coordinate: Some(format!("{:?}", record.chunk_offsets)),
+            file_offset: record.chunk_address,
+            detail: format!("chunk i16 decode failed: {detail}"),
+        })?;
 
     if values.len() > max_values {
         values.truncate(max_values);
@@ -277,7 +284,9 @@ pub fn decode_chunked_i16_row_major_window_in_file(
         if row_values.len() < col_end {
             return Err(WbhdfError::InvalidChunk {
                 dataset_path: dataset_path.to_string(),
-                chunk_coordinate: Some(format!("row_dim={row_dimension_index}, row_offset={row_offset}")),
+                chunk_coordinate: Some(format!(
+                    "row_dim={row_dimension_index}, row_offset={row_offset}"
+                )),
                 file_offset: chunk_index_address,
                 detail: format!(
                     "decoded row too short for requested window: decoded_len={}, col_end={col_end}",
@@ -335,13 +344,16 @@ pub fn decode_chunked_u16_row_prefix_in_file(
     else {
         return Err(WbhdfError::InvalidChunk {
             dataset_path: dataset_path.to_string(),
-            chunk_coordinate: Some(format!("row_dim={row_dimension_index}, row_offset={row_offset}")),
+            chunk_coordinate: Some(format!(
+                "row_dim={row_dimension_index}, row_offset={row_offset}"
+            )),
             file_offset: chunk_index_address,
             detail: "no chunk record matched requested row offset".to_string(),
         });
     };
 
-    let compressed = read_chunk_payload_in_file(container_path, record.chunk_address, record.chunk_size)?;
+    let compressed =
+        read_chunk_payload_in_file(container_path, record.chunk_address, record.chunk_size)?;
     let decompressed = decompress_zlib(&compressed).map_err(|err| match err {
         WbhdfError::UnsupportedFilter(detail) => WbhdfError::FilterFailure {
             dataset_path: dataset_path.to_string(),
@@ -353,12 +365,13 @@ pub fn decode_chunked_u16_row_prefix_in_file(
         other => other,
     })?;
 
-    let mut values = decode_u16_slice(&decompressed, endianness).map_err(|detail| WbhdfError::InvalidChunk {
-        dataset_path: dataset_path.to_string(),
-        chunk_coordinate: Some(format!("{:?}", record.chunk_offsets)),
-        file_offset: record.chunk_address,
-        detail: format!("chunk u16 decode failed: {detail}"),
-    })?;
+    let mut values =
+        decode_u16_slice(&decompressed, endianness).map_err(|detail| WbhdfError::InvalidChunk {
+            dataset_path: dataset_path.to_string(),
+            chunk_coordinate: Some(format!("{:?}", record.chunk_offsets)),
+            file_offset: record.chunk_address,
+            detail: format!("chunk u16 decode failed: {detail}"),
+        })?;
 
     if values.len() > max_values {
         values.truncate(max_values);
@@ -524,13 +537,16 @@ pub fn decode_chunked_u8_row_prefix_in_file(
     else {
         return Err(WbhdfError::InvalidChunk {
             dataset_path: dataset_path.to_string(),
-            chunk_coordinate: Some(format!("row_dim={row_dimension_index}, row_offset={row_offset}")),
+            chunk_coordinate: Some(format!(
+                "row_dim={row_dimension_index}, row_offset={row_offset}"
+            )),
             file_offset: chunk_index_address,
             detail: "no chunk record matched requested row offset".to_string(),
         });
     };
 
-    let compressed = read_chunk_payload_in_file(container_path, record.chunk_address, record.chunk_size)?;
+    let compressed =
+        read_chunk_payload_in_file(container_path, record.chunk_address, record.chunk_size)?;
     let mut decompressed = decompress_zlib(&compressed).map_err(|err| match err {
         WbhdfError::UnsupportedFilter(detail) => WbhdfError::FilterFailure {
             dataset_path: dataset_path.to_string(),
@@ -705,13 +721,16 @@ pub fn decode_chunked_f32_row_prefix_in_file(
     else {
         return Err(WbhdfError::InvalidChunk {
             dataset_path: dataset_path.to_string(),
-            chunk_coordinate: Some(format!("row_dim={row_dimension_index}, row_offset={row_offset}")),
+            chunk_coordinate: Some(format!(
+                "row_dim={row_dimension_index}, row_offset={row_offset}"
+            )),
             file_offset: chunk_index_address,
             detail: "no chunk record matched requested row offset".to_string(),
         });
     };
 
-    let compressed = read_chunk_payload_in_file(container_path, record.chunk_address, record.chunk_size)?;
+    let compressed =
+        read_chunk_payload_in_file(container_path, record.chunk_address, record.chunk_size)?;
     let decompressed = decompress_zlib(&compressed).map_err(|err| match err {
         WbhdfError::UnsupportedFilter(detail) => WbhdfError::FilterFailure {
             dataset_path: dataset_path.to_string(),
@@ -723,12 +742,13 @@ pub fn decode_chunked_f32_row_prefix_in_file(
         other => other,
     })?;
 
-    let mut values = decode_f32_slice(&decompressed, endianness).map_err(|detail| WbhdfError::InvalidChunk {
-        dataset_path: dataset_path.to_string(),
-        chunk_coordinate: Some(format!("{:?}", record.chunk_offsets)),
-        file_offset: record.chunk_address,
-        detail: format!("chunk f32 decode failed: {detail}"),
-    })?;
+    let mut values =
+        decode_f32_slice(&decompressed, endianness).map_err(|detail| WbhdfError::InvalidChunk {
+            dataset_path: dataset_path.to_string(),
+            chunk_coordinate: Some(format!("{:?}", record.chunk_offsets)),
+            file_offset: record.chunk_address,
+            detail: format!("chunk f32 decode failed: {detail}"),
+        })?;
 
     if values.len() > max_values {
         values.truncate(max_values);
@@ -956,11 +976,9 @@ mod tests {
 
     #[test]
     fn locator_reports_missing_known_key() {
-        let locator = DatasetChunkLocator::with_known_addresses(
-            "/GEDI04_B/BEAM0000/rh100",
-            &[(3, 7000)],
-        )
-        .expect("locator should construct");
+        let locator =
+            DatasetChunkLocator::with_known_addresses("/GEDI04_B/BEAM0000/rh100", &[(3, 7000)])
+                .expect("locator should construct");
 
         let err = locator.locate_chunk_address(&[1]).unwrap_err();
         let msg = format!("{err}");
@@ -1002,8 +1020,8 @@ mod tests {
         )
         .unwrap();
 
-        let descriptor = resolve_dataset_in_file(&file_path, "/gt1l/land_segments/canopy/h_canopy")
-            .unwrap();
+        let descriptor =
+            resolve_dataset_in_file(&file_path, "/gt1l/land_segments/canopy/h_canopy").unwrap();
         assert_eq!(descriptor.path, "/gt1l/land_segments/canopy/h_canopy");
 
         let _ = fs::remove_file(file_path);
@@ -1011,11 +1029,8 @@ mod tests {
 
     #[test]
     fn fill_mapping_replaces_fill_values_and_reports_counts() {
-        let mapped = apply_fill_value_mapping_f32(
-            &[1.0, f32::MAX, 2.0, f32::MAX],
-            Some(f32::MAX),
-            -9999.0,
-        );
+        let mapped =
+            apply_fill_value_mapping_f32(&[1.0, f32::MAX, 2.0, f32::MAX], Some(f32::MAX), -9999.0);
 
         assert_eq!(mapped.values, vec![1.0, -9999.0, 2.0, -9999.0]);
         assert_eq!(mapped.valid_count, 2);

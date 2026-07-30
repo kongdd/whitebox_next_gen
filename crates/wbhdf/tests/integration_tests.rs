@@ -1,40 +1,36 @@
-use wbhdf::btree::{
-    parse_node_header, read_chunk_payload_in_file, read_chunked_storage_leaf_chain_records_in_file,
-    read_first_chunked_storage_leaf_record_in_file,
-};
 use wbhdf::attributes::{
     dataset_metadata_contains_text_in_file, dataset_metadata_text_report_in_file,
 };
 use wbhdf::btree::read_chunked_storage_records_bounded_in_file;
-use wbhdf::compare::{compare_f32_with_tolerance, compare_f64_with_tolerance};
-use wbhdf::dataset::{
-    apply_fill_value_mapping_f32, decode_chunked_i16_row_major_window_in_file,
-    decode_chunked_f32_row_major_window_in_file,
-    decode_chunked_i16_row_prefix_in_file, DatasetChunkLocator,
-    decode_chunked_u16_row_major_window_in_file,
-    decode_chunked_u8_row_major_window_in_file,
+use wbhdf::btree::{
+    parse_node_header, read_chunk_payload_in_file, read_chunked_storage_leaf_chain_records_in_file,
+    read_first_chunked_storage_leaf_record_in_file,
 };
-use wbhdf::dataset::read_contiguous_f64_window_in_file;
-use wbhdf::dataset::resolve_dataset_in_file;
-use wbhdf::dataset::resolve_dataset;
+use wbhdf::compare::{compare_f32_with_tolerance, compare_f64_with_tolerance};
 use wbhdf::dataset::read_contiguous_f32_window_in_file;
+use wbhdf::dataset::read_contiguous_f64_window_in_file;
+use wbhdf::dataset::resolve_dataset;
+use wbhdf::dataset::resolve_dataset_in_file;
+use wbhdf::dataset::{
+    apply_fill_value_mapping_f32, decode_chunked_f32_row_major_window_in_file,
+    decode_chunked_i16_row_major_window_in_file, decode_chunked_i16_row_prefix_in_file,
+    decode_chunked_u16_row_major_window_in_file, decode_chunked_u8_row_major_window_in_file,
+    DatasetChunkLocator,
+};
 use wbhdf::datatypes::{decode_f32, decode_f32_slice, decode_fixed_string, Endianness};
+use wbhdf::filters::decompress_zlib;
 use wbhdf::fixtures::{
     external_fixture_dir, external_modis_fixture_dir, external_viirs_fixture_dir,
     fixture_is_available, smoke_fixture_file,
 };
-use wbhdf::filters::decompress_zlib;
 use wbhdf::hdf4::{
-    assess_hdf4_sds_i16_decode_readiness,
-    assess_hdf4_sds_i16_decode_readiness_in_file,
-    attempt_decode_hdf4_sds_i16_window_in_file,
-    decode_hdf4_sds_i16_window_at_in_file,
-    decode_hdf4_sds_i16_in_file, enumerate_hdf4_dataset_paths, probe_hdf4_eos_metadata_in_file,
-    resolve_hdf4_dataset_path, resolve_hdf4_grid_field, derive_hdf4_grid_geometry,
-    parse_hdf4_data_descriptors_in_file, find_hdf4_sds_i16_payload_candidates_in_file,
-    map_hdf4_sds_i16_descriptor_heuristic_in_file,
-    probe_hdf4_sds_i16_payload_window_in_file,
-    rank_hdf4_sds_i16_payload_candidates_in_file,
+    assess_hdf4_sds_i16_decode_readiness, assess_hdf4_sds_i16_decode_readiness_in_file,
+    attempt_decode_hdf4_sds_i16_window_in_file, decode_hdf4_sds_i16_in_file,
+    decode_hdf4_sds_i16_window_at_in_file, derive_hdf4_grid_geometry, enumerate_hdf4_dataset_paths,
+    find_hdf4_sds_i16_payload_candidates_in_file, map_hdf4_sds_i16_descriptor_heuristic_in_file,
+    parse_hdf4_data_descriptors_in_file, probe_hdf4_eos_metadata_in_file,
+    probe_hdf4_sds_i16_payload_window_in_file, rank_hdf4_sds_i16_payload_candidates_in_file,
+    resolve_hdf4_dataset_path, resolve_hdf4_grid_field,
 };
 use wbhdf::object_header::{
     parse_continuation_chunk_in_file, parse_v1_object_header_in_file, probe_file_object_headers,
@@ -80,7 +76,11 @@ fn find_modis_field<'a>(
         .grids
         .iter()
         .find(|grid| grid.name == grid_name)
-        .and_then(|grid| grid.data_fields.iter().find(|field| field.name == field_name))
+        .and_then(|grid| {
+            grid.data_fields
+                .iter()
+                .find(|field| field.name == field_name)
+        })
 }
 
 fn find_modis_grid<'a>(
@@ -348,7 +348,10 @@ fn atl08_fixture_dir_smoke_discovers_beam_groups() {
     };
 
     let metadata = probe_file_metadata(&path).expect("ATL08 metadata probe should succeed");
-    assert!(metadata.top_level_groups.iter().any(|group| group == "gt1l"));
+    assert!(metadata
+        .top_level_groups
+        .iter()
+        .any(|group| group == "gt1l"));
 
     let dataset = resolve_dataset_in_file(&path, "/gt1l/land_segments/canopy/h_canopy")
         .expect("ATL08 fixture should expose canonical canopy-height path marker");
@@ -357,17 +360,16 @@ fn atl08_fixture_dir_smoke_discovers_beam_groups() {
 
 #[test]
 fn gedi_fixture_dir_smoke_discovers_beam_groups() {
-    let Some(path) = fixture_named("GEDI02_A_2025190205730_O37237_01_T04940_02_004_02_V002.h5") else {
+    let Some(path) = fixture_named("GEDI02_A_2025190205730_O37237_01_T04940_02_004_02_V002.h5")
+    else {
         return;
     };
 
     let metadata = probe_file_metadata(&path).expect("GEDI metadata probe should succeed");
-    assert!(
-        metadata
-            .top_level_groups
-            .iter()
-            .any(|group| group == "BEAM0000")
-    );
+    assert!(metadata
+        .top_level_groups
+        .iter()
+        .any(|group| group == "BEAM0000"));
 
     let dataset = resolve_dataset_in_file(&path, "/BEAM0000/shot_number")
         .expect("GEDI fixture should expose canonical BEAM0000 shot-number path marker");
@@ -396,7 +398,8 @@ fn atl08_documented_field_vocabulary_is_discoverable_with_reports() {
 
 #[test]
 fn gedi_documented_field_vocabulary_is_discoverable_with_reports() {
-    let Some(path) = fixture_named("GEDI02_A_2025190205730_O37237_01_T04940_02_004_02_V002.h5") else {
+    let Some(path) = fixture_named("GEDI02_A_2025190205730_O37237_01_T04940_02_004_02_V002.h5")
+    else {
         return;
     };
 
@@ -420,8 +423,8 @@ fn atl08_fixture_dir_object_header_probe_finds_signatures() {
         return;
     };
 
-    let object_headers =
-        probe_file_object_headers(&path).expect("ATL08 fixture should expose object header signatures");
+    let object_headers = probe_file_object_headers(&path)
+        .expect("ATL08 fixture should expose object header signatures");
     assert!(!object_headers.signature_offsets.is_empty());
     assert!(
         !object_headers.v2_headers.is_empty(),
@@ -429,7 +432,11 @@ fn atl08_fixture_dir_object_header_probe_finds_signatures() {
     );
 
     let first_header = &object_headers.v2_headers[0];
-    let message_ids: Vec<u8> = first_header.messages.iter().map(|message| message.type_id).collect();
+    let message_ids: Vec<u8> = first_header
+        .messages
+        .iter()
+        .map(|message| message.type_id)
+        .collect();
     assert_eq!(message_ids, vec![0x01, 0x03, 0x05, 0x10]);
     assert_eq!(first_header.dataspaces.len(), 1);
     assert_eq!(first_header.dataspaces[0].version, 2);
@@ -446,7 +453,11 @@ fn atl08_fixture_dir_object_header_probe_finds_signatures() {
 
     let chunk1 = parse_continuation_chunk_in_file(&path, &first_header.continuations[0])
         .expect("ATL08 first continuation chunk should parse");
-    let chunk1_message_ids: Vec<u8> = chunk1.messages.iter().map(|message| message.type_id).collect();
+    let chunk1_message_ids: Vec<u8> = chunk1
+        .messages
+        .iter()
+        .map(|message| message.type_id)
+        .collect();
     assert_eq!(chunk1_message_ids, vec![0x10, 0x15]);
     assert_eq!(chunk1.continuations.len(), 1);
     assert_eq!(chunk1.continuations[0].address, 153351);
@@ -465,18 +476,20 @@ fn atl08_fixture_dir_object_header_probe_finds_signatures() {
     assert_eq!(payload.len(), 38_726);
     assert!(payload.starts_with(b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>"));
 
-    let prefix = decode_fixed_string(&payload[..128]).expect("ATL08 XML prefix should decode as UTF-8");
+    let prefix =
+        decode_fixed_string(&payload[..128]).expect("ATL08 XML prefix should decode as UTF-8");
     assert!(prefix.contains("<gmd:DS_Series"));
 }
 
 #[test]
 fn gedi_fixture_dir_object_header_probe_finds_signatures() {
-    let Some(path) = fixture_named("GEDI02_A_2025190205730_O37237_01_T04940_02_004_02_V002.h5") else {
+    let Some(path) = fixture_named("GEDI02_A_2025190205730_O37237_01_T04940_02_004_02_V002.h5")
+    else {
         return;
     };
 
-    let object_headers =
-        probe_file_object_headers(&path).expect("GEDI fixture should expose object header signatures");
+    let object_headers = probe_file_object_headers(&path)
+        .expect("GEDI fixture should expose object header signatures");
     assert!(!object_headers.signature_offsets.is_empty());
     // Current GEDI scan discovers OHDR markers but does not yet guarantee a parsable
     // v2 prefix at those offsets. Full object-header message traversal is pending.
@@ -484,7 +497,8 @@ fn gedi_fixture_dir_object_header_probe_finds_signatures() {
 
 #[test]
 fn gedi_elev_lowestmode_contiguous_window_matches_h5dump_reference() {
-    let Some(path) = fixture_named("GEDI02_A_2025190205730_O37237_01_T04940_02_004_02_V002.h5") else {
+    let Some(path) = fixture_named("GEDI02_A_2025190205730_O37237_01_T04940_02_004_02_V002.h5")
+    else {
         return;
     };
 
@@ -505,8 +519,9 @@ fn gedi_elev_lowestmode_contiguous_window_matches_h5dump_reference() {
         7372.41943359,
     ];
 
-    let actual = read_contiguous_f32_window_in_file(&path, 1_012_683, expected.len(), Endianness::Little)
-        .expect("GEDI elev_lowestmode contiguous f32 window should decode");
+    let actual =
+        read_contiguous_f32_window_in_file(&path, 1_012_683, expected.len(), Endianness::Little)
+            .expect("GEDI elev_lowestmode contiguous f32 window should decode");
     let summary = compare_f32_with_tolerance(&actual, &expected, 1e-5)
         .expect("GEDI first-window comparison should succeed");
 
@@ -526,7 +541,10 @@ fn gedi_new_granule_fixture_discovers_beam_and_elev_paths() {
 
     let metadata = probe_file_metadata(path).expect("new GEDI metadata probe should succeed");
     assert!(metadata.superblock_version <= 3);
-    assert!(metadata.top_level_groups.iter().any(|group| group == "BEAM0000"));
+    assert!(metadata
+        .top_level_groups
+        .iter()
+        .any(|group| group == "BEAM0000"));
 
     let shot_number = resolve_dataset_in_file(path, "/BEAM0000/shot_number")
         .expect("new GEDI shot_number dataset should be discoverable by path markers");
@@ -556,21 +574,30 @@ fn viirs_vnp13_xdim_contiguous_window_matches_h5dump_reference() {
         "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI",
     )
     .expect("VIIRS VNP13 NDVI dataset should be discoverable by path markers");
-    assert_eq!(ndvi.path, "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI");
+    assert_eq!(
+        ndvi.path,
+        "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI"
+    );
 
     let evi = resolve_dataset_in_file(
         &path,
         "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI",
     )
     .expect("VIIRS VNP13 EVI dataset should be discoverable by path markers");
-    assert_eq!(evi.path, "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI");
+    assert_eq!(
+        evi.path,
+        "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI"
+    );
 
     let evi2 = resolve_dataset_in_file(
         &path,
         "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI2",
     )
     .expect("VIIRS VNP13 EVI2 dataset should be discoverable by path markers");
-    assert_eq!(evi2.path, "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI2");
+    assert_eq!(
+        evi2.path,
+        "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI2"
+    );
 
     // Reference values extracted with:
     // h5dump -d '/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/XDim' -s 0 -c 8 -m '%.8f' <fixture>
@@ -585,8 +612,9 @@ fn viirs_vnp13_xdim_contiguous_window_matches_h5dump_reference() {
         -6668459.92898430,
     ];
 
-    let actual = read_contiguous_f64_window_in_file(&path, 78_857, expected.len(), Endianness::Little)
-        .expect("VIIRS VNP13 XDim contiguous f64 window should decode");
+    let actual =
+        read_contiguous_f64_window_in_file(&path, 78_857, expected.len(), Endianness::Little)
+            .expect("VIIRS VNP13 XDim contiguous f64 window should decode");
 
     let summary = compare_f64_with_tolerance(&actual, &expected, 1e-8)
         .expect("VIIRS XDim first-window comparison should succeed");
@@ -656,11 +684,16 @@ fn viirs_vnp13_ndvi_first_chunk_decodes_h5dump_reference_prefix() {
         "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI",
     )
     .expect("VIIRS VNP13 NDVI dataset should be discoverable before payload decode attempt");
-    assert_eq!(ndvi.path, "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI");
+    assert_eq!(
+        ndvi.path,
+        "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI"
+    );
 
     // Reference values extracted with:
     // h5dump -d '/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI' -s '0,0' -c '1,12' <fixture>
-    let expected_prefix = vec![6177_i16, 6384, 5691, 5145, 4970, 5386, 5606, 5852, 5866, 6390, 5630, 5729];
+    let expected_prefix = vec![
+        6177_i16, 6384, 5691, 5145, 4970, 5386, 5606, 5852, 5866, 6390, 5630, 5729,
+    ];
 
     // h5debug reports this NDVI dataset as a v2 object header at offset 1570 with
     // layout: chunked v1 B-tree index at address 112552 and logical chunk size {1, 2400, 2}.
@@ -681,7 +714,9 @@ fn viirs_vnp13_ndvi_first_chunk_decodes_h5dump_reference_prefix() {
         let Ok(values) = decoded else {
             continue;
         };
-        if values.len() >= expected_prefix.len() && values[..expected_prefix.len()] == expected_prefix {
+        if values.len() >= expected_prefix.len()
+            && values[..expected_prefix.len()] == expected_prefix
+        {
             matched = true;
             break;
         }
@@ -699,8 +734,12 @@ fn viirs_vnp13_ndvi_two_row_prefix_matches_h5dump_reference() {
         return;
     };
 
-    let row0_expected = vec![6177_i16, 6384, 5691, 5145, 4970, 5386, 5606, 5852, 5866, 6390, 5630, 5729];
-    let row1_expected = vec![6440_i16, 6052, 5847, 4909, 5304, 5519, 5338, 5356, 5707, 6228, 6288, 5215];
+    let row0_expected = vec![
+        6177_i16, 6384, 5691, 5145, 4970, 5386, 5606, 5852, 5866, 6390, 5630, 5729,
+    ];
+    let row1_expected = vec![
+        6440_i16, 6052, 5847, 4909, 5304, 5519, 5338, 5356, 5707, 6228, 6288, 5215,
+    ];
 
     let mut validated = false;
     for row_dim in 0..3 {
@@ -753,8 +792,12 @@ fn viirs_vnp13_evi_and_evi2_row_prefix_match_h5dump_reference() {
 
     let evi_path = "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI";
     let evi2_path = "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days EVI2";
-    let evi_expected = vec![2304_i16, 2338, 1999, 1463, 1786, 2017, 2007, 2148, 2058, 2190, 2094, 2241];
-    let evi2_expected = vec![2263_i16, 2288, 1966, 1364, 1702, 1887, 1964, 2126, 2019, 2125, 1986, 2110];
+    let evi_expected = vec![
+        2304_i16, 2338, 1999, 1463, 1786, 2017, 2007, 2148, 2058, 2190, 2094, 2241,
+    ];
+    let evi2_expected = vec![
+        2263_i16, 2288, 1966, 1364, 1702, 1887, 1964, 2126, 2019, 2125, 1986, 2110,
+    ];
 
     let mut evi_matched = false;
     for row_dim in 0..3 {
@@ -864,7 +907,10 @@ fn viirs_vnp13_ndvi_bounded_chunk_index_probe_returns_expected_chunk_records() {
         "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI",
     )
     .expect("VNP13 NDVI dataset should be discoverable before chunk-index probe");
-    assert_eq!(ndvi.path, "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI");
+    assert_eq!(
+        ndvi.path,
+        "/HDFEOS/GRIDS/VIIRS_Grid_8Day_VI_500m/Data Fields/500 m 8 days NDVI"
+    );
 
     let tree_address = 112_552_usize;
     let header_len = wbhdf::btree::NODE_HEADER_LEN;
@@ -901,8 +947,12 @@ fn viirs_vnp13_ndvi_bounded_chunk_index_probe_returns_expected_chunk_records() {
     assert!(nonorigin_record.chunk_size > 0);
     assert!(nonorigin_record.chunk_address > 0);
 
-    let compressed = read_chunk_payload_in_file(&path, nonorigin_record.chunk_address, nonorigin_record.chunk_size)
-        .expect("VNP13 NDVI origin chunk payload should be readable");
+    let compressed = read_chunk_payload_in_file(
+        &path,
+        nonorigin_record.chunk_address,
+        nonorigin_record.chunk_size,
+    )
+    .expect("VNP13 NDVI origin chunk payload should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("VNP13 NDVI origin chunk payload should zlib-decompress");
     assert!(!decompressed.is_empty());
@@ -915,145 +965,109 @@ fn viirs_vnp13_ndvi_bounded_chunk_index_probe_returns_expected_chunk_records() {
         "decoded VNP13 NDVI chunk should include at least one full chunk-width row"
     );
     assert!(
-        decoded.iter().any(|v| *v == 5_386_i16 || *v == 5_606_i16 || *v == 5_852_i16),
+        decoded
+            .iter()
+            .any(|v| *v == 5_386_i16 || *v == 5_606_i16 || *v == 5_852_i16),
         "decoded VNP13 NDVI chunk should include known NDVI reference-like values"
     );
 }
 
 #[test]
 fn viirs_vnp09_hdf4_eos_metadata_probe_enumerates_expected_fields() {
-    let Some(path) = hdf4_example_fixture_named("VNP09_NRT.A2026150.1906.002.2026150222127.hdf") else {
+    let Some(path) = hdf4_example_fixture_named("VNP09_NRT.A2026150.1906.002.2026150222127.hdf")
+    else {
         return;
     };
 
     let summary = probe_hdf4_eos_metadata_in_file(&path)
         .expect("VNP09 HDF4 EOS metadata probe should succeed");
     assert!(summary.struct_metadata_markers >= 1);
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "375m Surface Reflectance Band I1")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "land_water_mask")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "QF1 Surface Reflectance")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "375m Surface Reflectance Band I2")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "750m Surface Reflectance Band M1")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "375m Surface Reflectance Band I3")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "750m Surface Reflectance Band M2")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "QF2 Surface Reflectance")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "750m Surface Reflectance Band M3")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "QF3 Surface Reflectance")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "750m Surface Reflectance Band M4")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "QF4 Surface Reflectance")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "750m Surface Reflectance Band M5")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "750m Surface Reflectance Band M7")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "QF5 Surface Reflectance")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "QF6 Surface Reflectance")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "750m Surface Reflectance Band M8")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "QF7 Surface Reflectance")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "750m Surface Reflectance Band M10")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "750m Surface Reflectance Band M11")
-    );
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "375m Surface Reflectance Band I1"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "land_water_mask"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "QF1 Surface Reflectance"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "375m Surface Reflectance Band I2"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "750m Surface Reflectance Band M1"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "375m Surface Reflectance Band I3"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "750m Surface Reflectance Band M2"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "QF2 Surface Reflectance"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "750m Surface Reflectance Band M3"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "QF3 Surface Reflectance"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "750m Surface Reflectance Band M4"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "QF4 Surface Reflectance"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "750m Surface Reflectance Band M5"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "750m Surface Reflectance Band M7"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "QF5 Surface Reflectance"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "QF6 Surface Reflectance"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "750m Surface Reflectance Band M8"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "QF7 Surface Reflectance"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "750m Surface Reflectance Band M10"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "750m Surface Reflectance Band M11"));
 }
 
 #[test]
 fn viirs_vnp09_documented_swath_vocabulary_is_discoverable_with_reports() {
-    let Some(path) = hdf4_example_fixture_named("VNP09_NRT.A2026150.1906.002.2026150222127.hdf") else {
+    let Some(path) = hdf4_example_fixture_named("VNP09_NRT.A2026150.1906.002.2026150222127.hdf")
+    else {
         return;
     };
 
@@ -1120,12 +1134,10 @@ fn viirs_vnp21_netcdf_metadata_probe_discovers_swath_group_and_lst_path() {
 
     let metadata = probe_file_metadata(path).expect("VNP21 metadata probe should succeed");
     assert!(metadata.superblock_version <= 3);
-    assert!(
-        metadata
-            .top_level_groups
-            .iter()
-            .any(|group| group == "VIIRS_Swath_LSTE")
-    );
+    assert!(metadata
+        .top_level_groups
+        .iter()
+        .any(|group| group == "VIIRS_Swath_LSTE"));
 
     let descriptor = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Data Fields/LST")
         .expect("VNP21 LST dataset should be discoverable by path markers");
@@ -1133,11 +1145,17 @@ fn viirs_vnp21_netcdf_metadata_probe_discovers_swath_group_and_lst_path() {
 
     let latitude = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Geolocation Fields/latitude")
         .expect("VNP21 latitude dataset should be discoverable by path markers");
-    assert_eq!(latitude.path, "/VIIRS_Swath_LSTE/Geolocation Fields/latitude");
+    assert_eq!(
+        latitude.path,
+        "/VIIRS_Swath_LSTE/Geolocation Fields/latitude"
+    );
 
     let longitude = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Geolocation Fields/longitude")
         .expect("VNP21 longitude dataset should be discoverable by path markers");
-    assert_eq!(longitude.path, "/VIIRS_Swath_LSTE/Geolocation Fields/longitude");
+    assert_eq!(
+        longitude.path,
+        "/VIIRS_Swath_LSTE/Geolocation Fields/longitude"
+    );
 
     let lst_err = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Data Fields/LST_err")
         .expect("VNP21 LST_err dataset should be discoverable by path markers");
@@ -1153,7 +1171,10 @@ fn viirs_vnp21_netcdf_metadata_probe_discovers_swath_group_and_lst_path() {
 
     let emis_14_err = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Data Fields/Emis_14_err")
         .expect("VNP21 Emis_14_err dataset should be discoverable by path markers");
-    assert_eq!(emis_14_err.path, "/VIIRS_Swath_LSTE/Data Fields/Emis_14_err");
+    assert_eq!(
+        emis_14_err.path,
+        "/VIIRS_Swath_LSTE/Data Fields/Emis_14_err"
+    );
 
     let emis_15 = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Data Fields/Emis_15")
         .expect("VNP21 Emis_15 dataset should be discoverable by path markers");
@@ -1169,12 +1190,17 @@ fn viirs_vnp21_netcdf_metadata_probe_discovers_swath_group_and_lst_path() {
 
     let emis_15_err = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Data Fields/Emis_15_err")
         .expect("VNP21 Emis_15_err dataset should be discoverable by path markers");
-    assert_eq!(emis_15_err.path, "/VIIRS_Swath_LSTE/Data Fields/Emis_15_err");
+    assert_eq!(
+        emis_15_err.path,
+        "/VIIRS_Swath_LSTE/Data Fields/Emis_15_err"
+    );
 
     let emis_16_err = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Data Fields/Emis_16_err")
         .expect("VNP21 Emis_16_err dataset should be discoverable by path markers");
-    assert_eq!(emis_16_err.path, "/VIIRS_Swath_LSTE/Data Fields/Emis_16_err");
-
+    assert_eq!(
+        emis_16_err.path,
+        "/VIIRS_Swath_LSTE/Data Fields/Emis_16_err"
+    );
 }
 
 #[test]
@@ -1242,14 +1268,8 @@ fn viirs_vnp21_lst_bounded_chunk_index_probe_returns_expected_chunk_records() {
         "VNP21 LST chunk-index root should be non-leaf for multilevel traversal evidence"
     );
 
-    let records = read_chunked_storage_records_bounded_in_file(
-        path,
-        65_387_786,
-        3,
-        512,
-        8_192,
-    )
-    .expect("VNP21 LST bounded chunk-index probe should return chunk records");
+    let records = read_chunked_storage_records_bounded_in_file(path, 65_387_786, 3, 512, 8_192)
+        .expect("VNP21 LST bounded chunk-index probe should return chunk records");
 
     assert!(!records.is_empty());
     assert!(
@@ -1280,8 +1300,12 @@ fn viirs_vnp21_lst_bounded_chunk_index_probe_returns_expected_chunk_records() {
 
     let ref_chunk_record = record_for_col(1_600)
         .expect("reference-window chunk offset (1600) should resolve to a chunk record");
-    let compressed = read_chunk_payload_in_file(path, ref_chunk_record.chunk_address, ref_chunk_record.chunk_size)
-        .expect("VNP21 LST reference chunk payload should be readable");
+    let compressed = read_chunk_payload_in_file(
+        path,
+        ref_chunk_record.chunk_address,
+        ref_chunk_record.chunk_size,
+    )
+    .expect("VNP21 LST reference chunk payload should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("VNP21 LST reference chunk payload should zlib-decompress");
     assert_eq!(decompressed.len(), 102_400);
@@ -1392,8 +1416,8 @@ fn viirs_vnp21_view_angle_row_major_window_and_semantics_match_h5dump_reference(
     assert!(decoded.iter().all(|v| *v <= 180));
     let scaled: Vec<f64> = decoded.iter().map(|v| *v as f64 * 0.5).collect();
     let expected_scaled = vec![
-        37.5_f64, 37.5_f64, 37.5_f64, 37.0_f64, 37.0_f64, 37.0_f64, 37.5_f64, 37.5_f64,
-        37.5_f64, 37.0_f64, 37.0_f64, 37.0_f64,
+        37.5_f64, 37.5_f64, 37.5_f64, 37.0_f64, 37.0_f64, 37.0_f64, 37.5_f64, 37.5_f64, 37.5_f64,
+        37.0_f64, 37.0_f64, 37.0_f64,
     ];
     for (idx, (actual, expected)) in scaled.iter().zip(expected_scaled.iter()).enumerate() {
         let diff = (actual - expected).abs();
@@ -1467,13 +1491,26 @@ fn viirs_vnp21_latitude_row_major_window_matches_h5dump_reference() {
 
     let latitude = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Geolocation Fields/latitude")
         .expect("VNP21 latitude dataset should be discoverable before payload decode attempt");
-    assert_eq!(latitude.path, "/VIIRS_Swath_LSTE/Geolocation Fields/latitude");
+    assert_eq!(
+        latitude.path,
+        "/VIIRS_Swath_LSTE/Geolocation Fields/latitude"
+    );
 
     // Reference values extracted with:
     // h5dump -d '/VIIRS_Swath_LSTE/Geolocation Fields/latitude' -s '1234,987' -c '2,6' <fixture>
     let expected = vec![
-        42.0689_f32, 42.0680, 42.0670, 42.0661, 42.0651, 42.0641, 42.0608, 42.0599, 42.0589,
-        42.0580, 42.0570, 42.0561,
+        42.0689_f32,
+        42.0680,
+        42.0670,
+        42.0661,
+        42.0651,
+        42.0641,
+        42.0608,
+        42.0599,
+        42.0589,
+        42.0580,
+        42.0570,
+        42.0561,
     ];
 
     let decoded = decode_chunked_f32_row_major_window_in_file(
@@ -1511,11 +1548,15 @@ fn viirs_vnp21_latitude_bounded_chunk_index_probe_returns_expected_chunk_records
 
     let latitude = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Geolocation Fields/latitude")
         .expect("VNP21 latitude dataset should be discoverable before chunk-index probe");
-    assert_eq!(latitude.path, "/VIIRS_Swath_LSTE/Geolocation Fields/latitude");
+    assert_eq!(
+        latitude.path,
+        "/VIIRS_Swath_LSTE/Geolocation Fields/latitude"
+    );
 
     let tree_address = 5_504_usize;
     let header_len = wbhdf::btree::NODE_HEADER_LEN;
-    let bytes = std::fs::read(path).expect("VNP21 fixture should be readable for latitude header probe");
+    let bytes =
+        std::fs::read(path).expect("VNP21 fixture should be readable for latitude header probe");
     assert!(
         bytes.len() >= tree_address + header_len,
         "VNP21 fixture should include latitude chunk-index node header bytes"
@@ -1549,14 +1590,16 @@ fn viirs_vnp21_latitude_bounded_chunk_index_probe_returns_expected_chunk_records
     assert!(geoloc_record.chunk_size > 0);
     assert!(geoloc_record.chunk_address > 0);
 
-    let compressed = read_chunk_payload_in_file(path, geoloc_record.chunk_address, geoloc_record.chunk_size)
-        .expect("VNP21 latitude geolocation chunk payload should be readable");
+    let compressed =
+        read_chunk_payload_in_file(path, geoloc_record.chunk_address, geoloc_record.chunk_size)
+            .expect("VNP21 latitude geolocation chunk payload should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("VNP21 latitude geolocation chunk payload should zlib-decompress");
     assert_eq!(decompressed.len(), 204_800);
 
-    let decoded = decode_f32_slice(&decompressed, Endianness::Little)
-        .expect("VNP21 latitude geolocation chunk payload should decode as little-endian f32 values");
+    let decoded = decode_f32_slice(&decompressed, Endianness::Little).expect(
+        "VNP21 latitude geolocation chunk payload should decode as little-endian f32 values",
+    );
     assert_eq!(decoded.len(), 51_200);
 
     let valid_geo_count = decoded
@@ -1588,7 +1631,10 @@ fn viirs_vnp21_longitude_row_major_window_matches_h5dump_reference() {
 
     let longitude = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Geolocation Fields/longitude")
         .expect("VNP21 longitude dataset should be discoverable before payload decode attempt");
-    assert_eq!(longitude.path, "/VIIRS_Swath_LSTE/Geolocation Fields/longitude");
+    assert_eq!(
+        longitude.path,
+        "/VIIRS_Swath_LSTE/Geolocation Fields/longitude"
+    );
 
     // Reference values extracted with:
     // h5dump -d '/VIIRS_Swath_LSTE/Geolocation Fields/longitude' -s '1234,987' -c '2,6' <fixture>
@@ -1642,11 +1688,15 @@ fn viirs_vnp21_longitude_bounded_chunk_index_probe_returns_expected_chunk_record
 
     let longitude = resolve_dataset_in_file(path, "/VIIRS_Swath_LSTE/Geolocation Fields/longitude")
         .expect("VNP21 longitude dataset should be discoverable before chunk-index probe");
-    assert_eq!(longitude.path, "/VIIRS_Swath_LSTE/Geolocation Fields/longitude");
+    assert_eq!(
+        longitude.path,
+        "/VIIRS_Swath_LSTE/Geolocation Fields/longitude"
+    );
 
     let tree_address = 31_324_409_usize;
     let header_len = wbhdf::btree::NODE_HEADER_LEN;
-    let bytes = std::fs::read(path).expect("VNP21 fixture should be readable for longitude header probe");
+    let bytes =
+        std::fs::read(path).expect("VNP21 fixture should be readable for longitude header probe");
     assert!(
         bytes.len() >= tree_address + header_len,
         "VNP21 fixture should include longitude chunk-index node header bytes"
@@ -1680,14 +1730,16 @@ fn viirs_vnp21_longitude_bounded_chunk_index_probe_returns_expected_chunk_record
     assert!(geoloc_record.chunk_size > 0);
     assert!(geoloc_record.chunk_address > 0);
 
-    let compressed = read_chunk_payload_in_file(path, geoloc_record.chunk_address, geoloc_record.chunk_size)
-        .expect("VNP21 longitude geolocation chunk payload should be readable");
+    let compressed =
+        read_chunk_payload_in_file(path, geoloc_record.chunk_address, geoloc_record.chunk_size)
+            .expect("VNP21 longitude geolocation chunk payload should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("VNP21 longitude geolocation chunk payload should zlib-decompress");
     assert_eq!(decompressed.len(), 204_800);
 
-    let decoded = decode_f32_slice(&decompressed, Endianness::Little)
-        .expect("VNP21 longitude geolocation chunk payload should decode as little-endian f32 values");
+    let decoded = decode_f32_slice(&decompressed, Endianness::Little).expect(
+        "VNP21 longitude geolocation chunk payload should decode as little-endian f32 values",
+    );
     assert_eq!(decoded.len(), 51_200);
 
     let valid_geo_count = decoded
@@ -1723,7 +1775,9 @@ fn viirs_vnp21_pwv_row_major_window_and_semantics_match_h5dump_reference() {
 
     // Reference values extracted with:
     // h5dump -d '/VIIRS_Swath_LSTE/Data Fields/PWV' -s '1234,987' -c '2,6' <fixture>
-    let expected_raw = vec![845_u16, 844, 843, 842, 840, 839, 847, 845, 844, 843, 842, 840];
+    let expected_raw = vec![
+        845_u16, 844, 843, 842, 840, 839, 847, 845, 844, 843, 842, 840,
+    ];
 
     let decoded = decode_chunked_u16_row_major_window_in_file(
         path,
@@ -2041,10 +2095,22 @@ fn viirs_vnp21_qc_observed_profile_classifier_maps_known_and_unknown_states() {
     let known_00_07 = decode_vnp21_qc_observed_bits(7_u16);
     let unknown_state = decode_vnp21_qc_observed_bits(65535_u16);
 
-    assert_eq!(classify_vnp21_qc_observed_profile(known_fe_c0), "fe_c0_baseline");
-    assert_eq!(classify_vnp21_qc_observed_profile(known_fe_e1), "fe_e1_elevated");
-    assert_eq!(classify_vnp21_qc_observed_profile(known_fa_c0), "fa_c0_baseline_alt");
-    assert_eq!(classify_vnp21_qc_observed_profile(known_00_07), "00_07_inland_water");
+    assert_eq!(
+        classify_vnp21_qc_observed_profile(known_fe_c0),
+        "fe_c0_baseline"
+    );
+    assert_eq!(
+        classify_vnp21_qc_observed_profile(known_fe_e1),
+        "fe_e1_elevated"
+    );
+    assert_eq!(
+        classify_vnp21_qc_observed_profile(known_fa_c0),
+        "fa_c0_baseline_alt"
+    );
+    assert_eq!(
+        classify_vnp21_qc_observed_profile(known_00_07),
+        "00_07_inland_water"
+    );
     assert_eq!(classify_vnp21_qc_observed_profile(unknown_state), "unknown");
 }
 
@@ -2163,7 +2229,8 @@ fn viirs_vnp21_qc_oceanpix_profile_contract_is_exhaustive_across_key_windows() {
 
         assert_eq!(qc.len(), oceanpix.len());
         for (qc_value, ocean_value) in qc.iter().zip(oceanpix.iter()) {
-            let profile = classify_vnp21_qc_observed_profile(decode_vnp21_qc_observed_bits(*qc_value));
+            let profile =
+                classify_vnp21_qc_observed_profile(decode_vnp21_qc_observed_bits(*qc_value));
             *counts.entry((profile, *ocean_value)).or_insert(0) += 1;
         }
     }
@@ -2254,9 +2321,9 @@ fn viirs_vnp21_qc_profile_bit_invariants_are_stable_across_key_windows() {
                     assert!(!bits.low_bit6_set);
                     assert!(!bits.low_bit7_set);
                 }
-                "unknown" => panic!(
-                    "unexpected unknown QC profile in regression windows: value={value}"
-                ),
+                "unknown" => {
+                    panic!("unexpected unknown QC profile in regression windows: value={value}")
+                }
                 other => panic!("unexpected profile label: {other}"),
             }
         }
@@ -2403,7 +2470,8 @@ fn viirs_vnp21_qc_nonoverlapping_window_cluster_profile_contract_is_stable() {
 
         assert_eq!(qc.len(), oceanpix.len());
         for (qc_value, ocean_value) in qc.iter().zip(oceanpix.iter()) {
-            let profile = classify_vnp21_qc_observed_profile(decode_vnp21_qc_observed_bits(*qc_value));
+            let profile =
+                classify_vnp21_qc_observed_profile(decode_vnp21_qc_observed_bits(*qc_value));
             *counts.entry((profile, *ocean_value)).or_insert(0) += 1;
         }
     }
@@ -2890,10 +2958,8 @@ fn viirs_vnp21_qc_oceanpix_row_alignment_contract_is_stable() {
     let expected_ocean_nonorigin = vec![vec![2_u8, 2, 2, 2, 2, 2], vec![2_u8, 2, 2, 2, 2, 2]];
 
     let qc_nonorigin_rows: Vec<Vec<u16>> = qc_nonorigin.chunks(6).map(|row| row.to_vec()).collect();
-    let ocean_nonorigin_rows: Vec<Vec<u8>> = ocean_nonorigin
-        .chunks(6)
-        .map(|row| row.to_vec())
-        .collect();
+    let ocean_nonorigin_rows: Vec<Vec<u8>> =
+        ocean_nonorigin.chunks(6).map(|row| row.to_vec()).collect();
 
     assert_eq!(qc_nonorigin_rows, expected_qc_nonorigin);
     assert_eq!(ocean_nonorigin_rows, expected_ocean_nonorigin);
@@ -2901,8 +2967,17 @@ fn viirs_vnp21_qc_oceanpix_row_alignment_contract_is_stable() {
     let qc_origin_rows: Vec<Vec<u16>> = qc_origin.chunks(4).map(|row| row.to_vec()).collect();
     let ocean_origin_rows: Vec<Vec<u8>> = ocean_origin.chunks(4).map(|row| row.to_vec()).collect();
 
-    assert_eq!(qc_origin_rows, vec![vec![65216_u16, 65216, 65216, 65216], vec![65216_u16, 65216, 65216, 65216]]);
-    assert_eq!(ocean_origin_rows, vec![vec![0_u8, 0, 0, 0], vec![0_u8, 0, 0, 0]]);
+    assert_eq!(
+        qc_origin_rows,
+        vec![
+            vec![65216_u16, 65216, 65216, 65216],
+            vec![65216_u16, 65216, 65216, 65216]
+        ]
+    );
+    assert_eq!(
+        ocean_origin_rows,
+        vec![vec![0_u8, 0, 0, 0], vec![0_u8, 0, 0, 0]]
+    );
 }
 
 #[test]
@@ -3487,7 +3562,10 @@ fn viirs_vnp21_emis14_err_row_major_window_and_semantics_match_h5dump_reference(
     // _FillValue=0, valid_range=[1,65535], scale_factor=0.0001, add_offset=0.
     assert!(decoded.iter().all(|v| *v >= 1));
     let scaled: Vec<f64> = decoded.iter().map(|v| *v as f64 * 0.0001).collect();
-    let expected_scaled = vec![0.0235_f64, 0.0235_f64, 0.0235_f64, 0.0236_f64, 0.0235_f64, 0.0235_f64, 0.0235_f64, 0.0235_f64];
+    let expected_scaled = vec![
+        0.0235_f64, 0.0235_f64, 0.0235_f64, 0.0236_f64, 0.0235_f64, 0.0235_f64, 0.0235_f64,
+        0.0235_f64,
+    ];
     for (idx, (actual, expected)) in scaled.iter().zip(expected_scaled.iter()).enumerate() {
         let diff = (actual - expected).abs();
         assert!(
@@ -3608,7 +3686,9 @@ fn viirs_vnp21_emis14_err_nonzero_column_window_matches_h5dump_reference() {
         return;
     }
 
-    let expected_raw = vec![227_u16, 227, 227, 227, 227, 226, 227, 227, 227, 227, 227, 227];
+    let expected_raw = vec![
+        227_u16, 227, 227, 227, 227, 226, 227, 227, 227, 227, 227, 227,
+    ];
 
     let decoded = decode_chunked_u16_row_major_window_in_file(
         path,
@@ -3626,7 +3706,9 @@ fn viirs_vnp21_emis14_err_nonzero_column_window_matches_h5dump_reference() {
         512,
         8_192,
     )
-    .expect("VNP21 Emis_14_err nonzero-column window should decode through v1 chunk-index traversal");
+    .expect(
+        "VNP21 Emis_14_err nonzero-column window should decode through v1 chunk-index traversal",
+    );
 
     assert_eq!(decoded, expected_raw);
 
@@ -3635,8 +3717,8 @@ fn viirs_vnp21_emis14_err_nonzero_column_window_matches_h5dump_reference() {
     assert!(decoded.iter().all(|v| *v >= 1));
     let scaled: Vec<f64> = decoded.iter().map(|v| *v as f64 * 0.0001).collect();
     let expected_scaled = vec![
-        0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0226_f64,
-        0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0227_f64,
+        0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0226_f64, 0.0227_f64,
+        0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0227_f64, 0.0227_f64,
     ];
     for (idx, (actual, expected)) in scaled.iter().zip(expected_scaled.iter()).enumerate() {
         let diff = (actual - expected).abs();
@@ -3693,7 +3775,9 @@ fn viirs_vnp21_emis15_err_nonzero_column_window_matches_h5dump_reference() {
         return;
     }
 
-    let expected_raw = vec![114_u16, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114];
+    let expected_raw = vec![
+        114_u16, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114, 114,
+    ];
 
     let decoded = decode_chunked_u16_row_major_window_in_file(
         path,
@@ -3711,7 +3795,9 @@ fn viirs_vnp21_emis15_err_nonzero_column_window_matches_h5dump_reference() {
         512,
         8_192,
     )
-    .expect("VNP21 Emis_15_err nonzero-column window should decode through v1 chunk-index traversal");
+    .expect(
+        "VNP21 Emis_15_err nonzero-column window should decode through v1 chunk-index traversal",
+    );
 
     assert_eq!(decoded, expected_raw);
 
@@ -3768,7 +3854,9 @@ fn viirs_vnp21_emis16_err_nonzero_column_window_matches_h5dump_reference() {
         return;
     }
 
-    let expected_raw = vec![111_u16, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111];
+    let expected_raw = vec![
+        111_u16, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111,
+    ];
 
     let decoded = decode_chunked_u16_row_major_window_in_file(
         path,
@@ -3786,7 +3874,9 @@ fn viirs_vnp21_emis16_err_nonzero_column_window_matches_h5dump_reference() {
         512,
         8_192,
     )
-    .expect("VNP21 Emis_16_err nonzero-column window should decode through v1 chunk-index traversal");
+    .expect(
+        "VNP21 Emis_16_err nonzero-column window should decode through v1 chunk-index traversal",
+    );
 
     assert_eq!(decoded, expected_raw);
 
@@ -3960,22 +4050,29 @@ fn viirs_vnp21_thermal_cross_field_semantics_contract_is_consistent() {
 
 #[test]
 fn myd09_hdf4_eos_metadata_probe_and_payload_window_are_exercised() {
-    let Some(path) = hdf4_example_fixture_in_data_dir("MYD09A1.A2008057.h01v08.061.2021087165611.hdf") else {
+    let Some(path) =
+        hdf4_example_fixture_in_data_dir("MYD09A1.A2008057.h01v08.061.2021087165611.hdf")
+    else {
         return;
     };
 
     let summary = probe_hdf4_eos_metadata_in_file(&path)
         .expect("MYD09 HDF4 EOS metadata probe should succeed");
-    assert!(summary.grid_names.iter().any(|name| name == "MOD_Grid_500m_Surface_Reflectance"));
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "sur_refl_b01")
-    );
+    assert!(summary
+        .grid_names
+        .iter()
+        .any(|name| name == "MOD_Grid_500m_Surface_Reflectance"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "sur_refl_b01"));
 
-    let field = find_modis_field(&summary, "MOD_Grid_500m_Surface_Reflectance", "sur_refl_b01")
-        .expect("MYD09 field metadata should include sur_refl_b01");
+    let field = find_modis_field(
+        &summary,
+        "MOD_Grid_500m_Surface_Reflectance",
+        "sur_refl_b01",
+    )
+    .expect("MYD09 field metadata should include sur_refl_b01");
     assert_eq!(field.data_type.as_deref(), Some("DFNT_INT16"));
 
     let probe = probe_hdf4_sds_i16_payload_window_in_file(
@@ -3996,7 +4093,9 @@ fn myd09_hdf4_eos_metadata_probe_and_payload_window_are_exercised() {
         assert!(values.len() <= 8);
         assert!(values == probe.little_endian_preview || values == probe.big_endian_preview);
     } else {
-        let err = decode_attempt.expect_err("MYD09 decode attempt should report diagnostics when the probe cannot decode");
+        let err = decode_attempt.expect_err(
+            "MYD09 decode attempt should report diagnostics when the probe cannot decode",
+        );
         let msg = format!("{err}");
         assert!(msg.contains("not yet implemented"));
         assert!(msg.contains("/MOD_Grid_500m_Surface_Reflectance/sur_refl_b01"));
@@ -4006,25 +4105,30 @@ fn myd09_hdf4_eos_metadata_probe_and_payload_window_are_exercised() {
 
 #[test]
 fn myd11_hdf4_eos_metadata_probe_and_payload_window_are_exercised() {
-    let Some(path) = hdf4_example_fixture_in_data_dir("MYD11A2.A2026073.h04v11.061.2026083154149.hdf") else {
+    let Some(path) =
+        hdf4_example_fixture_in_data_dir("MYD11A2.A2026073.h04v11.061.2026083154149.hdf")
+    else {
         return;
     };
 
     let summary = probe_hdf4_eos_metadata_in_file(&path)
         .expect("MYD11 HDF4 EOS metadata probe should succeed");
-    assert!(summary.grid_names.iter().any(|name| name == "MODIS_Grid_8Day_1km_LST"));
-    assert!(summary.data_field_names.iter().any(|name| name == "LST_Day_1km"));
+    assert!(summary
+        .grid_names
+        .iter()
+        .any(|name| name == "MODIS_Grid_8Day_1km_LST"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "LST_Day_1km"));
 
     let field = find_modis_field(&summary, "MODIS_Grid_8Day_1km_LST", "LST_Day_1km")
         .expect("MYD11 field metadata should include LST_Day_1km");
     assert_eq!(field.data_type.as_deref(), Some("DFNT_UINT16"));
 
-    let probe = probe_hdf4_sds_i16_payload_window_in_file(
-        &path,
-        "/MODIS_Grid_8Day_1km_LST/LST_Day_1km",
-        8,
-    )
-    .expect("MYD11 payload probe should succeed before decode attempt");
+    let probe =
+        probe_hdf4_sds_i16_payload_window_in_file(&path, "/MODIS_Grid_8Day_1km_LST/LST_Day_1km", 8)
+            .expect("MYD11 payload probe should succeed before decode attempt");
     let decode_attempt = attempt_decode_hdf4_sds_i16_window_in_file(
         &path,
         "/MODIS_Grid_8Day_1km_LST/LST_Day_1km",
@@ -4037,20 +4141,29 @@ fn myd11_hdf4_eos_metadata_probe_and_payload_window_are_exercised() {
         assert!(values.len() <= 8);
         assert!(values == probe.little_endian_preview || values == probe.big_endian_preview);
     } else {
-        let _ = decode_attempt.expect_err("MYD11 decode attempt should either preview values or return diagnostics");
+        let _ = decode_attempt
+            .expect_err("MYD11 decode attempt should either preview values or return diagnostics");
     }
 }
 
 #[test]
 fn myd13_hdf4_eos_metadata_probe_and_payload_window_are_exercised() {
-    let Some(path) = hdf4_example_fixture_in_data_dir("MYD13A1.A2017281.h01v10.061.2021286205049.hdf") else {
+    let Some(path) =
+        hdf4_example_fixture_in_data_dir("MYD13A1.A2017281.h01v10.061.2021286205049.hdf")
+    else {
         return;
     };
 
     let summary = probe_hdf4_eos_metadata_in_file(&path)
         .expect("MYD13 HDF4 EOS metadata probe should succeed");
-    assert!(summary.grid_names.iter().any(|name| name == "MODIS_Grid_16DAY_500m_VI"));
-    assert!(summary.data_field_names.iter().any(|name| name == "500m 16 days NDVI"));
+    assert!(summary
+        .grid_names
+        .iter()
+        .any(|name| name == "MODIS_Grid_16DAY_500m_VI"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "500m 16 days NDVI"));
 
     let field = find_modis_field(&summary, "MODIS_Grid_16DAY_500m_VI", "500m 16 days NDVI")
         .expect("MYD13 field metadata should include NDVI");
@@ -4074,13 +4187,16 @@ fn myd13_hdf4_eos_metadata_probe_and_payload_window_are_exercised() {
         assert!(values.len() <= 8);
         assert!(values == probe.little_endian_preview || values == probe.big_endian_preview);
     } else {
-        let _ = decode_attempt.expect_err("MYD13 decode attempt should either preview values or return diagnostics");
+        let _ = decode_attempt
+            .expect_err("MYD13 decode attempt should either preview values or return diagnostics");
     }
 }
 
 #[test]
 fn myd09_documented_field_vocabulary_is_discoverable_with_reports() {
-    let Some(path) = hdf4_example_fixture_in_data_dir("MYD09A1.A2008057.h01v08.061.2021087165611.hdf") else {
+    let Some(path) =
+        hdf4_example_fixture_in_data_dir("MYD09A1.A2008057.h01v08.061.2021087165611.hdf")
+    else {
         return;
     };
 
@@ -4104,7 +4220,9 @@ fn myd09_documented_field_vocabulary_is_discoverable_with_reports() {
 
 #[test]
 fn myd11_documented_field_vocabulary_is_discoverable_with_reports() {
-    let Some(path) = hdf4_example_fixture_in_data_dir("MYD11A2.A2026073.h04v11.061.2026083154149.hdf") else {
+    let Some(path) =
+        hdf4_example_fixture_in_data_dir("MYD11A2.A2026073.h04v11.061.2026083154149.hdf")
+    else {
         return;
     };
 
@@ -4124,7 +4242,9 @@ fn myd11_documented_field_vocabulary_is_discoverable_with_reports() {
 
 #[test]
 fn myd13_documented_field_vocabulary_is_discoverable_with_reports() {
-    let Some(path) = hdf4_example_fixture_in_data_dir("MYD13A1.A2017281.h01v10.061.2021286205049.hdf") else {
+    let Some(path) =
+        hdf4_example_fixture_in_data_dir("MYD13A1.A2017281.h01v10.061.2021286205049.hdf")
+    else {
         return;
     };
 
@@ -4157,7 +4277,10 @@ fn viirs_m3_hdf5_fixture_discovers_science_paths() {
 
     let metadata = probe_file_metadata(path).expect("VIIRS M3 metadata probe should succeed");
     assert!(metadata.superblock_version <= 3);
-    assert!(metadata.top_level_groups.iter().any(|group| group == "VIIRS-M3-SDR"));
+    assert!(metadata
+        .top_level_groups
+        .iter()
+        .any(|group| group == "VIIRS-M3-SDR"));
 
     let radiance = resolve_dataset_in_file(path, "/All_Data/VIIRS-M3-SDR_All/Radiance")
         .expect("VIIRS M3 radiance dataset should be discoverable by path markers");
@@ -4167,13 +4290,21 @@ fn viirs_m3_hdf5_fixture_discovers_science_paths() {
         .expect("VIIRS M3 reflectance dataset should be discoverable by path markers");
     assert_eq!(reflectance.path, "/All_Data/VIIRS-M3-SDR_All/Reflectance");
 
-    let g_ring_latitude = resolve_dataset_in_file(path, "/All_Data/VIIRS-M3-SDR_All/G-Ring_Latitude")
-        .expect("VIIRS M3 G-Ring_Latitude dataset should be discoverable by path markers");
-    assert_eq!(g_ring_latitude.path, "/All_Data/VIIRS-M3-SDR_All/G-Ring_Latitude");
+    let g_ring_latitude =
+        resolve_dataset_in_file(path, "/All_Data/VIIRS-M3-SDR_All/G-Ring_Latitude")
+            .expect("VIIRS M3 G-Ring_Latitude dataset should be discoverable by path markers");
+    assert_eq!(
+        g_ring_latitude.path,
+        "/All_Data/VIIRS-M3-SDR_All/G-Ring_Latitude"
+    );
 
-    let g_ring_longitude = resolve_dataset_in_file(path, "/All_Data/VIIRS-M3-SDR_All/G-Ring_Longitude")
-        .expect("VIIRS M3 G-Ring_Longitude dataset should be discoverable by path markers");
-    assert_eq!(g_ring_longitude.path, "/All_Data/VIIRS-M3-SDR_All/G-Ring_Longitude");
+    let g_ring_longitude =
+        resolve_dataset_in_file(path, "/All_Data/VIIRS-M3-SDR_All/G-Ring_Longitude")
+            .expect("VIIRS M3 G-Ring_Longitude dataset should be discoverable by path markers");
+    assert_eq!(
+        g_ring_longitude.path,
+        "/All_Data/VIIRS-M3-SDR_All/G-Ring_Longitude"
+    );
 }
 
 #[test]
@@ -4187,23 +4318,40 @@ fn viirs_i4_hdf5_fixture_discovers_science_paths() {
 
     let metadata = probe_file_metadata(path).expect("VIIRS I4 metadata probe should succeed");
     assert!(metadata.superblock_version <= 3);
-    assert!(metadata.top_level_groups.iter().any(|group| group == "VIIRS-I4-IMG-EDR"));
+    assert!(metadata
+        .top_level_groups
+        .iter()
+        .any(|group| group == "VIIRS-I4-IMG-EDR"));
 
-    let brightness = resolve_dataset_in_file(path, "/All_Data/VIIRS-I4-IMG-EDR_All/BrightnessTemperature")
-        .expect("VIIRS I4 brightness-temperature dataset should be discoverable by path markers");
-    assert_eq!(brightness.path, "/All_Data/VIIRS-I4-IMG-EDR_All/BrightnessTemperature");
+    let brightness =
+        resolve_dataset_in_file(path, "/All_Data/VIIRS-I4-IMG-EDR_All/BrightnessTemperature")
+            .expect(
+                "VIIRS I4 brightness-temperature dataset should be discoverable by path markers",
+            );
+    assert_eq!(
+        brightness.path,
+        "/All_Data/VIIRS-I4-IMG-EDR_All/BrightnessTemperature"
+    );
 
     let radiance = resolve_dataset_in_file(path, "/All_Data/VIIRS-I4-IMG-EDR_All/Radiance")
         .expect("VIIRS I4 radiance dataset should be discoverable by path markers");
     assert_eq!(radiance.path, "/All_Data/VIIRS-I4-IMG-EDR_All/Radiance");
 
-    let g_ring_latitude = resolve_dataset_in_file(path, "/All_Data/VIIRS-I4-IMG-EDR_All/G-Ring_Latitude")
-        .expect("VIIRS I4 G-Ring_Latitude dataset should be discoverable by path markers");
-    assert_eq!(g_ring_latitude.path, "/All_Data/VIIRS-I4-IMG-EDR_All/G-Ring_Latitude");
+    let g_ring_latitude =
+        resolve_dataset_in_file(path, "/All_Data/VIIRS-I4-IMG-EDR_All/G-Ring_Latitude")
+            .expect("VIIRS I4 G-Ring_Latitude dataset should be discoverable by path markers");
+    assert_eq!(
+        g_ring_latitude.path,
+        "/All_Data/VIIRS-I4-IMG-EDR_All/G-Ring_Latitude"
+    );
 
-    let g_ring_longitude = resolve_dataset_in_file(path, "/All_Data/VIIRS-I4-IMG-EDR_All/G-Ring_Longitude")
-        .expect("VIIRS I4 G-Ring_Longitude dataset should be discoverable by path markers");
-    assert_eq!(g_ring_longitude.path, "/All_Data/VIIRS-I4-IMG-EDR_All/G-Ring_Longitude");
+    let g_ring_longitude =
+        resolve_dataset_in_file(path, "/All_Data/VIIRS-I4-IMG-EDR_All/G-Ring_Longitude")
+            .expect("VIIRS I4 G-Ring_Longitude dataset should be discoverable by path markers");
+    assert_eq!(
+        g_ring_longitude.path,
+        "/All_Data/VIIRS-I4-IMG-EDR_All/G-Ring_Longitude"
+    );
 }
 
 #[test]
@@ -4271,7 +4419,10 @@ fn modis_mod09a1_fixture_has_hdf4_signature() {
     };
 
     let bytes = std::fs::read(&path).expect("MODIS fixture should be readable");
-    assert!(bytes.len() >= 4, "MODIS fixture should contain at least 4 bytes");
+    assert!(
+        bytes.len() >= 4,
+        "MODIS fixture should contain at least 4 bytes"
+    );
     assert_eq!(
         &bytes[0..4],
         &[0x0E, 0x03, 0x13, 0x01],
@@ -4294,9 +4445,16 @@ fn modis_mod11_mod13_fixture_variants_are_present_and_hdf4() {
 
     for file_name in variants {
         let path = root.join(file_name);
-        assert!(path.is_file(), "expected MODIS fixture to exist: {}", file_name);
+        assert!(
+            path.is_file(),
+            "expected MODIS fixture to exist: {}",
+            file_name
+        );
         let bytes = std::fs::read(&path).expect("MODIS variant should be readable");
-        assert!(bytes.len() >= 4, "MODIS variant should contain at least 4 bytes");
+        assert!(
+            bytes.len() >= 4,
+            "MODIS variant should contain at least 4 bytes"
+        );
         assert_eq!(
             &bytes[0..4],
             &[0x0E, 0x03, 0x13, 0x01],
@@ -4315,27 +4473,25 @@ fn modis_mod09_hdf4_eos_metadata_probe_enumerates_expected_fields() {
     let summary = probe_hdf4_eos_metadata_in_file(&path)
         .expect("MOD09 HDF4 EOS metadata probe should succeed");
     assert!(summary.struct_metadata_markers >= 1);
-    assert!(
-        summary
-            .grid_names
-            .iter()
-            .any(|name| name == "MOD_Grid_500m_Surface_Reflectance")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "sur_refl_b01")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "sur_refl_state_500m")
-    );
+    assert!(summary
+        .grid_names
+        .iter()
+        .any(|name| name == "MOD_Grid_500m_Surface_Reflectance"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "sur_refl_b01"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "sur_refl_state_500m"));
 
-    let field = find_modis_field(&summary, "MOD_Grid_500m_Surface_Reflectance", "sur_refl_b01")
-        .expect("MOD09 field metadata should include sur_refl_b01");
+    let field = find_modis_field(
+        &summary,
+        "MOD_Grid_500m_Surface_Reflectance",
+        "sur_refl_b01",
+    )
+    .expect("MOD09 field metadata should include sur_refl_b01");
     assert_eq!(field.data_type.as_deref(), Some("DFNT_INT16"));
     assert_eq!(field.dim_list, vec!["YDim", "XDim"]);
 
@@ -4344,16 +4500,26 @@ fn modis_mod09_hdf4_eos_metadata_probe_enumerates_expected_fields() {
     assert_eq!(grid.projection.as_deref(), Some("GCTP_SNSOID"));
     assert_eq!(grid.sphere_code, Some(-1));
     assert_eq!(grid.upper_left_mtrs, Some((-15567307.275333, 0.0)));
-    assert_eq!(grid.lower_right_mtrs, Some((-14455356.755667, -1111950.519667)));
+    assert_eq!(
+        grid.lower_right_mtrs,
+        Some((-14455356.755667, -1111950.519667))
+    );
     assert_eq!(grid.proj_params.len(), 13);
     assert_eq!(grid.proj_params[0], 6_371_007.181);
 
-    let resolved = resolve_hdf4_grid_field(&summary, "MOD_Grid_500m_Surface_Reflectance", "sur_refl_b01")
-        .expect("MOD09 field should resolve with shape");
+    let resolved = resolve_hdf4_grid_field(
+        &summary,
+        "MOD_Grid_500m_Surface_Reflectance",
+        "sur_refl_b01",
+    )
+    .expect("MOD09 field should resolve with shape");
     assert_eq!(resolved.shape, vec![2400, 2400]);
     assert_eq!(resolved.projection.as_deref(), Some("GCTP_SNSOID"));
     assert_eq!(resolved.upper_left_mtrs, Some((-15567307.275333, 0.0)));
-    assert_eq!(resolved.lower_right_mtrs, Some((-14455356.755667, -1111950.519667)));
+    assert_eq!(
+        resolved.lower_right_mtrs,
+        Some((-14455356.755667, -1111950.519667))
+    );
 
     let geometry = derive_hdf4_grid_geometry(&resolved)
         .expect("MOD09 resolved field should derive grid geometry");
@@ -4362,16 +4528,18 @@ fn modis_mod09_hdf4_eos_metadata_probe_enumerates_expected_fields() {
     assert!((geometry.pixel_size_x - 463.3127165275).abs() < 1e-6);
     assert!((geometry.pixel_size_y + 463.31271652791664).abs() < 1e-6);
 
-    let resolved_path = resolve_hdf4_dataset_path(
-        &summary,
-        "/MOD_Grid_500m_Surface_Reflectance/sur_refl_b01",
-    )
-    .expect("MOD09 canonical path should resolve");
+    let resolved_path =
+        resolve_hdf4_dataset_path(&summary, "/MOD_Grid_500m_Surface_Reflectance/sur_refl_b01")
+            .expect("MOD09 canonical path should resolve");
     assert_eq!(resolved_path.shape, vec![2400, 2400]);
 
     let paths = enumerate_hdf4_dataset_paths(&summary);
-    assert!(paths.iter().any(|p| p == "/MOD_Grid_500m_Surface_Reflectance/sur_refl_b01"));
-    assert!(paths.iter().any(|p| p == "/MOD_Grid_500m_Surface_Reflectance/sur_refl_state_500m"));
+    assert!(paths
+        .iter()
+        .any(|p| p == "/MOD_Grid_500m_Surface_Reflectance/sur_refl_b01"));
+    assert!(paths
+        .iter()
+        .any(|p| p == "/MOD_Grid_500m_Surface_Reflectance/sur_refl_state_500m"));
 }
 
 #[test]
@@ -4389,14 +4557,15 @@ fn modis_mod09_hdf4_sds_decode_attempt_returns_window_or_diagnostics() {
     )
     .expect("MOD09 payload probe should succeed before decode attempt");
 
-    let decode_result = decode_hdf4_sds_i16_in_file(
-        &path,
-        "/MOD_Grid_500m_Surface_Reflectance/sur_refl_b01",
-    );
+    let decode_result =
+        decode_hdf4_sds_i16_in_file(&path, "/MOD_Grid_500m_Surface_Reflectance/sur_refl_b01");
 
     if probe.status == "decoded_preview" {
         let values = decode_result.expect("MOD09 decode attempt should return the probe preview");
-        assert!(!values.is_empty(), "decoded window values should not be empty");
+        assert!(
+            !values.is_empty(),
+            "decoded window values should not be empty"
+        );
         assert!(
             values.len() <= MOD09_WINDOW_VALUES,
             "decoded window should respect max_values"
@@ -4406,7 +4575,9 @@ fn modis_mod09_hdf4_sds_decode_attempt_returns_window_or_diagnostics() {
             "decoded window should match one of the probe previews"
         );
     } else {
-        let err = decode_result.expect_err("MOD09 decode attempt should report diagnostics when the probe cannot decode");
+        let err = decode_result.expect_err(
+            "MOD09 decode attempt should report diagnostics when the probe cannot decode",
+        );
         let msg = format!("{err}");
         assert!(msg.contains("not yet implemented"));
         assert!(msg.contains("/MOD_Grid_500m_Surface_Reflectance/sur_refl_b01"));
@@ -4447,7 +4618,10 @@ fn modis_mod09_hdf4_descriptor_enumeration_and_candidate_discovery() {
 
     let descriptors = parse_hdf4_data_descriptors_in_file(&path)
         .expect("MOD09 descriptor enumeration should succeed");
-    assert!(!descriptors.is_empty(), "MOD09 descriptors should not be empty");
+    assert!(
+        !descriptors.is_empty(),
+        "MOD09 descriptors should not be empty"
+    );
 
     let candidates = find_hdf4_sds_i16_payload_candidates_in_file(
         &path,
@@ -4462,13 +4636,10 @@ fn modis_mod09_hdf4_descriptor_enumeration_and_candidate_discovery() {
     .expect("MOD09 readiness-in-file should succeed");
     assert_eq!(readiness.payload_candidates, candidates);
     assert!(
-        readiness
-            .blockers
-            .iter()
-            .any(|b| {
-                b.contains("descriptor-to-field mapping")
-                    || b.contains("no in-bounds HDF4 descriptor candidates")
-            }),
+        readiness.blockers.iter().any(|b| {
+            b.contains("descriptor-to-field mapping")
+                || b.contains("no in-bounds HDF4 descriptor candidates")
+        }),
         "readiness blockers should include descriptor-mapping or no-candidate blocker"
     );
 
@@ -4516,9 +4687,16 @@ fn modis_mod09_hdf4_descriptor_enumeration_and_candidate_discovery() {
     )
     .expect("MOD09 payload probe should succeed");
     assert!(
-        ["decoded_preview", "compressed_payload", "textual_payload", "no_candidate", "candidate_out_of_bounds", "insufficient_bytes"]
-            .iter()
-            .any(|status| *status == probe.status),
+        [
+            "decoded_preview",
+            "compressed_payload",
+            "textual_payload",
+            "no_candidate",
+            "candidate_out_of_bounds",
+            "insufficient_bytes"
+        ]
+        .iter()
+        .any(|status| *status == probe.status),
         "MOD09 payload probe should report a known status"
     );
 
@@ -4529,8 +4707,14 @@ fn modis_mod09_hdf4_descriptor_enumeration_and_candidate_discovery() {
     );
     match decode_attempt {
         Ok(values) => {
-            assert!(!values.is_empty(), "decoded window values should not be empty");
-            assert!(values.len() <= 8, "decoded window should respect max_values");
+            assert!(
+                !values.is_empty(),
+                "decoded window values should not be empty"
+            );
+            assert!(
+                values.len() <= 8,
+                "decoded window should respect max_values"
+            );
             assert!(
                 values == probe.little_endian_preview || values == probe.big_endian_preview,
                 "decoded MOD09 window should match one of the probe previews"
@@ -4560,8 +4744,14 @@ fn modis_mod09_hdf4_offset_window_decode_is_exercised() {
     );
     match first_window {
         Ok(values) => {
-            assert!(!values.is_empty(), "decoded first window should not be empty");
-            assert!(values.len() <= 8, "decoded first window should respect max_values");
+            assert!(
+                !values.is_empty(),
+                "decoded first window should not be empty"
+            );
+            assert!(
+                values.len() <= 8,
+                "decoded first window should respect max_values"
+            );
             let probe = probe_hdf4_sds_i16_payload_window_in_file(
                 &path,
                 "/MOD_Grid_500m_Surface_Reflectance/sur_refl_b01",
@@ -4590,8 +4780,14 @@ fn modis_mod09_hdf4_offset_window_decode_is_exercised() {
     );
     match offset_window {
         Ok(values) => {
-            assert!(!values.is_empty(), "decoded offset window should not be empty");
-            assert!(values.len() <= 8, "decoded offset window should respect max_values");
+            assert!(
+                !values.is_empty(),
+                "decoded offset window should not be empty"
+            );
+            assert!(
+                values.len() <= 8,
+                "decoded offset window should respect max_values"
+            );
             let probe = probe_hdf4_sds_i16_payload_window_in_file(
                 &path,
                 "/MOD_Grid_500m_Surface_Reflectance/sur_refl_b01",
@@ -4662,24 +4858,15 @@ fn modis_mod11_hdf4_eos_metadata_probe_enumerates_expected_fields() {
     let summary = probe_hdf4_eos_metadata_in_file(&path)
         .expect("MOD11 HDF4 EOS metadata probe should succeed");
     assert!(summary.struct_metadata_markers >= 1);
-    assert!(
-        summary
-            .grid_names
-            .iter()
-            .any(|name| name == "MODIS_Grid_8Day_1km_LST")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "LST_Day_1km")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "QC_Day")
-    );
+    assert!(summary
+        .grid_names
+        .iter()
+        .any(|name| name == "MODIS_Grid_8Day_1km_LST"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "LST_Day_1km"));
+    assert!(summary.data_field_names.iter().any(|name| name == "QC_Day"));
 
     let field = find_modis_field(&summary, "MODIS_Grid_8Day_1km_LST", "LST_Day_1km")
         .expect("MOD11 field metadata should include LST_Day_1km");
@@ -4690,16 +4877,28 @@ fn modis_mod11_hdf4_eos_metadata_probe_enumerates_expected_fields() {
         .expect("MOD11 grid metadata should be present");
     assert_eq!(grid.projection.as_deref(), Some("GCTP_SNSOID"));
     assert_eq!(grid.sphere_code, Some(-1));
-    assert_eq!(grid.upper_left_mtrs, Some((-18903158.836031, -1111950.519767)));
-    assert_eq!(grid.lower_right_mtrs, Some((-17791208.316264, -2223901.039533)));
+    assert_eq!(
+        grid.upper_left_mtrs,
+        Some((-18903158.836031, -1111950.519767))
+    );
+    assert_eq!(
+        grid.lower_right_mtrs,
+        Some((-17791208.316264, -2223901.039533))
+    );
     assert_eq!(grid.proj_params.len(), 13);
 
     let resolved = resolve_hdf4_grid_field(&summary, "MODIS_Grid_8Day_1km_LST", "LST_Day_1km")
         .expect("MOD11 field should resolve with shape");
     assert_eq!(resolved.shape, vec![1200, 1200]);
     assert_eq!(resolved.projection.as_deref(), Some("GCTP_SNSOID"));
-    assert_eq!(resolved.upper_left_mtrs, Some((-18903158.836031, -1111950.519767)));
-    assert_eq!(resolved.lower_right_mtrs, Some((-17791208.316264, -2223901.039533)));
+    assert_eq!(
+        resolved.upper_left_mtrs,
+        Some((-18903158.836031, -1111950.519767))
+    );
+    assert_eq!(
+        resolved.lower_right_mtrs,
+        Some((-17791208.316264, -2223901.039533))
+    );
 
     let geometry = derive_hdf4_grid_geometry(&resolved)
         .expect("MOD11 resolved field should derive grid geometry");
@@ -4708,21 +4907,21 @@ fn modis_mod11_hdf4_eos_metadata_probe_enumerates_expected_fields() {
     assert!((geometry.pixel_size_x - 926.6254331391667).abs() < 1e-6);
     assert!((geometry.pixel_size_y + 926.6254331383334).abs() < 1e-6);
 
-    let resolved_path =
-        resolve_hdf4_dataset_path(&summary, "/MODIS_Grid_8Day_1km_LST/LST_Day_1km")
-            .expect("MOD11 canonical path should resolve");
+    let resolved_path = resolve_hdf4_dataset_path(&summary, "/MODIS_Grid_8Day_1km_LST/LST_Day_1km")
+        .expect("MOD11 canonical path should resolve");
     assert_eq!(resolved_path.shape, vec![1200, 1200]);
 
     let paths = enumerate_hdf4_dataset_paths(&summary);
-    assert!(paths.iter().any(|p| p == "/MODIS_Grid_8Day_1km_LST/LST_Day_1km"));
-    assert!(paths.iter().any(|p| p == "/MODIS_Grid_8Day_1km_LST/LST_Night_1km"));
+    assert!(paths
+        .iter()
+        .any(|p| p == "/MODIS_Grid_8Day_1km_LST/LST_Day_1km"));
+    assert!(paths
+        .iter()
+        .any(|p| p == "/MODIS_Grid_8Day_1km_LST/LST_Night_1km"));
 
-    let probe = probe_hdf4_sds_i16_payload_window_in_file(
-        &path,
-        "/MODIS_Grid_8Day_1km_LST/LST_Day_1km",
-        8,
-    )
-    .expect("MOD11 payload probe should succeed before decode attempt");
+    let probe =
+        probe_hdf4_sds_i16_payload_window_in_file(&path, "/MODIS_Grid_8Day_1km_LST/LST_Day_1km", 8)
+            .expect("MOD11 payload probe should succeed before decode attempt");
 
     let decode_attempt = attempt_decode_hdf4_sds_i16_window_in_file(
         &path,
@@ -4732,14 +4931,22 @@ fn modis_mod11_hdf4_eos_metadata_probe_enumerates_expected_fields() {
 
     if probe.status == "decoded_preview" {
         let values = decode_attempt.expect("MOD11 decode attempt should return the probe preview");
-        assert!(!values.is_empty(), "decoded MOD11 window values should not be empty");
-        assert!(values.len() <= 8, "decoded MOD11 window should respect max_values");
+        assert!(
+            !values.is_empty(),
+            "decoded MOD11 window values should not be empty"
+        );
+        assert!(
+            values.len() <= 8,
+            "decoded MOD11 window should respect max_values"
+        );
         assert!(
             values == probe.little_endian_preview || values == probe.big_endian_preview,
             "decoded MOD11 window should match one of the probe previews"
         );
     } else {
-        let err = decode_attempt.expect_err("MOD11 decode attempt should report diagnostics when the probe cannot decode");
+        let err = decode_attempt.expect_err(
+            "MOD11 decode attempt should report diagnostics when the probe cannot decode",
+        );
         let msg = format!("{err}");
         assert!(msg.contains("not yet implemented"));
         assert!(msg.contains("/MODIS_Grid_8Day_1km_LST/LST_Day_1km"));
@@ -4758,22 +4965,17 @@ fn modis_mod13_hdf4_eos_metadata_probe_enumerates_expected_fields() {
     let summary = probe_hdf4_eos_metadata_in_file(&path)
         .expect("MOD13 HDF4 EOS metadata probe should succeed");
     assert!(summary.struct_metadata_markers >= 1);
-    assert!(
-        summary
-            .grid_names
-            .iter()
-            .any(|name| name == "MODIS_Grid_16DAY_500m_VI")
-    );
-    assert!(
-        summary
-            .data_field_names
-            .iter()
-            .any(|name| name == "500m 16 days VI Quality")
-    );
+    assert!(summary
+        .grid_names
+        .iter()
+        .any(|name| name == "MODIS_Grid_16DAY_500m_VI"));
+    assert!(summary
+        .data_field_names
+        .iter()
+        .any(|name| name == "500m 16 days VI Quality"));
 
-    let field =
-        find_modis_field(&summary, "MODIS_Grid_16DAY_500m_VI", "500m 16 days NDVI")
-            .expect("MOD13 field metadata should include NDVI");
+    let field = find_modis_field(&summary, "MODIS_Grid_16DAY_500m_VI", "500m 16 days NDVI")
+        .expect("MOD13 field metadata should include NDVI");
     assert_eq!(field.data_type.as_deref(), Some("DFNT_INT16"));
     assert_eq!(field.dim_list, vec!["YDim", "XDim"]);
 
@@ -4781,8 +4983,14 @@ fn modis_mod13_hdf4_eos_metadata_probe_enumerates_expected_fields() {
         .expect("MOD13 grid metadata should be present");
     assert_eq!(grid.projection.as_deref(), Some("GCTP_SNSOID"));
     assert_eq!(grid.sphere_code, Some(-1));
-    assert_eq!(grid.upper_left_mtrs, Some((-16679257.795000, 2223901.039333)));
-    assert_eq!(grid.lower_right_mtrs, Some((-15567307.275333, 1111950.519667)));
+    assert_eq!(
+        grid.upper_left_mtrs,
+        Some((-16679257.795000, 2223901.039333))
+    );
+    assert_eq!(
+        grid.lower_right_mtrs,
+        Some((-15567307.275333, 1111950.519667))
+    );
     assert_eq!(grid.proj_params.len(), 13);
 
     let resolved =
@@ -4790,8 +4998,14 @@ fn modis_mod13_hdf4_eos_metadata_probe_enumerates_expected_fields() {
             .expect("MOD13 field should resolve with shape");
     assert_eq!(resolved.shape, vec![2400, 2400]);
     assert_eq!(resolved.projection.as_deref(), Some("GCTP_SNSOID"));
-    assert_eq!(resolved.upper_left_mtrs, Some((-16679257.795000, 2223901.039333)));
-    assert_eq!(resolved.lower_right_mtrs, Some((-15567307.275333, 1111950.519667)));
+    assert_eq!(
+        resolved.upper_left_mtrs,
+        Some((-16679257.795000, 2223901.039333))
+    );
+    assert_eq!(
+        resolved.lower_right_mtrs,
+        Some((-15567307.275333, 1111950.519667))
+    );
 
     let geometry = derive_hdf4_grid_geometry(&resolved)
         .expect("MOD13 resolved field should derive grid geometry");
@@ -4800,20 +5014,18 @@ fn modis_mod13_hdf4_eos_metadata_probe_enumerates_expected_fields() {
     assert!((geometry.pixel_size_x - 463.31271652791664).abs() < 1e-6);
     assert!((geometry.pixel_size_y + 463.3127165275).abs() < 1e-6);
 
-    let resolved_path = resolve_hdf4_dataset_path(
-        &summary,
-        "/MODIS_Grid_16DAY_500m_VI/500m 16 days NDVI",
-    )
-    .expect("MOD13 canonical path should resolve");
+    let resolved_path =
+        resolve_hdf4_dataset_path(&summary, "/MODIS_Grid_16DAY_500m_VI/500m 16 days NDVI")
+            .expect("MOD13 canonical path should resolve");
     assert_eq!(resolved_path.shape, vec![2400, 2400]);
 
     let paths = enumerate_hdf4_dataset_paths(&summary);
-    assert!(paths.iter().any(|p| p == "/MODIS_Grid_16DAY_500m_VI/500m 16 days NDVI"));
-    assert!(
-        paths
-            .iter()
-            .any(|p| p == "/MODIS_Grid_16DAY_500m_VI/500m 16 days VI Quality")
-    );
+    assert!(paths
+        .iter()
+        .any(|p| p == "/MODIS_Grid_16DAY_500m_VI/500m 16 days NDVI"));
+    assert!(paths
+        .iter()
+        .any(|p| p == "/MODIS_Grid_16DAY_500m_VI/500m 16 days VI Quality"));
 
     let probe = probe_hdf4_sds_i16_payload_window_in_file(
         &path,
@@ -4830,14 +5042,22 @@ fn modis_mod13_hdf4_eos_metadata_probe_enumerates_expected_fields() {
 
     if probe.status == "decoded_preview" {
         let values = decode_attempt.expect("MOD13 decode attempt should return the probe preview");
-        assert!(!values.is_empty(), "decoded MOD13 window values should not be empty");
-        assert!(values.len() <= 8, "decoded MOD13 window should respect max_values");
+        assert!(
+            !values.is_empty(),
+            "decoded MOD13 window values should not be empty"
+        );
+        assert!(
+            values.len() <= 8,
+            "decoded MOD13 window should respect max_values"
+        );
         assert!(
             values == probe.little_endian_preview || values == probe.big_endian_preview,
             "decoded MOD13 window should match one of the probe previews"
         );
     } else {
-        let err = decode_attempt.expect_err("MOD13 decode attempt should report diagnostics when the probe cannot decode");
+        let err = decode_attempt.expect_err(
+            "MOD13 decode attempt should report diagnostics when the probe cannot decode",
+        );
         let msg = format!("{err}");
         assert!(msg.contains("not yet implemented"));
         assert!(msg.contains("/MODIS_Grid_16DAY_500m_VI/500m 16 days NDVI"));
@@ -4936,9 +5156,16 @@ fn atl08_h_canopy_v1_object_header_layout_and_filter_are_decoded() {
     assert_eq!(parsed.fill_values[0].fill_time, 2);
     assert_eq!(parsed.fill_values[0].value_defined, 1);
     assert_eq!(parsed.fill_values[0].value_size, 4);
-    assert_eq!(parsed.fill_values[0].value_bytes, vec![0xff, 0xff, 0x7f, 0x7f]);
+    assert_eq!(
+        parsed.fill_values[0].value_bytes,
+        vec![0xff, 0xff, 0x7f, 0x7f]
+    );
     let fill = decode_f32(
-        parsed.fill_values[0].value_bytes.clone().try_into().expect("fill value should be f32"),
+        parsed.fill_values[0]
+            .value_bytes
+            .clone()
+            .try_into()
+            .expect("fill value should be f32"),
         Endianness::Little,
     );
     assert_eq!(fill, f32::MAX);
@@ -4980,9 +5207,11 @@ fn atl08_h_canopy_first_chunk_decodes_to_f32_values() {
     assert_eq!(first_record.chunk_address, 9_489_637);
     assert_eq!(first_record.chunk_offsets, vec![0, 0]);
 
-    let compressed = read_chunk_payload_in_file(&path, first_record.chunk_address, first_record.chunk_size)
-        .expect("ATL08 first compressed chunk should be readable");
-    let decompressed = decompress_zlib(&compressed).expect("ATL08 first chunk should zlib-decompress");
+    let compressed =
+        read_chunk_payload_in_file(&path, first_record.chunk_address, first_record.chunk_size)
+            .expect("ATL08 first compressed chunk should be readable");
+    let decompressed =
+        decompress_zlib(&compressed).expect("ATL08 first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 40_000);
 
     let values = decode_f32_slice(&decompressed, Endianness::Little)
@@ -4993,7 +5222,11 @@ fn atl08_h_canopy_first_chunk_decodes_to_f32_values() {
     assert_eq!(values[2], f32::MAX);
 
     let fill = decode_f32(
-        parsed.fill_values[0].value_bytes.clone().try_into().expect("fill value should be f32"),
+        parsed.fill_values[0]
+            .value_bytes
+            .clone()
+            .try_into()
+            .expect("fill value should be f32"),
         Endianness::Little,
     );
     let mapped = apply_fill_value_mapping_f32(&values, Some(fill), -9999.0);
@@ -5057,10 +5290,11 @@ fn atl08_h_canopy_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records[0].chunk_size, 13_494);
     assert_eq!(records[0].chunk_address, 9_489_637);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 bounded first chunk should be readable");
-    let decompressed = decompress_zlib(&compressed)
-        .expect("ATL08 bounded first chunk should zlib-decompress");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 bounded first chunk should be readable");
+    let decompressed =
+        decompress_zlib(&compressed).expect("ATL08 bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 40_000);
 
     let values = decode_f32_slice(&decompressed, Endianness::Little)
@@ -5071,7 +5305,11 @@ fn atl08_h_canopy_bounded_chunk_index_probe_returns_records() {
     assert_eq!(values[2], f32::MAX);
 
     let fill = decode_f32(
-        parsed.fill_values[0].value_bytes.clone().try_into().expect("fill value should be f32"),
+        parsed.fill_values[0]
+            .value_bytes
+            .clone()
+            .try_into()
+            .expect("fill value should be f32"),
         Endianness::Little,
     );
     let mapped = apply_fill_value_mapping_f32(&values, Some(fill), -9999.0);
@@ -5123,20 +5361,27 @@ fn atl08_h_te_best_fit_bounded_chunk_index_probe_returns_records() {
     assert!(!records.is_empty());
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
-    assert_eq!(records[0].chunk_offsets.len(), layout.num_dimensions as usize);
+    assert_eq!(
+        records[0].chunk_offsets.len(),
+        layout.num_dimensions as usize
+    );
     assert_eq!(records[0].chunk_offsets[0], 0);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 h_te_best_fit bounded first chunk should be readable");
-    let decompressed =
-        decompress_zlib(&compressed).expect("ATL08 h_te_best_fit bounded first chunk should zlib-decompress");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 h_te_best_fit bounded first chunk should be readable");
+    let decompressed = decompress_zlib(&compressed)
+        .expect("ATL08 h_te_best_fit bounded first chunk should zlib-decompress");
     assert!(!decompressed.is_empty());
 
-    let values = decode_f32_slice(&decompressed, Endianness::Little)
-        .expect("ATL08 h_te_best_fit bounded first chunk payload should decode as little-endian f32");
+    let values = decode_f32_slice(&decompressed, Endianness::Little).expect(
+        "ATL08 h_te_best_fit bounded first chunk payload should decode as little-endian f32",
+    );
     assert!(!values.is_empty());
     assert!(
-        values.iter().any(|v| v.is_finite() && *v > -500.0 && *v < 9000.0),
+        values
+            .iter()
+            .any(|v| v.is_finite() && *v > -500.0 && *v < 9000.0),
         "ATL08 h_te_best_fit should contain plausible finite terrain elevations"
     );
 }
@@ -5199,17 +5444,21 @@ fn atl08_terrain_slope_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 terrain_slope bounded first chunk should be readable");
-    let decompressed =
-        decompress_zlib(&compressed).expect("ATL08 terrain_slope bounded first chunk should zlib-decompress");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 terrain_slope bounded first chunk should be readable");
+    let decompressed = decompress_zlib(&compressed)
+        .expect("ATL08 terrain_slope bounded first chunk should zlib-decompress");
     assert!(!decompressed.is_empty());
 
-    let values = decode_f32_slice(&decompressed, Endianness::Little)
-        .expect("ATL08 terrain_slope bounded first chunk payload should decode as little-endian f32");
+    let values = decode_f32_slice(&decompressed, Endianness::Little).expect(
+        "ATL08 terrain_slope bounded first chunk payload should decode as little-endian f32",
+    );
     assert!(!values.is_empty());
     assert!(
-        values.iter().any(|v| v.is_finite() && *v > -10.0 && *v < 90.0),
+        values
+            .iter()
+            .any(|v| v.is_finite() && *v > -10.0 && *v < 90.0),
         "ATL08 terrain_slope should contain plausible finite slope values"
     );
 }
@@ -5273,17 +5522,21 @@ fn atl08_h_canopy_20m_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 h_canopy_20m bounded first chunk should be readable");
-    let decompressed =
-        decompress_zlib(&compressed).expect("ATL08 h_canopy_20m bounded first chunk should zlib-decompress");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 h_canopy_20m bounded first chunk should be readable");
+    let decompressed = decompress_zlib(&compressed)
+        .expect("ATL08 h_canopy_20m bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 200_000);
 
-    let values = decode_f32_slice(&decompressed, Endianness::Little)
-        .expect("ATL08 h_canopy_20m bounded first chunk payload should decode as little-endian f32");
+    let values = decode_f32_slice(&decompressed, Endianness::Little).expect(
+        "ATL08 h_canopy_20m bounded first chunk payload should decode as little-endian f32",
+    );
     assert_eq!(values.len(), 50_000);
     assert!(
-        values.iter().any(|v| v.is_finite() && *v > -500.0 && *v < 9000.0),
+        values
+            .iter()
+            .any(|v| v.is_finite() && *v > -500.0 && *v < 9000.0),
         "ATL08 h_canopy_20m should contain plausible finite canopy elevations"
     );
 }
@@ -5294,9 +5547,13 @@ fn atl08_h_te_best_fit_20m_bounded_chunk_index_probe_returns_records() {
         return;
     };
 
-    let descriptor = resolve_dataset_in_file(&path, "/gt1l/land_segments/terrain/h_te_best_fit_20m")
-        .expect("ATL08 fixture should expose canonical h_te_best_fit_20m path marker");
-    assert_eq!(descriptor.path, "/gt1l/land_segments/terrain/h_te_best_fit_20m");
+    let descriptor =
+        resolve_dataset_in_file(&path, "/gt1l/land_segments/terrain/h_te_best_fit_20m")
+            .expect("ATL08 fixture should expose canonical h_te_best_fit_20m path marker");
+    assert_eq!(
+        descriptor.path,
+        "/gt1l/land_segments/terrain/h_te_best_fit_20m"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 396_093)
         .expect("ATL08 h_te_best_fit_20m v1 object header should parse");
@@ -5347,17 +5604,21 @@ fn atl08_h_te_best_fit_20m_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 h_te_best_fit_20m bounded first chunk should be readable");
-    let decompressed =
-        decompress_zlib(&compressed).expect("ATL08 h_te_best_fit_20m bounded first chunk should zlib-decompress");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 h_te_best_fit_20m bounded first chunk should be readable");
+    let decompressed = decompress_zlib(&compressed)
+        .expect("ATL08 h_te_best_fit_20m bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 200_000);
 
-    let values = decode_f32_slice(&decompressed, Endianness::Little)
-        .expect("ATL08 h_te_best_fit_20m bounded first chunk payload should decode as little-endian f32");
+    let values = decode_f32_slice(&decompressed, Endianness::Little).expect(
+        "ATL08 h_te_best_fit_20m bounded first chunk payload should decode as little-endian f32",
+    );
     assert_eq!(values.len(), 50_000);
     assert!(
-        values.iter().any(|v| v.is_finite() && *v > -500.0 && *v < 9000.0),
+        values
+            .iter()
+            .any(|v| v.is_finite() && *v > -500.0 && *v < 9000.0),
         "ATL08 h_te_best_fit_20m should contain plausible finite terrain elevations"
     );
 }
@@ -5370,7 +5631,10 @@ fn atl08_canopy_h_metrics_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1l/land_segments/canopy/canopy_h_metrics")
         .expect("ATL08 fixture should expose canonical canopy_h_metrics path marker");
-    assert_eq!(descriptor.path, "/gt1l/land_segments/canopy/canopy_h_metrics");
+    assert_eq!(
+        descriptor.path,
+        "/gt1l/land_segments/canopy/canopy_h_metrics"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 311_833)
         .expect("ATL08 canopy_h_metrics v1 object header should parse");
@@ -5421,17 +5685,21 @@ fn atl08_canopy_h_metrics_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 canopy_h_metrics bounded first chunk should be readable");
-    let decompressed =
-        decompress_zlib(&compressed).expect("ATL08 canopy_h_metrics bounded first chunk should zlib-decompress");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 canopy_h_metrics bounded first chunk should be readable");
+    let decompressed = decompress_zlib(&compressed)
+        .expect("ATL08 canopy_h_metrics bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 720_000);
 
-    let values = decode_f32_slice(&decompressed, Endianness::Little)
-        .expect("ATL08 canopy_h_metrics bounded first chunk payload should decode as little-endian f32");
+    let values = decode_f32_slice(&decompressed, Endianness::Little).expect(
+        "ATL08 canopy_h_metrics bounded first chunk payload should decode as little-endian f32",
+    );
     assert_eq!(values.len(), 180_000);
     assert!(
-        values.iter().any(|v| v.is_finite() && *v > -500.0 && *v < 9000.0),
+        values
+            .iter()
+            .any(|v| v.is_finite() && *v > -500.0 && *v < 9000.0),
         "ATL08 canopy_h_metrics should contain plausible finite canopy metric values"
     );
 }
@@ -5444,7 +5712,10 @@ fn atl08_subset_can_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1l/land_segments/canopy/subset_can_flag")
         .expect("ATL08 fixture should expose canonical subset_can_flag path marker");
-    assert_eq!(descriptor.path, "/gt1l/land_segments/canopy/subset_can_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt1l/land_segments/canopy/subset_can_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 385_821)
         .expect("ATL08 subset_can_flag v1 object header should parse");
@@ -5500,10 +5771,11 @@ fn atl08_subset_can_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 subset_can_flag bounded first chunk should be readable");
-    let decompressed =
-        decompress_zlib(&compressed).expect("ATL08 subset_can_flag bounded first chunk should zlib-decompress");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 subset_can_flag bounded first chunk should be readable");
+    let decompressed = decompress_zlib(&compressed)
+        .expect("ATL08 subset_can_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);
 
     let values: Vec<i8> = decompressed.iter().map(|v| *v as i8).collect();
@@ -5526,7 +5798,10 @@ fn atl08_subset_te_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1l/land_segments/terrain/subset_te_flag")
         .expect("ATL08 fixture should expose canonical subset_te_flag path marker");
-    assert_eq!(descriptor.path, "/gt1l/land_segments/terrain/subset_te_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt1l/land_segments/terrain/subset_te_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 435_501)
         .expect("ATL08 subset_te_flag v1 object header should parse");
@@ -5582,10 +5857,11 @@ fn atl08_subset_te_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 subset_te_flag bounded first chunk should be readable");
-    let decompressed =
-        decompress_zlib(&compressed).expect("ATL08 subset_te_flag bounded first chunk should zlib-decompress");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 subset_te_flag bounded first chunk should be readable");
+    let decompressed = decompress_zlib(&compressed)
+        .expect("ATL08 subset_te_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);
 
     let values: Vec<i8> = decompressed.iter().map(|v| *v as i8).collect();
@@ -5608,7 +5884,10 @@ fn atl08_te_quality_score_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1l/land_segments/terrain/te_quality_score")
         .expect("ATL08 fixture should expose canonical te_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt1l/land_segments/terrain/te_quality_score");
+    assert_eq!(
+        descriptor.path,
+        "/gt1l/land_segments/terrain/te_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 438_837)
         .expect("ATL08 te_quality_score v1 object header should parse");
@@ -5664,8 +5943,9 @@ fn atl08_te_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 te_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 te_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 te_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -5690,7 +5970,10 @@ fn atl08_can_quality_score_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1l/land_segments/canopy/can_quality_score")
         .expect("ATL08 fixture should expose canonical can_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt1l/land_segments/canopy/can_quality_score");
+    assert_eq!(
+        descriptor.path,
+        "/gt1l/land_segments/canopy/can_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 308_297)
         .expect("ATL08 can_quality_score v1 object header should parse");
@@ -5746,8 +6029,9 @@ fn atl08_can_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 can_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 can_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 can_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -5772,7 +6056,10 @@ fn atl08_gt2l_te_quality_score_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt2l/land_segments/terrain/te_quality_score")
         .expect("ATL08 fixture should expose canonical gt2l te_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt2l/land_segments/terrain/te_quality_score");
+    assert_eq!(
+        descriptor.path,
+        "/gt2l/land_segments/terrain/te_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_055_491)
         .expect("ATL08 gt2l te_quality_score v1 object header should parse");
@@ -5828,8 +6115,9 @@ fn atl08_gt2l_te_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt2l te_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt2l te_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt2l te_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -5854,7 +6142,10 @@ fn atl08_gt2l_can_quality_score_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt2l/land_segments/canopy/can_quality_score")
         .expect("ATL08 fixture should expose canonical gt2l can_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt2l/land_segments/canopy/can_quality_score");
+    assert_eq!(
+        descriptor.path,
+        "/gt2l/land_segments/canopy/can_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 924_951)
         .expect("ATL08 gt2l can_quality_score v1 object header should parse");
@@ -5910,8 +6201,9 @@ fn atl08_gt2l_can_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt2l can_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt2l can_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt2l can_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -5936,7 +6228,10 @@ fn atl08_gt2l_subset_te_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt2l/land_segments/terrain/subset_te_flag")
         .expect("ATL08 fixture should expose canonical gt2l subset_te_flag path marker");
-    assert_eq!(descriptor.path, "/gt2l/land_segments/terrain/subset_te_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt2l/land_segments/terrain/subset_te_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_052_155)
         .expect("ATL08 gt2l subset_te_flag v1 object header should parse");
@@ -5992,8 +6287,9 @@ fn atl08_gt2l_subset_te_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt2l subset_te_flag bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt2l subset_te_flag bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt2l subset_te_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);
@@ -6018,7 +6314,10 @@ fn atl08_gt2l_subset_can_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt2l/land_segments/canopy/subset_can_flag")
         .expect("ATL08 fixture should expose canonical gt2l subset_can_flag path marker");
-    assert_eq!(descriptor.path, "/gt2l/land_segments/canopy/subset_can_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt2l/land_segments/canopy/subset_can_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_002_475)
         .expect("ATL08 gt2l subset_can_flag v1 object header should parse");
@@ -6074,8 +6373,9 @@ fn atl08_gt2l_subset_can_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt2l subset_can_flag bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt2l subset_can_flag bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt2l subset_can_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);
@@ -6100,7 +6400,10 @@ fn atl08_gt1r_te_quality_score_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1r/land_segments/terrain/te_quality_score")
         .expect("ATL08 fixture should expose canonical gt1r te_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt1r/land_segments/terrain/te_quality_score");
+    assert_eq!(
+        descriptor.path,
+        "/gt1r/land_segments/terrain/te_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 747_607)
         .expect("ATL08 gt1r te_quality_score v1 object header should parse");
@@ -6156,8 +6459,9 @@ fn atl08_gt1r_te_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt1r te_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt1r te_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt1r te_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -6182,7 +6486,10 @@ fn atl08_gt1r_can_quality_score_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1r/land_segments/canopy/can_quality_score")
         .expect("ATL08 fixture should expose canonical gt1r can_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt1r/land_segments/canopy/can_quality_score");
+    assert_eq!(
+        descriptor.path,
+        "/gt1r/land_segments/canopy/can_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 616_679)
         .expect("ATL08 gt1r can_quality_score v1 object header should parse");
@@ -6238,8 +6545,9 @@ fn atl08_gt1r_can_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt1r can_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt1r can_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt1r can_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -6264,7 +6572,10 @@ fn atl08_gt1r_subset_te_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1r/land_segments/terrain/subset_te_flag")
         .expect("ATL08 fixture should expose canonical gt1r subset_te_flag path marker");
-    assert_eq!(descriptor.path, "/gt1r/land_segments/terrain/subset_te_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt1r/land_segments/terrain/subset_te_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 744_271)
         .expect("ATL08 gt1r subset_te_flag v1 object header should parse");
@@ -6320,8 +6631,9 @@ fn atl08_gt1r_subset_te_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt1r subset_te_flag bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt1r subset_te_flag bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt1r subset_te_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);
@@ -6346,7 +6658,10 @@ fn atl08_gt1r_subset_can_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1r/land_segments/canopy/subset_can_flag")
         .expect("ATL08 fixture should expose canonical gt1r subset_can_flag path marker");
-    assert_eq!(descriptor.path, "/gt1r/land_segments/canopy/subset_can_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt1r/land_segments/canopy/subset_can_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 694_383)
         .expect("ATL08 gt1r subset_can_flag v1 object header should parse");
@@ -6402,8 +6717,9 @@ fn atl08_gt1r_subset_can_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt1r subset_can_flag bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt1r subset_can_flag bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt1r subset_can_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);
@@ -6426,10 +6742,12 @@ fn atl08_gt2r_te_quality_score_bounded_chunk_index_probe_returns_records() {
         return;
     };
 
-    let descriptor =
-        resolve_dataset_in_file(&path, "/gt2r/land_segments/terrain/te_quality_score")
-            .expect("ATL08 fixture should expose canonical gt2r te_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt2r/land_segments/terrain/te_quality_score");
+    let descriptor = resolve_dataset_in_file(&path, "/gt2r/land_segments/terrain/te_quality_score")
+        .expect("ATL08 fixture should expose canonical gt2r te_quality_score path marker");
+    assert_eq!(
+        descriptor.path,
+        "/gt2r/land_segments/terrain/te_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_363_375)
         .expect("ATL08 gt2r te_quality_score v1 object header should parse");
@@ -6485,8 +6803,9 @@ fn atl08_gt2r_te_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt2r te_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt2r te_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt2r te_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -6509,10 +6828,12 @@ fn atl08_gt2r_can_quality_score_bounded_chunk_index_probe_returns_records() {
         return;
     };
 
-    let descriptor =
-        resolve_dataset_in_file(&path, "/gt2r/land_segments/canopy/can_quality_score")
-            .expect("ATL08 fixture should expose canonical gt2r can_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt2r/land_segments/canopy/can_quality_score");
+    let descriptor = resolve_dataset_in_file(&path, "/gt2r/land_segments/canopy/can_quality_score")
+        .expect("ATL08 fixture should expose canonical gt2r can_quality_score path marker");
+    assert_eq!(
+        descriptor.path,
+        "/gt2r/land_segments/canopy/can_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_232_835)
         .expect("ATL08 gt2r can_quality_score v1 object header should parse");
@@ -6568,8 +6889,9 @@ fn atl08_gt2r_can_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt2r can_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt2r can_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt2r can_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -6594,7 +6916,10 @@ fn atl08_gt2r_subset_te_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt2r/land_segments/terrain/subset_te_flag")
         .expect("ATL08 fixture should expose canonical gt2r subset_te_flag path marker");
-    assert_eq!(descriptor.path, "/gt2r/land_segments/terrain/subset_te_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt2r/land_segments/terrain/subset_te_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_360_039)
         .expect("ATL08 gt2r subset_te_flag v1 object header should parse");
@@ -6650,8 +6975,9 @@ fn atl08_gt2r_subset_te_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt2r subset_te_flag bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt2r subset_te_flag bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt2r subset_te_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);
@@ -6676,7 +7002,10 @@ fn atl08_gt2r_subset_can_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt2r/land_segments/canopy/subset_can_flag")
         .expect("ATL08 fixture should expose canonical gt2r subset_can_flag path marker");
-    assert_eq!(descriptor.path, "/gt2r/land_segments/canopy/subset_can_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt2r/land_segments/canopy/subset_can_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_310_359)
         .expect("ATL08 gt2r subset_can_flag v1 object header should parse");
@@ -6732,8 +7061,9 @@ fn atl08_gt2r_subset_can_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt2r subset_can_flag bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt2r subset_can_flag bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt2r subset_can_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);
@@ -6756,10 +7086,12 @@ fn atl08_gt3l_te_quality_score_bounded_chunk_index_probe_returns_records() {
         return;
     };
 
-    let descriptor =
-        resolve_dataset_in_file(&path, "/gt3l/land_segments/terrain/te_quality_score")
-            .expect("ATL08 fixture should expose canonical gt3l te_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt3l/land_segments/terrain/te_quality_score");
+    let descriptor = resolve_dataset_in_file(&path, "/gt3l/land_segments/terrain/te_quality_score")
+        .expect("ATL08 fixture should expose canonical gt3l te_quality_score path marker");
+    assert_eq!(
+        descriptor.path,
+        "/gt3l/land_segments/terrain/te_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_671_259)
         .expect("ATL08 gt3l te_quality_score v1 object header should parse");
@@ -6815,8 +7147,9 @@ fn atl08_gt3l_te_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt3l te_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt3l te_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt3l te_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -6839,10 +7172,12 @@ fn atl08_gt3l_can_quality_score_bounded_chunk_index_probe_returns_records() {
         return;
     };
 
-    let descriptor =
-        resolve_dataset_in_file(&path, "/gt3l/land_segments/canopy/can_quality_score")
-            .expect("ATL08 fixture should expose canonical gt3l can_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt3l/land_segments/canopy/can_quality_score");
+    let descriptor = resolve_dataset_in_file(&path, "/gt3l/land_segments/canopy/can_quality_score")
+        .expect("ATL08 fixture should expose canonical gt3l can_quality_score path marker");
+    assert_eq!(
+        descriptor.path,
+        "/gt3l/land_segments/canopy/can_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_540_719)
         .expect("ATL08 gt3l can_quality_score v1 object header should parse");
@@ -6898,8 +7233,9 @@ fn atl08_gt3l_can_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt3l can_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt3l can_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt3l can_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -6924,7 +7260,10 @@ fn atl08_gt3l_subset_te_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt3l/land_segments/terrain/subset_te_flag")
         .expect("ATL08 fixture should expose canonical gt3l subset_te_flag path marker");
-    assert_eq!(descriptor.path, "/gt3l/land_segments/terrain/subset_te_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt3l/land_segments/terrain/subset_te_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_667_923)
         .expect("ATL08 gt3l subset_te_flag v1 object header should parse");
@@ -6980,8 +7319,9 @@ fn atl08_gt3l_subset_te_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt3l subset_te_flag bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt3l subset_te_flag bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt3l subset_te_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);
@@ -7006,7 +7346,10 @@ fn atl08_gt3l_subset_can_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt3l/land_segments/canopy/subset_can_flag")
         .expect("ATL08 fixture should expose canonical gt3l subset_can_flag path marker");
-    assert_eq!(descriptor.path, "/gt3l/land_segments/canopy/subset_can_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt3l/land_segments/canopy/subset_can_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 1_618_243)
         .expect("ATL08 gt3l subset_can_flag v1 object header should parse");
@@ -7062,8 +7405,9 @@ fn atl08_gt3l_subset_can_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt3l subset_can_flag bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt3l subset_can_flag bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt3l subset_can_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);
@@ -7086,10 +7430,12 @@ fn atl08_gt1l_te_quality_score_bounded_chunk_index_probe_returns_records() {
         return;
     };
 
-    let descriptor =
-        resolve_dataset_in_file(&path, "/gt1l/land_segments/terrain/te_quality_score")
-            .expect("ATL08 fixture should expose canonical gt1l te_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt1l/land_segments/terrain/te_quality_score");
+    let descriptor = resolve_dataset_in_file(&path, "/gt1l/land_segments/terrain/te_quality_score")
+        .expect("ATL08 fixture should expose canonical gt1l te_quality_score path marker");
+    assert_eq!(
+        descriptor.path,
+        "/gt1l/land_segments/terrain/te_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 438_837)
         .expect("ATL08 gt1l te_quality_score v1 object header should parse");
@@ -7145,8 +7491,9 @@ fn atl08_gt1l_te_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt1l te_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt1l te_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt1l te_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -7171,7 +7518,10 @@ fn atl08_gt1l_can_quality_score_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1l/land_segments/canopy/can_quality_score")
         .expect("ATL08 fixture should expose canonical gt1l can_quality_score path marker");
-    assert_eq!(descriptor.path, "/gt1l/land_segments/canopy/can_quality_score");
+    assert_eq!(
+        descriptor.path,
+        "/gt1l/land_segments/canopy/can_quality_score"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 308_297)
         .expect("ATL08 gt1l can_quality_score v1 object header should parse");
@@ -7227,8 +7577,9 @@ fn atl08_gt1l_can_quality_score_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt1l can_quality_score bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt1l can_quality_score bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt1l can_quality_score bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 10_000);
@@ -7253,7 +7604,10 @@ fn atl08_gt1l_subset_te_flag_bounded_chunk_index_probe_returns_records() {
 
     let descriptor = resolve_dataset_in_file(&path, "/gt1l/land_segments/terrain/subset_te_flag")
         .expect("ATL08 fixture should expose canonical gt1l subset_te_flag path marker");
-    assert_eq!(descriptor.path, "/gt1l/land_segments/terrain/subset_te_flag");
+    assert_eq!(
+        descriptor.path,
+        "/gt1l/land_segments/terrain/subset_te_flag"
+    );
 
     let parsed = parse_v1_object_header_in_file(&path, 435_501)
         .expect("ATL08 gt1l subset_te_flag v1 object header should parse");
@@ -7309,8 +7663,9 @@ fn atl08_gt1l_subset_te_flag_bounded_chunk_index_probe_returns_records() {
     assert_eq!(records, direct_leaf_chain_records);
     assert_eq!(records[0], first_record);
 
-    let compressed = read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
-        .expect("ATL08 gt1l subset_te_flag bounded first chunk should be readable");
+    let compressed =
+        read_chunk_payload_in_file(&path, records[0].chunk_address, records[0].chunk_size)
+            .expect("ATL08 gt1l subset_te_flag bounded first chunk should be readable");
     let decompressed = decompress_zlib(&compressed)
         .expect("ATL08 gt1l subset_te_flag bounded first chunk should zlib-decompress");
     assert_eq!(decompressed.len(), 50_000);

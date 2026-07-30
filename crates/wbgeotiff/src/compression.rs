@@ -73,17 +73,21 @@ pub fn compress_webp(
                     message: format!("{e}"),
                 })?
             } else {
-                encode_lossy(&image, 0, quality.clamp(0.0, 100.0).round() as usize, None)
-                    .map_err(|e| GeoTiffError::CompressionError {
+                encode_lossy(&image, 0, quality.clamp(0.0, 100.0).round() as usize, None).map_err(
+                    |e| GeoTiffError::CompressionError {
                         codec: "WebP",
                         message: format!("{e}"),
-                    })?
+                    },
+                )?
             }
         }
         _ => {
             return Err(GeoTiffError::CompressionError {
                 codec: "WebP",
-                message: format!("unsupported samples_per_pixel={}, expected 3 (RGB) or 4 (RGBA)", samples_per_pixel),
+                message: format!(
+                    "unsupported samples_per_pixel={}, expected 3 (RGB) or 4 (RGBA)",
+                    samples_per_pixel
+                ),
             })
         }
     };
@@ -175,7 +179,10 @@ pub fn compress_jpeg(
         _ => {
             return Err(GeoTiffError::CompressionError {
                 codec: "JPEG",
-                message: format!("unsupported samples_per_pixel={}, expected 1 or 3", samples_per_pixel),
+                message: format!(
+                    "unsupported samples_per_pixel={}, expected 1 or 3",
+                    samples_per_pixel
+                ),
             })
         }
     };
@@ -228,14 +235,23 @@ pub fn compress_jpegxl(
     if input.len() != expected_len {
         return Err(GeoTiffError::CompressionError {
             codec: "JPEG-XL",
-            message: format!("invalid input length {}, expected {}", input.len(), expected_len),
+            message: format!(
+                "invalid input length {}, expected {}",
+                input.len(),
+                expected_len
+            ),
         });
     }
 
     let effort = ((quality as u16 * 9 + 99) / 100) as u8;
-    let options = EncoderOptions::new(width as usize, height as usize, color_space, BitDepth::Eight)
-        .set_quality(quality.clamp(1, 100))
-        .set_effort(effort.clamp(1, 9));
+    let options = EncoderOptions::new(
+        width as usize,
+        height as usize,
+        color_space,
+        BitDepth::Eight,
+    )
+    .set_quality(quality.clamp(1, 100))
+    .set_effort(effort.clamp(1, 9));
     let encoder = JxlSimpleEncoder::new(input, options);
     let mut out = Vec::new();
     encoder
@@ -251,17 +267,19 @@ pub fn compress_jpegxl(
 pub fn decompress_jpegxl(input: &[u8], expected_len: usize) -> Result<Vec<u8>> {
     use jxl_oxide::JxlImage;
 
-    let image = JxlImage::builder()
-        .read(Cursor::new(input))
+    let image = JxlImage::builder().read(Cursor::new(input)).map_err(|e| {
+        GeoTiffError::CompressionError {
+            codec: "JPEG-XL",
+            message: format!("{e:?}"),
+        }
+    })?;
+
+    let render = image
+        .render_frame(0)
         .map_err(|e| GeoTiffError::CompressionError {
             codec: "JPEG-XL",
             message: format!("{e:?}"),
         })?;
-
-    let render = image.render_frame(0).map_err(|e| GeoTiffError::CompressionError {
-        codec: "JPEG-XL",
-        message: format!("{e:?}"),
-    })?;
     let fb = render.image_all_channels();
     let pixel_count = fb.width().saturating_mul(fb.height());
     let channels = fb.channels();
@@ -392,7 +410,9 @@ mod lzw {
     pub fn compress(input: &[u8]) -> Result<Vec<u8>> {
         let mut encoder = weezl::encode::Encoder::with_tiff_size_switch(BIT_ORDER, MIN_CODE_SIZE);
 
-        encoder.encode(input).map_err(|e| GeoTiffError::CompressionError {
+        encoder
+            .encode(input)
+            .map_err(|e| GeoTiffError::CompressionError {
                 codec: "LZW",
                 message: e.to_string(),
             })
@@ -402,7 +422,9 @@ mod lzw {
     pub fn decompress(input: &[u8], expected_len: usize) -> Result<Vec<u8>> {
         let mut decoder = weezl::decode::Decoder::with_tiff_size_switch(BIT_ORDER, MIN_CODE_SIZE);
 
-        let mut output = decoder.decode(input).map_err(|e| GeoTiffError::CompressionError {
+        let mut output = decoder
+            .decode(input)
+            .map_err(|e| GeoTiffError::CompressionError {
                 codec: "LZW",
                 message: e.to_string(),
             })?;
@@ -422,23 +444,29 @@ mod deflate {
 
     pub fn compress(input: &[u8]) -> Result<Vec<u8>> {
         let mut encoder = ZlibEncoder::new(Vec::new(), FlateLevel::default());
-        encoder.write_all(input).map_err(|e| GeoTiffError::CompressionError {
-            codec: "Deflate",
-            message: e.to_string(),
-        })?;
-        encoder.finish().map_err(|e| GeoTiffError::CompressionError {
-            codec: "Deflate",
-            message: e.to_string(),
-        })
+        encoder
+            .write_all(input)
+            .map_err(|e| GeoTiffError::CompressionError {
+                codec: "Deflate",
+                message: e.to_string(),
+            })?;
+        encoder
+            .finish()
+            .map_err(|e| GeoTiffError::CompressionError {
+                codec: "Deflate",
+                message: e.to_string(),
+            })
     }
 
     pub fn decompress(input: &[u8], expected_len: usize) -> Result<Vec<u8>> {
         let mut decoder = ZlibDecoder::new(input);
         let mut output = Vec::with_capacity(expected_len);
-        decoder.read_to_end(&mut output).map_err(|e| GeoTiffError::CompressionError {
-            codec: "Deflate",
-            message: e.to_string(),
-        })?;
+        decoder
+            .read_to_end(&mut output)
+            .map_err(|e| GeoTiffError::CompressionError {
+                codec: "Deflate",
+                message: e.to_string(),
+            })?;
         Ok(output)
     }
 }
@@ -564,7 +592,11 @@ pub mod packbits {
             let data = vec![0xAAu8; 256];
             let compressed = compress(&data).unwrap();
             // A run of 256 should compress to ~4 bytes
-            assert!(compressed.len() < 20, "compressed len = {}", compressed.len());
+            assert!(
+                compressed.len() < 20,
+                "compressed len = {}",
+                compressed.len()
+            );
             let decompressed = decompress(&compressed, data.len()).unwrap();
             assert_eq!(data, decompressed);
         }
@@ -588,7 +620,12 @@ mod codec_tests {
     fn test_roundtrip(codec: Compression, data: &[u8]) {
         let compressed = compress(codec, data).unwrap();
         let decompressed = decompress(codec, &compressed, data.len()).unwrap();
-        assert_eq!(data, decompressed.as_slice(), "roundtrip failed for {:?}", codec);
+        assert_eq!(
+            data,
+            decompressed.as_slice(),
+            "roundtrip failed for {:?}",
+            codec
+        );
     }
 
     #[test]
