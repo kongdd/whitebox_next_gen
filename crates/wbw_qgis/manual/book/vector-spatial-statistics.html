@@ -173,86 +173,526 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="spatial-statistics"><a class="header" href="#spatial-statistics">Spatial Statistics</a></h1>
+                        <h1 id="vector-spatial-statistics"><a class="header" href="#vector-spatial-statistics">Vector Spatial Statistics</a></h1>
+<p>Vector-based spatial statistics methods in the Whitebox QGIS plugin analyze point and polygon features to detect spatial patterns, model relationships, and test for clustering. This section covers autocorrelation detection, point pattern analysis, spatial regression, and variogram-based spatial structure assessment.</p>
 <hr />
-<h2 id="global-morans-i"><a class="header" href="#global-morans-i">Global Morans I</a></h2>
+<h2 id="core-concepts"><a class="header" href="#core-concepts">Core Concepts</a></h2>
+<ul>
+<li><strong>Spatial autocorrelation</strong>: Degree to which observations at nearby locations resemble each other. Most geographic data exhibit positive autocorrelation.</li>
+<li><strong>Moran's I</strong>: Global measure of autocorrelation. Significant positive I indicates clustering; negative indicates alternating patterns.</li>
+<li><strong>LISA (Local Indicators of Spatial Association)</strong>: Local autocorrelation revealing hot spots (HH), cold spots (LL), and outliers (HL, LH).</li>
+<li><strong>Hot spot</strong>: Statistically significant cluster of high values. Cold spot: cluster of low values.</li>
+<li><strong>Point pattern</strong>: Distribution of point events. Can be clustered (aggregated), dispersed (regular), or random.</li>
+<li><strong>Ripley's K function</strong>: Cumulative measure of clustering intensity across distance scales.</li>
+<li><strong>Variogram</strong>: Describes variance increase with distance. Essential for kriging.</li>
+<li><strong>Spatial regression</strong>: Models incorporating spatial dependence (SAR, SEM, GWR).</li>
+<li><strong>Null hypothesis (CSR)</strong>: Complete Spatial Randomness; used as baseline for pattern tests.</li>
+</ul>
+<hr />
+<h2 id="autocorrelation-analysis-detecting-spatial-structure"><a class="header" href="#autocorrelation-analysis-detecting-spatial-structure">Autocorrelation Analysis: Detecting Spatial Structure</a></h2>
+<h3 id="global-morans-i-overall-spatial-autocorrelation"><a class="header" href="#global-morans-i-overall-spatial-autocorrelation">Global Moran's I: Overall Spatial Autocorrelation</a></h3>
+<p>Tests whether observations are randomly distributed or exhibit spatial structure.</p>
 <p><strong>Function name:</strong> <code>global_morans_i</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Load vector layer with numerical attribute</li>
+<li>Navigate to <strong>Vector → Spatial Statistics → Global Morans I</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Feature collection</li>
+<li>Field: Attribute to analyze (e.g., temperature, disease rate)</li>
+<li>Weight matrix: queen (8-neighbor) or rook (4-neighbor)</li>
+</ul>
+</li>
+<li>Output: Text report with Moran's I, p-value, interpretation</li>
+</ol>
+<p><strong>Example: Regional Temperature Autocorrelation</strong></p>
+<ol>
+<li>Load <code>weather_stations.gpkg</code> with <code>temperature</code> field</li>
+<li>Run Global Moran's I</li>
+<li>Interpretation:
+<ul>
+<li>If p &lt; 0.05 and I &gt; 0: Significant clustering; nearby stations have similar temperatures</li>
+<li>If p &gt; 0.05: No significant spatial structure; patterns likely random</li>
+</ul>
+</li>
+<li>Proceed to LISA for cluster localization</li>
+</ol>
 <hr />
-<h2 id="getis-ord-gi-star"><a class="header" href="#getis-ord-gi-star">Getis Ord Gi Star</a></h2>
-<p><strong>Function name:</strong> <code>getis_ord_gi_star</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="local-morans-i-lisa"><a class="header" href="#local-morans-i-lisa">Local Morans I Lisa</a></h2>
+<h3 id="local-morans-i-lisa-cluster-identification"><a class="header" href="#local-morans-i-lisa-cluster-identification">Local Moran's I (LISA): Cluster Identification</a></h3>
+<p>Decomposes global autocorrelation into local contributions, identifying hot spots, cold spots, and outliers.</p>
 <p><strong>Function name:</strong> <code>local_morans_i_lisa</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Local Morans I (LISA)</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Feature collection</li>
+<li>Field: Attribute to analyze</li>
+<li>Output: New shapefile with cluster classifications</li>
+</ul>
+</li>
+<li>Output feature attributes include:
+<ul>
+<li>Cluster classification: Cluster-High (HH), Cluster-Low (LL), Outlier-High (HL), Outlier-Low (LH), No significant</li>
+<li>Local Moran's I value</li>
+<li>p-value (statistical significance)</li>
+</ul>
+</li>
+</ol>
+<p><strong>Workflow: Disease Surveillance Cluster Detection</strong></p>
+<ol>
+<li>Load <code>covid_cases.gpkg</code> with <code>case_count</code> field</li>
+<li>Run Global Moran's I to confirm clustering:
+<ul>
+<li>If p &lt; 0.05, proceed to local analysis</li>
+</ul>
+</li>
+<li>Run Local Moran's I:
+<ul>
+<li>Input: covid_cases.gpkg</li>
+<li>Field: case_count</li>
+<li>Output: covid_hotspots.gpkg</li>
+</ul>
+</li>
+<li>In QGIS, symbolize output by cluster classification:
+<ul>
+<li>Red: Cluster-High (intervention zones)</li>
+<li>Blue: Cluster-Low (low-prevalence areas)</li>
+<li>Gray: Not significant (random variation)</li>
+</ul>
+</li>
+<li>Use hot spot map for outbreak response planning</li>
+</ol>
+<p><strong>Interpretation Guide:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Cluster Type</th><th>Meaning</th><th>Action</th></tr></thead><tbody>
+<tr><td>Cluster-High (HH)</td><td>High values clustered together</td><td>Investigate common risk factors</td></tr>
+<tr><td>Cluster-Low (LL)</td><td>Low values clustered together</td><td>Identify protective factors</td></tr>
+<tr><td>Outlier-High (HL)</td><td>High surrounded by low</td><td>Anomaly; verify data quality</td></tr>
+<tr><td>Outlier-Low (LH)</td><td>Low surrounded by high</td><td>Edge/boundary zones</td></tr>
+<tr><td>No significant</td><td>Not statistically significant</td><td>Random variation expected</td></tr>
+</tbody></table>
+</div>
 <hr />
-<h2 id="nearest-neighbour-index"><a class="header" href="#nearest-neighbour-index">Nearest Neighbour Index</a></h2>
+<h3 id="getis-ord-gi-z-score-based-hot-spots"><a class="header" href="#getis-ord-gi-z-score-based-hot-spots">Getis-Ord Gi*: Z-Score-Based Hot Spots</a></h3>
+<p>Z-score-based hot spot detector providing continuous intensity scores directly interpretable as standard deviations from mean.</p>
+<p><strong>Function name:</strong> <code>getis_ord_gi_star</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Getis-Ord Gi Star</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Feature collection</li>
+<li>Field: Attribute to analyze</li>
+<li>Output: New shapefile with Gi* z-scores</li>
+</ul>
+</li>
+<li>Interpret z-scores:
+<ul>
+<li>Z &gt; 1.96: Hot spot (p &lt; 0.05)</li>
+<li>Z &lt; -1.96: Cold spot (p &lt; 0.05)</li>
+<li>-1.96 ≤ Z ≤ 1.96: No significant clustering</li>
+</ul>
+</li>
+</ol>
+<p><strong>Workflow: Crime Hot Spot Mapping</strong></p>
+<ol>
+<li>Load <code>crime_incidents.gpkg</code> with <code>incident_count</code> field</li>
+<li>Run Getis-Ord Gi*:
+<ul>
+<li>Input: crime_incidents.gpkg</li>
+<li>Field: incident_count</li>
+<li>Output: crime_hotspots.gpkg</li>
+</ul>
+</li>
+<li>Symbolize by z-score:
+<ul>
+<li>Red (Z &gt; 2.576, p &lt; 0.01): Very high-confidence hotspots</li>
+<li>Orange (1.96 &lt; Z ≤ 2.576, p &lt; 0.05): Hotspots</li>
+<li>Blue (Z &lt; -1.96, p &lt; 0.05): Cold spots (low crime)</li>
+</ul>
+</li>
+<li>Use for police resource allocation and intervention targeting</li>
+</ol>
+<hr />
+<h2 id="point-pattern-analysis-clustering-vs-dispersion"><a class="header" href="#point-pattern-analysis-clustering-vs-dispersion">Point Pattern Analysis: Clustering vs. Dispersion</a></h2>
+<h3 id="nearest-neighbour-index-overall-pattern-test"><a class="header" href="#nearest-neighbour-index-overall-pattern-test">Nearest Neighbour Index: Overall Pattern Test</a></h3>
+<p>Compares observed nearest-neighbour distances to expected distances under Complete Spatial Randomness (CSR).</p>
+<p>$$\text{NNI} = \frac{\text{Observed Mean Distance}}{\text{Expected Mean Distance}}$$</p>
 <p><strong>Function name:</strong> <code>nearest_neighbour_index</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Load point layer (e.g., tree locations, earthquake epicenters)</li>
+<li>Navigate to <strong>Vector → Spatial Statistics → Nearest Neighbour Index</strong></li>
+<li>Output includes:
+<ul>
+<li>NNI value</li>
+<li>z-score and p-value</li>
+<li>Observed and expected mean distances</li>
+</ul>
+</li>
+<li>Interpret:
+<ul>
+<li>NNI ≈ 1: Random pattern (CSR)</li>
+<li>NNI &lt; 1: Clustering (p &lt; 0.05 indicates significant)</li>
+<li>NNI &gt; 1: Dispersion (regular spacing)</li>
+</ul>
+</li>
+</ol>
+<p><strong>Example: Wildfire Clustering Analysis</strong></p>
+<ol>
+<li>Load <code>fire_events.gpkg</code> (point layer of fire locations)</li>
+<li>Run NNI:
+<ul>
+<li>If NNI &lt; 1, p &lt; 0.05: Fires significantly clustered</li>
+<li>Investigate common conditions: drought, fuel load, ignition sources</li>
+<li>If NNI ≈ 1: Random pattern suggests independent ignition events</li>
+</ul>
+</li>
+</ol>
 <hr />
-<h2 id="quadrat-count-test"><a class="header" href="#quadrat-count-test">Quadrat Count Test</a></h2>
-<p><strong>Function name:</strong> <code>quadrat_count_test</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="estimate-variogram"><a class="header" href="#estimate-variogram">Estimate Variogram</a></h2>
-<p><strong>Function name:</strong> <code>estimate_variogram</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="fit-variogram"><a class="header" href="#fit-variogram">Fit Variogram</a></h2>
-<p><strong>Function name:</strong> <code>fit_variogram</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="directional-variogram"><a class="header" href="#directional-variogram">Directional Variogram</a></h2>
-<p><strong>Function name:</strong> <code>directional_variogram</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="kriging-cross-validation"><a class="header" href="#kriging-cross-validation">Kriging Cross Validation</a></h2>
-<p><strong>Function name:</strong> <code>kriging_cross_validation</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="spatial-lag-regression"><a class="header" href="#spatial-lag-regression">Spatial Lag Regression</a></h2>
-<p><strong>Function name:</strong> <code>spatial_lag_regression</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="spatial-error-regression"><a class="header" href="#spatial-error-regression">Spatial Error Regression</a></h2>
-<p><strong>Function name:</strong> <code>spatial_error_regression</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="geographically-weighted-regression"><a class="header" href="#geographically-weighted-regression">Geographically Weighted Regression</a></h2>
-<p><strong>Function name:</strong> <code>geographically_weighted_regression</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="ripleys-k-test"><a class="header" href="#ripleys-k-test">Ripleys K Test</a></h2>
-<p><strong>Function name:</strong> <code>ripleys_k_test</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="envelope-test"><a class="header" href="#envelope-test">Envelope Test</a></h2>
-<p><strong>Function name:</strong> <code>envelope_test</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="point-process-residuals"><a class="header" href="#point-process-residuals">Point Process Residuals</a></h2>
-<p><strong>Function name:</strong> <code>point_process_residuals</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="ripleys-k-function"><a class="header" href="#ripleys-k-function">Ripleys K Function</a></h2>
+<h3 id="ripleys-k-function-scale-dependent-clustering"><a class="header" href="#ripleys-k-function-scale-dependent-clustering">Ripley's K Function: Scale-Dependent Clustering</a></h3>
+<p>Examines clustering intensity across multiple distance scales, revealing whether clustering is local (fine-scale) or regional (broad-scale).</p>
 <p><strong>Function name:</strong> <code>ripleys_k_function</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Ripley's K Function</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point features</li>
+<li>Distance intervals and number of scales</li>
+</ul>
+</li>
+<li>Output: Text file or table with K(d) values at each distance</li>
+</ol>
+<p><strong>Interpretation:</strong></p>
+<ul>
+<li>K(d) &gt; πd²: Clustering at scale d</li>
+<li>K(d) ≈ πd²: Random pattern</li>
+<li>K(d) &lt; πd²: Dispersion at scale d</li>
+</ul>
 <hr />
-<h2 id="point-pattern-envelope"><a class="header" href="#point-pattern-envelope">Point Pattern Envelope</a></h2>
-<p><strong>Function name:</strong> <code>point_pattern_envelope</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<h3 id="envelope-test-confidence-bands-for-clustering"><a class="header" href="#envelope-test-confidence-bands-for-clustering">Envelope Test: Confidence Bands for Clustering</a></h3>
+<p>Determine confidence envelope around expected K function under CSR through Monte Carlo simulation.</p>
+<p><strong>Function name:</strong> <code>envelope_test</code> and <code>point_pattern_envelope</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Point Pattern Envelope Test</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point features</li>
+<li>Number of simulations: 99 or 999 for Monte Carlo permutations</li>
+</ul>
+</li>
+<li>Output: Envelope boundaries showing significant clustering/dispersion ranges</li>
+</ol>
+<p><strong>Workflow: Vegetation Clustering in Forests</strong></p>
+<ol>
+<li>Load <code>plant_observations.gpkg</code> (species point locations)</li>
+<li>Run Ripley's K Function:
+<ul>
+<li>Identifies clustering scales (e.g., significant at 0-200 m, independent beyond 500 m)</li>
+</ul>
+</li>
+<li>Run Envelope Test:
+<ul>
+<li>Compares observed K(d) to random permutation envelope</li>
+<li>Reveals statistically significant scales</li>
+</ul>
+</li>
+<li>Interpretation: Strong clustering 0-100 m suggests facilitating factors (microhabitat, species facilitation, regeneration from seed)</li>
+</ol>
 <hr />
-<h2 id="inhomogeneous-baseline"><a class="header" href="#inhomogeneous-baseline">Inhomogeneous Baseline</a></h2>
-<p><strong>Function name:</strong> <code>inhomogeneous_baseline</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<h3 id="quadrat-count-test-grid-based-pattern-analysis"><a class="header" href="#quadrat-count-test-grid-based-pattern-analysis">Quadrat Count Test: Grid-Based Pattern Analysis</a></h3>
+<p>Divide study area into grid cells (quadrats), count points in each, and test if counts follow Poisson distribution (expected under CSR).</p>
+<p><strong>Function name:</strong> <code>quadrat_count_test</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Quadrat Count Test</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point features</li>
+<li>Cell size: Quadrat size (e.g., 1000 m × 1000 m)</li>
+</ul>
+</li>
+<li>Output includes:
+<ul>
+<li>Chi-squared statistic</li>
+<li>p-value</li>
+<li>Variance-to-mean ratio (dispersion index)</li>
+</ul>
+</li>
+<li>Interpret:
+<ul>
+<li>Dispersion index &gt; 1: Clustering</li>
+<li>Dispersion index ≈ 1: Random (CSR)</li>
+<li>Dispersion index &lt; 1: Dispersion</li>
+</ul>
+</li>
+</ol>
 <hr />
-<h2 id="hotspot-vs-process"><a class="header" href="#hotspot-vs-process">Hotspot Vs Process</a></h2>
+<h2 id="spatial-regression-modeling-spatial-relationships"><a class="header" href="#spatial-regression-modeling-spatial-relationships">Spatial Regression: Modeling Spatial Relationships</a></h2>
+<h3 id="spatial-lag-regression-sar"><a class="header" href="#spatial-lag-regression-sar">Spatial Lag Regression (SAR)</a></h3>
+<p>Includes spatially lagged dependent variable, capturing spillover/contagion effects.</p>
+<p><strong>Function name:</strong> <code>spatial_lag_regression</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Spatial Lag Regression</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Feature collection with dependent and independent variables</li>
+<li>Dependent variable: Outcome field</li>
+<li>Independent variables: Predictor fields (multiple)</li>
+</ul>
+</li>
+<li>Output: Report with coefficients, spatial lag parameter (ρ), diagnostics</li>
+</ol>
+<p><strong>Workflow: Real Estate Price Spillover Analysis</strong></p>
+<ol>
+<li>Load <code>properties.gpkg</code> with:
+<ul>
+<li><code>sale_price</code> (dependent)</li>
+<li><code>living_area</code>, <code>lot_size</code>, <code>year_built</code> (independent)</li>
+</ul>
+</li>
+<li>Run SAR:
+<ul>
+<li>Dependent: sale_price</li>
+<li>Independent: living_area, lot_size, year_built</li>
+</ul>
+</li>
+<li>Interpret ρ (spatial lag coefficient):
+<ul>
+<li>Significant positive ρ: Neighborhood effects (gentrification, price contagion)</li>
+<li>Significant negative ρ: Competition effects (unusual)</li>
+<li>Non-significant ρ: Spatial independence (rare in real estate)</li>
+</ul>
+</li>
+<li>Use for property valuation modeling accounting for neighborhood context</li>
+</ol>
+<hr />
+<h3 id="spatial-error-regression-sem"><a class="header" href="#spatial-error-regression-sem">Spatial Error Regression (SEM)</a></h3>
+<p>Regression with spatial correlation in residuals (rather than dependent variable). Appropriate when spatial dependence arises from omitted variables.</p>
+<p><strong>Function name:</strong> <code>spatial_error_regression</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Spatial Error Regression</strong></li>
+<li>Specify: Input layer, dependent, independent variables</li>
+<li>Output: Coefficients, lambda (spatial error lag), diagnostics</li>
+</ol>
+<p><strong>When to Use:</strong></p>
+<ul>
+<li>Theory suggests omitted variable is spatially structured (unobserved soil heterogeneity, unmeasured environmental factor)</li>
+<li>Example: Crop yield with unobserved soil type, elevation-related variables</li>
+</ul>
+<hr />
+<h3 id="geographically-weighted-regression-gwr"><a class="header" href="#geographically-weighted-regression-gwr">Geographically Weighted Regression (GWR)</a></h3>
+<p>Local regression estimation allowing relationships to vary spatially. Produces maps of local parameters.</p>
+<p><strong>Function name:</strong> <code>geographically_weighted_regression</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Geographically Weighted Regression</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Feature collection</li>
+<li>Dependent variable: Outcome field</li>
+<li>Independent variables: Predictor fields</li>
+<li>Kernel: adaptive (local bandwidth) or fixed (distance)</li>
+</ul>
+</li>
+<li>Output: Shapefile with local coefficients, local R² values</li>
+</ol>
+<p><strong>Workflow: School Performance Regional Variation</strong></p>
+<ol>
+<li>Load <code>school_districts.gpkg</code> with:
+<ul>
+<li><code>graduation_rate</code> (dependent)</li>
+<li><code>student_poverty_rate</code>, <code>teacher_experience</code> (independent)</li>
+</ul>
+</li>
+<li>Run GWR:
+<ul>
+<li>Output: local_coefficients.gpkg</li>
+</ul>
+</li>
+<li>Inspect local <code>student_poverty_rate</code> coefficient:
+<ul>
+<li>Urban areas: Strong negative effect (poverty strongly linked to lower graduation)</li>
+<li>Suburban areas: Moderate effect (other factors important)</li>
+<li>Rural areas: Weak effect (cultural, school-quality variation dominates)</li>
+</ul>
+</li>
+<li>Use for targeted policy: interventions match local relationship patterns</li>
+</ol>
+<hr />
+<h2 id="geostatistics-variogram-analysis-and-kriging-parameters"><a class="header" href="#geostatistics-variogram-analysis-and-kriging-parameters">Geostatistics: Variogram Analysis and Kriging Parameters</a></h2>
+<h3 id="estimate-variogram-quantifying-spatial-correlation"><a class="header" href="#estimate-variogram-quantifying-spatial-correlation">Estimate Variogram: Quantifying Spatial Correlation</a></h3>
+<p>Compute empirical variogram from point measurements. Essential for all kriging methods.</p>
+<p><strong>Function name:</strong> <code>estimate_variogram</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Load point layer with measurement attribute</li>
+<li>Navigate to <strong>Vector → Spatial Statistics → Estimate Variogram</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point features</li>
+<li>Value field: Attribute to analyze</li>
+<li>Lag size: Distance interval (e.g., 500 m)</li>
+<li>Number of lags: Distance bins to compute (e.g., 15)</li>
+</ul>
+</li>
+<li>Output: Text file or table with variogram values</li>
+</ol>
+<p><strong>Interpretation:</strong></p>
+<ul>
+<li><strong>Nugget</strong>: Variance at distance 0 (measurement error, microscale variation)</li>
+<li><strong>Sill</strong>: Maximum variance (asymptotic level)</li>
+<li><strong>Range</strong>: Distance beyond which values uncorrelated</li>
+</ul>
+<p><strong>Workflow: Soil pH Spatial Structure</strong></p>
+<ol>
+<li>Load <code>soil_samples.gpkg</code> with <code>soil_ph</code> field</li>
+<li>Run Estimate Variogram:
+<ul>
+<li>Lag size: 500 m</li>
+<li>Number of lags: 20</li>
+</ul>
+</li>
+<li>Plot variogram:
+<ul>
+<li>Steep initial rise: Strong local variation</li>
+<li>Leveloff at 3000 m: Range of spatial dependence</li>
+<li>Sill ≈ 0.5: Total variance after removing trend</li>
+</ul>
+</li>
+<li>Use for variogram model selection</li>
+</ol>
+<hr />
+<h3 id="fit-variogram-model-parameter-estimation"><a class="header" href="#fit-variogram-model-parameter-estimation">Fit Variogram: Model Parameter Estimation</a></h3>
+<p>Fit parametric variogram model (Spherical, Exponential, Gaussian) to empirical variogram.</p>
+<p><strong>Function name:</strong> <code>fit_variogram</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Fit Variogram</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point features</li>
+<li>Value field: Attribute</li>
+<li>Model type: spherical, exponential, gaussian</li>
+</ul>
+</li>
+<li>Output: Model parameters (nugget, partial sill, range)</li>
+</ol>
+<p><strong>Common Models:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Model</th><th>Shape</th><th>Use Case</th></tr></thead><tbody>
+<tr><td>Spherical</td><td>S-shaped, reaches sill asymptotically</td><td>Most common; realistic spatial correlation decay</td></tr>
+<tr><td>Exponential</td><td>Smooth approach to sill</td><td>More gradual correlation decay; less abrupt</td></tr>
+<tr><td>Gaussian</td><td>Parabolic near origin</td><td>Assumes high smoothness; rare</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h3 id="kriging-cross-validation-model-reliability-assessment"><a class="header" href="#kriging-cross-validation-model-reliability-assessment">Kriging Cross-Validation: Model Reliability Assessment</a></h3>
+<p>Leave-one-out cross-validation: Remove each data point, predict from others, compare to true value.</p>
+<p><strong>Function name:</strong> <code>kriging_cross_validation</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Kriging Cross Validation</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point features</li>
+<li>Value field: Attribute</li>
+<li>Kriging model: ordinary, simple, universal</li>
+</ul>
+</li>
+<li>Output: Diagnostics (RMSE, MAE, standardized residuals, correlation)</li>
+</ol>
+<p><strong>Diagnostics Interpretation:</strong></p>
+<div class="table-wrapper"><table><thead><tr><th>Statistic</th><th>Good Value</th><th>Bad Value</th></tr></thead><tbody>
+<tr><td>RMSE</td><td>Notably &lt; observed std dev</td><td>Close to observed std dev (no skill)</td></tr>
+<tr><td>Standardized residuals</td><td>Mean ≈ 0, σ ≈ 1</td><td>Mean ≠ 0 (bias) or σ &gt;&gt; 1 (underconfident)</td></tr>
+<tr><td>Correlation</td><td>High (&gt; 0.7)</td><td>Low (&lt; 0.5)</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="advanced-spatial-pattern-diagnostics"><a class="header" href="#advanced-spatial-pattern-diagnostics">Advanced Spatial Pattern Diagnostics</a></h2>
+<h3 id="point-process-residuals-model-adequacy-testing"><a class="header" href="#point-process-residuals-model-adequacy-testing">Point Process Residuals: Model Adequacy Testing</a></h3>
+<p>Extract residuals after fitting spatial model to diagnose model fit.</p>
+<p><strong>Function name:</strong> <code>point_process_residuals</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Point Process Residuals</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point features</li>
+<li>Baseline intensity: Expected density raster</li>
+</ul>
+</li>
+<li>Output: Residual pattern revealing unmodeled structure</li>
+</ol>
+<p><strong>Workflow: Species Distribution Modeling</strong></p>
+<ol>
+<li>Model predicts habitat suitability (baseline intensity)</li>
+<li>Extract observed species locations</li>
+<li>Compare residuals to null model:
+<ul>
+<li>Clustering of positive residuals: Unexplained clustering, missing predictor</li>
+<li>Random residuals: Good model fit</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="hotspot-vs-process-comparison"><a class="header" href="#hotspot-vs-process-comparison">Hotspot vs. Process Comparison</a></h3>
+<p>Distinguish whether observed hot spots are sampling artifacts or true underlying process heterogeneity.</p>
 <p><strong>Function name:</strong> <code>hotspot_vs_process</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Vector → Spatial Statistics → Hotspot vs Process Comparison</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point observations</li>
+<li>Intensity raster: Expected point density (e.g., population density for disease cases)</li>
+</ul>
+</li>
+<li>Output: Comparison of observed clustering to intensity-adjusted expectation</li>
+</ol>
+<p><strong>Example: Disease Cluster Validity</strong></p>
+<ul>
+<li>Observed hot spot in dense urban zone</li>
+<li>Question: Is clustering due to population density (sampling) or disease risk?</li>
+<li>Output: If intensity-adjusted residuals cluster, suggests true disease hot spot</li>
+<li>If residuals random, hot spot is artifact of population distribution</li>
+</ul>
 <hr />
-<h2 id="point-process-residuals-comparison"><a class="header" href="#point-process-residuals-comparison">Point Process Residuals Comparison</a></h2>
-<p><strong>Function name:</strong> <code>point_process_residuals_comparison</code></p>
+<h2 id="best-practices-for-vector-spatial-statistics"><a class="header" href="#best-practices-for-vector-spatial-statistics">Best Practices for Vector Spatial Statistics</a></h2>
+<h3 id="choosing-autocorrelation-method"><a class="header" href="#choosing-autocorrelation-method">Choosing Autocorrelation Method</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Method</th><th>Rationale</th></tr></thead><tbody>
+<tr><td>Global overview needed</td><td>Global Moran's I</td><td>Summarizes entire dataset; fast</td></tr>
+<tr><td>Cluster location required</td><td>Local Moran's I (LISA)</td><td>Identifies hot/cold spots; categorical</td></tr>
+<tr><td>Continuous intensity scoring</td><td>Getis-Ord Gi*</td><td>Z-scores ideal for mapping</td></tr>
+</tbody></table>
+</div>
+<h3 id="weight-matrix-selection"><a class="header" href="#weight-matrix-selection">Weight Matrix Selection</a></h3>
+<ul>
+<li><strong>Queen (8-neighbor)</strong>: Most common; captures diagonal adjacencies</li>
+<li><strong>Rook (4-neighbor)</strong>: Cardinal directions only; use for regular grids</li>
+<li><strong>Distance-based</strong>: All features within fixed radius; for continuous fields</li>
+</ul>
+<h3 id="sample-size-considerations"><a class="header" href="#sample-size-considerations">Sample Size Considerations</a></h3>
+<ul>
+<li><strong>&lt; 30 samples</strong>: Kriging unreliable; visual inspection only</li>
+<li><strong>30-100 samples</strong>: Kriging viable for local interpolation</li>
+<li><strong>&gt; 100 samples</strong>: Kriging robust; consider local kriging for non-stationarity</li>
+</ul>
+<hr />
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>Vector spatial statistics methods enable:</p>
+<ol>
+<li><strong>Cluster detection</strong> (LISA, Getis-Ord Gi*) for targeted intervention</li>
+<li><strong>Pattern testing</strong> (NNI, Ripley's K, quadrat test) for ecological/epidemiological questions</li>
+<li><strong>Spatial modeling</strong> (SAR, SEM, GWR) accounting for spatial dependence</li>
+<li><strong>Interpolation foundation</strong> (variogram analysis) for kriging parameter estimation</li>
+</ol>
+<p>Integration with vector geometry tools, network analysis, and overlay operations enables comprehensive spatial analysis workflows for epidemiology, ecology, real estate, and regional planning applications.</p>
 <p><em>No help documentation available for this tool.</em></p>
 
                     </main>

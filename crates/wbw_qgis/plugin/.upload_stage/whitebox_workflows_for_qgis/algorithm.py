@@ -1907,6 +1907,12 @@ class WhiteboxCatalogAlgorithm(QgsProcessingAlgorithm):
     def icon(self):
         if self._provider is None:
             return None
+        provider_icon = getattr(self._provider, "icon_for_tool", None)
+        if callable(provider_icon):
+            try:
+                return provider_icon(self._manifest)
+            except Exception:
+                pass
         provider_icon = getattr(self._provider, "icon", None)
         if callable(provider_icon):
             try:

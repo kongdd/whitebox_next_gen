@@ -437,3 +437,27 @@ See Also `slope`, `D8FlowAccumulation`, `DInfFlowAccumulation`, `FD8FlowAccumula
 ```python
 def wetness_index(self, specific_catchment_area: Raster, slope: Raster) -> Raster:
 ```
+
+---
+
+## SAGA Wetness Index
+
+**Function name:** `saga_wetness_index`
+
+This tool calculates a SAGA-style wetness index directly from a depressionless DEM. It internally derives the local slope and specific catchment area (SCA) using Whitebox's flow-routing routines, then evaluates a formulation of the form:
+
+SWI = ln((As + suction) / tan(max(slope, slope_min)))
+
+where `As` is the specific catchment area, `suction` is an optional additive offset, `slope` is the local slope in degrees, and `slope_min` prevents the denominator from becoming too small. This is a useful approximation for workflows that want a SAGA-like wetness index without first computing SCA and slope as separate rasters. It should be interpreted as a lightweight SAGA-style approximation rather than a claim of exact equivalence to SAGA's full algorithm.
+
+The input DEM should be hydrologically conditioned and free of spurious depressions. The output raster uses the same grid geometry as the input DEM and is written as a float raster.
+
+### See Also
+
+`wetness_index`, `slope`, `D8FlowAccumulation`, `breach_depressions_least_cost`
+
+### Python API
+
+```python
+def saga_wetness_index(self, dem: Raster, suction: float = 0.0, slope_min: float = 0.1, z_factor: float = 1.0) -> Raster:
+```

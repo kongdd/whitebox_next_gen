@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
-use pyo3::IntoPyObjectExt;
 use pyo3::types::{PyBytes, PyDict, PyList};
+use pyo3::IntoPyObjectExt;
 use rayon::prelude::*;
 use serde_json::json;
 use serde_json::Value as JsonValue;
@@ -10,63 +10,36 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
-use wbraster::raster::RasterData;
-use wbraster::{
-    memory_store,
-    AntimeridianPolicy as RasterAntimeridianPolicy,
-    CrsInfo,
-    DataType,
-    DestinationFootprint as RasterDestinationFootprint,
-    Extent,
-    GridSizePolicy as RasterGridSizePolicy,
-    NodataPolicy as RasterNodataPolicy,
-    Raster as WbRaster,
-    ReprojectOptions,
-    ResampleMethod,
-    SensorBundle,
-    SafeBundle,
-    open_sensor_bundle,
-    open_sensor_bundle_path,
-    GeoTiffCompression,
-    GeoTiffLayout,
-    GeoTiffWriteOptions,
-    Jpeg2000ColorSpace,
-    Jpeg2000Compression,
-    Jpeg2000WriteOptions,
-    RasterFormat,
-};
-use wblidar::reproject::{
-    LidarReprojectOptions,
-    TransformFailurePolicy as LidarTransformFailurePolicy,
-};
 use wblidar::copc::CopcNodePointOrdering;
+use wblidar::reproject::{
+    LidarReprojectOptions, TransformFailurePolicy as LidarTransformFailurePolicy,
+};
 use wblidar::{
-    memory_store as lidar_memory_store,
-    CopcWriteOptions,
-    LazWriteOptions,
-    LidarFormat,
-    LidarWriteOptions,
-    PointCloud,
-    PointColumnChunkReader,
-    PointField,
+    memory_store as lidar_memory_store, CopcWriteOptions, LazWriteOptions, LidarFormat,
+    LidarWriteOptions, PointCloud, PointColumnChunkReader, PointField,
 };
 use wbprojection::{
-    epsg_from_srs_reference,
-    identify_epsg_from_wkt_with_policy,
-    to_ogc_wkt,
-    EpochPolicy,
-    EpochTransformOptions,
-    EpsgIdentifyPolicy,
+    epsg_from_srs_reference, identify_epsg_from_wkt_with_policy, to_ogc_wkt, EpochPolicy,
+    EpochTransformOptions, EpsgIdentifyPolicy,
+};
+use wbraster::raster::RasterData;
+use wbraster::{
+    memory_store, open_sensor_bundle, open_sensor_bundle_path,
+    AntimeridianPolicy as RasterAntimeridianPolicy, CrsInfo, DataType,
+    DestinationFootprint as RasterDestinationFootprint, Extent, GeoTiffCompression, GeoTiffLayout,
+    GeoTiffWriteOptions, GridSizePolicy as RasterGridSizePolicy, Jpeg2000ColorSpace,
+    Jpeg2000Compression, Jpeg2000WriteOptions, NodataPolicy as RasterNodataPolicy,
+    Raster as WbRaster, RasterFormat, ReprojectOptions, ResampleMethod, SafeBundle, SensorBundle,
 };
 use wbvector::reproject::{
-    layer_to_epsg_with_options_and_progress,
-    layer_to_epsg_with_options,
-    AntimeridianPolicy as VectorAntimeridianPolicy,
-    TopologyPolicy as VectorTopologyPolicy,
-    TransformFailurePolicy as VectorTransformFailurePolicy,
-    VectorReprojectOptions,
+    layer_to_epsg_with_options, layer_to_epsg_with_options_and_progress,
+    AntimeridianPolicy as VectorAntimeridianPolicy, TopologyPolicy as VectorTopologyPolicy,
+    TransformFailurePolicy as VectorTransformFailurePolicy, VectorReprojectOptions,
 };
-use wbvector::{memory_store as vector_memory_store, FieldDef, FieldType, FieldValue, Layer as WbLayer, VectorFormat};
+use wbvector::{
+    memory_store as vector_memory_store, FieldDef, FieldType, FieldValue, Layer as WbLayer,
+    VectorFormat,
+};
 
 use crate::{map_tool_error, parse_tier, PyCallbackSink, PythonToolRuntime};
 
@@ -75,7 +48,8 @@ struct CachedDiskRaster {
     dirty: bool,
 }
 
-static DISK_RASTER_CACHE: OnceLock<Mutex<HashMap<String, Arc<Mutex<CachedDiskRaster>>>>> = OnceLock::new();
+static DISK_RASTER_CACHE: OnceLock<Mutex<HashMap<String, Arc<Mutex<CachedDiskRaster>>>>> =
+    OnceLock::new();
 
 fn disk_raster_cache() -> &'static Mutex<HashMap<String, Arc<Mutex<CachedDiskRaster>>>> {
     DISK_RASTER_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -86,9 +60,7 @@ fn get_or_load_disk_raster_handle(path: &Path) -> PyResult<Arc<Mutex<CachedDiskR
 
     {
         let map = disk_raster_cache().lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                "disk raster cache lock poisoned",
-            )
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache lock poisoned")
         })?;
 
         if let Some(handle) = map.get(&key) {
@@ -170,7 +142,10 @@ mod wbw_r {
         wbtopology::from_wkt(wkt).map_err(|e| e.to_string())
     }
 
-    fn get_vector_feature_geometry(path: &str, feature_index: usize) -> Result<wbtopology::Geometry, String> {
+    fn get_vector_feature_geometry(
+        path: &str,
+        feature_index: usize,
+    ) -> Result<wbtopology::Geometry, String> {
         let layer = wbvector::read(path).map_err(|e| e.to_string())?;
         let feature = layer
             .features
@@ -184,7 +159,11 @@ mod wbw_r {
     }
 
     #[allow(dead_code)]
-    pub fn lidar_write_with_options_json(src: &str, dst: &str, options_json: &str) -> Result<String, String> {
+    pub fn lidar_write_with_options_json(
+        src: &str,
+        dst: &str,
+        options_json: &str,
+    ) -> Result<String, String> {
         let src_path = Path::new(src);
         let dst_path = Path::new(dst);
         if !src_path.exists() {
@@ -205,10 +184,12 @@ mod wbw_r {
     }
 
     pub fn projection_identify_epsg(crs_text: &str) -> Result<Option<u32>, String> {
-        Ok(
-            wbprojection::epsg_from_srs_reference(crs_text)
-                .or_else(|| wbprojection::identify_epsg_from_wkt_with_policy(crs_text, wbprojection::EpsgIdentifyPolicy::Lenient)),
-        )
+        Ok(wbprojection::epsg_from_srs_reference(crs_text).or_else(|| {
+            wbprojection::identify_epsg_from_wkt_with_policy(
+                crs_text,
+                wbprojection::EpsgIdentifyPolicy::Lenient,
+            )
+        }))
     }
 
     pub fn projection_from_proj_string(proj_str: &str) -> Result<String, String> {
@@ -386,7 +367,10 @@ mod wbw_r {
                 wbtopology::Geometry::Polygon(wbtopology::buffer_polygon(&poly, distance, options))
             }
             _ => {
-                return Err("buffer_wkt currently supports Point, LineString, and Polygon geometries".to_string())
+                return Err(
+                    "buffer_wkt currently supports Point, LineString, and Polygon geometries"
+                        .to_string(),
+                )
             }
         };
         Ok(wbtopology::to_wkt(&out))
@@ -444,7 +428,10 @@ mod wbw_r {
                 if let Some(v) = geo.get("write_batch_size").and_then(JsonValue::as_u64) {
                     options = options.with_write_batch_size(v as usize);
                 }
-                if let Some(v) = geo.get("data_page_row_count_limit").and_then(JsonValue::as_u64) {
+                if let Some(v) = geo
+                    .get("data_page_row_count_limit")
+                    .and_then(JsonValue::as_u64)
+                {
                     options = options.with_data_page_row_count_limit(v as usize);
                 }
             }
@@ -590,9 +577,7 @@ fn parse_copc_node_point_ordering(value: &str) -> Option<CopcNodePointOrdering> 
 
 fn parse_lidar_write_options_json(options_json: &str) -> PyResult<LidarWriteOptions> {
     let parsed: JsonValue = serde_json::from_str(options_json).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-            "invalid lidar options JSON: {e}"
-        ))
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid lidar options JSON: {e}"))
     })?;
 
     let mut options = LidarWriteOptions::default();
@@ -650,14 +635,13 @@ fn parse_lidar_write_options_json(options_json: &str) -> PyResult<LidarWriteOpti
                     "lidar options copc.node_point_ordering must be a string",
                 )
             })?;
-            copc_options.node_point_ordering = Some(
-                parse_copc_node_point_ordering(ordering_str).ok_or_else(|| {
+            copc_options.node_point_ordering =
+                Some(parse_copc_node_point_ordering(ordering_str).ok_or_else(|| {
                     PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
                         "unsupported copc.node_point_ordering '{}'; expected auto|morton|hilbert",
                         ordering_str
                     ))
-                })?,
-            );
+                })?);
         }
         options.copc = copc_options;
     }
@@ -665,7 +649,11 @@ fn parse_lidar_write_options_json(options_json: &str) -> PyResult<LidarWriteOpti
     Ok(options)
 }
 
-fn write_lidar_path_with_options_json(src: &Path, dst: &Path, options_json: &str) -> PyResult<PathBuf> {
+fn write_lidar_path_with_options_json(
+    src: &Path,
+    dst: &Path,
+    options_json: &str,
+) -> PyResult<PathBuf> {
     let cloud = PointCloud::read(src).map_err(|e| {
         PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
             "failed to read lidar source '{}': {e}",
@@ -675,12 +663,14 @@ fn write_lidar_path_with_options_json(src: &Path, dst: &Path, options_json: &str
 
     let options = parse_lidar_write_options_json(options_json)?;
     if let Some(format) = detect_lidar_output_format(dst) {
-        cloud.write_as_with_options(dst, format, &options).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                "failed to write lidar destination '{}': {e}",
-                dst.display()
-            ))
-        })?;
+        cloud
+            .write_as_with_options(dst, format, &options)
+            .map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                    "failed to write lidar destination '{}': {e}",
+                    dst.display()
+                ))
+            })?;
     } else {
         cloud.write_with_options(dst, &options).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
@@ -698,10 +688,7 @@ fn derived_output_path(input: &Path, suffix: &str) -> PathBuf {
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let stem = input
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("data");
+    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("data");
     let ext = input
         .extension()
         .and_then(|e| e.to_str())
@@ -719,10 +706,7 @@ fn derived_vector_output_path(input: &Path, suffix: &str) -> PathBuf {
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
-    let stem = input
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("data");
+    let stem = input.file_stem().and_then(|s| s.to_str()).unwrap_or("data");
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
@@ -796,14 +780,11 @@ impl RasterWriteControls {
     }
 
     fn geotiff_options(&self) -> Option<GeoTiffWriteOptions> {
-        let compression = self
-            .geotiff
-            .compression
-            .or_else(|| match self.compress {
-                Some(true) => Some(GeoTiffCompression::Deflate),
-                Some(false) => Some(GeoTiffCompression::None),
-                None => None,
-            });
+        let compression = self.geotiff.compression.or_else(|| match self.compress {
+            Some(true) => Some(GeoTiffCompression::Deflate),
+            Some(false) => Some(GeoTiffCompression::None),
+            None => None,
+        });
         let bigtiff = self.geotiff.bigtiff;
         let layout = self.geotiff.layout;
 
@@ -872,7 +853,10 @@ fn parse_geotiff_compression(name: &str) -> Option<GeoTiffCompression> {
     }
 }
 
-fn parse_geo_tiff_layout(layout_name: &str, geotiff_obj: &serde_json::Map<String, JsonValue>) -> PyResult<GeoTiffLayout> {
+fn parse_geo_tiff_layout(
+    layout_name: &str,
+    geotiff_obj: &serde_json::Map<String, JsonValue>,
+) -> PyResult<GeoTiffLayout> {
     let get_u32 = |keys: &[&str]| -> Option<u32> {
         for key in keys {
             if let Some(v) = geotiff_obj.get(*key).and_then(JsonValue::as_u64) {
@@ -914,9 +898,7 @@ fn parse_raster_write_controls(options: Option<JsonValue>) -> PyResult<RasterWri
     };
 
     let obj = options.as_object().ok_or_else(|| {
-        PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-            "write options must be a dict-like mapping",
-        )
+        PyErr::new::<pyo3::exceptions::PyTypeError, _>("write options must be a dict-like mapping")
     })?;
 
     let compress = match obj.get("compress") {
@@ -1007,11 +989,12 @@ fn parse_raster_write_controls(options: Option<JsonValue>) -> PyResult<RasterWri
                     "options.jpeg2000.compression must be a string",
                 )
             })?;
-            jpeg2000.compression = Some(parse_jpeg2000_compression(name, quality_db).ok_or_else(|| {
-                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            jpeg2000.compression =
+                Some(parse_jpeg2000_compression(name, quality_db).ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
                     "Unsupported jpeg2000.compression '{name}'. Expected one of: lossless, lossy"
                 ))
-            })?);
+                })?);
         }
 
         if let Some(v) = jp2_obj.get("decomp_levels") {
@@ -1122,8 +1105,7 @@ fn resolved_output_path(working_directory: &Path, output_path: &str) -> PathBuf 
 }
 
 fn path_has_extension(path: &Path) -> bool {
-    path
-        .extension()
+    path.extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| !ext.trim().is_empty())
         .unwrap_or(false)
@@ -1219,9 +1201,10 @@ fn write_raster_with_controls_for_env(
         flush_cached_disk_raster(&raster.file_path)?;
     }
 
-    let requires_reencode =
-        (output_format == RasterFormat::GeoTiff && effective_controls.geotiff_options().is_some())
-            || (output_format == RasterFormat::Jpeg2000 && effective_controls.jpeg2000_options().is_some());
+    let requires_reencode = (output_format == RasterFormat::GeoTiff
+        && effective_controls.geotiff_options().is_some())
+        || (output_format == RasterFormat::Jpeg2000
+            && effective_controls.jpeg2000_options().is_some());
 
     if output_format != RasterFormat::GeoTiff
         && effective_controls.has_geotiff_controls()
@@ -1263,9 +1246,7 @@ fn write_raster_with_controls_for_env(
         }
     } else if raster.file_path != out_path && !requires_reencode {
         std::fs::copy(&raster.file_path, &out_path).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                "Failed to write raster: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to write raster: {e}"))
         })?;
         copy_raster_sidecars_if_present(&raster.file_path, &out_path, output_format)?;
     } else {
@@ -1306,7 +1287,11 @@ fn read_prj_sidecar(path: &Path) -> PyResult<Option<String>> {
     // always WGS84). GeoJSON and TopoJSON store no CRS metadata per RFC 7946
     // but are defined as WGS84. Read the embedded CRS via wbvector for any
     // non-Shapefile format.
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
     if ext != "shp" {
         // GeoJSON and TopoJSON carry no CRS metadata field on read but are
         // defined as WGS84 (EPSG:4326) by RFC 7946 / TopoJSON spec.
@@ -1416,10 +1401,12 @@ fn write_vector_layer_for_python(vector: &Vector, layer: &WbLayer) -> PyResult<(
         if vector_memory_store::replace_vector_by_id(id, layer.clone()) {
             return Ok(());
         }
-        return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
-            "in-memory vector '{}' no longer exists",
-            vector.file_path.display()
-        )));
+        return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(
+            format!(
+                "in-memory vector '{}' no longer exists",
+                vector.file_path.display()
+            ),
+        ));
     }
 
     let format = detect_vector_output_format(&vector.file_path)?;
@@ -1470,10 +1457,12 @@ fn write_lidar_cloud_for_python(lidar: &Lidar, cloud: &PointCloud) -> PyResult<(
         if lidar_memory_store::replace_lidar_by_id(id, cloud.clone()) {
             return Ok(());
         }
-        return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
-            "in-memory lidar '{}' no longer exists",
-            lidar.file_path.display()
-        )));
+        return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(
+            format!(
+                "in-memory lidar '{}' no longer exists",
+                lidar.file_path.display()
+            ),
+        ));
     }
 
     cloud.write(&lidar.file_path).map_err(|e| {
@@ -1513,7 +1502,10 @@ fn field_value_to_pyobject(py: Python<'_>, value: &FieldValue) -> PyResult<Py<Py
     }
 }
 
-fn py_any_to_field_value(value: &Bound<'_, PyAny>, expected_type: FieldType) -> PyResult<FieldValue> {
+fn py_any_to_field_value(
+    value: &Bound<'_, PyAny>,
+    expected_type: FieldType,
+) -> PyResult<FieldValue> {
     if value.is_none() {
         return Ok(FieldValue::Null);
     }
@@ -1546,7 +1538,9 @@ fn py_any_to_field_value(value: &Bound<'_, PyAny>, expected_type: FieldType) -> 
         FieldType::Boolean => value
             .extract::<bool>()
             .map(FieldValue::Boolean)
-            .map_err(|_| PyErr::new::<pyo3::exceptions::PyTypeError, _>("expected a boolean value")),
+            .map_err(|_| {
+                PyErr::new::<pyo3::exceptions::PyTypeError, _>("expected a boolean value")
+            }),
         FieldType::Blob => {
             if let Ok(v) = value.extract::<Vec<u8>>() {
                 Ok(FieldValue::Blob(v))
@@ -1559,7 +1553,9 @@ fn py_any_to_field_value(value: &Bound<'_, PyAny>, expected_type: FieldType) -> 
         FieldType::Date => value
             .extract::<String>()
             .map(FieldValue::Date)
-            .map_err(|_| PyErr::new::<pyo3::exceptions::PyTypeError, _>("expected a date string value")),
+            .map_err(|_| {
+                PyErr::new::<pyo3::exceptions::PyTypeError, _>("expected a date string value")
+            }),
         FieldType::DateTime => value
             .extract::<String>()
             .map(FieldValue::DateTime)
@@ -1569,7 +1565,9 @@ fn py_any_to_field_value(value: &Bound<'_, PyAny>, expected_type: FieldType) -> 
         FieldType::Json => value
             .extract::<String>()
             .map(FieldValue::Text)
-            .map_err(|_| PyErr::new::<pyo3::exceptions::PyTypeError, _>("expected a JSON string value")),
+            .map_err(|_| {
+                PyErr::new::<pyo3::exceptions::PyTypeError, _>("expected a JSON string value")
+            }),
     }
 }
 
@@ -1618,7 +1616,10 @@ fn normalize_control_points_argument(control_points: &Bound<'_, PyAny>) -> PyRes
 
     let temp_path = std::env::temp_dir().join(format!(
         "wbw_gcps_{}_{}.csv",
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
         std::process::id(),
     ));
     let mut file = File::create(&temp_path).map_err(|e| {
@@ -1636,7 +1637,9 @@ fn normalize_control_points_argument(control_points: &Bound<'_, PyAny>) -> PyRes
 
     for values in points {
         writeln!(file, "{},{},{},{}", values.0, values.1, values.2, values.3).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("failed writing temp GCP csv: {e}"))
+            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                "failed writing temp GCP csv: {e}"
+            ))
         })?;
     }
 
@@ -1740,13 +1743,14 @@ pub(crate) fn run_unary_tool_runtime_with_callback(
         json!(input_path.to_string_lossy().to_string()),
     );
     if let Some(path) = output_path {
-        args.insert("output".to_string(), json!(path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(path.to_string_lossy().to_string()),
+        );
     }
 
     let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-            "invalid JSON arguments: {e}"
-        ))
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
     })?;
 
     let response = if let Some(cb) = callback {
@@ -1815,14 +1819,12 @@ fn extract_typed_output_path_by_key(
     key: &str,
 ) -> PyResult<PathBuf> {
     let outputs = response.get("outputs").unwrap_or(response);
-    let typed = outputs
-        .get(key)
-        .ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                "tool '{}' did not return output key '{}'",
-                tool_id, key
-            ))
-        })?;
+    let typed = outputs.get(key).ok_or_else(|| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+            "tool '{}' did not return output key '{}'",
+            tool_id, key
+        ))
+    })?;
 
     let path = typed
         .get("path")
@@ -1849,7 +1851,11 @@ fn extract_optional_typed_output_path_by_key(
         .map(PathBuf::from)
 }
 
-fn extract_output_string_by_key(tool_id: &str, response: &serde_json::Value, key: &str) -> PyResult<String> {
+fn extract_output_string_by_key(
+    tool_id: &str,
+    response: &serde_json::Value,
+    key: &str,
+) -> PyResult<String> {
     let outputs = response.get("outputs").unwrap_or(response);
     outputs
         .get(key)
@@ -1863,7 +1869,11 @@ fn extract_output_string_by_key(tool_id: &str, response: &serde_json::Value, key
         })
 }
 
-fn extract_output_path_by_key(tool_id: &str, response: &serde_json::Value, key: &str) -> PyResult<PathBuf> {
+fn extract_output_path_by_key(
+    tool_id: &str,
+    response: &serde_json::Value,
+    key: &str,
+) -> PyResult<PathBuf> {
     let outputs = response.get("outputs").unwrap_or(response);
     let value = outputs.get(key).ok_or_else(|| {
         PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
@@ -1888,13 +1898,11 @@ fn extract_output_path_by_key(tool_id: &str, response: &serde_json::Value, key: 
 
 fn extract_typed_output_list(response: &serde_json::Value) -> PyResult<Vec<PathBuf>> {
     let outputs = response.get("outputs").unwrap_or(response);
-    let arr = outputs
-        .as_array()
-        .ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                "tool did not return a list of typed outputs".to_string()
-            )
-        })?;
+    let arr = outputs.as_array().ok_or_else(|| {
+        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+            "tool did not return a list of typed outputs".to_string(),
+        )
+    })?;
 
     let mut paths = Vec::with_capacity(arr.len());
     for item in arr {
@@ -1903,7 +1911,7 @@ fn extract_typed_output_list(response: &serde_json::Value) -> PyResult<Vec<PathB
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| {
                 PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                    "output list item missing 'path' field".to_string()
+                    "output list item missing 'path' field".to_string(),
                 )
             })?;
         paths.push(PathBuf::from(path));
@@ -1911,7 +1919,11 @@ fn extract_typed_output_list(response: &serde_json::Value) -> PyResult<Vec<PathB
     Ok(paths)
 }
 
-fn extract_output_u8_vec_by_key(tool_id: &str, response: &serde_json::Value, key: &str) -> PyResult<Vec<u8>> {
+fn extract_output_u8_vec_by_key(
+    tool_id: &str,
+    response: &serde_json::Value,
+    key: &str,
+) -> PyResult<Vec<u8>> {
     let outputs = response.get("outputs").unwrap_or(response);
     let arr = outputs
         .get(key)
@@ -1942,7 +1954,10 @@ fn extract_output_u8_vec_by_key(tool_id: &str, response: &serde_json::Value, key
     Ok(out)
 }
 
-fn extract_raster_input_paths(input_rasters: &Bound<'_, PyList>, arg_name: &str) -> PyResult<Vec<String>> {
+fn extract_raster_input_paths(
+    input_rasters: &Bound<'_, PyList>,
+    arg_name: &str,
+) -> PyResult<Vec<String>> {
     input_rasters
         .iter()
         .map(|item| {
@@ -1967,9 +1982,7 @@ fn run_tool_response_with_args(
     callback: Option<Py<PyAny>>,
 ) -> PyResult<serde_json::Value> {
     let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-            "invalid JSON arguments: {e}"
-        ))
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
     })?;
 
     if let Some(cb) = callback {
@@ -2024,13 +2037,14 @@ fn run_binary_tool_runtime_with_callback(
         json!(input2_path.to_string_lossy().to_string()),
     );
     if let Some(path) = output_path {
-        args.insert("output".to_string(), json!(path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(path.to_string_lossy().to_string()),
+        );
     }
 
     let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-            "invalid JSON arguments: {e}"
-        ))
+        PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
     })?;
 
     let out = if let Some(cb) = callback {
@@ -2147,7 +2161,11 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("add", "raster", "overlay_math"),
     ("add_field", "vector", "attribute_analysis"),
     ("add_geometry_attributes", "vector", "attribute_analysis"),
-    ("add_point_coordinates_to_table", "conversion", "vector_table_io"),
+    (
+        "add_point_coordinates_to_table",
+        "conversion",
+        "vector_table_io",
+    ),
     ("aggregate_raster", "raster", "general"),
     ("anisotropic_diffusion_filter", "remote_sensing", "filters"),
     ("anova", "raster", "general"),
@@ -2160,20 +2178,48 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("ascii_to_las", "lidar", "io_management"),
     ("aspect", "terrain", "derivatives"),
     ("assess_route", "terrain", "general"),
-    ("assign_projection_lidar", "projection_georeferencing", "general"),
-    ("assign_projection_raster", "projection_georeferencing", "general"),
-    ("assign_projection_vector", "projection_georeferencing", "general"),
+    (
+        "assign_projection_lidar",
+        "projection_georeferencing",
+        "general",
+    ),
+    (
+        "assign_projection_raster",
+        "projection_georeferencing",
+        "general",
+    ),
+    (
+        "assign_projection_vector",
+        "projection_georeferencing",
+        "general",
+    ),
     ("atan2", "raster", "general"),
     ("attribute_correlation", "vector", "attribute_analysis"),
     ("attribute_histogram", "vector", "attribute_analysis"),
     ("attribute_scattergram", "vector", "attribute_analysis"),
     ("average_flowpath_slope", "hydrology", "flow_routing"),
     ("average_horizon_distance", "terrain", "visibility"),
-    ("average_normal_vector_angular_deviation", "terrain", "roughness_texture"),
+    (
+        "average_normal_vector_angular_deviation",
+        "terrain",
+        "roughness_texture",
+    ),
     ("average_overlay", "raster", "overlay_math"),
-    ("average_upslope_flowpath_length", "hydrology", "flow_routing"),
-    ("balance_contrast_enhancement", "remote_sensing", "enhancement_contrast"),
-    ("baseline_matching_and_diagnostics_assessment", "terrain", "workflow_products"),
+    (
+        "average_upslope_flowpath_length",
+        "hydrology",
+        "flow_routing",
+    ),
+    (
+        "balance_contrast_enhancement",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
+    (
+        "baseline_matching_and_diagnostics_assessment",
+        "terrain",
+        "workflow_products",
+    ),
     ("basins", "hydrology", "watersheds_basins"),
     ("bilateral_filter", "remote_sensing", "filters"),
     ("block_maximum", "raster", "general"),
@@ -2183,32 +2229,80 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("bool_or", "raster", "overlay_math"),
     ("bool_xor", "raster", "overlay_math"),
     ("boundary_shape_complexity", "raster", "general"),
-    ("brdf_normalization", "remote_sensing", "radiometric_correction"),
-    ("brdf_surface_reflectance_consistency", "remote_sensing", "radiometric_correction"),
-    ("breach_depressions_least_cost", "hydrology", "depressions_storage"),
-    ("breach_single_cell_pits", "hydrology", "depressions_storage"),
+    (
+        "brdf_normalization",
+        "remote_sensing",
+        "radiometric_correction",
+    ),
+    (
+        "brdf_surface_reflectance_consistency",
+        "remote_sensing",
+        "radiometric_correction",
+    ),
+    (
+        "breach_depressions_least_cost",
+        "hydrology",
+        "depressions_storage",
+    ),
+    (
+        "breach_single_cell_pits",
+        "hydrology",
+        "depressions_storage",
+    ),
     ("breakline_mapping", "terrain", "general"),
     ("buffer_raster", "raster", "distance_cost"),
     ("build_network_topology", "vector", "network_analysis"),
-    ("build_object_hierarchy_multiscale", "remote_sensing", "obia"),
+    (
+        "build_object_hierarchy_multiscale",
+        "remote_sensing",
+        "obia",
+    ),
     ("burn_streams", "hydrology", "depressions_storage"),
     ("burn_streams_at_roads", "hydrology", "depressions_storage"),
-    ("canny_edge_detection", "remote_sensing", "edge_feature_detection"),
-    ("carbon_sequestration_verification_audit", "terrain", "workflow_products"),
+    (
+        "canny_edge_detection",
+        "remote_sensing",
+        "edge_feature_detection",
+    ),
+    (
+        "carbon_sequestration_verification_audit",
+        "terrain",
+        "workflow_products",
+    ),
     ("casorati_curvature", "terrain", "derivatives"),
     ("ceil", "raster", "general"),
     ("centroid_raster", "raster", "general"),
     ("centroid_vector", "vector", "geometry_processing"),
-    ("change_vector_analysis", "remote_sensing", "change_detection"),
-    ("circular_variance_of_aspect", "terrain", "roughness_texture"),
-    ("classify_buildings_in_lidar", "lidar", "filtering_classification"),
+    (
+        "change_vector_analysis",
+        "remote_sensing",
+        "change_detection",
+    ),
+    (
+        "circular_variance_of_aspect",
+        "terrain",
+        "roughness_texture",
+    ),
+    (
+        "classify_buildings_in_lidar",
+        "lidar",
+        "filtering_classification",
+    ),
     ("classify_lidar", "lidar", "filtering_classification"),
     ("classify_objects_ensemble_pro", "remote_sensing", "obia"),
     ("classify_objects_random_forest", "remote_sensing", "obia"),
     ("classify_objects_rules_basic", "remote_sensing", "obia"),
-    ("classify_objects_rules_hierarchical", "remote_sensing", "obia"),
+    (
+        "classify_objects_rules_hierarchical",
+        "remote_sensing",
+        "obia",
+    ),
     ("classify_objects_svm", "remote_sensing", "obia"),
-    ("classify_overlap_points", "lidar", "filtering_classification"),
+    (
+        "classify_overlap_points",
+        "lidar",
+        "filtering_classification",
+    ),
     ("clean_vector", "conversion", "vector_table_io"),
     ("clip", "vector", "overlay_analysis"),
     ("clip_lidar_to_polygon", "lidar", "filtering_classification"),
@@ -2218,7 +2312,11 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("cloude_pottier_decomposition", "remote_sensing", "sar"),
     ("clump", "raster", "general"),
     ("colourize_based_on_class", "lidar", "analysis_metrics"),
-    ("colourize_based_on_point_returns", "lidar", "analysis_metrics"),
+    (
+        "colourize_based_on_point_returns",
+        "lidar",
+        "analysis_metrics",
+    ),
     ("compactness_ratio", "vector", "shape_metrics"),
     ("concave_hull", "vector", "geometry_processing"),
     ("conditional_evaluation", "raster", "reclass_mask"),
@@ -2228,17 +2326,37 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("contours_from_points", "vector", "sampling_gridding"),
     ("contours_from_raster", "vector", "sampling_gridding"),
     ("convergence_index", "terrain", "general"),
-    ("convert_nodata_to_zero", "conversion", "raster_vector_conversion"),
-    ("corner_detection", "remote_sensing", "edge_feature_detection"),
-    ("correct_vignetting", "remote_sensing", "radiometric_correction"),
-    ("corridor_mapping_intelligence", "terrain", "workflow_products"),
+    (
+        "convert_nodata_to_zero",
+        "conversion",
+        "raster_vector_conversion",
+    ),
+    (
+        "corner_detection",
+        "remote_sensing",
+        "edge_feature_detection",
+    ),
+    (
+        "correct_vignetting",
+        "remote_sensing",
+        "radiometric_correction",
+    ),
+    (
+        "corridor_mapping_intelligence",
+        "terrain",
+        "workflow_products",
+    ),
     ("cos", "raster", "general"),
     ("cosh", "raster", "general"),
     ("cost_allocation", "raster", "distance_cost"),
     ("cost_distance", "raster", "distance_cost"),
     ("cost_pathway", "raster", "distance_cost"),
     ("count_if", "raster", "overlay_math"),
-    ("create_colour_composite", "remote_sensing", "enhancement_contrast"),
+    (
+        "create_colour_composite",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("create_plane", "raster", "general"),
     ("crispness_index", "raster", "general"),
     ("cross_tabulation", "raster", "general"),
@@ -2248,7 +2366,11 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("d8_flow_accum", "hydrology", "flow_routing"),
     ("d8_mass_flux", "hydrology", "flow_routing"),
     ("d8_pointer", "hydrology", "flow_routing"),
-    ("dark_object_subtraction", "remote_sensing", "radiometric_correction"),
+    (
+        "dark_object_subtraction",
+        "remote_sensing",
+        "radiometric_correction",
+    ),
     ("dbscan", "raster", "general"),
     ("decrement", "raster", "general"),
     ("delete_field", "vector", "attribute_analysis"),
@@ -2257,7 +2379,11 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("depth_in_sink", "hydrology", "depressions_storage"),
     ("depth_to_water", "hydrology", "hydrologic_indices"),
     ("deviation_from_mean_elevation", "terrain", "general"),
-    ("deviation_from_regional_direction", "vector", "shape_metrics"),
+    (
+        "deviation_from_regional_direction",
+        "vector",
+        "shape_metrics",
+    ),
     ("diff_of_gaussians_filter", "remote_sensing", "filters"),
     ("difference", "vector", "overlay_analysis"),
     ("difference_curvature", "terrain", "derivatives"),
@@ -2265,16 +2391,28 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("dinf_flow_accum", "hydrology", "flow_routing"),
     ("dinf_mass_flux", "hydrology", "flow_routing"),
     ("dinf_pointer", "hydrology", "flow_routing"),
-    ("direct_decorrelation_stretch", "remote_sensing", "enhancement_contrast"),
+    (
+        "direct_decorrelation_stretch",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("directional_relief", "terrain", "general"),
     ("directional_variogram", "vector", "spatial_statistics"),
     ("dissolve", "vector", "overlay_analysis"),
     ("distance_to_outlet", "hydrology", "hydrologic_indices"),
     ("diversity_filter", "remote_sensing", "filters"),
     ("divide", "raster", "overlay_math"),
-    ("dn_to_toa_reflectance", "remote_sensing", "radiometric_correction"),
+    (
+        "dn_to_toa_reflectance",
+        "remote_sensing",
+        "radiometric_correction",
+    ),
     ("download_osm_vector", "vector", "online_data"),
-    ("downslope_distance_to_stream", "hydrology", "hydrologic_indices"),
+    (
+        "downslope_distance_to_stream",
+        "hydrology",
+        "hydrologic_indices",
+    ),
     ("downslope_flowpath_length", "hydrology", "flow_routing"),
     ("downslope_index", "hydrology", "hydrologic_indices"),
     ("edge_contamination", "hydrology", "hydrologic_indices"),
@@ -2284,27 +2422,59 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("elev_above_pit", "terrain", "general"),
     ("elev_above_pit_dist", "terrain", "general"),
     ("elev_relative_to_min_max", "terrain", "landform_indices"),
-    ("elev_relative_to_watershed_min_max", "hydrology", "hydrologic_indices"),
+    (
+        "elev_relative_to_watershed_min_max",
+        "hydrology",
+        "hydrologic_indices",
+    ),
     ("elevation_above_stream", "hydrology", "hydrologic_indices"),
-    ("elevation_above_stream_euclidean", "hydrology", "hydrologic_indices"),
+    (
+        "elevation_above_stream_euclidean",
+        "hydrology",
+        "hydrologic_indices",
+    ),
     ("elevation_percentile", "terrain", "general"),
-    ("eliminate_coincident_points", "vector", "geometry_processing"),
+    (
+        "eliminate_coincident_points",
+        "vector",
+        "geometry_processing",
+    ),
     ("elongation_ratio", "vector", "shape_metrics"),
     ("embankment_mapping", "terrain", "general"),
     ("emboss_filter", "remote_sensing", "filters"),
-    ("emergency_scenario_routing_and_accessibility_simulator", "vector", "network_analysis"),
+    (
+        "emergency_scenario_routing_and_accessibility_simulator",
+        "vector",
+        "network_analysis",
+    ),
     ("enhanced_lee_filter", "remote_sensing", "sar"),
     ("envelope_test", "vector", "spatial_statistics"),
     ("equal_to", "raster", "general"),
     ("erase", "vector", "overlay_analysis"),
-    ("erase_polygon_from_lidar", "lidar", "filtering_classification"),
+    (
+        "erase_polygon_from_lidar",
+        "lidar",
+        "filtering_classification",
+    ),
     ("erase_polygon_from_raster", "raster", "general"),
     ("estimate_variogram", "vector", "spatial_statistics"),
     ("euclidean_allocation", "raster", "distance_cost"),
     ("euclidean_distance", "raster", "distance_cost"),
-    ("evaluate_object_classification_accuracy", "remote_sensing", "obia"),
-    ("evaluate_segmentation_quality_pro", "remote_sensing", "obia"),
-    ("evaluate_training_sites", "remote_sensing", "classification"),
+    (
+        "evaluate_object_classification_accuracy",
+        "remote_sensing",
+        "obia",
+    ),
+    (
+        "evaluate_segmentation_quality_pro",
+        "remote_sensing",
+        "obia",
+    ),
+    (
+        "evaluate_training_sites",
+        "remote_sensing",
+        "classification",
+    ),
     ("exp", "raster", "general"),
     ("exp2", "raster", "general"),
     ("export_table_to_csv", "conversion", "vector_table_io"),
@@ -2312,36 +2482,80 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("extend_vector_lines", "vector", "geometry_processing"),
     ("extract_by_attribute", "vector", "attribute_analysis"),
     ("extract_nodes", "vector", "sampling_gridding"),
-    ("extract_raster_values_at_points", "vector", "sampling_gridding"),
+    (
+        "extract_raster_values_at_points",
+        "vector",
+        "sampling_gridding",
+    ),
     ("extract_streams", "streams", "network_extraction"),
     ("extract_valleys", "streams", "network_extraction"),
-    ("false_colour_composite", "remote_sensing", "enhancement_contrast"),
+    (
+        "false_colour_composite",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("farthest_channel_head", "streams", "longitudinal_analysis"),
     ("fast_almost_gaussian_filter", "remote_sensing", "filters"),
     ("fd8_flow_accum", "hydrology", "flow_routing"),
     ("fd8_pointer", "hydrology", "flow_routing"),
     ("feature_preserving_smoothing", "terrain", "general"),
-    ("feature_preserving_smoothing_multiscale", "terrain", "general"),
+    (
+        "feature_preserving_smoothing_multiscale",
+        "terrain",
+        "general",
+    ),
     ("fetch_analysis", "terrain", "general"),
     ("fft_random_field", "raster", "general"),
     ("field_calculator", "vector", "attribute_analysis"),
-    ("field_trafficability_and_operation_planning", "precision_agriculture", "general"),
+    (
+        "field_trafficability_and_operation_planning",
+        "precision_agriculture",
+        "general",
+    ),
     ("fill_burn", "hydrology", "depressions_storage"),
     ("fill_depressions", "hydrology", "depressions_storage"),
-    ("fill_depressions_planchon_and_darboux", "hydrology", "depressions_storage"),
-    ("fill_depressions_wang_and_liu", "hydrology", "depressions_storage"),
+    (
+        "fill_depressions_planchon_and_darboux",
+        "hydrology",
+        "depressions_storage",
+    ),
+    (
+        "fill_depressions_wang_and_liu",
+        "hydrology",
+        "depressions_storage",
+    ),
     ("fill_missing_data", "terrain", "general"),
     ("fill_pits", "hydrology", "depressions_storage"),
     ("filter_lidar", "lidar", "filtering_classification"),
-    ("filter_lidar_by_percentile", "lidar", "filtering_classification"),
-    ("filter_lidar_by_reference_surface", "lidar", "filtering_classification"),
+    (
+        "filter_lidar_by_percentile",
+        "lidar",
+        "filtering_classification",
+    ),
+    (
+        "filter_lidar_by_reference_surface",
+        "lidar",
+        "filtering_classification",
+    ),
     ("filter_lidar_classes", "lidar", "filtering_classification"),
     ("filter_lidar_noise", "lidar", "filtering_classification"),
-    ("filter_lidar_scan_angles", "lidar", "filtering_classification"),
+    (
+        "filter_lidar_scan_angles",
+        "lidar",
+        "filtering_classification",
+    ),
     ("filter_raster_features_by_area", "raster", "general"),
-    ("filter_vector_features_by_area", "vector", "attribute_analysis"),
+    (
+        "filter_vector_features_by_area",
+        "vector",
+        "attribute_analysis",
+    ),
     ("find_flightline_edge_points", "lidar", "analysis_metrics"),
-    ("find_lowest_or_highest_points", "vector", "sampling_gridding"),
+    (
+        "find_lowest_or_highest_points",
+        "vector",
+        "sampling_gridding",
+    ),
     ("find_main_stem", "streams", "longitudinal_analysis"),
     ("find_noflow_cells", "hydrology", "hydrologic_indices"),
     ("find_parallel_flow", "hydrology", "hydrologic_indices"),
@@ -2350,54 +2564,114 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("fit_variogram", "vector", "spatial_statistics"),
     ("fix_dangling_arcs", "conversion", "geometry_topology"),
     ("flatten_lakes", "hydrology", "depressions_storage"),
-    ("fleet_routing_and_dispatch_optimizer", "vector", "network_analysis"),
+    (
+        "fleet_routing_and_dispatch_optimizer",
+        "vector",
+        "network_analysis",
+    ),
     ("flightline_overlap", "lidar", "interpolation_gridding"),
     ("flip_image", "remote_sensing", "filters"),
     ("flood_order", "hydrology", "watersheds_basins"),
     ("floor", "raster", "general"),
     ("flow_accum_full_workflow", "hydrology", "flow_routing"),
     ("flow_length_diff", "hydrology", "flow_routing"),
-    ("forestry_structure_and_biomass_intelligence", "terrain", "workflow_products"),
+    (
+        "forestry_structure_and_biomass_intelligence",
+        "terrain",
+        "workflow_products",
+    ),
     ("frangi_filter", "remote_sensing", "filters"),
     ("freeman_durden_decomposition", "remote_sensing", "sar"),
     ("frost_filter", "remote_sensing", "sar"),
-    ("fuzzy_knn_classification", "remote_sensing", "classification"),
+    (
+        "fuzzy_knn_classification",
+        "remote_sensing",
+        "classification",
+    ),
     ("gabor_filter_bank", "remote_sensing", "filters"),
     ("gamma_correction", "remote_sensing", "enhancement_contrast"),
     ("gamma_map_filter", "remote_sensing", "sar"),
-    ("gaussian_contrast_stretch", "remote_sensing", "enhancement_contrast"),
+    (
+        "gaussian_contrast_stretch",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("gaussian_curvature", "terrain", "derivatives"),
     ("gaussian_filter", "remote_sensing", "filters"),
-    ("generalize_classified_raster", "remote_sensing", "classification"),
-    ("generalize_with_similarity", "remote_sensing", "classification"),
+    (
+        "generalize_classified_raster",
+        "remote_sensing",
+        "classification",
+    ),
+    (
+        "generalize_with_similarity",
+        "remote_sensing",
+        "classification",
+    ),
     ("generate_network_nodes", "vector", "network_analysis"),
     ("generating_function", "terrain", "derivatives"),
-    ("geographically_weighted_regression", "vector", "spatial_statistics"),
-    ("geographically_weighted_regression_raster", "raster", "spatial_statistics"),
+    (
+        "geographically_weighted_regression",
+        "vector",
+        "spatial_statistics",
+    ),
+    (
+        "geographically_weighted_regression_raster",
+        "raster",
+        "spatial_statistics",
+    ),
     ("geomorphons", "terrain", "landform_indices"),
-    ("georeference_raster_from_control_points", "projection_georeferencing", "general"),
+    (
+        "georeference_raster_from_control_points",
+        "projection_georeferencing",
+        "general",
+    ),
     ("getis_ord_gi_star", "vector", "spatial_statistics"),
     ("getis_ord_gi_star_raster", "raster", "spatial_statistics"),
     ("glcm_texture", "remote_sensing", "filters"),
     ("global_morans_i", "vector", "spatial_statistics"),
     ("greater_than", "raster", "general"),
     ("guided_filter", "remote_sensing", "filters"),
-    ("guided_uav_image_intake_workflow", "remote_sensing", "workflow_products"),
+    (
+        "guided_uav_image_intake_workflow",
+        "remote_sensing",
+        "workflow_products",
+    ),
     ("h_alpha_wisart_classification", "remote_sensing", "sar"),
     ("hack_stream_order", "streams", "ordering_metrics"),
     ("heat_map", "raster", "general"),
     ("height_above_ground", "lidar", "filtering_classification"),
-    ("hexagonal_grid_from_raster_base", "vector", "sampling_gridding"),
-    ("hexagonal_grid_from_vector_base", "vector", "sampling_gridding"),
+    (
+        "hexagonal_grid_from_raster_base",
+        "vector",
+        "sampling_gridding",
+    ),
+    (
+        "hexagonal_grid_from_vector_base",
+        "vector",
+        "sampling_gridding",
+    ),
     ("high_pass_bilateral_filter", "remote_sensing", "filters"),
     ("high_pass_filter", "remote_sensing", "filters"),
     ("high_pass_median_filter", "remote_sensing", "filters"),
     ("highest_position", "raster", "overlay_math"),
     ("hillshade", "terrain", "general"),
     ("hillslopes", "hydrology", "watersheds_basins"),
-    ("histogram_equalization", "remote_sensing", "enhancement_contrast"),
-    ("histogram_matching", "remote_sensing", "enhancement_contrast"),
-    ("histogram_matching_two_images", "remote_sensing", "enhancement_contrast"),
+    (
+        "histogram_equalization",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
+    (
+        "histogram_matching",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
+    (
+        "histogram_matching_two_images",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("hole_proportion", "vector", "shape_metrics"),
     ("horizon_angle", "terrain", "visibility"),
     ("horizon_area", "terrain", "visibility"),
@@ -2413,20 +2687,44 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("ihs_to_rgb", "remote_sensing", "enhancement_contrast"),
     ("image_autocorrelation", "raster", "general"),
     ("image_correlation", "raster", "general"),
-    ("image_correlation_neighbourhood_analysis", "raster", "local_neighborhood"),
-    ("image_difference_change_detection", "remote_sensing", "change_detection"),
+    (
+        "image_correlation_neighbourhood_analysis",
+        "raster",
+        "local_neighborhood",
+    ),
+    (
+        "image_difference_change_detection",
+        "remote_sensing",
+        "change_detection",
+    ),
     ("image_regression", "raster", "general"),
     ("image_segmentation", "remote_sensing", "obia"),
     ("image_slider", "remote_sensing", "obia"),
     ("image_stack_profile", "remote_sensing", "obia"),
     ("impoundment_size_index", "hydrology", "depressions_storage"),
-    ("improved_ground_point_filter", "lidar", "filtering_classification"),
-    ("in_season_crop_stress_intervention_planning", "precision_agriculture", "general"),
+    (
+        "improved_ground_point_filter",
+        "lidar",
+        "filtering_classification",
+    ),
+    (
+        "in_season_crop_stress_intervention_planning",
+        "precision_agriculture",
+        "general",
+    ),
     ("increment", "raster", "general"),
     ("individual_tree_detection", "lidar", "analysis_metrics"),
-    ("individual_tree_segmentation", "lidar", "filtering_classification"),
+    (
+        "individual_tree_segmentation",
+        "lidar",
+        "filtering_classification",
+    ),
     ("inhomogeneous_baseline", "vector", "spatial_statistics"),
-    ("inhomogeneous_intensity_raster", "raster", "spatial_statistics"),
+    (
+        "inhomogeneous_intensity_raster",
+        "raster",
+        "spatial_statistics",
+    ),
     ("inplace_add", "raster", "general"),
     ("inplace_divide", "raster", "general"),
     ("inplace_multiply", "raster", "general"),
@@ -2450,26 +2748,62 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("ks_normality_test", "raster", "general"),
     ("kuan_filter", "remote_sensing", "sar"),
     ("kuwahara_filter", "remote_sensing", "filters"),
-    ("land_surface_temperature_single_channel", "remote_sensing", "thermal_emissivity"),
-    ("land_surface_temperature_split_window", "remote_sensing", "thermal_emissivity"),
-    ("landslide_susceptibility_assessment", "terrain", "workflow_products"),
-    ("laplacian_filter", "remote_sensing", "edge_feature_detection"),
-    ("laplacian_of_gaussians_filter", "remote_sensing", "edge_feature_detection"),
+    (
+        "land_surface_temperature_single_channel",
+        "remote_sensing",
+        "thermal_emissivity",
+    ),
+    (
+        "land_surface_temperature_split_window",
+        "remote_sensing",
+        "thermal_emissivity",
+    ),
+    (
+        "landslide_susceptibility_assessment",
+        "terrain",
+        "workflow_products",
+    ),
+    (
+        "laplacian_filter",
+        "remote_sensing",
+        "edge_feature_detection",
+    ),
+    (
+        "laplacian_of_gaussians_filter",
+        "remote_sensing",
+        "edge_feature_detection",
+    ),
     ("las_to_ascii", "lidar", "io_management"),
     ("las_to_shapefile", "lidar", "io_management"),
     ("layer_footprint_raster", "vector", "sampling_gridding"),
     ("layer_footprint_vector", "vector", "sampling_gridding"),
     ("lee_filter", "remote_sensing", "filters"),
-    ("length_of_upstream_channels", "streams", "longitudinal_analysis"),
+    (
+        "length_of_upstream_channels",
+        "streams",
+        "longitudinal_analysis",
+    ),
     ("less_than", "raster", "general"),
     ("lidar_block_maximum", "lidar", "interpolation_gridding"),
     ("lidar_block_minimum", "lidar", "interpolation_gridding"),
-    ("lidar_change_and_disturbance_analysis", "lidar", "workflow_products"),
+    (
+        "lidar_change_and_disturbance_analysis",
+        "lidar",
+        "workflow_products",
+    ),
     ("lidar_classify_subset", "lidar", "filtering_classification"),
     ("lidar_colourize", "lidar", "io_management"),
-    ("lidar_construct_vector_tin", "lidar", "interpolation_gridding"),
+    (
+        "lidar_construct_vector_tin",
+        "lidar",
+        "interpolation_gridding",
+    ),
     ("lidar_contour", "lidar", "interpolation_gridding"),
-    ("lidar_digital_surface_model", "lidar", "interpolation_gridding"),
+    (
+        "lidar_digital_surface_model",
+        "lidar",
+        "interpolation_gridding",
+    ),
     ("lidar_eigenvalue_features", "lidar", "analysis_metrics"),
     ("lidar_elevation_slice", "lidar", "filtering_classification"),
     ("lidar_ground_point_filter", "remote_sensing", "filters"),
@@ -2480,19 +2814,35 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("lidar_info", "lidar", "analysis_metrics"),
     ("lidar_join", "lidar", "io_management"),
     ("lidar_kappa", "lidar", "analysis_metrics"),
-    ("lidar_nearest_neighbour_gridding", "lidar", "interpolation_gridding"),
+    (
+        "lidar_nearest_neighbour_gridding",
+        "lidar",
+        "interpolation_gridding",
+    ),
     ("lidar_point_density", "lidar", "analysis_metrics"),
     ("lidar_point_return_analysis", "lidar", "analysis_metrics"),
     ("lidar_point_stats", "lidar", "analysis_metrics"),
     ("lidar_qa_and_confidence", "lidar", "workflow_products"),
-    ("lidar_radial_basis_function_interpolation", "lidar", "interpolation_gridding"),
+    (
+        "lidar_radial_basis_function_interpolation",
+        "lidar",
+        "interpolation_gridding",
+    ),
     ("lidar_ransac_planes", "lidar", "analysis_metrics"),
     ("lidar_remove_outliers", "lidar", "filtering_classification"),
     ("lidar_rooftop_analysis", "lidar", "analysis_metrics"),
     ("lidar_segmentation", "lidar", "filtering_classification"),
-    ("lidar_segmentation_based_filter", "lidar", "filtering_classification"),
+    (
+        "lidar_segmentation_based_filter",
+        "lidar",
+        "filtering_classification",
+    ),
     ("lidar_shift", "lidar", "io_management"),
-    ("lidar_sibson_interpolation", "lidar", "interpolation_gridding"),
+    (
+        "lidar_sibson_interpolation",
+        "lidar",
+        "interpolation_gridding",
+    ),
     ("lidar_terrain_product_suite", "lidar", "workflow_products"),
     ("lidar_thin", "lidar", "interpolation_gridding"),
     ("lidar_thin_high_density", "lidar", "interpolation_gridding"),
@@ -2504,7 +2854,11 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("line_intersections", "vector", "overlay_analysis"),
     ("line_polygon_clip", "vector", "overlay_analysis"),
     ("line_thinning", "remote_sensing", "filters"),
-    ("linear_spectral_unmixing", "remote_sensing", "spectral_analytics"),
+    (
+        "linear_spectral_unmixing",
+        "remote_sensing",
+        "spectral_analytics",
+    ),
     ("linearity_index", "vector", "shape_metrics"),
     ("lines_to_polygons", "conversion", "geometry_topology"),
     ("list_unique_values", "vector", "attribute_analysis"),
@@ -2520,7 +2874,11 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("log2", "raster", "general"),
     ("logistic_regression", "remote_sensing", "classification"),
     ("long_profile", "streams", "longitudinal_analysis"),
-    ("long_profile_from_points", "streams", "longitudinal_analysis"),
+    (
+        "long_profile_from_points",
+        "streams",
+        "longitudinal_analysis",
+    ),
     ("longest_flowpath", "hydrology", "watersheds_basins"),
     ("low_points_on_headwater_divides", "terrain", "general"),
     ("lowest_position", "raster", "overlay_math"),
@@ -2528,16 +2886,32 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("map_features", "raster", "general"),
     ("map_matching_v1", "vector", "network_analysis"),
     ("map_off_terrain_objects", "terrain", "general"),
-    ("market_access_and_site_intelligence_workflow", "vector", "network_analysis"),
+    (
+        "market_access_and_site_intelligence_workflow",
+        "vector",
+        "network_analysis",
+    ),
     ("max", "raster", "general"),
     ("max_absolute_overlay", "raster", "overlay_math"),
     ("max_anisotropy_dev", "terrain", "multiscale_signatures"),
-    ("max_anisotropy_dev_signature", "terrain", "multiscale_signatures"),
+    (
+        "max_anisotropy_dev_signature",
+        "terrain",
+        "multiscale_signatures",
+    ),
     ("max_branch_length", "hydrology", "watersheds_basins"),
-    ("max_difference_from_mean", "terrain", "multiscale_signatures"),
+    (
+        "max_difference_from_mean",
+        "terrain",
+        "multiscale_signatures",
+    ),
     ("max_downslope_elev_change", "terrain", "general"),
     ("max_elev_dev_signature", "terrain", "multiscale_signatures"),
-    ("max_elevation_deviation", "terrain", "multiscale_signatures"),
+    (
+        "max_elevation_deviation",
+        "terrain",
+        "multiscale_signatures",
+    ),
     ("max_overlay", "raster", "overlay_math"),
     ("max_upslope_elev_change", "terrain", "general"),
     ("max_upslope_flowpath_length", "hydrology", "flow_routing"),
@@ -2554,27 +2928,63 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("merge_vectors", "conversion", "vector_table_io"),
     ("min", "raster", "general"),
     ("min_absolute_overlay", "raster", "overlay_math"),
-    ("min_dist_classification", "remote_sensing", "classification"),
+    (
+        "min_dist_classification",
+        "remote_sensing",
+        "classification",
+    ),
     ("min_downslope_elev_change", "terrain", "general"),
-    ("min_max_contrast_stretch", "remote_sensing", "enhancement_contrast"),
+    (
+        "min_max_contrast_stretch",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("min_overlay", "raster", "overlay_math"),
-    ("mine_site_reclamation_compliance_tracker", "terrain", "workflow_products"),
+    (
+        "mine_site_reclamation_compliance_tracker",
+        "terrain",
+        "workflow_products",
+    ),
     ("minimal_curvature", "terrain", "derivatives"),
-    ("minimal_dispersion_flow_algorithm", "hydrology", "flow_routing"),
+    (
+        "minimal_dispersion_flow_algorithm",
+        "hydrology",
+        "flow_routing",
+    ),
     ("minimum_bounding_box", "vector", "geometry_processing"),
     ("minimum_bounding_circle", "vector", "geometry_processing"),
     ("minimum_bounding_envelope", "vector", "geometry_processing"),
     ("minimum_convex_hull", "vector", "geometry_processing"),
     ("minimum_filter", "remote_sensing", "filters"),
-    ("minimum_noise_fraction", "remote_sensing", "spectral_analytics"),
-    ("modified_k_means_clustering", "remote_sensing", "classification"),
+    (
+        "minimum_noise_fraction",
+        "remote_sensing",
+        "spectral_analytics",
+    ),
+    (
+        "modified_k_means_clustering",
+        "remote_sensing",
+        "classification",
+    ),
     ("modified_shepard_interpolation", "raster", "general"),
     ("modify_lidar", "lidar", "filtering_classification"),
-    ("modify_nodata_value", "conversion", "raster_vector_conversion"),
+    (
+        "modify_nodata_value",
+        "conversion",
+        "raster_vector_conversion",
+    ),
     ("modulo", "raster", "overlay_math"),
     ("mosaic", "remote_sensing", "enhancement_contrast"),
-    ("mosaic_with_feathering", "remote_sensing", "enhancement_contrast"),
-    ("multi_sensor_fusion_monitoring", "remote_sensing", "workflow_products"),
+    (
+        "mosaic_with_feathering",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
+    (
+        "multi_sensor_fusion_monitoring",
+        "remote_sensing",
+        "workflow_products",
+    ),
     ("multidirectional_hillshade", "terrain", "general"),
     ("multimodal_od_cost_matrix", "vector", "network_analysis"),
     ("multimodal_routes_from_od", "vector", "network_analysis"),
@@ -2583,40 +2993,104 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("multiply", "raster", "overlay_math"),
     ("multiply_overlay", "raster", "overlay_math"),
     ("multiscale_curvatures", "terrain", "multiscale_signatures"),
-    ("multiscale_elevated_index", "terrain", "multiscale_signatures"),
-    ("multiscale_elevation_percentile", "terrain", "multiscale_signatures"),
-    ("multiscale_low_lying_index", "terrain", "multiscale_signatures"),
+    (
+        "multiscale_elevated_index",
+        "terrain",
+        "multiscale_signatures",
+    ),
+    (
+        "multiscale_elevation_percentile",
+        "terrain",
+        "multiscale_signatures",
+    ),
+    (
+        "multiscale_low_lying_index",
+        "terrain",
+        "multiscale_signatures",
+    ),
     ("multiscale_roughness", "terrain", "multiscale_signatures"),
-    ("multiscale_roughness_signature", "terrain", "multiscale_signatures"),
-    ("multiscale_std_dev_normals", "terrain", "multiscale_signatures"),
-    ("multiscale_std_dev_normals_signature", "terrain", "multiscale_signatures"),
-    ("multiscale_topographic_position_class", "terrain", "landform_indices"),
-    ("multiscale_topographic_position_image", "terrain", "multiscale_signatures"),
+    (
+        "multiscale_roughness_signature",
+        "terrain",
+        "multiscale_signatures",
+    ),
+    (
+        "multiscale_std_dev_normals",
+        "terrain",
+        "multiscale_signatures",
+    ),
+    (
+        "multiscale_std_dev_normals_signature",
+        "terrain",
+        "multiscale_signatures",
+    ),
+    (
+        "multiscale_topographic_position_class",
+        "terrain",
+        "landform_indices",
+    ),
+    (
+        "multiscale_topographic_position_image",
+        "terrain",
+        "multiscale_signatures",
+    ),
     ("narrowness_index", "raster", "general"),
     ("narrowness_index_vector", "vector", "shape_metrics"),
-    ("natural_neighbour_interpolation", "raster", "local_neighborhood"),
-    ("ndvi_based_emissivity", "remote_sensing", "thermal_emissivity"),
+    (
+        "natural_neighbour_interpolation",
+        "raster",
+        "local_neighborhood",
+    ),
+    (
+        "ndvi_based_emissivity",
+        "remote_sensing",
+        "thermal_emissivity",
+    ),
     ("near", "vector", "overlay_analysis"),
     ("nearest_neighbour_index", "vector", "spatial_statistics"),
-    ("nearest_neighbour_interpolation", "raster", "local_neighborhood"),
+    (
+        "nearest_neighbour_interpolation",
+        "raster",
+        "local_neighborhood",
+    ),
     ("negate", "raster", "general"),
-    ("network_accessibility_metrics", "vector", "network_analysis"),
+    (
+        "network_accessibility_metrics",
+        "vector",
+        "network_analysis",
+    ),
     ("network_centrality_metrics", "vector", "network_analysis"),
     ("network_connected_components", "vector", "network_analysis"),
     ("network_node_degree", "vector", "network_analysis"),
     ("network_od_cost_matrix", "vector", "network_analysis"),
-    ("network_readiness_and_diagnostics_intelligence", "vector", "network_analysis"),
+    (
+        "network_readiness_and_diagnostics_intelligence",
+        "vector",
+        "network_analysis",
+    ),
     ("network_routes_from_od", "vector", "network_analysis"),
     ("network_service_area", "vector", "network_analysis"),
     ("network_topology_audit", "vector", "network_analysis"),
-    ("new_raster_from_base_raster", "conversion", "raster_vector_conversion"),
-    ("new_raster_from_base_vector", "conversion", "raster_vector_conversion"),
+    (
+        "new_raster_from_base_raster",
+        "conversion",
+        "raster_vector_conversion",
+    ),
+    (
+        "new_raster_from_base_vector",
+        "conversion",
+        "raster_vector_conversion",
+    ),
     ("nibble", "raster", "general"),
     ("nnd_classification", "remote_sensing", "classification"),
     ("non_local_means_filter", "remote_sensing", "filters"),
     ("normal_vectors", "lidar", "analysis_metrics"),
     ("normalize_lidar", "lidar", "filtering_classification"),
-    ("normalized_difference_index", "remote_sensing", "enhancement_contrast"),
+    (
+        "normalized_difference_index",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("not_equal_to", "raster", "general"),
     ("num_downslope_neighbours", "terrain", "general"),
     ("num_inflowing_neighbours", "hydrology", "flow_routing"),
@@ -2625,12 +3099,28 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("obia_batch_orchestrator_pro", "remote_sensing", "obia"),
     ("obia_pipeline_basic", "remote_sensing", "obia"),
     ("object_class_probability_maps", "remote_sensing", "obia"),
-    ("object_features_context_neighbors", "remote_sensing", "obia"),
+    (
+        "object_features_context_neighbors",
+        "remote_sensing",
+        "obia",
+    ),
     ("object_features_shape_basic", "remote_sensing", "obia"),
     ("object_features_spectral_basic", "remote_sensing", "obia"),
-    ("object_features_texture_glcm_basic", "remote_sensing", "obia"),
-    ("object_features_topology_relations", "remote_sensing", "obia"),
-    ("object_uncertainty_diagnostics_pro", "remote_sensing", "obia"),
+    (
+        "object_features_texture_glcm_basic",
+        "remote_sensing",
+        "obia",
+    ),
+    (
+        "object_features_topology_relations",
+        "remote_sensing",
+        "obia",
+    ),
+    (
+        "object_uncertainty_diagnostics_pro",
+        "remote_sensing",
+        "obia",
+    ),
     ("objects_boundary_refinement_pro", "remote_sensing", "obia"),
     ("objects_enforce_min_mapping_unit", "remote_sensing", "obia"),
     ("od_sensitivity_analysis", "vector", "network_analysis"),
@@ -2642,26 +3132,58 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("orthorectification", "projection_georeferencing", "general"),
     ("otsu_thresholding", "remote_sensing", "classification"),
     ("paired_sample_t_test", "raster", "general"),
-    ("panchromatic_sharpening", "remote_sensing", "enhancement_contrast"),
-    ("parallelepiped_classification", "remote_sensing", "classification"),
-    ("parcel_and_land_fabric_topology_compliance_workflow", "vector", "workflow_products"),
+    (
+        "panchromatic_sharpening",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
+    (
+        "parallelepiped_classification",
+        "remote_sensing",
+        "classification",
+    ),
+    (
+        "parcel_and_land_fabric_topology_compliance_workflow",
+        "vector",
+        "workflow_products",
+    ),
     ("patch_orientation", "vector", "shape_metrics"),
-    ("pca_based_change_detection", "remote_sensing", "change_detection"),
-    ("pennock_landform_classification", "terrain", "landform_indices"),
+    (
+        "pca_based_change_detection",
+        "remote_sensing",
+        "change_detection",
+    ),
+    (
+        "pennock_landform_classification",
+        "terrain",
+        "landform_indices",
+    ),
     ("percent_elev_range", "terrain", "landform_indices"),
     ("percent_equal_to", "raster", "overlay_math"),
     ("percent_greater_than", "raster", "overlay_math"),
     ("percent_less_than", "raster", "overlay_math"),
-    ("percentage_contrast_stretch", "remote_sensing", "enhancement_contrast"),
+    (
+        "percentage_contrast_stretch",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("percentile_filter", "remote_sensing", "filters"),
     ("perimeter_area_ratio", "vector", "shape_metrics"),
     ("phi_coefficient", "raster", "general"),
     ("pick_from_list", "raster", "overlay_math"),
-    ("piecewise_contrast_stretch", "remote_sensing", "enhancement_contrast"),
+    (
+        "piecewise_contrast_stretch",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("plan_curvature", "terrain", "derivatives"),
     ("point_pattern_envelope", "vector", "spatial_statistics"),
     ("point_process_residuals", "vector", "spatial_statistics"),
-    ("point_process_residuals_comparison", "vector", "spatial_statistics"),
+    (
+        "point_process_residuals_comparison",
+        "vector",
+        "spatial_statistics",
+    ),
     ("points_along_lines", "vector", "linear_referencing"),
     ("polygon_area", "vector", "shape_metrics"),
     ("polygon_long_axis", "vector", "shape_metrics"),
@@ -2670,17 +3192,33 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("polygonize", "vector", "geometry_processing"),
     ("polygons_to_lines", "conversion", "geometry_topology"),
     ("polygons_to_segments", "remote_sensing", "obia"),
-    ("post_classification_change", "remote_sensing", "change_detection"),
+    (
+        "post_classification_change",
+        "remote_sensing",
+        "change_detection",
+    ),
     ("power", "raster", "overlay_math"),
-    ("precision_ag_yield_zone_intelligence", "precision_agriculture", "general"),
-    ("precision_irrigation_optimization", "precision_agriculture", "general"),
+    (
+        "precision_ag_yield_zone_intelligence",
+        "precision_agriculture",
+        "general",
+    ),
+    (
+        "precision_irrigation_optimization",
+        "precision_agriculture",
+        "general",
+    ),
     ("prewitt_filter", "remote_sensing", "edge_feature_detection"),
     ("principal_component_analysis", "raster", "general"),
     ("principal_curvature_direction", "terrain", "derivatives"),
     ("print_geotiff_tags", "raster", "general"),
     ("profile", "terrain", "general"),
     ("profile_curvature", "terrain", "derivatives"),
-    ("propagate_labels_across_hierarchy", "remote_sensing", "obia"),
+    (
+        "propagate_labels_across_hierarchy",
+        "remote_sensing",
+        "obia",
+    ),
     ("prune_vector_streams", "streams", "network_extraction"),
     ("qin_flow_accumulation", "hydrology", "flow_routing"),
     ("quadrat_count_test", "vector", "spatial_statistics"),
@@ -2690,10 +3228,18 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("radius_of_gyration", "raster", "general"),
     ("raise_walls", "hydrology", "depressions_storage"),
     ("random_field", "raster", "general"),
-    ("random_forest_classification", "remote_sensing", "classification"),
+    (
+        "random_forest_classification",
+        "remote_sensing",
+        "classification",
+    ),
     ("random_forest_classification_fit", "raster", "general"),
     ("random_forest_classification_predict", "raster", "general"),
-    ("random_forest_regression", "remote_sensing", "classification"),
+    (
+        "random_forest_regression",
+        "remote_sensing",
+        "classification",
+    ),
     ("random_forest_regression_fit", "raster", "general"),
     ("random_forest_regression_predict", "raster", "general"),
     ("random_points_in_polygon", "vector", "sampling_gridding"),
@@ -2706,33 +3252,85 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("raster_perimeter", "raster", "general"),
     ("raster_streams_to_vector", "streams", "network_extraction"),
     ("raster_summary_stats", "raster", "general"),
-    ("raster_to_vector_lines", "conversion", "raster_vector_conversion"),
-    ("raster_to_vector_points", "conversion", "raster_vector_conversion"),
-    ("raster_to_vector_polygons", "conversion", "raster_vector_conversion"),
+    (
+        "raster_to_vector_lines",
+        "conversion",
+        "raster_vector_conversion",
+    ),
+    (
+        "raster_to_vector_points",
+        "conversion",
+        "raster_vector_conversion",
+    ),
+    (
+        "raster_to_vector_polygons",
+        "conversion",
+        "raster_vector_conversion",
+    ),
     ("rasterize_streams", "streams", "network_extraction"),
     ("reciprocal", "raster", "general"),
     ("reclass", "raster", "reclass_mask"),
     ("reclass_equal_interval", "raster", "reclass_mask"),
     ("recover_flightline_info", "lidar", "io_management"),
-    ("rectangular_grid_from_raster_base", "vector", "sampling_gridding"),
-    ("rectangular_grid_from_vector_base", "vector", "sampling_gridding"),
+    (
+        "rectangular_grid_from_raster_base",
+        "vector",
+        "sampling_gridding",
+    ),
+    (
+        "rectangular_grid_from_vector_base",
+        "vector",
+        "sampling_gridding",
+    ),
     ("refined_lee_filter", "remote_sensing", "sar"),
-    ("registration_oriented_feature_workflow", "remote_sensing", "workflow_products"),
-    ("reinitialize_attribute_table", "conversion", "vector_table_io"),
+    (
+        "registration_oriented_feature_workflow",
+        "remote_sensing",
+        "workflow_products",
+    ),
+    (
+        "reinitialize_attribute_table",
+        "conversion",
+        "vector_table_io",
+    ),
     ("related_circumscribing_circle", "vector", "shape_metrics"),
     ("relative_aspect", "terrain", "derivatives"),
-    ("relative_stream_power_index", "hydrology", "hydrologic_indices"),
-    ("relative_topographic_position", "terrain", "landform_indices"),
-    ("remote_sensing_change_detection", "remote_sensing", "change_detection"),
+    (
+        "relative_stream_power_index",
+        "hydrology",
+        "hydrologic_indices",
+    ),
+    (
+        "relative_topographic_position",
+        "terrain",
+        "landform_indices",
+    ),
+    (
+        "remote_sensing_change_detection",
+        "remote_sensing",
+        "change_detection",
+    ),
     ("remove_duplicates", "lidar", "filtering_classification"),
     ("remove_off_terrain_objects", "terrain", "general"),
     ("remove_polygon_holes", "conversion", "geometry_topology"),
-    ("remove_raster_polygon_holes", "conversion", "raster_vector_conversion"),
+    (
+        "remove_raster_polygon_holes",
+        "conversion",
+        "raster_vector_conversion",
+    ),
     ("remove_short_streams", "streams", "network_extraction"),
     ("remove_spurs", "remote_sensing", "filters"),
     ("rename_field", "vector", "attribute_analysis"),
-    ("repair_stream_vector_topology", "streams", "network_extraction"),
-    ("representative_point_vector", "vector", "geometry_processing"),
+    (
+        "repair_stream_vector_topology",
+        "streams",
+        "network_extraction",
+    ),
+    (
+        "representative_point_vector",
+        "vector",
+        "geometry_processing",
+    ),
     ("reproject_lidar", "projection_georeferencing", "general"),
     ("reproject_raster", "projection_georeferencing", "general"),
     ("reproject_vector", "projection_georeferencing", "general"),
@@ -2746,19 +3344,47 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("ripleys_k_function", "vector", "spatial_statistics"),
     ("ripleys_k_test", "vector", "spatial_statistics"),
     ("river_centerlines", "streams", "network_extraction"),
-    ("river_corridor_health_assessment", "terrain", "workflow_products"),
-    ("roberts_cross_filter", "remote_sensing", "edge_feature_detection"),
+    (
+        "river_corridor_health_assessment",
+        "terrain",
+        "workflow_products",
+    ),
+    (
+        "roberts_cross_filter",
+        "remote_sensing",
+        "edge_feature_detection",
+    ),
     ("root_mean_square_error", "raster", "general"),
     ("rotor", "terrain", "derivatives"),
     ("round", "raster", "general"),
     ("route_calibrate", "vector", "linear_referencing"),
-    ("route_event_governance_for_linear_assets", "vector", "linear_referencing"),
-    ("route_event_lines_from_layer", "vector", "linear_referencing"),
-    ("route_event_lines_from_table", "vector", "linear_referencing"),
+    (
+        "route_event_governance_for_linear_assets",
+        "vector",
+        "linear_referencing",
+    ),
+    (
+        "route_event_lines_from_layer",
+        "vector",
+        "linear_referencing",
+    ),
+    (
+        "route_event_lines_from_table",
+        "vector",
+        "linear_referencing",
+    ),
     ("route_event_merge", "vector", "linear_referencing"),
     ("route_event_overlay", "vector", "linear_referencing"),
-    ("route_event_points_from_layer", "vector", "linear_referencing"),
-    ("route_event_points_from_table", "vector", "linear_referencing"),
+    (
+        "route_event_points_from_layer",
+        "vector",
+        "linear_referencing",
+    ),
+    (
+        "route_event_points_from_table",
+        "vector",
+        "linear_referencing",
+    ),
     ("route_event_split", "vector", "linear_referencing"),
     ("route_measure_qa", "vector", "linear_referencing"),
     ("route_recalibrate", "vector", "linear_referencing"),
@@ -2768,10 +3394,22 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("sar_interferogram_coherence", "remote_sensing", "sar"),
     ("savitzky_golay_2d_filter", "remote_sensing", "filters"),
     ("scharr_filter", "remote_sensing", "filters"),
-    ("sediment_transport_index", "hydrology", "hydrologic_indices"),
+    (
+        "sediment_transport_index",
+        "hydrology",
+        "hydrologic_indices",
+    ),
     ("segment_graph_felzenszwalb", "remote_sensing", "obia"),
-    ("segment_multiresolution_hierarchical", "remote_sensing", "obia"),
-    ("segment_scale_parameter_optimizer", "remote_sensing", "obia"),
+    (
+        "segment_multiresolution_hierarchical",
+        "remote_sensing",
+        "obia",
+    ),
+    (
+        "segment_scale_parameter_optimizer",
+        "remote_sensing",
+        "obia",
+    ),
     ("segment_slic_superpixels", "remote_sensing", "obia"),
     ("segment_watershed_markers", "remote_sensing", "obia"),
     ("segments_merge_small_regions", "remote_sensing", "obia"),
@@ -2779,7 +3417,11 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("segments_to_polygons", "remote_sensing", "obia"),
     ("select_by_location", "vector", "overlay_analysis"),
     ("select_tiles_by_polygon", "lidar", "io_management"),
-    ("service_area_planning_and_coverage_optimization", "vector", "network_analysis"),
+    (
+        "service_area_planning_and_coverage_optimization",
+        "vector",
+        "network_analysis",
+    ),
     ("set_nodata_value", "conversion", "raster_vector_conversion"),
     ("shadow_animation", "terrain", "visibility"),
     ("shadow_image", "terrain", "visibility"),
@@ -2788,9 +3430,17 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("shape_index", "terrain", "derivatives"),
     ("shortest_path_network", "vector", "network_analysis"),
     ("shreve_stream_magnitude", "streams", "ordering_metrics"),
-    ("sidewalk_vegetation_accessibility_monitoring", "lidar", "workflow_products"),
+    (
+        "sidewalk_vegetation_accessibility_monitoring",
+        "lidar",
+        "workflow_products",
+    ),
     ("sieve", "raster", "general"),
-    ("sigmoidal_contrast_stretch", "remote_sensing", "enhancement_contrast"),
+    (
+        "sigmoidal_contrast_stretch",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("simple_kriging", "raster", "spatial_statistics"),
     ("simplify_features", "vector", "geometry_processing"),
     ("sin", "raster", "general"),
@@ -2809,30 +3459,74 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("snap_points_to_network", "vector", "network_analysis"),
     ("snap_pour_points", "hydrology", "watersheds_basins"),
     ("sobel_filter", "remote_sensing", "edge_feature_detection"),
-    ("soil_landscape_classification", "precision_agriculture", "general"),
-    ("solar_site_suitability_analysis", "terrain", "workflow_products"),
+    (
+        "soil_landscape_classification",
+        "precision_agriculture",
+        "general",
+    ),
+    (
+        "solar_site_suitability_analysis",
+        "terrain",
+        "workflow_products",
+    ),
     ("sort_lidar", "lidar", "io_management"),
     ("spacetime_kriging", "raster", "spatial_statistics"),
     ("spatial_error_regression", "vector", "spatial_statistics"),
-    ("spatial_error_regression_raster", "raster", "spatial_statistics"),
+    (
+        "spatial_error_regression_raster",
+        "raster",
+        "spatial_statistics",
+    ),
     ("spatial_join", "vector", "overlay_analysis"),
     ("spatial_lag_regression", "vector", "spatial_statistics"),
-    ("spatial_lag_regression_raster", "raster", "spatial_statistics"),
-    ("spectral_angle_mapper", "remote_sensing", "spectral_analytics"),
-    ("spectral_library_matching", "remote_sensing", "spectral_analytics"),
-    ("spherical_std_dev_of_normals", "terrain", "roughness_texture"),
-    ("split_colour_composite", "remote_sensing", "enhancement_contrast"),
+    (
+        "spatial_lag_regression_raster",
+        "raster",
+        "spatial_statistics",
+    ),
+    (
+        "spectral_angle_mapper",
+        "remote_sensing",
+        "spectral_analytics",
+    ),
+    (
+        "spectral_library_matching",
+        "remote_sensing",
+        "spectral_analytics",
+    ),
+    (
+        "spherical_std_dev_of_normals",
+        "terrain",
+        "roughness_texture",
+    ),
+    (
+        "split_colour_composite",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("split_lidar", "lidar", "io_management"),
     ("split_lines_at_intersections", "vector", "network_analysis"),
     ("split_vector_lines", "vector", "geometry_processing"),
     ("split_with_lines", "vector", "geometry_processing"),
     ("sqrt", "raster", "general"),
     ("square", "raster", "general"),
-    ("standard_deviation_contrast_stretch", "remote_sensing", "enhancement_contrast"),
+    (
+        "standard_deviation_contrast_stretch",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("standard_deviation_filter", "remote_sensing", "filters"),
-    ("standard_deviation_of_slope", "terrain", "roughness_texture"),
+    (
+        "standard_deviation_of_slope",
+        "terrain",
+        "roughness_texture",
+    ),
     ("standard_deviation_overlay", "raster", "overlay_math"),
-    ("stochastic_depression_analysis", "hydrology", "depressions_storage"),
+    (
+        "stochastic_depression_analysis",
+        "hydrology",
+        "depressions_storage",
+    ),
     ("strahler_order_basins", "streams", "ordering_metrics"),
     ("strahler_stream_order", "streams", "ordering_metrics"),
     ("stream_link_class", "streams", "ordering_metrics"),
@@ -2850,24 +3544,52 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("tan", "raster", "general"),
     ("tangential_curvature", "terrain", "derivatives"),
     ("tanh", "raster", "general"),
-    ("terrain_constraint_and_conflict_analysis", "terrain", "workflow_products"),
-    ("terrain_constructability_and_cost_analysis", "terrain", "workflow_products"),
-    ("terrain_corrected_optical_analytics", "remote_sensing", "radiometric_correction"),
+    (
+        "terrain_constraint_and_conflict_analysis",
+        "terrain",
+        "workflow_products",
+    ),
+    (
+        "terrain_constructability_and_cost_analysis",
+        "terrain",
+        "workflow_products",
+    ),
+    (
+        "terrain_corrected_optical_analytics",
+        "remote_sensing",
+        "radiometric_correction",
+    ),
     ("thicken_raster_line", "remote_sensing", "filters"),
     ("time_in_daylight", "terrain", "visibility"),
-    ("time_series_change_intelligence", "remote_sensing", "change_detection"),
+    (
+        "time_series_change_intelligence",
+        "remote_sensing",
+        "change_detection",
+    ),
     ("tin_interpolation", "raster", "general"),
     ("to_degrees", "raster", "general"),
     ("to_radians", "raster", "general"),
     ("tophat_transform", "remote_sensing", "filters"),
     ("topo_render", "terrain", "workflow_products"),
     ("topographic_hachures", "terrain", "general"),
-    ("topographic_position_animation", "terrain", "multiscale_signatures"),
-    ("topological_breach_burn", "hydrology", "depressions_storage"),
+    (
+        "topographic_position_animation",
+        "terrain",
+        "multiscale_signatures",
+    ),
+    (
+        "topological_breach_burn",
+        "hydrology",
+        "depressions_storage",
+    ),
     ("topological_stream_order", "streams", "ordering_metrics"),
     ("topology_rule_autofix", "conversion", "geometry_topology"),
     ("topology_rule_validate", "conversion", "geometry_topology"),
-    ("topology_validation_report", "conversion", "geometry_topology"),
+    (
+        "topology_validation_report",
+        "conversion",
+        "geometry_topology",
+    ),
     ("total_curvature", "terrain", "derivatives"),
     ("total_filter", "remote_sensing", "filters"),
     ("trace_downslope_flowpaths", "hydrology", "flow_routing"),
@@ -2876,7 +3598,11 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("trend_surface", "raster", "general"),
     ("trend_surface_vector_points", "raster", "general"),
     ("tributary_identifier", "streams", "ordering_metrics"),
-    ("true_colour_composite", "remote_sensing", "enhancement_contrast"),
+    (
+        "true_colour_composite",
+        "remote_sensing",
+        "enhancement_contrast",
+    ),
     ("truncate", "raster", "general"),
     ("turning_bands_simulation", "raster", "general"),
     ("two_sample_ks_test", "raster", "general"),
@@ -2887,38 +3613,98 @@ const EXPLICIT_TOOL_CATEGORY_SUBCATEGORY: &[(&str, &str, &str)] = &[
     ("unsphericity", "terrain", "derivatives"),
     ("update", "vector", "overlay_analysis"),
     ("update_nodata_cells", "raster", "overlay_math"),
-    ("upslope_depression_storage", "hydrology", "depressions_storage"),
-    ("urban_expansion_impact_assessment", "terrain", "workflow_products"),
+    (
+        "upslope_depression_storage",
+        "hydrology",
+        "depressions_storage",
+    ),
+    (
+        "urban_expansion_impact_assessment",
+        "terrain",
+        "workflow_products",
+    ),
     ("user_defined_weights_filter", "remote_sensing", "filters"),
-    ("utility_corridor_encroachment_and_access_planning", "vector", "workflow_products"),
-    ("utility_corridor_encroachment_intelligence", "terrain", "workflow_products"),
+    (
+        "utility_corridor_encroachment_and_access_planning",
+        "vector",
+        "workflow_products",
+    ),
+    (
+        "utility_corridor_encroachment_intelligence",
+        "terrain",
+        "workflow_products",
+    ),
     ("vector_hex_binning", "vector", "sampling_gridding"),
-    ("vector_lines_to_raster", "conversion", "raster_vector_conversion"),
-    ("vector_points_to_raster", "conversion", "raster_vector_conversion"),
-    ("vector_polygons_to_raster", "conversion", "raster_vector_conversion"),
-    ("vector_stream_network_analysis", "streams", "ordering_metrics"),
+    (
+        "vector_lines_to_raster",
+        "conversion",
+        "raster_vector_conversion",
+    ),
+    (
+        "vector_points_to_raster",
+        "conversion",
+        "raster_vector_conversion",
+    ),
+    (
+        "vector_polygons_to_raster",
+        "conversion",
+        "raster_vector_conversion",
+    ),
+    (
+        "vector_stream_network_analysis",
+        "streams",
+        "ordering_metrics",
+    ),
     ("vector_summary_statistics", "conversion", "vector_table_io"),
     ("vehicle_routing_cvrp", "vector", "network_analysis"),
-    ("vehicle_routing_pickup_delivery", "vector", "network_analysis"),
+    (
+        "vehicle_routing_pickup_delivery",
+        "vector",
+        "network_analysis",
+    ),
     ("vehicle_routing_vrptw", "vector", "network_analysis"),
     ("vertical_excess_curvature", "terrain", "derivatives"),
     ("viewshed", "terrain", "visibility"),
     ("visibility_index", "terrain", "visibility"),
     ("voronoi_diagram", "vector", "sampling_gridding"),
     ("watershed", "hydrology", "watersheds_basins"),
-    ("watershed_from_raster_pour_points", "hydrology", "watersheds_basins"),
+    (
+        "watershed_from_raster_pour_points",
+        "hydrology",
+        "watersheds_basins",
+    ),
     ("weighted_overlay", "raster", "overlay_math"),
     ("weighted_sum", "raster", "overlay_math"),
-    ("wetland_hydrogeomorphic_classification", "terrain", "workflow_products"),
+    (
+        "wetland_hydrogeomorphic_classification",
+        "terrain",
+        "workflow_products",
+    ),
     ("wetness_index", "hydrology", "hydrologic_indices"),
     ("wiener_filter", "remote_sensing", "filters"),
     ("wilcoxon_signed_rank_test", "raster", "general"),
-    ("wildfire_fuel_loading_and_risk_matrix", "terrain", "workflow_products"),
+    (
+        "wildfire_fuel_loading_and_risk_matrix",
+        "terrain",
+        "workflow_products",
+    ),
     ("wind_turbine_siting", "terrain", "workflow_products"),
     ("wisart_iterative_clustering", "remote_sensing", "sar"),
-    ("write_function_memory_insertion", "remote_sensing", "change_detection"),
-    ("yamaguchi_4component_decomposition", "remote_sensing", "sar"),
-    ("yield_data_conditioning_and_qa", "precision_agriculture", "general"),
+    (
+        "write_function_memory_insertion",
+        "remote_sensing",
+        "change_detection",
+    ),
+    (
+        "yamaguchi_4component_decomposition",
+        "remote_sensing",
+        "sar",
+    ),
+    (
+        "yield_data_conditioning_and_qa",
+        "precision_agriculture",
+        "general",
+    ),
     ("z_scores", "raster", "general"),
     ("zonal_statistics", "raster", "general"),
 ];
@@ -3016,14 +3802,18 @@ fn normalized_category_name(raw_category: &str, tool_id: &str, tags: &[String]) 
 
     let terrain_reassignment_candidate = matches!(raw_category, "Raster" | "Other" | "Terrain");
     if terrain_reassignment_candidate {
-        let slope_aspect_curvature = id.contains("slope") || id.contains("aspect") || id.contains("curvature");
+        let slope_aspect_curvature =
+            id.contains("slope") || id.contains("aspect") || id.contains("curvature");
         let tagged_as_terrain_family = tags.iter().any(|tag| {
             matches!(
                 tag.as_str(),
                 "slope" | "aspect" | "curvature" | "terrain" | "roughness" | "geomorphometry"
             )
         });
-        if slope_aspect_curvature || tagged_as_terrain_family || id.contains("normal_vector_angular_deviation") {
+        if slope_aspect_curvature
+            || tagged_as_terrain_family
+            || id.contains("normal_vector_angular_deviation")
+        {
             return "Terrain".to_string();
         }
     }
@@ -3089,9 +3879,7 @@ fn known_subcategories_for_category(category_slug: &str) -> &'static [&'static s
             "workflow_products",
             "online_data",
         ],
-        "projection_georeferencing" => &[
-            "general",
-        ],
+        "projection_georeferencing" => &["general"],
         "hydrology" => &[
             "flow_routing",
             "depressions_storage",
@@ -3125,15 +3913,18 @@ fn known_subcategories_for_category(category_slug: &str) -> &'static [&'static s
             "multiscale_signatures",
             "workflow_products",
         ],
-        "precision_agriculture" => &[
-            "general",
-        ],
-// END AUTO-TAXONOMY-SUBCATEGORIES
+        "precision_agriculture" => &["general"],
+        // END AUTO-TAXONOMY-SUBCATEGORIES
         _ => &[],
     }
 }
 
-fn matches_subcategory(category_slug: &str, subcategory: &str, tool_id: &str, tags: &[String]) -> bool {
+fn matches_subcategory(
+    category_slug: &str,
+    subcategory: &str,
+    tool_id: &str,
+    tags: &[String],
+) -> bool {
     if let Some(explicit_subcategory) = explicit_tool_subcategory_slug(tool_id, category_slug) {
         return explicit_subcategory.eq_ignore_ascii_case(subcategory);
     }
@@ -3426,7 +4217,10 @@ fn matches_subcategory(category_slug: &str, subcategory: &str, tool_id: &str, ta
                 || id.contains("trace_downslope")
                 || id.contains("inflowing")
                 || id.contains("minimal_dispersion")
-                || matches!(id.as_str(), "qin_flow_accumulation" | "quinn_flow_accumulation")
+                || matches!(
+                    id.as_str(),
+                    "qin_flow_accumulation" | "quinn_flow_accumulation"
+                )
         }
         ("hydrology", "depressions_storage") => {
             id.contains("breach")
@@ -3532,12 +4326,8 @@ fn matches_subcategory(category_slug: &str, subcategory: &str, tool_id: &str, ta
                 || has_tag("cost")
         }
         ("raster", "general") => true,
-        ("remote_sensing", "filters") => {
-            id.contains("filter") || has_tag("filter")
-        }
-        ("remote_sensing", "sar") => {
-            id.starts_with("sar_") || has_tag("sar")
-        }
+        ("remote_sensing", "filters") => id.contains("filter") || has_tag("filter"),
+        ("remote_sensing", "sar") => id.starts_with("sar_") || has_tag("sar"),
         ("remote_sensing", "workflow_products") => {
             id.contains("workflow") || id.contains("monitoring") || has_tag("workflow")
         }
@@ -3550,9 +4340,7 @@ fn matches_subcategory(category_slug: &str, subcategory: &str, tool_id: &str, ta
                 || has_tag("enhancement")
         }
         ("remote_sensing", "edge_feature_detection") => {
-            id.contains("edge")
-                || id.contains("corner")
-                || has_tag("edge_detection")
+            id.contains("edge") || id.contains("corner") || has_tag("edge_detection")
         }
         ("remote_sensing", "change_detection") => {
             id.contains("change") || has_tag("change_detection")
@@ -3681,7 +4469,10 @@ fn category_tool_summaries(
     tools
 }
 
-fn manifest_value_matches_category(manifest_value: &serde_json::Value, category_slug: &str) -> bool {
+fn manifest_value_matches_category(
+    manifest_value: &serde_json::Value,
+    category_slug: &str,
+) -> bool {
     let normalized_category = normalized_category_name_from_manifest_value(manifest_value);
     let primary_match = category_slug_from_category_name(&normalized_category) == category_slug;
 
@@ -3727,9 +4518,9 @@ fn parse_choice_tokens(candidate: &str) -> Option<Vec<String>> {
         .replace('/', ",");
     let mut out = Vec::new();
     for part in normalized.split(',') {
-        let token = part
-            .trim()
-            .trim_matches(|c: char| matches!(c, '.' | ':' | ';' | '(' | ')' | '[' | ']' | '{' | '}'));
+        let token = part.trim().trim_matches(|c: char| {
+            matches!(c, '.' | ':' | ';' | '(' | ')' | '[' | ']' | '{' | '}')
+        });
         if token.is_empty() {
             continue;
         }
@@ -3767,7 +4558,15 @@ fn infer_choices_from_description(description: &str) -> Option<Vec<String>> {
     None
 }
 
-fn enrich_param_metadata(tool_id: &str, param_name: &str, description: &str) -> (Option<&'static str>, Option<Vec<String>>, Option<&'static str>) {
+fn enrich_param_metadata(
+    tool_id: &str,
+    param_name: &str,
+    description: &str,
+) -> (
+    Option<&'static str>,
+    Option<Vec<String>>,
+    Option<&'static str>,
+) {
     if tool_id == "lidar_tin_gridding" {
         return match param_name {
             "input" => (Some("path"), None, None),
@@ -3790,7 +4589,11 @@ fn enrich_param_metadata(tool_id: &str, param_name: &str, description: &str) -> 
             ),
             "returns_included" => (
                 Some("string"),
-                Some(vec!["all".to_string(), "first".to_string(), "last".to_string()]),
+                Some(vec![
+                    "all".to_string(),
+                    "first".to_string(),
+                    "last".to_string(),
+                ]),
                 Some("all"),
             ),
             "excluded_classes" => (Some("array[int]"), None, None),
@@ -3891,7 +4694,11 @@ fn build_tool_info_dict(
     Ok(dict.into_any().unbind())
 }
 
-fn build_tool_callable_doc(runtime: &Arc<PythonToolRuntime>, tool_id: &str, is_pro: bool) -> String {
+fn build_tool_callable_doc(
+    runtime: &Arc<PythonToolRuntime>,
+    tool_id: &str,
+    is_pro: bool,
+) -> String {
     if tool_id == "true_colour_composite" || tool_id == "false_colour_composite" {
         let mut lines = Vec::new();
         lines.push(tool_id.to_string());
@@ -3901,7 +4708,9 @@ fn build_tool_callable_doc(runtime: &Arc<PythonToolRuntime>, tool_id: &str, is_p
                 .to_string(),
         );
         lines.push(String::new());
-        lines.push("Call style: helper_name(bundle_root=..., output_path=None, callback=None)".to_string());
+        lines.push(
+            "Call style: helper_name(bundle_root=..., output_path=None, callback=None)".to_string(),
+        );
         lines.push(String::new());
         lines.push("Required parameters:".to_string());
         lines.push("- bundle_root: root path of a supported optical sensor bundle".to_string());
@@ -3928,16 +4737,14 @@ fn build_tool_callable_doc(runtime: &Arc<PythonToolRuntime>, tool_id: &str, is_p
     lines.push(title);
 
     let tools_json = runtime.list_tools_json();
-    let manifest = tools_json
-        .as_array()
-        .and_then(|items| {
-            items.iter().find(|item| {
-                item.get("id")
-                    .and_then(serde_json::Value::as_str)
-                    .map(|id| id == tool_id)
-                    .unwrap_or(false)
-            })
-        });
+    let manifest = tools_json.as_array().and_then(|items| {
+        items.iter().find(|item| {
+            item.get("id")
+                .and_then(serde_json::Value::as_str)
+                .map(|id| id == tool_id)
+                .unwrap_or(false)
+        })
+    });
 
     if let Some(m) = manifest {
         if let Some(display_name) = m.get("display_name").and_then(serde_json::Value::as_str) {
@@ -3999,7 +4806,10 @@ fn build_tool_callable_doc(runtime: &Arc<PythonToolRuntime>, tool_id: &str, is_p
         }
 
         lines.push(String::new());
-        lines.push("Return: runtime-decoded object (shape varies by tool; often dict/list/scalar).".to_string());
+        lines.push(
+            "Return: runtime-decoded object (shape varies by tool; often dict/list/scalar)."
+                .to_string(),
+        );
     } else {
         lines.push(String::new());
         lines.push("Tool metadata not found in manifest registry for this session.".to_string());
@@ -4155,7 +4965,9 @@ fn infer_data_object_kind(category: &str, path: &str) -> Option<&'static str> {
     }
 
     match category {
-        "raster" | "hydrology" | "terrain" | "streams" | "topology" | "precision_agriculture" => Some("raster"),
+        "raster" | "hydrology" | "terrain" | "streams" | "topology" | "precision_agriculture" => {
+            Some("raster")
+        }
         "vector" => Some("vector"),
         "lidar" => Some("lidar"),
         _ => None,
@@ -4177,15 +4989,12 @@ fn typed_kind_from_value(value: &serde_json::Value) -> Option<&'static str> {
 }
 
 fn maybe_path_from_output_value(value: &serde_json::Value) -> Option<String> {
-    value
-        .as_str()
-        .map(|s| s.to_string())
-        .or_else(|| {
-            value
-                .get("path")
-                .and_then(serde_json::Value::as_str)
-                .map(|s| s.to_string())
-        })
+    value.as_str().map(|s| s.to_string()).or_else(|| {
+        value
+            .get("path")
+            .and_then(serde_json::Value::as_str)
+            .map(|s| s.to_string())
+    })
 }
 
 fn maybe_extract_single_output_path(response: &serde_json::Value) -> Option<String> {
@@ -4208,15 +5017,12 @@ fn maybe_extract_single_output_path(response: &serde_json::Value) -> Option<Stri
 
     let mut candidate: Option<String> = None;
     for value in map.values() {
-        let next = value
-            .as_str()
-            .map(|s| s.to_string())
-            .or_else(|| {
-                value
-                    .get("path")
-                    .and_then(serde_json::Value::as_str)
-                    .map(|s| s.to_string())
-            });
+        let next = value.as_str().map(|s| s.to_string()).or_else(|| {
+            value
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .map(|s| s.to_string())
+        });
 
         if let Some(path) = next {
             if candidate.is_some() {
@@ -4235,30 +5041,50 @@ fn maybe_extract_data_object_output(
     response: &serde_json::Value,
 ) -> Option<DataObjectOutput> {
     let outputs = response.get("outputs").unwrap_or(response);
-    if let (Some(kind), Some(path)) = (typed_kind_from_value(outputs), maybe_path_from_output_value(outputs)) {
-        let absolute = PathBuf::from(resolve_path_against_working_directory(working_directory, &path));
+    if let (Some(kind), Some(path)) = (
+        typed_kind_from_value(outputs),
+        maybe_path_from_output_value(outputs),
+    ) {
+        let absolute = PathBuf::from(resolve_path_against_working_directory(
+            working_directory,
+            &path,
+        ));
         return match kind {
             "raster" => Some(DataObjectOutput::Raster(Raster {
                 file_path: absolute,
                 active_band: 0,
             })),
-            "vector" => Some(DataObjectOutput::Vector(Vector { file_path: absolute })),
-            "lidar" => Some(DataObjectOutput::Lidar(Lidar { file_path: absolute })),
+            "vector" => Some(DataObjectOutput::Vector(Vector {
+                file_path: absolute,
+            })),
+            "lidar" => Some(DataObjectOutput::Lidar(Lidar {
+                file_path: absolute,
+            })),
             _ => None,
         };
     }
 
     if let Some(map) = outputs.as_object() {
         if let Some(value) = map.get("output") {
-            if let (Some(kind), Some(path)) = (typed_kind_from_value(value), maybe_path_from_output_value(value)) {
-                let absolute = PathBuf::from(resolve_path_against_working_directory(working_directory, &path));
+            if let (Some(kind), Some(path)) = (
+                typed_kind_from_value(value),
+                maybe_path_from_output_value(value),
+            ) {
+                let absolute = PathBuf::from(resolve_path_against_working_directory(
+                    working_directory,
+                    &path,
+                ));
                 return match kind {
                     "raster" => Some(DataObjectOutput::Raster(Raster {
                         file_path: absolute,
                         active_band: 0,
                     })),
-                    "vector" => Some(DataObjectOutput::Vector(Vector { file_path: absolute })),
-                    "lidar" => Some(DataObjectOutput::Lidar(Lidar { file_path: absolute })),
+                    "vector" => Some(DataObjectOutput::Vector(Vector {
+                        file_path: absolute,
+                    })),
+                    "lidar" => Some(DataObjectOutput::Lidar(Lidar {
+                        file_path: absolute,
+                    })),
                     _ => None,
                 };
             }
@@ -4266,15 +5092,22 @@ fn maybe_extract_data_object_output(
     }
 
     let path = maybe_extract_single_output_path(response)?;
-    let absolute = PathBuf::from(resolve_path_against_working_directory(working_directory, &path));
+    let absolute = PathBuf::from(resolve_path_against_working_directory(
+        working_directory,
+        &path,
+    ));
 
     match infer_data_object_kind(category, &path)? {
         "raster" => Some(DataObjectOutput::Raster(Raster {
             file_path: absolute,
             active_band: 0,
         })),
-        "vector" => Some(DataObjectOutput::Vector(Vector { file_path: absolute })),
-        "lidar" => Some(DataObjectOutput::Lidar(Lidar { file_path: absolute })),
+        "vector" => Some(DataObjectOutput::Vector(Vector {
+            file_path: absolute,
+        })),
+        "lidar" => Some(DataObjectOutput::Lidar(Lidar {
+            file_path: absolute,
+        })),
         _ => None,
     }
 }
@@ -4282,7 +5115,10 @@ fn maybe_extract_data_object_output(
 fn output_key_is_metadata(key: &str) -> bool {
     // "path" is always a legacy compat alias duplicating the primary typed "output" entry;
     // treat it as metadata so multi-output extraction doesn't count it as a second output.
-    matches!(key, "__wbw_type__" | "active_band" | "band" | "cells_processed" | "path")
+    matches!(
+        key,
+        "__wbw_type__" | "active_band" | "band" | "cells_processed" | "path"
+    )
 }
 
 fn looks_like_output_locator_key(key: &str) -> bool {
@@ -4372,14 +5208,21 @@ fn maybe_extract_data_object_outputs(
     pairs.sort_by(|(ka, _, _), (kb, _, _)| sort_output_key(ka, kb));
     let mut out: Vec<DataObjectOutput> = Vec::with_capacity(pairs.len());
     for (_, path, kind) in pairs {
-        let absolute = PathBuf::from(resolve_path_against_working_directory(working_directory, &path));
+        let absolute = PathBuf::from(resolve_path_against_working_directory(
+            working_directory,
+            &path,
+        ));
         let item = match kind {
             "raster" => DataObjectOutput::Raster(Raster {
                 file_path: absolute,
                 active_band: 0,
             }),
-            "vector" => DataObjectOutput::Vector(Vector { file_path: absolute }),
-            "lidar" => DataObjectOutput::Lidar(Lidar { file_path: absolute }),
+            "vector" => DataObjectOutput::Vector(Vector {
+                file_path: absolute,
+            }),
+            "lidar" => DataObjectOutput::Lidar(Lidar {
+                file_path: absolute,
+            }),
             _ => return None,
         };
         out.push(item);
@@ -4397,7 +5240,8 @@ impl WbToolCategory {
         known_subcategories_for_category(&self.category)
             .iter()
             .filter_map(|name| {
-                let has_any = !category_tool_summaries(&self.runtime, &self.category, Some(name)).is_empty();
+                let has_any =
+                    !category_tool_summaries(&self.runtime, &self.category, Some(name)).is_empty();
                 if has_any {
                     Some((*name).to_string())
                 } else {
@@ -4417,7 +5261,11 @@ impl WbToolSubcategory {
 #[pymethods]
 impl WbToolCategory {
     fn __dir__(&self) -> Vec<String> {
-        let mut out: Vec<String> = self.tool_summaries().into_iter().map(|(id, _)| id).collect();
+        let mut out: Vec<String> = self
+            .tool_summaries()
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
         out.extend(self.subcategory_slugs());
         out
     }
@@ -4476,11 +5324,17 @@ impl WbToolCategory {
 #[pymethods]
 impl WbToolSubcategory {
     fn __repr__(&self) -> String {
-        format!("<WbToolSubcategory '{}.{}'>", self.category, self.subcategory)
+        format!(
+            "<WbToolSubcategory '{}.{}'>",
+            self.category, self.subcategory
+        )
     }
 
     fn __dir__(&self) -> Vec<String> {
-        self.tool_summaries().into_iter().map(|(id, _)| id).collect()
+        self.tool_summaries()
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect()
     }
 
     #[pyo3(signature = (include_pro_markers=true))]
@@ -4562,9 +5416,7 @@ impl WbCategoryToolCallable {
                 }
 
                 let mut value = py_any_to_json_value(&v)?;
-                if (key == "output" || key == "output_path")
-                    && value.is_string()
-                {
+                if (key == "output" || key == "output_path") && value.is_string() {
                     if let Some(raw) = value.as_str() {
                         value = json!(resolve_path_against_working_directory(
                             &self.working_directory,
@@ -4621,19 +5473,34 @@ impl WbCategoryToolCallable {
             };
 
             let mut composed_args = serde_json::Map::new();
-            composed_args.insert("red".to_string(), json!(red_path.to_string_lossy().to_string()));
-            composed_args.insert("green".to_string(), json!(green_path.to_string_lossy().to_string()));
-            composed_args.insert("blue".to_string(), json!(blue_path.to_string_lossy().to_string()));
+            composed_args.insert(
+                "red".to_string(),
+                json!(red_path.to_string_lossy().to_string()),
+            );
+            composed_args.insert(
+                "green".to_string(),
+                json!(green_path.to_string_lossy().to_string()),
+            );
+            composed_args.insert(
+                "blue".to_string(),
+                json!(blue_path.to_string_lossy().to_string()),
+            );
             if let Some(out) = output_path {
                 composed_args.insert(
                     "output".to_string(),
-                    json!(resolve_path_against_working_directory(&self.working_directory, &out)),
+                    json!(resolve_path_against_working_directory(
+                        &self.working_directory,
+                        &out
+                    )),
                 );
             }
 
-            let args_json = serde_json::to_string(&serde_json::Value::Object(composed_args)).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
-            })?;
+            let args_json = serde_json::to_string(&serde_json::Value::Object(composed_args))
+                .map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                        "invalid JSON arguments: {e}"
+                    ))
+                })?;
 
             let response = if let Some(cb) = callback {
                 let sink = PyCallbackSink::new(cb);
@@ -4662,9 +5529,12 @@ impl WbCategoryToolCallable {
             return json_value_to_pyobject(py, &response);
         }
 
-        let args_json = serde_json::to_string(&serde_json::Value::Object(args_map)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
-        })?;
+        let args_json =
+            serde_json::to_string(&serde_json::Value::Object(args_map)).map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "invalid JSON arguments: {e}"
+                ))
+            })?;
 
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -4687,11 +5557,7 @@ impl WbCategoryToolCallable {
         // Must be checked BEFORE the data-object extraction paths, which
         // would otherwise mis-classify the string value "tuple" as a path.
         let check_outputs = response.get("outputs").unwrap_or(&response);
-        if check_outputs
-            .get("__wbw_type__")
-            .and_then(|v| v.as_str())
-            == Some("tuple")
-        {
+        if check_outputs.get("__wbw_type__").and_then(|v| v.as_str()) == Some("tuple") {
             let items = check_outputs.get("items").unwrap_or(check_outputs);
             return json_value_to_pyobject(py, items);
         }
@@ -4708,16 +5574,20 @@ impl WbCategoryToolCallable {
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or("")
                 .to_string();
-            let raster = Raster { file_path: out_path, active_band: 0 };
-            let tuple = pyo3::types::PyTuple::new(py, [raster.into_py_any(py)?, class_key.into_py_any(py)?])?;
+            let raster = Raster {
+                file_path: out_path,
+                active_band: 0,
+            };
+            let tuple = pyo3::types::PyTuple::new(
+                py,
+                [raster.into_py_any(py)?, class_key.into_py_any(py)?],
+            )?;
             return Ok(tuple.unbind().into_any());
         }
 
-        if let Some(data_objects) = maybe_extract_data_object_outputs(
-            &self.category,
-            &self.working_directory,
-            &response,
-        ) {
+        if let Some(data_objects) =
+            maybe_extract_data_object_outputs(&self.category, &self.working_directory, &response)
+        {
             let list = PyList::empty(py);
             for item in data_objects {
                 list.append(item.into_py_any(py)?)?;
@@ -4725,11 +5595,9 @@ impl WbCategoryToolCallable {
             return Ok(list.unbind().into_any());
         }
 
-        if let Some(data_object) = maybe_extract_data_object_output(
-            &self.category,
-            &self.working_directory,
-            &response,
-        ) {
+        if let Some(data_object) =
+            maybe_extract_data_object_output(&self.category, &self.working_directory, &response)
+        {
             return data_object.into_py_any(py);
         }
 
@@ -4783,9 +5651,7 @@ impl WbDomainNamespace {
     fn __getattr__(&self, name: &str) -> PyResult<WbCategoryToolCallable> {
         // Accept either exact id match or hyphen/underscore variants
         let matches_name = |id: &str| -> bool {
-            id == name
-                || id.replace('-', "_") == name
-                || id.replace('_', "-") == name
+            id == name || id.replace('-', "_") == name || id.replace('_', "-") == name
         };
 
         let manifest = self
@@ -4800,10 +5666,12 @@ impl WbDomainNamespace {
             .find(|m| matches_name(&m.id));
 
         let Some(m) = manifest else {
-            return Err(PyErr::new::<pyo3::exceptions::PyAttributeError, _>(format!(
-                "'{}' not found in domain '{}'; use list_tools() to see available tools",
-                name, self.domain_name
-            )));
+            return Err(PyErr::new::<pyo3::exceptions::PyAttributeError, _>(
+                format!(
+                    "'{}' not found in domain '{}'; use list_tools() to see available tools",
+                    name, self.domain_name
+                ),
+            ));
         };
 
         let is_pro = matches!(
@@ -4835,12 +5703,14 @@ fn sensor_bundle_family_name(bundle: &SensorBundle) -> &'static str {
 }
 
 fn open_bundle_for_python_bundle(bundle: &Bundle) -> PyResult<SensorBundle> {
-    open_sensor_bundle_path(&bundle.bundle_root).map(|opened| opened.bundle).map_err(|e| {
-        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-            "failed to open bundle '{}': {e}",
-            bundle.bundle_root.display()
-        ))
-    })
+    open_sensor_bundle_path(&bundle.bundle_root)
+        .map(|opened| opened.bundle)
+        .map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "failed to open bundle '{}': {e}",
+                bundle.bundle_root.display()
+            ))
+        })
 }
 
 fn sensor_bundle_metadata_json_value(bundle: &SensorBundle) -> serde_json::Value {
@@ -4984,64 +5854,112 @@ impl RasterConfigs {
     }
 
     #[getter]
-    fn rows(&self) -> usize { self.rows }
+    fn rows(&self) -> usize {
+        self.rows
+    }
     #[setter]
-    fn set_rows(&mut self, v: usize) { self.rows = v; }
+    fn set_rows(&mut self, v: usize) {
+        self.rows = v;
+    }
 
     #[getter]
-    fn columns(&self) -> usize { self.columns }
+    fn columns(&self) -> usize {
+        self.columns
+    }
     #[setter]
-    fn set_columns(&mut self, v: usize) { self.columns = v; }
+    fn set_columns(&mut self, v: usize) {
+        self.columns = v;
+    }
 
     #[getter]
-    fn nodata(&self) -> f64 { self.nodata }
+    fn nodata(&self) -> f64 {
+        self.nodata
+    }
     #[setter]
-    fn set_nodata(&mut self, v: f64) { self.nodata = v; }
+    fn set_nodata(&mut self, v: f64) {
+        self.nodata = v;
+    }
 
     #[getter]
-    fn north(&self) -> f64 { self.north }
+    fn north(&self) -> f64 {
+        self.north
+    }
     #[setter]
-    fn set_north(&mut self, v: f64) { self.north = v; }
+    fn set_north(&mut self, v: f64) {
+        self.north = v;
+    }
 
     #[getter]
-    fn south(&self) -> f64 { self.south }
+    fn south(&self) -> f64 {
+        self.south
+    }
     #[setter]
-    fn set_south(&mut self, v: f64) { self.south = v; }
+    fn set_south(&mut self, v: f64) {
+        self.south = v;
+    }
 
     #[getter]
-    fn east(&self) -> f64 { self.east }
+    fn east(&self) -> f64 {
+        self.east
+    }
     #[setter]
-    fn set_east(&mut self, v: f64) { self.east = v; }
+    fn set_east(&mut self, v: f64) {
+        self.east = v;
+    }
 
     #[getter]
-    fn west(&self) -> f64 { self.west }
+    fn west(&self) -> f64 {
+        self.west
+    }
     #[setter]
-    fn set_west(&mut self, v: f64) { self.west = v; }
+    fn set_west(&mut self, v: f64) {
+        self.west = v;
+    }
 
     #[getter]
-    fn resolution_x(&self) -> f64 { self.resolution_x }
+    fn resolution_x(&self) -> f64 {
+        self.resolution_x
+    }
     #[setter]
-    fn set_resolution_x(&mut self, v: f64) { self.resolution_x = v; }
+    fn set_resolution_x(&mut self, v: f64) {
+        self.resolution_x = v;
+    }
 
     #[getter]
-    fn resolution_y(&self) -> f64 { self.resolution_y }
+    fn resolution_y(&self) -> f64 {
+        self.resolution_y
+    }
     #[setter]
-    fn set_resolution_y(&mut self, v: f64) { self.resolution_y = v; }
+    fn set_resolution_y(&mut self, v: f64) {
+        self.resolution_y = v;
+    }
 
     #[getter]
-    fn minimum(&self) -> f64 { self.minimum }
+    fn minimum(&self) -> f64 {
+        self.minimum
+    }
     #[setter]
-    fn set_minimum(&mut self, v: f64) { self.minimum = v; }
+    fn set_minimum(&mut self, v: f64) {
+        self.minimum = v;
+    }
 
     #[getter]
-    fn maximum(&self) -> f64 { self.maximum }
+    fn maximum(&self) -> f64 {
+        self.maximum
+    }
     #[setter]
-    fn set_maximum(&mut self, v: f64) { self.maximum = v; }
+    fn set_maximum(&mut self, v: f64) {
+        self.maximum = v;
+    }
 
     #[getter]
-    fn epsg_code(&self) -> i32 { self.epsg_code }
+    fn epsg_code(&self) -> i32 {
+        self.epsg_code
+    }
     #[setter]
-    fn set_epsg_code(&mut self, v: i32) { self.epsg_code = v; }
+    fn set_epsg_code(&mut self, v: i32) {
+        self.epsg_code = v;
+    }
 }
 
 #[pymethods]
@@ -5080,11 +5998,13 @@ impl Bundle {
         let out = match bundle {
             SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => pkg.acquisition_datetime_utc,
             SensorBundle::Safe(SafeBundle::Sentinel1(pkg)) => pkg.acquisition_datetime_utc,
-            SensorBundle::Landsat(pkg) => match (pkg.acquisition_date_utc, pkg.scene_center_time_utc) {
-                (Some(d), Some(t)) => Some(format!("{d}T{t}")),
-                (Some(d), None) => Some(d),
-                _ => None,
-            },
+            SensorBundle::Landsat(pkg) => {
+                match (pkg.acquisition_date_utc, pkg.scene_center_time_utc) {
+                    (Some(d), Some(t)) => Some(format!("{d}T{t}")),
+                    (Some(d), None) => Some(d),
+                    _ => None,
+                }
+            }
             SensorBundle::Iceye(pkg) => pkg.acquisition_datetime_utc,
             SensorBundle::PlanetScope(pkg) => pkg.acquisition_datetime_utc,
             SensorBundle::Dimap(pkg) => pkg.acquisition_datetime_utc,
@@ -5123,7 +6043,9 @@ impl Bundle {
     fn processing_level(&self) -> PyResult<Option<String>> {
         let bundle = open_bundle_for_python_bundle(self)?;
         let out = match bundle {
-            SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => Some(format!("{:?}", pkg.product_level)),
+            SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => {
+                Some(format!("{:?}", pkg.product_level))
+            }
             SensorBundle::Landsat(pkg) => Some(format!("{:?}", pkg.processing_level)),
             SensorBundle::Dimap(pkg) => pkg.processing_level,
             _ => None,
@@ -5441,15 +6363,18 @@ impl Bundle {
             ))
         })?;
         let path = match bundle {
-            SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => pkg.band_path(key).map(Path::to_path_buf),
+            SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => {
+                pkg.band_path(key).map(Path::to_path_buf)
+            }
             SensorBundle::Landsat(pkg) => pkg.band_path(key).map(Path::to_path_buf),
             SensorBundle::PlanetScope(pkg) => pkg.band_path(key).map(Path::to_path_buf),
             SensorBundle::Dimap(pkg) => pkg.band_path(key).map(Path::to_path_buf),
             SensorBundle::MaxarWorldView(pkg) => pkg.band_path(key).map(Path::to_path_buf),
             _ => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    format!("read_band is not supported for bundle family '{}'", self.family),
-                ));
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "read_band is not supported for bundle family '{}'",
+                    self.family
+                )));
             }
         };
         let file_path = path.ok_or_else(|| {
@@ -5459,7 +6384,10 @@ impl Bundle {
                 self.bundle_root.display()
             ))
         })?;
-        Ok(Raster { file_path, active_band: 0 })
+        Ok(Raster {
+            file_path,
+            active_band: 0,
+        })
     }
 
     fn read_qa_layer(&self, key: &str) -> PyResult<Raster> {
@@ -5470,13 +6398,16 @@ impl Bundle {
             ))
         })?;
         let path = match bundle {
-            SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => pkg.qa_path(key).map(Path::to_path_buf),
+            SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => {
+                pkg.qa_path(key).map(Path::to_path_buf)
+            }
             SensorBundle::Landsat(pkg) => pkg.qa_path(key).map(Path::to_path_buf),
             SensorBundle::PlanetScope(pkg) => pkg.qa_path(key).map(Path::to_path_buf),
             _ => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    format!("read_qa_layer is not supported for bundle family '{}'", self.family),
-                ));
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "read_qa_layer is not supported for bundle family '{}'",
+                    self.family
+                )));
             }
         };
         let file_path = path.ok_or_else(|| {
@@ -5486,7 +6417,10 @@ impl Bundle {
                 self.bundle_root.display()
             ))
         })?;
-        Ok(Raster { file_path, active_band: 0 })
+        Ok(Raster {
+            file_path,
+            active_band: 0,
+        })
     }
 
     fn read_aux_layer(&self, key: &str) -> PyResult<Raster> {
@@ -5497,12 +6431,15 @@ impl Bundle {
             ))
         })?;
         let path = match bundle {
-            SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => pkg.aux_path(key).map(Path::to_path_buf),
+            SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => {
+                pkg.aux_path(key).map(Path::to_path_buf)
+            }
             SensorBundle::Landsat(pkg) => pkg.aux_path(key).map(Path::to_path_buf),
             _ => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    format!("read_aux_layer is not supported for bundle family '{}'", self.family),
-                ));
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "read_aux_layer is not supported for bundle family '{}'",
+                    self.family
+                )));
             }
         };
         let file_path = path.ok_or_else(|| {
@@ -5512,7 +6449,10 @@ impl Bundle {
                 self.bundle_root.display()
             ))
         })?;
-        Ok(Raster { file_path, active_band: 0 })
+        Ok(Raster {
+            file_path,
+            active_band: 0,
+        })
     }
 
     fn read_measurement(&self, key: &str) -> PyResult<Raster> {
@@ -5523,13 +6463,16 @@ impl Bundle {
             ))
         })?;
         let path = match bundle {
-            SensorBundle::Safe(SafeBundle::Sentinel1(pkg)) => pkg.measurement_path(key).map(Path::to_path_buf),
+            SensorBundle::Safe(SafeBundle::Sentinel1(pkg)) => {
+                pkg.measurement_path(key).map(Path::to_path_buf)
+            }
             SensorBundle::Radarsat2(pkg) => pkg.measurement_path(key).map(Path::to_path_buf),
             SensorBundle::Rcm(pkg) => pkg.measurement_path(key).map(Path::to_path_buf),
             _ => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    format!("read_measurement is not supported for bundle family '{}'", self.family),
-                ));
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "read_measurement is not supported for bundle family '{}'",
+                    self.family
+                )));
             }
         };
         let file_path = path.ok_or_else(|| {
@@ -5539,7 +6482,10 @@ impl Bundle {
                 self.bundle_root.display()
             ))
         })?;
-        Ok(Raster { file_path, active_band: 0 })
+        Ok(Raster {
+            file_path,
+            active_band: 0,
+        })
     }
 
     fn read_asset(&self, key: &str) -> PyResult<Raster> {
@@ -5552,9 +6498,10 @@ impl Bundle {
         let path = match bundle {
             SensorBundle::Iceye(pkg) => pkg.asset_path(key).map(Path::to_path_buf),
             _ => {
-                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    format!("read_asset is not supported for bundle family '{}'", self.family),
-                ));
+                return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "read_asset is not supported for bundle family '{}'",
+                    self.family
+                )));
             }
         };
         let file_path = path.ok_or_else(|| {
@@ -5564,7 +6511,10 @@ impl Bundle {
                 self.bundle_root.display()
             ))
         })?;
-        Ok(Raster { file_path, active_band: 0 })
+        Ok(Raster {
+            file_path,
+            active_band: 0,
+        })
     }
 
     /// Create a true-colour (Red/Green/Blue) composite from this bundle.
@@ -5653,11 +6603,11 @@ impl Raster {
             let r = memory_store::get_raster_arc_by_id(id)
                 .map(|r| r.as_ref().clone())
                 .ok_or_else(|| {
-                PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
-                    "in-memory raster '{}' no longer exists",
-                    self.file_path.display()
-                ))
-            })?;
+                    PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
+                        "in-memory raster '{}' no longer exists",
+                        self.file_path.display()
+                    ))
+                })?;
             return Ok(PinnedRasterView {
                 source_path: self.file_path.clone(),
                 memory_id: Some(id.to_string()),
@@ -5670,7 +6620,9 @@ impl Raster {
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
 
         Ok(PinnedRasterView {
@@ -5937,7 +6889,10 @@ impl Raster {
         if let Some(code) = r.crs.epsg {
             return Ok(Some(code));
         }
-        Ok(r.crs.wkt.as_deref().and_then(|w| infer_epsg_from_crs_text(w, strict)))
+        Ok(r.crs
+            .wkt
+            .as_deref()
+            .and_then(|w| infer_epsg_from_crs_text(w, strict)))
     }
 
     fn set_crs_wkt(&self, wkt: &str) -> PyResult<()> {
@@ -6108,15 +7063,17 @@ impl Raster {
                     .unwrap_or(None);
             let progress_state_for_progress = Arc::clone(&progress_state);
             src.reproject_with_options_and_progress(&options, move |pct| {
-                emit_progress_if_advanced(&callback_for_progress, &progress_state_for_progress, pct);
+                emit_progress_if_advanced(
+                    &callback_for_progress,
+                    &progress_state_for_progress,
+                    pct,
+                );
             })
         } else {
             src.reproject_with_options(&options)
         }
         .map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                "reproject failed: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("reproject failed: {e}"))
         })?;
 
         let out_path = resolve_unary_output_path(&self.file_path, "reproject", output_path, None);
@@ -6136,7 +7093,12 @@ impl Raster {
     }
 
     #[pyo3(signature = (dst_epsg, output_path=None, callback=None))]
-    fn reproject_nearest(&self, dst_epsg: u32, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
+    fn reproject_nearest(
+        &self,
+        dst_epsg: u32,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
         self.reproject(
             dst_epsg,
             output_path,
@@ -6163,7 +7125,12 @@ impl Raster {
     }
 
     #[pyo3(signature = (dst_epsg, output_path=None, callback=None))]
-    fn reproject_bilinear(&self, dst_epsg: u32, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
+    fn reproject_bilinear(
+        &self,
+        dst_epsg: u32,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
         self.reproject(
             dst_epsg,
             output_path,
@@ -6197,7 +7164,10 @@ impl Raster {
         resample: &str,
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
-        emit_callback_event(&callback, json!({"type":"message","message":"Reprojecting raster to match grid"}))?;
+        emit_callback_event(
+            &callback,
+            json!({"type":"message","message":"Reprojecting raster to match grid"}),
+        )?;
         let src = self.load_wbraster()?;
         let target = target_grid.load_wbraster()?;
         let method = parse_resample_method(resample)?;
@@ -6209,16 +7179,20 @@ impl Raster {
                     .unwrap_or(None);
             let progress_state_for_progress = Arc::clone(&progress_state);
             src.reproject_to_match_grid_and_progress(&target, method, move |pct| {
-                emit_progress_if_advanced(&callback_for_progress, &progress_state_for_progress, pct);
+                emit_progress_if_advanced(
+                    &callback_for_progress,
+                    &progress_state_for_progress,
+                    pct,
+                );
             })
         } else {
             src.reproject_to_match_grid(&target, method)
         }
-            .map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                    "reproject_to_match_grid failed: {e}"
-                ))
-            })?;
+        .map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "reproject_to_match_grid failed: {e}"
+            ))
+        })?;
 
         let out_path = resolve_unary_output_path(
             &self.file_path,
@@ -6248,7 +7222,10 @@ impl Raster {
         resample: &str,
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
-        emit_callback_event(&callback, json!({"type":"message","message":"Reprojecting raster to match resolution"}))?;
+        emit_callback_event(
+            &callback,
+            json!({"type":"message","message":"Reprojecting raster to match resolution"}),
+        )?;
         let src = self.load_wbraster()?;
         let reference = reference_grid.load_wbraster()?;
         let method = parse_resample_method(resample)?;
@@ -6260,16 +7237,20 @@ impl Raster {
                     .unwrap_or(None);
             let progress_state_for_progress = Arc::clone(&progress_state);
             src.reproject_to_match_resolution_and_progress(&reference, method, move |pct| {
-                emit_progress_if_advanced(&callback_for_progress, &progress_state_for_progress, pct);
+                emit_progress_if_advanced(
+                    &callback_for_progress,
+                    &progress_state_for_progress,
+                    pct,
+                );
             })
         } else {
             src.reproject_to_match_resolution(&reference, method)
         }
-            .map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                    "reproject_to_match_resolution failed: {e}"
-                ))
-            })?;
+        .map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "reproject_to_match_resolution failed: {e}"
+            ))
+        })?;
 
         let out_path = resolve_unary_output_path(
             &self.file_path,
@@ -6300,7 +7281,10 @@ impl Raster {
         resample: &str,
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
-        emit_callback_event(&callback, json!({"type":"message","message":format!("Reprojecting raster to EPSG:{} while matching resolution", dst_epsg)}))?;
+        emit_callback_event(
+            &callback,
+            json!({"type":"message","message":format!("Reprojecting raster to EPSG:{} while matching resolution", dst_epsg)}),
+        )?;
         let src = self.load_wbraster()?;
         let reference = reference_grid.load_wbraster()?;
         let method = parse_resample_method(resample)?;
@@ -6316,17 +7300,21 @@ impl Raster {
                 &reference,
                 method,
                 move |pct| {
-                    emit_progress_if_advanced(&callback_for_progress, &progress_state_for_progress, pct);
+                    emit_progress_if_advanced(
+                        &callback_for_progress,
+                        &progress_state_for_progress,
+                        pct,
+                    );
                 },
             )
         } else {
             src.reproject_to_match_resolution_in_epsg(dst_epsg, &reference, method)
         }
-            .map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                    "reproject_to_match_resolution_in_epsg failed: {e}"
-                ))
-            })?;
+        .map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "reproject_to_match_resolution_in_epsg failed: {e}"
+            ))
+        })?;
 
         let out_path = resolve_unary_output_path(
             &self.file_path,
@@ -6361,7 +7349,9 @@ impl Raster {
         for band in 0..out.bands {
             let vals = vec![nodata; out.rows * out.cols];
             out.set_band_slice(band as isize, &vals).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("failed building new raster: {e}"))
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "failed building new raster: {e}"
+                ))
             })?;
         }
         let id = memory_store::put_raster(out);
@@ -6390,7 +7380,10 @@ impl Raster {
         let source = self.load_wbraster()?;
         let out_path = self.derived_output_path("deep_copy");
         source.write_auto(&out_path).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("failed to write raster '{}': {e}", out_path.display()))
+            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                "failed to write raster '{}': {e}",
+                out_path.display()
+            ))
         })?;
         Ok(Raster {
             file_path: out_path,
@@ -6403,7 +7396,9 @@ impl Raster {
         for band in 0..r.bands {
             let vals = vec![value; r.rows * r.cols];
             r.set_band_slice(band as isize, &vals).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("failed to reinitialize raster: {e}"))
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "failed to reinitialize raster: {e}"
+                ))
             })?;
         }
         self.save_wbraster(&r)
@@ -6423,13 +7418,18 @@ impl Raster {
                     }
                 }
                 r.set_band_slice(band as isize, &vals).map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("normalize failed: {e}"))
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                        "normalize failed: {e}"
+                    ))
                 })?;
             }
         }
         let out_path = resolve_unary_output_path(&self.file_path, "normalize", output_path, None);
         r.write_auto(&out_path).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("failed to write raster '{}': {e}", out_path.display()))
+            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                "failed to write raster '{}': {e}",
+                out_path.display()
+            ))
         })?;
         Ok(Raster {
             file_path: out_path,
@@ -6462,7 +7462,10 @@ impl Raster {
         }
         let out_path = resolve_unary_output_path(&self.file_path, "signum", output_path, None);
         r.write_auto(&out_path).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("failed to write raster '{}': {e}", out_path.display()))
+            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                "failed to write raster '{}': {e}",
+                out_path.display()
+            ))
         })?;
         Ok(Raster {
             file_path: out_path,
@@ -6484,7 +7487,10 @@ impl Raster {
         }
         let out_path = resolve_unary_output_path(&self.file_path, "is_nodata", output_path, None);
         r.write_auto(&out_path).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("failed to write raster '{}': {e}", out_path.display()))
+            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                "failed to write raster '{}': {e}",
+                out_path.display()
+            ))
         })?;
         Ok(Raster {
             file_path: out_path,
@@ -6493,12 +7499,25 @@ impl Raster {
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn max(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn max(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         if let Ok(v) = other.extract::<f64>() {
             return self.map_valid_to_new("max", output_path, Some(band_mode), bands, |x| x.max(v));
         }
         if let Ok(r_other) = other.extract::<PyRef<Raster>>() {
-            return self.map_valid_pair_to_new("max", &r_other, output_path, Some(band_mode), bands, |a, b| a.max(b));
+            return self.map_valid_pair_to_new(
+                "max",
+                &r_other,
+                output_path,
+                Some(band_mode),
+                bands,
+                |a, b| a.max(b),
+            );
         }
         Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
             "max expects either a numeric value or a Raster",
@@ -6506,12 +7525,25 @@ impl Raster {
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn min(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn min(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         if let Ok(v) = other.extract::<f64>() {
             return self.map_valid_to_new("min", output_path, Some(band_mode), bands, |x| x.min(v));
         }
         if let Ok(r_other) = other.extract::<PyRef<Raster>>() {
-            return self.map_valid_pair_to_new("min", &r_other, output_path, Some(band_mode), bands, |a, b| a.min(b));
+            return self.map_valid_pair_to_new(
+                "min",
+                &r_other,
+                output_path,
+                Some(band_mode),
+                bands,
+                |a, b| a.min(b),
+            );
         }
         Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
             "min expects either a numeric value or a Raster",
@@ -6519,128 +7551,322 @@ impl Raster {
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn add(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_operand_to_new("add", other, output_path, Some(band_mode), bands, |a, b| a + b)
+    fn add(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_operand_to_new("add", other, output_path, Some(band_mode), bands, |a, b| {
+            a + b
+        })
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn sub(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_operand_to_new("sub", other, output_path, Some(band_mode), bands, |a, b| a - b)
+    fn sub(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_operand_to_new("sub", other, output_path, Some(band_mode), bands, |a, b| {
+            a - b
+        })
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn subtract(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn subtract(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.sub(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn mul(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_operand_to_new("mul", other, output_path, Some(band_mode), bands, |a, b| a * b)
+    fn mul(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_operand_to_new("mul", other, output_path, Some(band_mode), bands, |a, b| {
+            a * b
+        })
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn multiply(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn multiply(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.mul(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn div(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_operand_to_new("div", other, output_path, Some(band_mode), bands, |a, b| a / b)
+    fn div(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_operand_to_new("div", other, output_path, Some(band_mode), bands, |a, b| {
+            a / b
+        })
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn divide(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn divide(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.div(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn pow(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_operand_to_new("pow", other, output_path, Some(band_mode), bands, |a, b| a.powf(b))
+    fn pow(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_operand_to_new("pow", other, output_path, Some(band_mode), bands, |a, b| {
+            a.powf(b)
+        })
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn power(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn power(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.pow(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn mod_(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_operand_to_new("modulo", other, output_path, Some(band_mode), bands, |a, b| a % b)
+    fn mod_(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_operand_to_new(
+            "modulo",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| a % b,
+        )
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn add_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_operand_in_place("add_in_place", other, Some(band_mode), bands, |a, b| a + b)
+    fn add_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_operand_in_place("add_in_place", other, Some(band_mode), bands, |a, b| {
+            a + b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn sub_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_operand_in_place("sub_in_place", other, Some(band_mode), bands, |a, b| a - b)
+    fn sub_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_operand_in_place("sub_in_place", other, Some(band_mode), bands, |a, b| {
+            a - b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn mul_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_operand_in_place("mul_in_place", other, Some(band_mode), bands, |a, b| a * b)
+    fn mul_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_operand_in_place("mul_in_place", other, Some(band_mode), bands, |a, b| {
+            a * b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn div_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_operand_in_place("div_in_place", other, Some(band_mode), bands, |a, b| a / b)
+    fn div_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_operand_in_place("div_in_place", other, Some(band_mode), bands, |a, b| {
+            a / b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn pow_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_operand_in_place("pow_in_place", other, Some(band_mode), bands, |a, b| a.powf(b))
+    fn pow_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_operand_in_place("pow_in_place", other, Some(band_mode), bands, |a, b| {
+            a.powf(b)
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn mod_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_operand_in_place("mod_in_place", other, Some(band_mode), bands, |a, b| a % b)
+    fn mod_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_operand_in_place("mod_in_place", other, Some(band_mode), bands, |a, b| {
+            a % b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn eq_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_predicate_in_place("eq_in_place", other, Some(band_mode), bands, |a, b| a == b)
+    fn eq_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_predicate_in_place("eq_in_place", other, Some(band_mode), bands, |a, b| {
+            a == b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn ne_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_predicate_in_place("ne_in_place", other, Some(band_mode), bands, |a, b| a != b)
+    fn ne_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_predicate_in_place("ne_in_place", other, Some(band_mode), bands, |a, b| {
+            a != b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn gt_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_predicate_in_place("gt_in_place", other, Some(band_mode), bands, |a, b| a > b)
+    fn gt_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_predicate_in_place("gt_in_place", other, Some(band_mode), bands, |a, b| {
+            a > b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn ge_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_predicate_in_place("ge_in_place", other, Some(band_mode), bands, |a, b| a >= b)
+    fn ge_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_predicate_in_place("ge_in_place", other, Some(band_mode), bands, |a, b| {
+            a >= b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn lt_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_predicate_in_place("lt_in_place", other, Some(band_mode), bands, |a, b| a < b)
+    fn lt_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_predicate_in_place("lt_in_place", other, Some(band_mode), bands, |a, b| {
+            a < b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn le_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_predicate_in_place("le_in_place", other, Some(band_mode), bands, |a, b| a <= b)
+    fn le_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_predicate_in_place("le_in_place", other, Some(band_mode), bands, |a, b| {
+            a <= b
+        })
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn logical_and_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_predicate_in_place("logical_and_in_place", other, Some(band_mode), bands, |a, b| a != 0.0 && b != 0.0)
+    fn logical_and_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_predicate_in_place(
+            "logical_and_in_place",
+            other,
+            Some(band_mode),
+            bands,
+            |a, b| a != 0.0 && b != 0.0,
+        )
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn logical_or_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_predicate_in_place("logical_or_in_place", other, Some(band_mode), bands, |a, b| a != 0.0 || b != 0.0)
+    fn logical_or_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_predicate_in_place(
+            "logical_or_in_place",
+            other,
+            Some(band_mode),
+            bands,
+            |a, b| a != 0.0 || b != 0.0,
+        )
     }
 
     #[pyo3(signature = (other, band_mode="all", bands=None))]
-    fn logical_xor_in_place(&self, other: &Bound<'_, PyAny>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<()> {
-        self.map_binary_predicate_in_place("logical_xor_in_place", other, Some(band_mode), bands, |a, b| (a != 0.0) ^ (b != 0.0))
+    fn logical_xor_in_place(
+        &self,
+        other: &Bound<'_, PyAny>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<()> {
+        self.map_binary_predicate_in_place(
+            "logical_xor_in_place",
+            other,
+            Some(band_mode),
+            bands,
+            |a, b| (a != 0.0) ^ (b != 0.0),
+        )
     }
 
     #[pyo3(signature = (band_mode="all", bands=None))]
@@ -6655,7 +7881,9 @@ impl Raster {
                 }
             }
             r.set_band_slice(band as isize, &vals).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("logical_not_in_place failed: {e}"))
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                    "logical_not_in_place failed: {e}"
+                ))
             })?;
         }
         self.save_wbraster(&r)
@@ -6709,7 +7937,11 @@ impl Raster {
         self.__itruediv__(other)
     }
 
-    fn __pow__(&self, other: &Bound<'_, PyAny>, _modulo: Option<&Bound<'_, PyAny>>) -> PyResult<Raster> {
+    fn __pow__(
+        &self,
+        other: &Bound<'_, PyAny>,
+        _modulo: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Raster> {
         self.pow(other, None, "all", None)
     }
 
@@ -6756,7 +7988,11 @@ impl Raster {
         ))
     }
 
-    fn __rpow__(&self, other: &Bound<'_, PyAny>, _modulo: Option<&Bound<'_, PyAny>>) -> PyResult<Raster> {
+    fn __rpow__(
+        &self,
+        other: &Bound<'_, PyAny>,
+        _modulo: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<Raster> {
         if let Ok(v) = other.extract::<f64>() {
             return self.map_valid_to_new("rpow", None, None, None, |x| v.powf(x));
         }
@@ -6769,283 +8005,682 @@ impl Raster {
     }
 
     #[pyo3(signature = (min_value, max_value, output_path=None, band_mode="all", bands=None))]
-    fn clamp(&self, min_value: f64, max_value: f64, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_valid_to_new("clamp", output_path, Some(band_mode), bands, |v| v.clamp(min_value, max_value))
+    fn clamp(
+        &self,
+        min_value: f64,
+        max_value: f64,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_valid_to_new("clamp", output_path, Some(band_mode), bands, |v| {
+            v.clamp(min_value, max_value)
+        })
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn to_radians(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_valid_to_new("to_radians", output_path, Some(band_mode), bands, |v| v.to_radians())
+    fn to_radians(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_valid_to_new("to_radians", output_path, Some(band_mode), bands, |v| {
+            v.to_radians()
+        })
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn radians(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn radians(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.to_radians(output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn to_degrees(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_valid_to_new("to_degrees", output_path, Some(band_mode), bands, |v| v.to_degrees())
+    fn to_degrees(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_valid_to_new("to_degrees", output_path, Some(band_mode), bands, |v| {
+            v.to_degrees()
+        })
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn degrees(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn degrees(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.to_degrees(output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn trunc(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn trunc(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("trunc", output_path, Some(band_mode), bands, |v| v.trunc())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn exp(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn exp(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("exp", output_path, Some(band_mode), bands, |v| v.exp())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn exp2(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn exp2(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("exp2", output_path, Some(band_mode), bands, |v| v.exp2())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn log2(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn log2(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("log2", output_path, Some(band_mode), bands, |v| v.log2())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn tan(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn tan(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("tan", output_path, Some(band_mode), bands, |v| v.tan())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn arctanh(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn arctanh(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.atanh(output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn asin(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn asin(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("asin", output_path, Some(band_mode), bands, |v| v.asin())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn arcsin(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn arcsin(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.asin(output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn acos(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn acos(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("acos", output_path, Some(band_mode), bands, |v| v.acos())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn arccos(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn arccos(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.acos(output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn atan(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn atan(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("atan", output_path, Some(band_mode), bands, |v| v.atan())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn arctan(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn arctan(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.atan(output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn sinh(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn sinh(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("sinh", output_path, Some(band_mode), bands, |v| v.sinh())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn cosh(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn cosh(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("cosh", output_path, Some(band_mode), bands, |v| v.cosh())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn tanh(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn tanh(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("tanh", output_path, Some(band_mode), bands, |v| v.tanh())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn asinh(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn asinh(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("asinh", output_path, Some(band_mode), bands, |v| v.asinh())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn arcsinh(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn arcsinh(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.asinh(output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn acosh(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn acosh(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("acosh", output_path, Some(band_mode), bands, |v| v.acosh())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn arccosh(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn arccosh(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.acosh(output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn atanh(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn atanh(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("atanh", output_path, Some(band_mode), bands, |v| v.atanh())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn cbrt(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn cbrt(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("cbrt", output_path, Some(band_mode), bands, |v| v.cbrt())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn recip(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn recip(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("recip", output_path, Some(band_mode), bands, |v| v.recip())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn expm1(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn expm1(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("expm1", output_path, Some(band_mode), bands, |v| v.exp_m1())
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn log1p(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn log1p(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("log1p", output_path, Some(band_mode), bands, |v| v.ln_1p())
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn atan2(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_operand_to_new("atan2", other, output_path, Some(band_mode), bands, |a, b| a.atan2(b))
+    fn atan2(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_operand_to_new(
+            "atan2",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| a.atan2(b),
+        )
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn eq(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn eq(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         if band_mode.eq_ignore_ascii_case("all") && bands.is_none() {
             if let Ok(r_other) = other.extract::<PyRef<Raster>>() {
-                return self.map_binary_raster_to_new_via_runtime("equal_to", &r_other, output_path);
+                return self.map_binary_raster_to_new_via_runtime(
+                    "equal_to",
+                    &r_other,
+                    output_path,
+                );
             }
         }
-        self.map_binary_predicate_to_new("eq", other, output_path, Some(band_mode), bands, |a, b| a == b)
+        self.map_binary_predicate_to_new(
+            "eq",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| a == b,
+        )
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn ne(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn ne(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         if band_mode.eq_ignore_ascii_case("all") && bands.is_none() {
             if let Ok(r_other) = other.extract::<PyRef<Raster>>() {
-                return self.map_binary_raster_to_new_via_runtime("not_equal_to", &r_other, output_path);
+                return self.map_binary_raster_to_new_via_runtime(
+                    "not_equal_to",
+                    &r_other,
+                    output_path,
+                );
             }
         }
-        self.map_binary_predicate_to_new("ne", other, output_path, Some(band_mode), bands, |a, b| a != b)
+        self.map_binary_predicate_to_new(
+            "ne",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| a != b,
+        )
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn gt(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_predicate_to_new("gt", other, output_path, Some(band_mode), bands, |a, b| a > b)
+    fn gt(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_predicate_to_new(
+            "gt",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| a > b,
+        )
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn ge(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_predicate_to_new("ge", other, output_path, Some(band_mode), bands, |a, b| a >= b)
+    fn ge(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_predicate_to_new(
+            "ge",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| a >= b,
+        )
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn lt(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_predicate_to_new("lt", other, output_path, Some(band_mode), bands, |a, b| a < b)
+    fn lt(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_predicate_to_new(
+            "lt",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| a < b,
+        )
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn le(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_predicate_to_new("le", other, output_path, Some(band_mode), bands, |a, b| a <= b)
+    fn le(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_predicate_to_new(
+            "le",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| a <= b,
+        )
     }
 
     // Long-form aliases matching the tool names (e.g. dem.equal_to(pntr) == dem.eq(pntr) == dem == pntr).
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn equal_to(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn equal_to(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.eq(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn not_equal_to(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn not_equal_to(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.ne(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn greater_than(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn greater_than(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.gt(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn greater_than_or_equal_to(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn greater_than_or_equal_to(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.ge(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn less_than(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn less_than(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.lt(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn less_than_or_equal_to(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn less_than_or_equal_to(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.le(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn logical_and(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_predicate_to_new("logical_and", other, output_path, Some(band_mode), bands, |a, b| a != 0.0 && b != 0.0)
+    fn logical_and(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_predicate_to_new(
+            "logical_and",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| a != 0.0 && b != 0.0,
+        )
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn logical_or(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_predicate_to_new("logical_or", other, output_path, Some(band_mode), bands, |a, b| a != 0.0 || b != 0.0)
+    fn logical_or(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_predicate_to_new(
+            "logical_or",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| a != 0.0 || b != 0.0,
+        )
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn logical_xor(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_binary_predicate_to_new("logical_xor", other, output_path, Some(band_mode), bands, |a, b| (a != 0.0) ^ (b != 0.0))
+    fn logical_xor(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_binary_predicate_to_new(
+            "logical_xor",
+            other,
+            output_path,
+            Some(band_mode),
+            bands,
+            |a, b| (a != 0.0) ^ (b != 0.0),
+        )
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn and_(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn and_(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.logical_and(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn or_(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn or_(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.logical_or(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (other, output_path=None, band_mode="all", bands=None))]
-    fn xor_(&self, other: &Bound<'_, PyAny>, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn xor_(
+        &self,
+        other: &Bound<'_, PyAny>,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.logical_xor(other, output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn logical_not(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_valid_to_new("logical_not", output_path, Some(band_mode), bands, |v| if v == 0.0 { 1.0 } else { 0.0 })
+    fn logical_not(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_valid_to_new("logical_not", output_path, Some(band_mode), bands, |v| {
+            if v == 0.0 {
+                1.0
+            } else {
+                0.0
+            }
+        })
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn not_(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn not_(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.logical_not(output_path, band_mode, bands)
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn is_finite(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_valid_to_new("is_finite", output_path, Some(band_mode), bands, |v| if v.is_finite() { 1.0 } else { 0.0 })
+    fn is_finite(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_valid_to_new("is_finite", output_path, Some(band_mode), bands, |v| {
+            if v.is_finite() {
+                1.0
+            } else {
+                0.0
+            }
+        })
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn is_infinite(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_valid_to_new("is_infinite", output_path, Some(band_mode), bands, |v| if v.is_infinite() { 1.0 } else { 0.0 })
+    fn is_infinite(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_valid_to_new("is_infinite", output_path, Some(band_mode), bands, |v| {
+            if v.is_infinite() {
+                1.0
+            } else {
+                0.0
+            }
+        })
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn is_nan(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self.map_valid_to_new("is_nan", output_path, Some(band_mode), bands, |v| if v.is_nan() { 1.0 } else { 0.0 })
+    fn is_nan(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self.map_valid_to_new("is_nan", output_path, Some(band_mode), bands, |v| {
+            if v.is_nan() {
+                1.0
+            } else {
+                0.0
+            }
+        })
     }
 
     #[pyo3(signature = (output_path=None, band_mode="all", bands=None))]
-    fn neg(&self, output_path: Option<&str>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn neg(
+        &self,
+        output_path: Option<&str>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.map_valid_to_new("neg", output_path, Some(band_mode), bands, |v| -v)
     }
 
@@ -7120,11 +8755,7 @@ impl Raster {
     }
 
     #[pyo3(signature = (statement, band=None))]
-    fn con_count(
-        &self,
-        statement: &str,
-        band: Option<usize>,
-    ) -> PyResult<usize> {
+    fn con_count(&self, statement: &str, band: Option<usize>) -> PyResult<usize> {
         // Fast path: parse "value <op> <literal>" directly and count in parallel
         // without creating an intermediate raster via conditional_evaluation.
         // This avoids: serial per-cell evalexpr evaluation, HashMapContext mutations,
@@ -7137,10 +8768,7 @@ impl Raster {
         // Parse the condition: trim, normalise, split on whitespace into [lhs, op, rhs]
         let stmt = statement.trim();
         // Resolve "nodata" token in the rhs to the raster nodata value
-        let rhs_str = stmt
-            .split_whitespace()
-            .nth(2)
-            .unwrap_or("");
+        let rhs_str = stmt.split_whitespace().nth(2).unwrap_or("");
         let rhs_val: Option<f64> = if rhs_str.eq_ignore_ascii_case("nodata") {
             Some(nodata)
         } else {
@@ -7151,20 +8779,35 @@ impl Raster {
             // Determine the operator from the middle token
             let op = stmt.split_whitespace().nth(1).unwrap_or("");
             let count = match op {
-                "==" => band_data.par_iter().filter(|&&v| {
-                    !r.is_nodata(v) && (v - rhs).abs() < f64::EPSILON
-                }).count(),
-                "!=" => band_data.par_iter().filter(|&&v| {
-                    !r.is_nodata(v) && (v - rhs).abs() >= f64::EPSILON
-                }).count(),
-                ">"  => band_data.par_iter().filter(|&&v| !r.is_nodata(v) && v > rhs).count(),
-                ">=" => band_data.par_iter().filter(|&&v| !r.is_nodata(v) && v >= rhs).count(),
-                "<"  => band_data.par_iter().filter(|&&v| !r.is_nodata(v) && v < rhs).count(),
-                "<=" => band_data.par_iter().filter(|&&v| !r.is_nodata(v) && v <= rhs).count(),
+                "==" => band_data
+                    .par_iter()
+                    .filter(|&&v| !r.is_nodata(v) && (v - rhs).abs() < f64::EPSILON)
+                    .count(),
+                "!=" => band_data
+                    .par_iter()
+                    .filter(|&&v| !r.is_nodata(v) && (v - rhs).abs() >= f64::EPSILON)
+                    .count(),
+                ">" => band_data
+                    .par_iter()
+                    .filter(|&&v| !r.is_nodata(v) && v > rhs)
+                    .count(),
+                ">=" => band_data
+                    .par_iter()
+                    .filter(|&&v| !r.is_nodata(v) && v >= rhs)
+                    .count(),
+                "<" => band_data
+                    .par_iter()
+                    .filter(|&&v| !r.is_nodata(v) && v < rhs)
+                    .count(),
+                "<=" => band_data
+                    .par_iter()
+                    .filter(|&&v| !r.is_nodata(v) && v <= rhs)
+                    .count(),
                 _ => {
-                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                        format!("con_count: unsupported operator '{}' in statement '{}'", op, statement)
-                    ));
+                    return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                        "con_count: unsupported operator '{}' in statement '{}'",
+                        op, statement
+                    )));
                 }
             };
             return Ok(count);
@@ -7172,7 +8815,10 @@ impl Raster {
 
         // Fallback for complex expressions: route through conditional_evaluation tool.
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(self.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(self.file_path.to_string_lossy().to_string()),
+        );
         args.insert("statement".to_string(), json!(statement));
         args.insert("true".to_string(), json!(1.0));
         args.insert("false".to_string(), json!(0.0));
@@ -7185,10 +8831,17 @@ impl Raster {
             .map_err(map_tool_error)?;
         let out_path = extract_typed_output_path("conditional_evaluation", &response)?;
         let out_path_str = out_path.to_string_lossy().to_string();
-        let out = Raster { file_path: out_path, active_band: self.active_band };
+        let out = Raster {
+            file_path: out_path,
+            active_band: self.active_band,
+        };
         let r2 = out.load_wbraster()?;
         let b2 = out.resolve_band_index(&r2, band)?;
-        let count = r2.band_slice(b2).par_iter().filter(|&&v| !r2.is_nodata(v) && (v - 1.0).abs() < f64::EPSILON).count();
+        let count = r2
+            .band_slice(b2)
+            .par_iter()
+            .filter(|&&v| !r2.is_nodata(v) && (v - 1.0).abs() < f64::EPSILON)
+            .count();
         if memory_store::raster_is_memory_path(&out_path_str) {
             let _ = memory_store::remove_raster_by_path(&out_path_str);
         }
@@ -7196,11 +8849,7 @@ impl Raster {
     }
 
     #[pyo3(signature = (statement, band=None))]
-    fn count_where(
-        &self,
-        statement: &str,
-        band: Option<usize>,
-    ) -> PyResult<usize> {
+    fn count_where(&self, statement: &str, band: Option<usize>) -> PyResult<usize> {
         self.con_count(statement, band)
     }
 
@@ -7226,14 +8875,22 @@ impl Raster {
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
         let b = self.resolve_band_index(&cached.raster, band)?;
         Ok(cached.raster.get(b, row, column))
     }
 
     #[pyo3(signature = (row, column, value, band=None))]
-    fn set_value(&self, row: isize, column: isize, value: f64, band: Option<usize>) -> PyResult<()> {
+    fn set_value(
+        &self,
+        row: isize,
+        column: isize,
+        value: f64,
+        band: Option<usize>,
+    ) -> PyResult<()> {
         let raster_path = self.file_path.to_string_lossy().to_string();
         if memory_store::raster_is_memory_path(&raster_path) {
             let mut r = self.load_wbraster()?;
@@ -7247,7 +8904,9 @@ impl Raster {
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let mut cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
         let b = self.resolve_band_index(&cached.raster, band)?;
         // Silently ignore out-of-bounds writes, matching legacy API behavior
@@ -7273,7 +8932,9 @@ impl Raster {
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
         Ok(cached.raster.get(self.active_band as isize, row, col))
     }
@@ -7286,27 +8947,31 @@ impl Raster {
             let mut r = memory_store::get_raster_arc_by_id(id)
                 .map(|r| r.as_ref().clone())
                 .ok_or_else(|| {
-                PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
-                    "in-memory raster '{}' no longer exists",
-                    self.file_path.display()
-                ))
-            })?;
+                    PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
+                        "in-memory raster '{}' no longer exists",
+                        self.file_path.display()
+                    ))
+                })?;
             // Silently ignore out-of-bounds writes, matching legacy API behavior
             if r.set(self.active_band as isize, row, col, value).is_ok() {
                 if memory_store::replace_raster_by_id(id, r) {
                     return Ok(());
                 }
-                return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
-                    "in-memory raster '{}' no longer exists",
-                    self.file_path.display()
-                )));
+                return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(
+                    format!(
+                        "in-memory raster '{}' no longer exists",
+                        self.file_path.display()
+                    ),
+                ));
             }
             return Ok(());
         }
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let mut cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
         cached
             .raster
@@ -7331,7 +8996,9 @@ impl Raster {
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
         let b = self.resolve_band_index(&cached.raster, band)?;
         Ok(cached.raster.get_opt(b, row, col).is_none())
@@ -7343,9 +9010,9 @@ impl Raster {
         if memory_store::raster_is_memory_path(&raster_path) {
             let r = self.load_wbraster()?;
             if row < 0 || row >= r.rows as isize {
-                return Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(
-                    format!("row out of bounds: {row}"),
-                ));
+                return Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(format!(
+                    "row out of bounds: {row}"
+                )));
             }
             let b = self.resolve_band_index(&r, band)?;
             return Ok(r.row_slice(b, row));
@@ -7353,12 +9020,14 @@ impl Raster {
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
         if row < 0 || row >= cached.raster.rows as isize {
-            return Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(
-                format!("row out of bounds: {row}"),
-            ));
+            return Err(PyErr::new::<pyo3::exceptions::PyIndexError, _>(format!(
+                "row out of bounds: {row}"
+            )));
         }
         let b = self.resolve_band_index(&cached.raster, band)?;
         Ok(cached.raster.row_slice(b, row))
@@ -7371,29 +9040,33 @@ impl Raster {
             let mut r = self.load_wbraster()?;
             let b = self.resolve_band_index(&r, band)?;
             r.set_row_slice(b, row, &values).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "invalid row data: {e}"
-                ))
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid row data: {e}"))
             })?;
             return self.save_wbraster(&r);
         }
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let mut cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
         let b = self.resolve_band_index(&cached.raster, band)?;
         cached.raster.set_row_slice(b, row, &values).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid row data: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid row data: {e}"))
         })?;
         cached.dirty = true;
         Ok(())
     }
 
     #[pyo3(signature = (row, column, value, band=None))]
-    fn increment(&self, row: isize, column: isize, value: f64, band: Option<usize>) -> PyResult<()> {
+    fn increment(
+        &self,
+        row: isize,
+        column: isize,
+        value: f64,
+        band: Option<usize>,
+    ) -> PyResult<()> {
         let raster_path = self.file_path.to_string_lossy().to_string();
         if memory_store::raster_is_memory_path(&raster_path) {
             let mut r = self.load_wbraster()?;
@@ -7411,22 +9084,33 @@ impl Raster {
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let mut cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
         let b = self.resolve_band_index(&cached.raster, band)?;
         if let Some(current) = cached.raster.get_opt(b, row, column) {
-            cached.raster.set(b, row, column, current + value).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyIndexError, _>(format!(
-                    "increment out-of-bounds: {e}"
-                ))
-            })?;
+            cached
+                .raster
+                .set(b, row, column, current + value)
+                .map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyIndexError, _>(format!(
+                        "increment out-of-bounds: {e}"
+                    ))
+                })?;
             cached.dirty = true;
         }
         Ok(())
     }
 
     #[pyo3(signature = (row, column, value, band=None))]
-    fn decrement(&self, row: isize, column: isize, value: f64, band: Option<usize>) -> PyResult<()> {
+    fn decrement(
+        &self,
+        row: isize,
+        column: isize,
+        value: f64,
+        band: Option<usize>,
+    ) -> PyResult<()> {
         let raster_path = self.file_path.to_string_lossy().to_string();
         if memory_store::raster_is_memory_path(&raster_path) {
             let mut r = self.load_wbraster()?;
@@ -7444,29 +9128,41 @@ impl Raster {
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let mut cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
         let b = self.resolve_band_index(&cached.raster, band)?;
         if let Some(current) = cached.raster.get_opt(b, row, column) {
-            cached.raster.set(b, row, column, current - value).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyIndexError, _>(format!(
-                    "decrement out-of-bounds: {e}"
-                ))
-            })?;
+            cached
+                .raster
+                .set(b, row, column, current - value)
+                .map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyIndexError, _>(format!(
+                        "decrement out-of-bounds: {e}"
+                    ))
+                })?;
             cached.dirty = true;
         }
         Ok(())
     }
 
     #[pyo3(signature = (row, values, band=None))]
-    fn increment_row_data(&self, row: isize, values: Vec<f64>, band: Option<usize>) -> PyResult<()> {
+    fn increment_row_data(
+        &self,
+        row: isize,
+        values: Vec<f64>,
+        band: Option<usize>,
+    ) -> PyResult<()> {
         let mut r = self.load_wbraster()?;
         let b = self.resolve_band_index(&r, band)?;
         let mut row_vals = r.row_slice(b, row);
         if row_vals.len() != values.len() {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("row data length mismatch: expected {}, got {}", row_vals.len(), values.len()),
-            ));
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "row data length mismatch: expected {}, got {}",
+                row_vals.len(),
+                values.len()
+            )));
         }
         for (v, inc) in row_vals.iter_mut().zip(values.iter()) {
             if !r.is_nodata(*v) {
@@ -7474,22 +9170,27 @@ impl Raster {
             }
         }
         r.set_row_slice(b, row, &row_vals).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid row data: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid row data: {e}"))
         })?;
         self.save_wbraster(&r)
     }
 
     #[pyo3(signature = (row, values, band=None))]
-    fn decrement_row_data(&self, row: isize, values: Vec<f64>, band: Option<usize>) -> PyResult<()> {
+    fn decrement_row_data(
+        &self,
+        row: isize,
+        values: Vec<f64>,
+        band: Option<usize>,
+    ) -> PyResult<()> {
         let mut r = self.load_wbraster()?;
         let b = self.resolve_band_index(&r, band)?;
         let mut row_vals = r.row_slice(b, row);
         if row_vals.len() != values.len() {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                format!("row data length mismatch: expected {}, got {}", row_vals.len(), values.len()),
-            ));
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "row data length mismatch: expected {}, got {}",
+                row_vals.len(),
+                values.len()
+            )));
         }
         for (v, dec) in row_vals.iter_mut().zip(values.iter()) {
             if !r.is_nodata(*v) {
@@ -7497,9 +9198,7 @@ impl Raster {
             }
         }
         r.set_row_slice(b, row, &row_vals).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid row data: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid row data: {e}"))
         })?;
         self.save_wbraster(&r)
     }
@@ -7555,67 +9254,145 @@ impl Raster {
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn abs(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn abs(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("abs", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn ceil(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn ceil(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("ceil", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn floor(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn floor(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("floor", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn round(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn round(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("round", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn negate(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn negate(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("negate", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn reciprocal(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn reciprocal(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("reciprocal", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn truncate(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn truncate(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("truncate", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn sqrt(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn sqrt(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("sqrt", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn square(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn square(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("square", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn ln(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn ln(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("ln", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn log10(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn log10(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("log10", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn sin(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn sin(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("sin", output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (output_path=None, callback=None, band_mode="all", bands=None))]
-    fn cos(&self, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn cos(
+        &self,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self.run_unary("cos", output_path, callback, Some(band_mode), bands)
     }
 }
@@ -7769,17 +9546,19 @@ impl Vector {
         Ok(out.unbind().into_any())
     }
 
-    fn attribute(&self, py: Python<'_>, feature_index: usize, field_name: &str) -> PyResult<Py<PyAny>> {
+    fn attribute(
+        &self,
+        py: Python<'_>,
+        feature_index: usize,
+        field_name: &str,
+    ) -> PyResult<Py<PyAny>> {
         let layer = read_vector_layer_for_python(self)?;
-        let idx = layer
-            .schema
-            .field_index(field_name)
-            .ok_or_else(|| {
-                PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
-                    "attribute field '{}' not found",
-                    field_name
-                ))
-            })?;
+        let idx = layer.schema.field_index(field_name).ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
+                "attribute field '{}' not found",
+                field_name
+            ))
+        })?;
         let feature = layer.features.get(feature_index).ok_or_else(|| {
             PyErr::new::<pyo3::exceptions::PyIndexError, _>(format!(
                 "feature_index {} out of range (feature_count={})",
@@ -7798,15 +9577,12 @@ impl Vector {
         value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         let mut layer = read_vector_layer_for_python(self)?;
-        let idx = layer
-            .schema
-            .field_index(field_name)
-            .ok_or_else(|| {
-                PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
-                    "attribute field '{}' not found",
-                    field_name
-                ))
-            })?;
+        let idx = layer.schema.field_index(field_name).ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
+                "attribute field '{}' not found",
+                field_name
+            ))
+        })?;
         let expected_type = layer.schema.fields()[idx].field_type;
         let converted = py_any_to_field_value(value, expected_type)?;
         let feature_count = layer.features.len();
@@ -7828,15 +9604,12 @@ impl Vector {
             let key = k.extract::<String>().map_err(|_| {
                 PyErr::new::<pyo3::exceptions::PyTypeError, _>("attribute keys must be strings")
             })?;
-            let idx = layer
-                .schema
-                .field_index(&key)
-                .ok_or_else(|| {
-                    PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
-                        "attribute field '{}' not found",
-                        key
-                    ))
-                })?;
+            let idx = layer.schema.field_index(&key).ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
+                    "attribute field '{}' not found",
+                    key
+                ))
+            })?;
             let expected_type = layer.schema.fields()[idx].field_type;
             updates.push((idx, py_any_to_field_value(&v, expected_type)?));
         }
@@ -7969,7 +9742,11 @@ impl Vector {
                     .unwrap_or(None);
             let progress_state_for_progress = Arc::clone(&progress_state);
             layer_to_epsg_with_options_and_progress(&layer, dst_epsg, &options, move |pct| {
-                emit_progress_if_advanced(&callback_for_progress, &progress_state_for_progress, pct);
+                emit_progress_if_advanced(
+                    &callback_for_progress,
+                    &progress_state_for_progress,
+                    pct,
+                );
             })
         } else {
             layer_to_epsg_with_options(&layer, dst_epsg, &options)
@@ -7988,7 +9765,9 @@ impl Vector {
 
         emit_callback_event(&callback, json!({"type":"progress","percent":1.0}))?;
 
-        Ok(Vector { file_path: out_path })
+        Ok(Vector {
+            file_path: out_path,
+        })
     }
 
     fn crs_wkt(&self) -> PyResult<Option<String>> {
@@ -8041,7 +9820,9 @@ impl Vector {
         };
         write_vector_layer_for_python(&out_vector, &layer)?;
 
-        Ok(Vector { file_path: out_path })
+        Ok(Vector {
+            file_path: out_path,
+        })
     }
 }
 
@@ -8362,7 +10143,9 @@ impl Lidar {
             ))
         })?;
 
-        Ok(Lidar { file_path: out_path })
+        Ok(Lidar {
+            file_path: out_path,
+        })
     }
 
     #[staticmethod]
@@ -8374,7 +10157,8 @@ impl Lidar {
         cols: Option<Vec<String>>,
     ) -> PyResult<Lidar> {
         let fields = parse_lidar_point_fields(cols.as_deref())?;
-        let out_path = resolve_unary_output_path(&base.file_path, "from_numpy_chunks", output_path, None);
+        let out_path =
+            resolve_unary_output_path(&base.file_path, "from_numpy_chunks", output_path, None);
         if let Some(parent) = out_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
                 PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
@@ -8398,17 +10182,14 @@ impl Lidar {
         };
 
         if matches!(out_format, LidarFormat::Las | LidarFormat::Laz) && !base_is_memory {
-            let mut rewriter = wblidar::PointColumnChunkRewriter::open(
-                &base.file_path,
-                &out_path,
-                &fields,
-            )
-            .map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                    "failed to initialize lidar chunk rewriter '{}': {e}",
-                    out_path.display()
-                ))
-            })?;
+            let mut rewriter =
+                wblidar::PointColumnChunkRewriter::open(&base.file_path, &out_path, &fields)
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                            "failed to initialize lidar chunk rewriter '{}': {e}",
+                            out_path.display()
+                        ))
+                    })?;
 
             let iter = chunks.try_iter().map_err(|_| {
                 PyErr::new::<pyo3::exceptions::PyTypeError, _>(
@@ -8438,11 +10219,12 @@ impl Lidar {
                     )));
                 }
 
-                let rows: Vec<Vec<f64>> = chunk.call_method0("tolist")?.extract().map_err(|_| {
-                    PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                        "chunk values must be numeric and coercible to float",
-                    )
-                })?;
+                let rows: Vec<Vec<f64>> =
+                    chunk.call_method0("tolist")?.extract().map_err(|_| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                            "chunk values must be numeric and coercible to float",
+                        )
+                    })?;
 
                 let row_count = rows.len();
                 let mut columns: Vec<Vec<f64>> = fields
@@ -8479,7 +10261,9 @@ impl Lidar {
                 ))
             })?;
 
-            return Ok(Lidar { file_path: out_path });
+            return Ok(Lidar {
+                file_path: out_path,
+            });
         }
 
         // Fallback path for formats not yet supported by streaming chunk write.
@@ -8578,7 +10362,9 @@ impl Lidar {
             ))
         })?;
 
-        Ok(Lidar { file_path: out_path })
+        Ok(Lidar {
+            file_path: out_path,
+        })
     }
 
     #[pyo3(signature = (
@@ -8635,16 +10421,20 @@ impl Lidar {
                     .unwrap_or(None);
             let progress_state_for_progress = Arc::clone(&progress_state);
             cloud.reprojected_to_epsg_with_options_and_progress(dst_epsg, &options, move |pct| {
-                emit_progress_if_advanced(&callback_for_progress, &progress_state_for_progress, pct);
+                emit_progress_if_advanced(
+                    &callback_for_progress,
+                    &progress_state_for_progress,
+                    pct,
+                );
             })
         } else {
             cloud.reprojected_to_epsg_with_options(dst_epsg, &options)
         }
-            .map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
-                    "lidar reprojection failed: {e}"
-                ))
-            })?;
+        .map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "lidar reprojection failed: {e}"
+            ))
+        })?;
 
         let out_path = resolve_unary_output_path(&self.file_path, "reproject", output_path, None);
         out_cloud.write(&out_path).map_err(|e| {
@@ -8656,7 +10446,9 @@ impl Lidar {
 
         emit_callback_event(&callback, json!({"type":"progress","percent":1.0}))?;
 
-        Ok(Lidar { file_path: out_path })
+        Ok(Lidar {
+            file_path: out_path,
+        })
     }
 
     fn crs_wkt(&self) -> PyResult<Option<String>> {
@@ -8665,7 +10457,15 @@ impl Lidar {
             let cloud = read_lidar_cloud_for_python(self)?;
             return Ok(cloud.crs.and_then(|c| c.wkt));
         }
-        read_prj_sidecar(&self.file_path)
+
+        // First try to read from sidecar .prj file if it exists
+        if let Ok(Some(wkt)) = read_prj_sidecar(&self.file_path) {
+            return Ok(Some(wkt));
+        }
+
+        // If no sidecar, read CRS from the LAS file itself
+        let cloud = read_lidar_cloud_for_python(self)?;
+        Ok(cloud.crs.and_then(|c| c.wkt))
     }
 
     #[pyo3(signature = (strict=false))]
@@ -8685,10 +10485,23 @@ impl Lidar {
             return Ok(None);
         }
 
-        let wkt = read_prj_sidecar(&self.file_path)?;
-        Ok(wkt
-            .as_deref()
-            .and_then(|text| infer_epsg_from_crs_text(text, strict)))
+        // First try to read from sidecar .prj file if it exists
+        if let Ok(Some(wkt)) = read_prj_sidecar(&self.file_path) {
+            return Ok(infer_epsg_from_crs_text(&wkt, strict));
+        }
+
+        // If no sidecar, read CRS from the LAS file itself
+        let cloud = read_lidar_cloud_for_python(self)?;
+        if let Some(crs) = cloud.crs {
+            if crs.epsg.is_some() {
+                return Ok(crs.epsg);
+            }
+            return Ok(crs
+                .wkt
+                .as_deref()
+                .and_then(|text| infer_epsg_from_crs_text(text, strict)));
+        }
+        Ok(None)
     }
 
     fn set_crs_wkt(&self, wkt: &str) -> PyResult<()> {
@@ -8765,7 +10578,9 @@ impl Lidar {
             })?;
         }
 
-        Ok(Lidar { file_path: out_path })
+        Ok(Lidar {
+            file_path: out_path,
+        })
     }
 
     #[pyo3(signature = (dst, options_json=None))]
@@ -8796,17 +10611,16 @@ impl Lidar {
             }
         };
 
-        let result_path = write_lidar_path_with_options_json(
-            &source_path,
-            Path::new(dst),
-            opts_json,
-        )?;
+        let result_path =
+            write_lidar_path_with_options_json(&source_path, Path::new(dst), opts_json)?;
 
         if let Some(staged) = staged_input {
             let _ = std::fs::remove_file(staged);
         }
 
-        Ok(Lidar { file_path: PathBuf::from(result_path) })
+        Ok(Lidar {
+            file_path: PathBuf::from(result_path),
+        })
     }
 
     fn copy_to_path(&self, dst: &str) -> PyResult<Lidar> {
@@ -8835,17 +10649,15 @@ impl Lidar {
             }
         };
 
-        let result_path = write_lidar_path_with_options_json(
-            &source_path,
-            Path::new(dst),
-            "{}",
-        )?;
+        let result_path = write_lidar_path_with_options_json(&source_path, Path::new(dst), "{}")?;
 
         if let Some(staged) = staged_input {
             let _ = std::fs::remove_file(staged);
         }
 
-        Ok(Lidar { file_path: PathBuf::from(result_path) })
+        Ok(Lidar {
+            file_path: PathBuf::from(result_path),
+        })
     }
 }
 
@@ -8928,16 +10740,18 @@ impl Raster {
             return memory_store::get_raster_arc_by_id(id)
                 .map(|r| r.as_ref().clone())
                 .ok_or_else(|| {
-                PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
-                    "in-memory raster '{}' no longer exists",
-                    self.file_path.display()
-                ))
-            });
+                    PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
+                        "in-memory raster '{}' no longer exists",
+                        self.file_path.display()
+                    ))
+                });
         }
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         let cached = handle.lock().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                "disk raster cache entry lock poisoned",
+            )
         })?;
         Ok(cached.raster.clone())
     }
@@ -8956,16 +10770,20 @@ impl Raster {
                 return Ok(());
             }
 
-            return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
-                "in-memory raster '{}' no longer exists",
-                self.file_path.display()
-            )));
+            return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(
+                format!(
+                    "in-memory raster '{}' no longer exists",
+                    self.file_path.display()
+                ),
+            ));
         }
 
         let handle = get_or_load_disk_raster_handle(&self.file_path)?;
         {
             let mut cached = handle.lock().map_err(|_| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("disk raster cache entry lock poisoned")
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "disk raster cache entry lock poisoned",
+                )
             })?;
             cached.raster = raster.clone();
             cached.dirty = true;
@@ -9016,13 +10834,19 @@ impl Raster {
                 let nodata = r.nodata;
                 let nodata_is_nan = nodata.is_nan();
                 vals.par_iter_mut().for_each(|v| {
-                    let is_nodata = if nodata_is_nan { v.is_nan() } else { *v == nodata };
+                    let is_nodata = if nodata_is_nan {
+                        v.is_nan()
+                    } else {
+                        *v == nodata
+                    };
                     if !is_nodata {
                         *v = op(*v);
                     }
                 });
                 r.set_band_slice(*b as isize, &vals).map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{tool_id} failed: {e}"))
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                        "{tool_id} failed: {e}"
+                    ))
                 })?;
                 let pct = (i + 1) as f64 / target_bands.len() as f64;
                 emit_callback_event(
@@ -9069,7 +10893,7 @@ impl Raster {
     {
         let mut r = self.load_wbraster()?;
         let target_bands = resolve_target_bands(r.bands, self.active_band, band_mode, bands)?;
-        
+
         // When all bands are selected, use the flat-buffer fast-path (F32/F64 typed slices,
         // no band_slice copy or set_band_slice serial write-back).
         let math_bands = if target_bands.len() == r.bands {
@@ -9077,26 +10901,31 @@ impl Raster {
         } else {
             Some(target_bands)
         };
-        
+
         r.apply_unary_math(f, math_bands).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{suffix} failed: {e}"))
         })?;
-        
+
         // Keep intermediates in memory for memory-backed inputs unless an explicit output path is provided.
         let file_path_str = self.file_path.to_string_lossy().to_string();
-        let out_path = if output_path.is_none() && memory_store::raster_is_memory_path(&file_path_str) {
-            // Generate a new memory path for the result
-            let id = memory_store::put_raster(r);
-            PathBuf::from(memory_store::make_raster_memory_path(&id))
-        } else {
-            // Write to disk at resolved output path
-            let out_path_resolved = resolve_unary_output_path(&self.file_path, suffix, output_path, None);
-            r.write_auto(&out_path_resolved).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("failed to write raster '{}': {e}", out_path_resolved.display()))
-            })?;
-            out_path_resolved
-        };
-        
+        let out_path =
+            if output_path.is_none() && memory_store::raster_is_memory_path(&file_path_str) {
+                // Generate a new memory path for the result
+                let id = memory_store::put_raster(r);
+                PathBuf::from(memory_store::make_raster_memory_path(&id))
+            } else {
+                // Write to disk at resolved output path
+                let out_path_resolved =
+                    resolve_unary_output_path(&self.file_path, suffix, output_path, None);
+                r.write_auto(&out_path_resolved).map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                        "failed to write raster '{}': {e}",
+                        out_path_resolved.display()
+                    ))
+                })?;
+                out_path_resolved
+            };
+
         Ok(Raster {
             file_path: out_path,
             active_band: self.active_band,
@@ -9144,8 +10973,16 @@ impl Raster {
                     .for_each(|(a, b)| {
                         let a_f64 = *a as f64;
                         let b_f64 = *b as f64;
-                        let a_is_nodata = if left_nodata_is_nan { a_f64.is_nan() } else { *a == left_nodata_f32 };
-                        let b_is_nodata = if right_nodata_is_nan { b_f64.is_nan() } else { *b == right_nodata_f32 };
+                        let a_is_nodata = if left_nodata_is_nan {
+                            a_f64.is_nan()
+                        } else {
+                            *a == left_nodata_f32
+                        };
+                        let b_is_nodata = if right_nodata_is_nan {
+                            b_f64.is_nan()
+                        } else {
+                            *b == right_nodata_f32
+                        };
                         *a = if a_is_nodata || b_is_nodata {
                             left_nodata_f32
                         } else {
@@ -9159,8 +10996,16 @@ impl Raster {
                     .par_iter_mut()
                     .zip(vals_right.par_iter())
                     .for_each(|(a, b)| {
-                        let a_is_nodata = if left_nodata_is_nan { a.is_nan() } else { *a == left_nodata };
-                        let b_is_nodata = if right_nodata_is_nan { b.is_nan() } else { *b == right_nodata };
+                        let a_is_nodata = if left_nodata_is_nan {
+                            a.is_nan()
+                        } else {
+                            *a == left_nodata
+                        };
+                        let b_is_nodata = if right_nodata_is_nan {
+                            b.is_nan()
+                        } else {
+                            *b == right_nodata
+                        };
                         *a = if a_is_nodata || b_is_nodata {
                             left_nodata
                         } else {
@@ -9172,8 +11017,16 @@ impl Raster {
                 for i in 0..len {
                     let a = left.data.get_f64(i);
                     let b = right.data.get_f64(i);
-                    let a_is_nodata = if left_nodata_is_nan { a.is_nan() } else { a == left_nodata };
-                    let b_is_nodata = if right_nodata_is_nan { b.is_nan() } else { b == right_nodata };
+                    let a_is_nodata = if left_nodata_is_nan {
+                        a.is_nan()
+                    } else {
+                        a == left_nodata
+                    };
+                    let b_is_nodata = if right_nodata_is_nan {
+                        b.is_nan()
+                    } else {
+                        b == right_nodata
+                    };
                     let out = if a_is_nodata || b_is_nodata {
                         left_nodata
                     } else {
@@ -9195,34 +11048,50 @@ impl Raster {
                     .par_iter_mut()
                     .zip(vals_right.par_iter())
                     .for_each(|(a, b)| {
-                        let a_is_nodata = if left_nodata_is_nan { a.is_nan() } else { *a == left_nodata };
-                        let b_is_nodata = if right_nodata_is_nan { b.is_nan() } else { *b == right_nodata };
+                        let a_is_nodata = if left_nodata_is_nan {
+                            a.is_nan()
+                        } else {
+                            *a == left_nodata
+                        };
+                        let b_is_nodata = if right_nodata_is_nan {
+                            b.is_nan()
+                        } else {
+                            *b == right_nodata
+                        };
                         if a_is_nodata || b_is_nodata {
                             *a = left_nodata;
                         } else {
                             *a = f(*a, *b);
                         }
                     });
-                left.set_band_slice(band as isize, &vals_left).map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{suffix} failed: {e}"))
-                })?;
+                left.set_band_slice(band as isize, &vals_left)
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                            "{suffix} failed: {e}"
+                        ))
+                    })?;
             }
         }
 
         // Keep intermediates in memory for memory-backed inputs unless an explicit output path is provided.
         let file_path_str = self.file_path.to_string_lossy().to_string();
-        let out_path = if output_path.is_none() && memory_store::raster_is_memory_path(&file_path_str) {
-            // Generate a new memory path for the result
-            let id = memory_store::put_raster(left);
-            PathBuf::from(memory_store::make_raster_memory_path(&id))
-        } else {
-            // Write to disk at resolved output path
-            let out_path_resolved = resolve_unary_output_path(&self.file_path, suffix, output_path, None);
-            left.write_auto(&out_path_resolved).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("failed to write raster '{}': {e}", out_path_resolved.display()))
-            })?;
-            out_path_resolved
-        };
+        let out_path =
+            if output_path.is_none() && memory_store::raster_is_memory_path(&file_path_str) {
+                // Generate a new memory path for the result
+                let id = memory_store::put_raster(left);
+                PathBuf::from(memory_store::make_raster_memory_path(&id))
+            } else {
+                // Write to disk at resolved output path
+                let out_path_resolved =
+                    resolve_unary_output_path(&self.file_path, suffix, output_path, None);
+                left.write_auto(&out_path_resolved).map_err(|e| {
+                    PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                        "failed to write raster '{}': {e}",
+                        out_path_resolved.display()
+                    ))
+                })?;
+                out_path_resolved
+            };
 
         Ok(Raster {
             file_path: out_path,
@@ -9261,16 +11130,20 @@ impl Raster {
                     let both_disk = !self.is_memory_backed() && !r_other.is_memory_backed();
                     let allow_runtime_fast_path = output_path.is_some() || !both_disk;
                     if allow_runtime_fast_path {
-                        return self.map_binary_raster_to_new_via_runtime(tool_id, &r_other, output_path);
+                        return self.map_binary_raster_to_new_via_runtime(
+                            tool_id,
+                            &r_other,
+                            output_path,
+                        );
                     }
                 }
             }
             return self.map_valid_pair_to_new(suffix, &r_other, output_path, band_mode, bands, f);
         }
 
-        Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-            format!("{suffix} expects either a numeric value or a Raster"),
-        ))
+        Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+            "{suffix} expects either a numeric value or a Raster"
+        )))
     }
 
     fn map_binary_predicate_to_new<F>(
@@ -9286,7 +11159,11 @@ impl Raster {
         F: Fn(f64, f64) -> bool + Sync,
     {
         self.map_binary_operand_to_new(suffix, other, output_path, band_mode, bands, |a, b| {
-            if predicate(a, b) { 1.0 } else { 0.0 }
+            if predicate(a, b) {
+                1.0
+            } else {
+                0.0
+            }
         })
     }
 
@@ -9309,13 +11186,19 @@ impl Raster {
                 let nodata = r.nodata;
                 let nodata_is_nan = nodata.is_nan();
                 vals.par_iter_mut().for_each(|cell| {
-                    let is_nodata = if nodata_is_nan { cell.is_nan() } else { *cell == nodata };
+                    let is_nodata = if nodata_is_nan {
+                        cell.is_nan()
+                    } else {
+                        *cell == nodata
+                    };
                     if !is_nodata {
                         *cell = f(*cell, v);
                     }
                 });
                 r.set_band_slice(band as isize, &vals).map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{op_name} failed: {e}"))
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                        "{op_name} failed: {e}"
+                    ))
                 })?;
             }
             return self.save_wbraster(&r);
@@ -9331,7 +11214,8 @@ impl Raster {
                 ));
             }
 
-            let target_bands = resolve_target_bands(left.bands, self.active_band, band_mode, bands)?;
+            let target_bands =
+                resolve_target_bands(left.bands, self.active_band, band_mode, bands)?;
             for band in target_bands {
                 if band >= right.bands {
                     return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -9348,23 +11232,34 @@ impl Raster {
                     .par_iter_mut()
                     .zip(vals_right.par_iter())
                     .for_each(|(a, b)| {
-                        let a_is_nodata = if left_nodata_is_nan { a.is_nan() } else { *a == left_nodata };
-                        let b_is_nodata = if right_nodata_is_nan { b.is_nan() } else { *b == right_nodata };
+                        let a_is_nodata = if left_nodata_is_nan {
+                            a.is_nan()
+                        } else {
+                            *a == left_nodata
+                        };
+                        let b_is_nodata = if right_nodata_is_nan {
+                            b.is_nan()
+                        } else {
+                            *b == right_nodata
+                        };
                         if !(a_is_nodata || b_is_nodata) {
                             *a = f(*a, *b);
                         }
                     });
-                left.set_band_slice(band as isize, &vals_left).map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{op_name} failed: {e}"))
-                })?;
+                left.set_band_slice(band as isize, &vals_left)
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                            "{op_name} failed: {e}"
+                        ))
+                    })?;
             }
 
             return self.save_wbraster(&left);
         }
 
-        Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-            format!("{op_name} expects either a numeric value or a Raster"),
-        ))
+        Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+            "{op_name} expects either a numeric value or a Raster"
+        )))
     }
 
     fn map_binary_predicate_in_place<F>(
@@ -9379,7 +11274,11 @@ impl Raster {
         F: Fn(f64, f64) -> bool + Sync,
     {
         self.map_binary_operand_in_place(op_name, other, band_mode, bands, |a, b| {
-            if predicate(a, b) { 1.0 } else { 0.0 }
+            if predicate(a, b) {
+                1.0
+            } else {
+                0.0
+            }
         })
     }
 }
@@ -9439,15 +11338,19 @@ impl PinnedRasterView {
 
         if self.dirty {
             let raster = self.raster.as_ref().ok_or_else(|| {
-                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("PinnedRasterView has no raster data")
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "PinnedRasterView has no raster data",
+                )
             })?;
 
             if let Some(id) = &self.memory_id {
                 if !memory_store::replace_raster_by_id(id, raster.clone()) {
-                    return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
-                        "in-memory raster '{}' no longer exists",
-                        self.source_path.display()
-                    )));
+                    return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(
+                        format!(
+                            "in-memory raster '{}' no longer exists",
+                            self.source_path.display()
+                        ),
+                    ));
                 }
             } else {
                 raster.write_auto(&self.source_path).map_err(|e| {
@@ -9481,13 +11384,12 @@ fn cast_raster_data_type(src: &WbRaster, data_type: DataType) -> WbRaster {
 fn parse_data_type_opt(data_type: Option<&str>) -> PyResult<Option<DataType>> {
     match data_type {
         None => Ok(None),
-        Some(s) => DataType::from_str(s)
-            .map(Some)
-            .ok_or_else(|| {
-                PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    format!("invalid data_type '{}'; expected one of u8,i8,u16,i16,u32,i32,u64,i64,f32,f64", s)
-                )
-            }),
+        Some(s) => DataType::from_str(s).map(Some).ok_or_else(|| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "invalid data_type '{}'; expected one of u8,i8,u16,i16,u32,i32,u64,i64,f32,f64",
+                s
+            ))
+        }),
     }
 }
 
@@ -9517,12 +11419,10 @@ fn parse_nodata_policy(value: &str) -> PyResult<RasterNodataPolicy> {
         "strict" => Ok(RasterNodataPolicy::Strict),
         "partial_kernel" | "partial" => Ok(RasterNodataPolicy::PartialKernel),
         "fill" => Ok(RasterNodataPolicy::Fill),
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!(
-                "invalid nodata_policy '{}'; expected strict|partial_kernel|fill",
-                value
-            ),
-        )),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "invalid nodata_policy '{}'; expected strict|partial_kernel|fill",
+            value
+        ))),
     }
 }
 
@@ -9531,12 +11431,10 @@ fn parse_antimeridian_policy(value: &str) -> PyResult<RasterAntimeridianPolicy> 
         "auto" => Ok(RasterAntimeridianPolicy::Auto),
         "linear" => Ok(RasterAntimeridianPolicy::Linear),
         "wrap" => Ok(RasterAntimeridianPolicy::Wrap),
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!(
-                "invalid antimeridian_policy '{}'; expected auto|linear|wrap",
-                value
-            ),
-        )),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "invalid antimeridian_policy '{}'; expected auto|linear|wrap",
+            value
+        ))),
     }
 }
 
@@ -9544,12 +11442,10 @@ fn parse_grid_size_policy(value: &str) -> PyResult<RasterGridSizePolicy> {
     match value.to_ascii_lowercase().as_str() {
         "expand" => Ok(RasterGridSizePolicy::Expand),
         "fit_inside" | "fitinside" => Ok(RasterGridSizePolicy::FitInside),
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!(
-                "invalid grid_size_policy '{}'; expected expand|fit_inside",
-                value
-            ),
-        )),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "invalid grid_size_policy '{}'; expected expand|fit_inside",
+            value
+        ))),
     }
 }
 
@@ -9557,26 +11453,24 @@ fn parse_destination_footprint(value: &str) -> PyResult<RasterDestinationFootpri
     match value.to_ascii_lowercase().as_str() {
         "none" => Ok(RasterDestinationFootprint::None),
         "source_boundary" | "sourceboundary" => Ok(RasterDestinationFootprint::SourceBoundary),
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!(
-                "invalid destination_footprint '{}'; expected none|source_boundary",
-                value
-            ),
-        )),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "invalid destination_footprint '{}'; expected none|source_boundary",
+            value
+        ))),
     }
 }
 
 fn parse_vector_failure_policy(value: &str) -> PyResult<VectorTransformFailurePolicy> {
     match value.to_ascii_lowercase().as_str() {
         "error" => Ok(VectorTransformFailurePolicy::Error),
-        "set_null_geometry" | "setnullgeometry" => Ok(VectorTransformFailurePolicy::SetNullGeometry),
+        "set_null_geometry" | "setnullgeometry" => {
+            Ok(VectorTransformFailurePolicy::SetNullGeometry)
+        }
         "skip_feature" | "skipfeature" => Ok(VectorTransformFailurePolicy::SkipFeature),
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!(
-                "invalid failure_policy '{}'; expected error|set_null_geometry|skip_feature",
-                value
-            ),
-        )),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "invalid failure_policy '{}'; expected error|set_null_geometry|skip_feature",
+            value
+        ))),
     }
 }
 
@@ -9585,12 +11479,10 @@ fn parse_vector_antimeridian_policy(value: &str) -> PyResult<VectorAntimeridianP
         "keep" => Ok(VectorAntimeridianPolicy::Keep),
         "normalize_lon180" | "normalizelon180" => Ok(VectorAntimeridianPolicy::NormalizeLon180),
         "split_at_180" | "splitat180" => Ok(VectorAntimeridianPolicy::SplitAt180),
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!(
-                "invalid antimeridian_policy '{}'; expected keep|normalize_lon180|split_at_180",
-                value
-            ),
-        )),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "invalid antimeridian_policy '{}'; expected keep|normalize_lon180|split_at_180",
+            value
+        ))),
     }
 }
 
@@ -9601,12 +11493,10 @@ fn parse_vector_topology_policy(value: &str) -> PyResult<VectorTopologyPolicy> {
         "validate_and_fix_orientation" | "validateandfixorientation" => {
             Ok(VectorTopologyPolicy::ValidateAndFixOrientation)
         }
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!(
-                "invalid topology_policy '{}'; expected none|validate|validate_and_fix_orientation",
-                value
-            ),
-        )),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "invalid topology_policy '{}'; expected none|validate|validate_and_fix_orientation",
+            value
+        ))),
     }
 }
 
@@ -9615,12 +11505,10 @@ fn parse_lidar_failure_policy(value: &str) -> PyResult<LidarTransformFailurePoli
         "error" => Ok(LidarTransformFailurePolicy::Error),
         "set_nan" | "setnan" => Ok(LidarTransformFailurePolicy::SetNaN),
         "skip_point" | "skippoint" => Ok(LidarTransformFailurePolicy::SkipPoint),
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!(
-                "invalid failure_policy '{}'; expected error|set_nan|skip_point",
-                value
-            ),
-        )),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "invalid failure_policy '{}'; expected error|set_nan|skip_point",
+            value
+        ))),
     }
 }
 
@@ -9628,12 +11516,10 @@ fn parse_epoch_policy(value: &str) -> PyResult<EpochPolicy> {
     match value.to_ascii_lowercase().as_str() {
         "strict" => Ok(EpochPolicy::Strict),
         "allow_static_fallback" | "allowstaticfallback" => Ok(EpochPolicy::AllowStaticFallback),
-        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-            format!(
-                "invalid epoch_policy '{}'; expected strict|allow_static_fallback",
-                value
-            ),
-        )),
+        _ => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+            "invalid epoch_policy '{}'; expected strict|allow_static_fallback",
+            value
+        ))),
     }
 }
 
@@ -9774,8 +11660,8 @@ impl WbProjectionNamespace {
         src_epsg: u32,
         dst_epsg: u32,
     ) -> PyResult<Py<PyAny>> {
-        let out_json = wbw_r::projection_reproject_point_json(x, y, src_epsg, dst_epsg)
-            .map_err(|e| {
+        let out_json =
+            wbw_r::projection_reproject_point_json(x, y, src_epsg, dst_epsg).map_err(|e| {
                 PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
                     "Failed to reproject point from EPSG:{src_epsg} to EPSG:{dst_epsg}: {e}"
                 ))
@@ -10010,12 +11896,24 @@ fn resolve_true_colour_band_paths(
     })?;
     match sensor_bundle {
         SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => {
-            let r = pkg.band_path("B04").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing band B04"))?;
-            let g = pkg.band_path("B03").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing band B03"))?;
-            let b = pkg.band_path("B02").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing band B02"))?;
+            let r = pkg
+                .band_path("B04")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing band B04")
+                })?;
+            let g = pkg
+                .band_path("B03")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing band B03")
+                })?;
+            let b = pkg
+                .band_path("B02")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing band B02")
+                })?;
             Ok((r, g, b))
         }
         SensorBundle::Landsat(pkg) => {
@@ -10030,49 +11928,126 @@ fn resolve_true_colour_band_paths(
                     }
                 }
             };
-            let r = pkg.band_path(red_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(format!("Landsat bundle is missing band {red_key}")))?;
-            let g = pkg.band_path(green_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(format!("Landsat bundle is missing band {green_key}")))?;
-            let b = pkg.band_path(blue_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(format!("Landsat bundle is missing band {blue_key}")))?;
+            let r = pkg
+                .band_path(red_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(format!(
+                        "Landsat bundle is missing band {red_key}"
+                    ))
+                })?;
+            let g = pkg
+                .band_path(green_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(format!(
+                        "Landsat bundle is missing band {green_key}"
+                    ))
+                })?;
+            let b = pkg
+                .band_path(blue_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(format!(
+                        "Landsat bundle is missing band {blue_key}"
+                    ))
+                })?;
             Ok((r, g, b))
         }
         SensorBundle::PlanetScope(pkg) => {
-            let r = pkg.band_path("red").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("PlanetScope bundle is missing band 'red'"))?;
-            let g = pkg.band_path("green").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("PlanetScope bundle is missing band 'green'"))?;
-            let b = pkg.band_path("blue").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("PlanetScope bundle is missing band 'blue'"))?;
+            let r = pkg
+                .band_path("red")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "PlanetScope bundle is missing band 'red'",
+                    )
+                })?;
+            let g = pkg
+                .band_path("green")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "PlanetScope bundle is missing band 'green'",
+                    )
+                })?;
+            let b = pkg
+                .band_path("blue")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "PlanetScope bundle is missing band 'blue'",
+                    )
+                })?;
             Ok((r, g, b))
         }
         SensorBundle::Dimap(pkg) => {
-            let r = pkg.band_path("red").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing band 'red'"))?;
-            let g = pkg.band_path("green").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing band 'green'"))?;
-            let b = pkg.band_path("blue").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing band 'blue'"))?;
+            let r = pkg
+                .band_path("red")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing band 'red'")
+                })?;
+            let g = pkg
+                .band_path("green")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing band 'green'")
+                })?;
+            let b = pkg
+                .band_path("blue")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing band 'blue'")
+                })?;
             Ok((r, g, b))
         }
         SensorBundle::MaxarWorldView(pkg) => {
-            let r_key = if pkg.band_path("red").is_some() { "red" } else { "RED" };
-            let g_key = if pkg.band_path("green").is_some() { "green" } else { "GREEN" };
-            let b_key = if pkg.band_path("blue").is_some() { "blue" } else { "BLUE" };
-            let r = pkg.band_path(r_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Maxar WorldView bundle is missing a red band"))?;
-            let g = pkg.band_path(g_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Maxar WorldView bundle is missing a green band"))?;
-            let b = pkg.band_path(b_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Maxar WorldView bundle is missing a blue band"))?;
+            let r_key = if pkg.band_path("red").is_some() {
+                "red"
+            } else {
+                "RED"
+            };
+            let g_key = if pkg.band_path("green").is_some() {
+                "green"
+            } else {
+                "GREEN"
+            };
+            let b_key = if pkg.band_path("blue").is_some() {
+                "blue"
+            } else {
+                "BLUE"
+            };
+            let r = pkg
+                .band_path(r_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "Maxar WorldView bundle is missing a red band",
+                    )
+                })?;
+            let g = pkg
+                .band_path(g_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "Maxar WorldView bundle is missing a green band",
+                    )
+                })?;
+            let b = pkg
+                .band_path(b_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "Maxar WorldView bundle is missing a blue band",
+                    )
+                })?;
             Ok((r, g, b))
         }
         SensorBundle::Safe(SafeBundle::Sentinel1(_))
         | SensorBundle::Iceye(_)
         | SensorBundle::Radarsat2(_)
-        | SensorBundle::Rcm(_)
-        => Err(pyo3::exceptions::PyValueError::new_err(
+        | SensorBundle::Rcm(_) => Err(pyo3::exceptions::PyValueError::new_err(
             "true_colour_composite is only supported for optical directory bundles \
              (sentinel2_safe, landsat, planetscope, dimap, maxar_worldview).",
         )),
@@ -10093,13 +12068,31 @@ fn resolve_false_colour_band_paths(
     })?;
     match sensor_bundle {
         SensorBundle::Safe(SafeBundle::Sentinel2(pkg)) => {
-            let nir_key = if pkg.band_path("B08").is_some() { "B08" } else { "B8A" };
-            let r = pkg.band_path(nir_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing NIR band (B08/B8A)"))?;
-            let g = pkg.band_path("B04").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing band B04"))?;
-            let b = pkg.band_path("B03").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing band B03"))?;
+            let nir_key = if pkg.band_path("B08").is_some() {
+                "B08"
+            } else {
+                "B8A"
+            };
+            let r = pkg
+                .band_path(nir_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "Sentinel-2 bundle is missing NIR band (B08/B8A)",
+                    )
+                })?;
+            let g = pkg
+                .band_path("B04")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing band B04")
+                })?;
+            let b = pkg
+                .band_path("B03")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("Sentinel-2 bundle is missing band B03")
+                })?;
             Ok((r, g, b))
         }
         SensorBundle::Landsat(pkg) => {
@@ -10114,51 +12107,134 @@ fn resolve_false_colour_band_paths(
                     }
                 }
             };
-            let r = pkg.band_path(nir_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(format!("Landsat bundle is missing NIR band {nir_key}")))?;
-            let g = pkg.band_path(red_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(format!("Landsat bundle is missing band {red_key}")))?;
-            let b = pkg.band_path(green_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err(format!("Landsat bundle is missing band {green_key}")))?;
+            let r = pkg
+                .band_path(nir_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(format!(
+                        "Landsat bundle is missing NIR band {nir_key}"
+                    ))
+                })?;
+            let g = pkg
+                .band_path(red_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(format!(
+                        "Landsat bundle is missing band {red_key}"
+                    ))
+                })?;
+            let b = pkg
+                .band_path(green_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(format!(
+                        "Landsat bundle is missing band {green_key}"
+                    ))
+                })?;
             Ok((r, g, b))
         }
         SensorBundle::PlanetScope(pkg) => {
-            let nir_key = if pkg.band_path("nir").is_some() { "nir" } else { "NIR" };
-            let r = pkg.band_path(nir_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("PlanetScope bundle is missing NIR band"))?;
-            let g = pkg.band_path("red").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("PlanetScope bundle is missing band 'red'"))?;
-            let b = pkg.band_path("green").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("PlanetScope bundle is missing band 'green'"))?;
+            let nir_key = if pkg.band_path("nir").is_some() {
+                "nir"
+            } else {
+                "NIR"
+            };
+            let r = pkg
+                .band_path(nir_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("PlanetScope bundle is missing NIR band")
+                })?;
+            let g = pkg
+                .band_path("red")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "PlanetScope bundle is missing band 'red'",
+                    )
+                })?;
+            let b = pkg
+                .band_path("green")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "PlanetScope bundle is missing band 'green'",
+                    )
+                })?;
             Ok((r, g, b))
         }
         SensorBundle::Dimap(pkg) => {
-            let nir_key = if pkg.band_path("nir").is_some() { "nir" } else { "NIR" };
-            let r = pkg.band_path(nir_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing NIR band"))?;
-            let g = pkg.band_path("red").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing band 'red'"))?;
-            let b = pkg.band_path("green").map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing band 'green'"))?;
+            let nir_key = if pkg.band_path("nir").is_some() {
+                "nir"
+            } else {
+                "NIR"
+            };
+            let r = pkg
+                .band_path(nir_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing NIR band")
+                })?;
+            let g = pkg
+                .band_path("red")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing band 'red'")
+                })?;
+            let b = pkg
+                .band_path("green")
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err("DIMAP bundle is missing band 'green'")
+                })?;
             Ok((r, g, b))
         }
         SensorBundle::MaxarWorldView(pkg) => {
-            let nir_key = if pkg.band_path("nir").is_some() { "nir" } else { "NIR" };
-            let r_key = if pkg.band_path("red").is_some()   { "red" }   else { "RED"   };
-            let g_key = if pkg.band_path("green").is_some() { "green" } else { "GREEN" };
-            let r = pkg.band_path(nir_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Maxar WorldView bundle is missing a NIR band"))?;
-            let g = pkg.band_path(r_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Maxar WorldView bundle is missing a red band"))?;
-            let b = pkg.band_path(g_key).map(|p| p.to_path_buf())
-                .ok_or_else(|| pyo3::exceptions::PyKeyError::new_err("Maxar WorldView bundle is missing a green band"))?;
+            let nir_key = if pkg.band_path("nir").is_some() {
+                "nir"
+            } else {
+                "NIR"
+            };
+            let r_key = if pkg.band_path("red").is_some() {
+                "red"
+            } else {
+                "RED"
+            };
+            let g_key = if pkg.band_path("green").is_some() {
+                "green"
+            } else {
+                "GREEN"
+            };
+            let r = pkg
+                .band_path(nir_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "Maxar WorldView bundle is missing a NIR band",
+                    )
+                })?;
+            let g = pkg
+                .band_path(r_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "Maxar WorldView bundle is missing a red band",
+                    )
+                })?;
+            let b = pkg
+                .band_path(g_key)
+                .map(|p| p.to_path_buf())
+                .ok_or_else(|| {
+                    pyo3::exceptions::PyKeyError::new_err(
+                        "Maxar WorldView bundle is missing a green band",
+                    )
+                })?;
             Ok((r, g, b))
         }
         SensorBundle::Safe(SafeBundle::Sentinel1(_))
         | SensorBundle::Iceye(_)
         | SensorBundle::Radarsat2(_)
-        | SensorBundle::Rcm(_)
-        => Err(pyo3::exceptions::PyValueError::new_err(
+        | SensorBundle::Rcm(_) => Err(pyo3::exceptions::PyValueError::new_err(
             "false_colour_composite is only supported for optical directory bundles \
              (sentinel2_safe, landsat, planetscope, dimap, maxar_worldview).",
         )),
@@ -10264,7 +12340,12 @@ impl WbEnvironment {
     }
 
     fn license_type(&self) -> String {
-        if self.include_pro && matches!(self.max_tier, wbcore::LicenseTier::Pro | wbcore::LicenseTier::Enterprise) {
+        if self.include_pro
+            && matches!(
+                self.max_tier,
+                wbcore::LicenseTier::Pro | wbcore::LicenseTier::Enterprise
+            )
+        {
             "WbWPro".to_string()
         } else {
             "WbW".to_string()
@@ -10287,9 +12368,7 @@ impl WbEnvironment {
     fn list_tools(&self) -> PyResult<Vec<String>> {
         let tools = self.runtime.list_tools_json();
         let arr = tools.as_array().ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                "tools payload was not a list",
-            )
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>("tools payload was not a list")
         })?;
 
         let mut ids = Vec::with_capacity(arr.len());
@@ -10472,7 +12551,8 @@ impl WbEnvironment {
             .cloned()
             .or_else(|| {
                 if include_locked {
-                    self.runtime.build_catalog_manifests()
+                    self.runtime
+                        .build_catalog_manifests()
                         .into_iter()
                         .find(|m| m.id == tool_id)
                 } else {
@@ -10484,7 +12564,11 @@ impl WbEnvironment {
             return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
                 "no tool with id '{}' found{}",
                 tool_id,
-                if include_locked { " in the build catalog" } else { "; pass include_locked=True to check locked Pro tools" }
+                if include_locked {
+                    " in the build catalog"
+                } else {
+                    "; pass include_locked=True to check locked Pro tools"
+                }
             )));
         };
 
@@ -10530,11 +12614,7 @@ impl WbEnvironment {
     /// Set `include_locked=True` to also include Pro tools that are currently
     /// locked (requires a higher-tier entitlement or include_pro=True).
     #[pyo3(signature = (include_locked=false))]
-    fn list_tools_detailed(
-        &self,
-        include_locked: bool,
-        py: Python<'_>,
-    ) -> PyResult<Py<PyAny>> {
+    fn list_tools_detailed(&self, include_locked: bool, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let visible = self.runtime.visible_manifests();
         let catalog: Vec<_> = if include_locked {
             self.runtime.build_catalog_manifests()
@@ -10604,9 +12684,10 @@ impl WbEnvironment {
         if file_mode.to_ascii_lowercase().contains('m') {
             // Load the raster data into memory_store to enable efficient reuse across tool calls
             let raster = WbRaster::read(&path).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyIOError, _>(
-                    format!("failed to read raster '{}': {e}", path.display())
-                )
+                PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
+                    "failed to read raster '{}': {e}",
+                    path.display()
+                ))
             })?;
             let id = memory_store::put_raster(raster);
             return Ok(Raster {
@@ -10615,7 +12696,10 @@ impl WbEnvironment {
             });
         }
 
-        Ok(Raster { file_path: path, active_band: 0 })
+        Ok(Raster {
+            file_path: path,
+            active_band: 0,
+        })
     }
 
     /// Read a single vector file.
@@ -10628,7 +12712,12 @@ impl WbEnvironment {
     /// - `osmpbf`: {`highways_only`, `named_ways_only`, `polygons_only`, `include_tag_keys`}
     /// - `strict_format_options`: bool
     #[pyo3(signature = (file_name, options=None, file_mode="r"))]
-    fn read_vector(&self, file_name: &str, options: Option<&Bound<'_, PyAny>>, file_mode: &str) -> PyResult<Vector> {
+    fn read_vector(
+        &self,
+        file_name: &str,
+        options: Option<&Bound<'_, PyAny>>,
+        file_mode: &str,
+    ) -> PyResult<Vector> {
         let path = if Path::new(file_name).is_absolute() {
             PathBuf::from(file_name)
         } else {
@@ -10701,9 +12790,7 @@ impl WbEnvironment {
             });
         }
 
-        Ok(Vector {
-            file_path: path,
-        })
+        Ok(Vector { file_path: path })
     }
 
     /// Read a single LiDAR file.
@@ -10742,7 +12829,12 @@ impl WbEnvironment {
     /// The `parallel` flag is currently accepted for API compatibility.
     /// `file_mode` is forwarded to each `read_raster` call (`"r"` = disk-path, `"m"` = memory).
     #[pyo3(signature = (file_names, parallel=true, file_mode="r"))]
-    fn read_rasters(&self, file_names: Vec<String>, parallel: bool, file_mode: &str) -> PyResult<Vec<Raster>> {
+    fn read_rasters(
+        &self,
+        file_names: Vec<String>,
+        parallel: bool,
+        file_mode: &str,
+    ) -> PyResult<Vec<Raster>> {
         let _ = parallel;
         file_names
             .into_iter()
@@ -10768,7 +12860,12 @@ impl WbEnvironment {
 
     /// Read multiple LiDAR files at once.
     #[pyo3(signature = (file_names, parallel=true, file_mode="r"))]
-    fn read_lidars(&self, file_names: Vec<String>, parallel: bool, file_mode: &str) -> PyResult<Vec<Lidar>> {
+    fn read_lidars(
+        &self,
+        file_names: Vec<String>,
+        parallel: bool,
+        file_mode: &str,
+    ) -> PyResult<Vec<Lidar>> {
         let _ = parallel;
         file_names
             .into_iter()
@@ -10785,10 +12882,9 @@ impl WbEnvironment {
         };
 
         if !input_path.exists() {
-            return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(format!(
-                "Bundle path not found: {}",
-                input_path.display()
-            )));
+            return Err(PyErr::new::<pyo3::exceptions::PyFileNotFoundError, _>(
+                format!("Bundle path not found: {}", input_path.display()),
+            ));
         }
 
         let opened = open_sensor_bundle_path(&input_path).map_err(|e| {
@@ -11137,19 +13233,25 @@ impl WbEnvironment {
         let out_dir = output_dir
             .map(|p| {
                 let pb = PathBuf::from(p);
-                if pb.is_absolute() { pb } else { self.working_directory.join(p) }
+                if pb.is_absolute() {
+                    pb
+                } else {
+                    self.working_directory.join(p)
+                }
             })
             .unwrap_or_else(|| self.working_directory.clone());
 
         let mut results = Vec::with_capacity(n);
         for (i, py_raster) in inputs.iter().enumerate() {
             let raster_ref = py_raster.borrow(py);
-            let src_name = raster_ref.file_path
+            let src_name = raster_ref
+                .file_path
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("reprojected")
                 .to_owned();
-            let src_ext = raster_ref.file_path
+            let src_ext = raster_ref
+                .file_path
                 .extension()
                 .and_then(|s| s.to_str())
                 .unwrap_or("tif")
@@ -11169,7 +13271,13 @@ impl WbEnvironment {
                 Some(out_path_s.as_str()),
                 None,
                 resample,
-                None, None, None, None, None, None, None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
                 nodata_policy,
                 antimeridian_policy,
                 grid_size_policy,
@@ -11184,7 +13292,10 @@ impl WbEnvironment {
             drop(raster_ref);
 
             let pct = (i + 1) as f64 / n as f64;
-            emit_callback_event(&callback, json!({"type": "progress", "percent": pct, "item": i, "count": n}))?;
+            emit_callback_event(
+                &callback,
+                json!({"type": "progress", "percent": pct, "item": i, "count": n}),
+            )?;
             results.push(out);
         }
         Ok(results)
@@ -11217,19 +13328,25 @@ impl WbEnvironment {
         let out_dir = output_dir
             .map(|p| {
                 let pb = PathBuf::from(p);
-                if pb.is_absolute() { pb } else { self.working_directory.join(p) }
+                if pb.is_absolute() {
+                    pb
+                } else {
+                    self.working_directory.join(p)
+                }
             })
             .unwrap_or_else(|| self.working_directory.clone());
 
         let mut results = Vec::with_capacity(n);
         for (i, py_vec) in inputs.iter().enumerate() {
             let vec_ref = py_vec.borrow(py);
-            let src_name = vec_ref.file_path
+            let src_name = vec_ref
+                .file_path
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("reprojected")
                 .to_owned();
-            let src_ext = vec_ref.file_path
+            let src_ext = vec_ref
+                .file_path
                 .extension()
                 .and_then(|s| s.to_str())
                 .unwrap_or("shp")
@@ -11262,7 +13379,10 @@ impl WbEnvironment {
             drop(vec_ref);
 
             let pct = (i + 1) as f64 / n as f64;
-            emit_callback_event(&callback, json!({"type": "progress", "percent": pct, "item": i, "count": n}))?;
+            emit_callback_event(
+                &callback,
+                json!({"type": "progress", "percent": pct, "item": i, "count": n}),
+            )?;
             results.push(out);
         }
         Ok(results)
@@ -11293,19 +13413,25 @@ impl WbEnvironment {
         let out_dir = output_dir
             .map(|p| {
                 let pb = PathBuf::from(p);
-                if pb.is_absolute() { pb } else { self.working_directory.join(p) }
+                if pb.is_absolute() {
+                    pb
+                } else {
+                    self.working_directory.join(p)
+                }
             })
             .unwrap_or_else(|| self.working_directory.clone());
 
         let mut results = Vec::with_capacity(n);
         for (i, py_lid) in inputs.iter().enumerate() {
             let lid_ref = py_lid.borrow(py);
-            let src_name = lid_ref.file_path
+            let src_name = lid_ref
+                .file_path
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("reprojected")
                 .to_owned();
-            let src_ext = lid_ref.file_path
+            let src_ext = lid_ref
+                .file_path
                 .extension()
                 .and_then(|s| s.to_str())
                 .unwrap_or("las")
@@ -11336,7 +13462,10 @@ impl WbEnvironment {
             drop(lid_ref);
 
             let pct = (i + 1) as f64 / n as f64;
-            emit_callback_event(&callback, json!({"type": "progress", "percent": pct, "item": i, "count": n}))?;
+            emit_callback_event(
+                &callback,
+                json!({"type": "progress", "percent": pct, "item": i, "count": n}),
+            )?;
             results.push(out);
         }
         Ok(results)
@@ -11687,11 +13816,7 @@ impl WbEnvironment {
                 }
             };
 
-            write_lidar_path_with_options_json(
-                &source_path,
-                &out_path,
-                &options_json,
-            )?;
+            write_lidar_path_with_options_json(&source_path, &out_path, &options_json)?;
 
             if let Some(staged) = staged_input {
                 let _ = std::fs::remove_file(staged);
@@ -11718,9 +13843,7 @@ impl WbEnvironment {
         }
 
         std::fs::write(&out_path, text).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!(
-                "Failed to write text file: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyIOError, _>(format!("Failed to write text file: {e}"))
         })?;
 
         Ok(())
@@ -11738,18 +13861,25 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(String, Vector, String, Option<String>)> {
         let mut args = serde_json::Map::new();
-        args.insert("network".to_string(), json!(network.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "network".to_string(),
+            json!(network.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "qa_report".to_string(),
             json!(self.resolve_output_path_for_wd(Some(qa_report)).unwrap()),
         );
         args.insert(
             "diagnostics_layer".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(diagnostics_layer)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(diagnostics_layer))
+                .unwrap()),
         );
         args.insert(
             "readiness_score".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(readiness_score)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(readiness_score))
+                .unwrap()),
         );
         if let Some(path) = html_report {
             args.insert(
@@ -11783,7 +13913,11 @@ impl WbEnvironment {
         let outputs = response.get("outputs").unwrap_or(&response);
         let html_report_path = outputs
             .get("html_report")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
             .map(|p| PathBuf::from(p).to_string_lossy().to_string());
 
         Ok((
@@ -11821,8 +13955,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Vector, Vector, String, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("network".to_string(), json!(network.file_path.to_string_lossy().to_string()));
-        args.insert("facilities".to_string(), json!(facilities.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "network".to_string(),
+            json!(network.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "facilities".to_string(),
+            json!(facilities.file_path.to_string_lossy().to_string()),
+        );
         if let Some(points) = demand_points {
             args.insert(
                 "demand_points".to_string(),
@@ -11865,19 +14005,27 @@ impl WbEnvironment {
         }
         args.insert(
             "service_areas".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(service_areas)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(service_areas))
+                .unwrap()),
         );
         args.insert(
             "uncovered_demand".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(uncovered_demand)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(uncovered_demand))
+                .unwrap()),
         );
         args.insert(
             "scenario_summary_csv".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(scenario_summary_csv)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(scenario_summary_csv))
+                .unwrap()),
         );
         args.insert(
             "ranked_candidates_csv".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(ranked_candidates_csv)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(ranked_candidates_csv))
+                .unwrap()),
         );
 
         let response = run_tool_response_with_args(
@@ -11909,8 +14057,12 @@ impl WbEnvironment {
         )?;
 
         Ok((
-            Vector { file_path: service_areas_path },
-            Vector { file_path: uncovered_demand_path },
+            Vector {
+                file_path: service_areas_path,
+            },
+            Vector {
+                file_path: uncovered_demand_path,
+            },
             scenario_summary_path.to_string_lossy().to_string(),
             ranked_candidates_path.to_string_lossy().to_string(),
         ))
@@ -11937,7 +14089,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Vector, String, Option<Vector>, String, Option<String>)> {
         let mut args = serde_json::Map::new();
-        args.insert("events".to_string(), json!(events.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "events".to_string(),
+            json!(events.file_path.to_string_lossy().to_string()),
+        );
         args.insert("route_id_field".to_string(), json!(route_id_field));
         args.insert("from_measure_field".to_string(), json!(from_measure_field));
         args.insert("to_measure_field".to_string(), json!(to_measure_field));
@@ -11949,7 +14104,9 @@ impl WbEnvironment {
         }
         args.insert(
             "governed_events".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(governed_events)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(governed_events))
+                .unwrap()),
         );
         args.insert(
             "issues_csv".to_string(),
@@ -11963,7 +14120,9 @@ impl WbEnvironment {
         }
         args.insert(
             "governance_report".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(governance_report)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(governance_report))
+                .unwrap()),
         );
         if let Some(path) = remediation_queue_csv {
             args.insert(
@@ -11997,15 +14156,27 @@ impl WbEnvironment {
         let outputs = response.get("outputs").unwrap_or(&response);
         let corrected_events_path = outputs
             .get("corrected_events")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
-            .map(|p| Vector { file_path: PathBuf::from(p) });
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
+            .map(|p| Vector {
+                file_path: PathBuf::from(p),
+            });
         let remediation_queue_path = outputs
             .get("remediation_queue_csv")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
             .map(|p| PathBuf::from(p).to_string_lossy().to_string());
 
         Ok((
-            Vector { file_path: governed_events_path },
+            Vector {
+                file_path: governed_events_path,
+            },
             issues_csv_path.to_string_lossy().to_string(),
             corrected_events_path,
             governance_report_path.to_string_lossy().to_string(),
@@ -12029,7 +14200,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Vector, String, String, Option<String>)> {
         let mut args = serde_json::Map::new();
-        args.insert("corridors".to_string(), json!(corridors.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "corridors".to_string(),
+            json!(corridors.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "encroachments".to_string(),
             json!(encroachments.file_path.to_string_lossy().to_string()),
@@ -12053,7 +14227,9 @@ impl WbEnvironment {
         );
         args.insert(
             "planning_report".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(planning_report)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(planning_report))
+                .unwrap()),
         );
         if let Some(path) = response_queue_csv {
             args.insert(
@@ -12087,11 +14263,17 @@ impl WbEnvironment {
         let outputs = response.get("outputs").unwrap_or(&response);
         let response_queue_path = outputs
             .get("response_queue_csv")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
             .map(|p| PathBuf::from(p).to_string_lossy().to_string());
 
         Ok((
-            Vector { file_path: hotspots_path },
+            Vector {
+                file_path: hotspots_path,
+            },
             priority_csv_path.to_string_lossy().to_string(),
             planning_report_path.to_string_lossy().to_string(),
             response_queue_path,
@@ -12114,15 +14296,30 @@ impl WbEnvironment {
         remediation_queue_csv: Option<&str>,
         html_report: Option<&str>,
         callback: Option<Py<PyAny>>,
-    ) -> PyResult<(Vector, String, String, Option<Vector>, Option<String>, Option<String>)> {
+    ) -> PyResult<(
+        Vector,
+        String,
+        String,
+        Option<Vector>,
+        Option<String>,
+        Option<String>,
+    )> {
         let mut args = serde_json::Map::new();
-        args.insert("parcels".to_string(), json!(parcels.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "parcels".to_string(),
+            json!(parcels.file_path.to_string_lossy().to_string()),
+        );
         args.insert("min_sliver_area".to_string(), json!(min_sliver_area));
         args.insert("auto_fix".to_string(), json!(auto_fix));
-        args.insert("jurisdiction_template".to_string(), json!(jurisdiction_template));
+        args.insert(
+            "jurisdiction_template".to_string(),
+            json!(jurisdiction_template),
+        );
         args.insert(
             "topology_violations".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(topology_violations)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(topology_violations))
+                .unwrap()),
         );
         args.insert(
             "issues_csv".to_string(),
@@ -12130,7 +14327,9 @@ impl WbEnvironment {
         );
         args.insert(
             "compliance_report".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(compliance_report)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(compliance_report))
+                .unwrap()),
         );
         if let Some(path) = corrected_parcels {
             args.insert(
@@ -12176,15 +14375,29 @@ impl WbEnvironment {
         let outputs = response.get("outputs").unwrap_or(&response);
         let corrected_parcels_path = outputs
             .get("corrected_parcels")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
-            .map(|p| Vector { file_path: PathBuf::from(p) });
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
+            .map(|p| Vector {
+                file_path: PathBuf::from(p),
+            });
         let remediation_queue_path = outputs
             .get("remediation_queue_csv")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
             .map(|p| PathBuf::from(p).to_string_lossy().to_string());
         let html_report_path = outputs
             .get("html_report")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
             .map(|p| PathBuf::from(p).to_string_lossy().to_string());
 
         Ok((
@@ -12218,7 +14431,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Vector, Vector, String, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("network".to_string(), json!(network.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "network".to_string(),
+            json!(network.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "critical_facilities".to_string(),
             json!(critical_facilities.file_path.to_string_lossy().to_string()),
@@ -12237,19 +14453,27 @@ impl WbEnvironment {
         }
         args.insert(
             "baseline_service_areas".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(baseline_service_areas)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(baseline_service_areas))
+                .unwrap()),
         );
         args.insert(
             "worst_case_service_areas".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(worst_case_service_areas)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(worst_case_service_areas))
+                .unwrap()),
         );
         args.insert(
             "scenario_summary_csv".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(scenario_summary_csv)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(scenario_summary_csv))
+                .unwrap()),
         );
         args.insert(
             "simulation_report".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(simulation_report)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(simulation_report))
+                .unwrap()),
         );
 
         let response = run_tool_response_with_args(
@@ -12311,7 +14535,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Vector, Vector, String, String, Option<String>)> {
         let mut args = serde_json::Map::new();
-        args.insert("network".to_string(), json!(network.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "network".to_string(),
+            json!(network.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "sites_existing".to_string(),
             json!(sites_existing.file_path.to_string_lossy().to_string()),
@@ -12333,19 +14560,27 @@ impl WbEnvironment {
         args.insert("ring_costs".to_string(), json!(ring_costs));
         args.insert(
             "catchments_output".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(catchments_output)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(catchments_output))
+                .unwrap()),
         );
         args.insert(
             "overlap_analysis_output".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(overlap_analysis_output)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(overlap_analysis_output))
+                .unwrap()),
         );
         args.insert(
             "candidate_rank_csv".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(candidate_rank_csv)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(candidate_rank_csv))
+                .unwrap()),
         );
         args.insert(
             "executive_summary_json".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(executive_summary_json)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(executive_summary_json))
+                .unwrap()),
         );
         if let Some(path) = market_action_queue_csv {
             args.insert(
@@ -12384,7 +14619,11 @@ impl WbEnvironment {
         let outputs = response.get("outputs").unwrap_or(&response);
         let market_action_queue_path = outputs
             .get("market_action_queue_csv")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
             .map(|p| PathBuf::from(p).to_string_lossy().to_string());
 
         Ok((
@@ -12418,25 +14657,42 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Vector, String, String, String, Option<String>)> {
         let mut args = serde_json::Map::new();
-        args.insert("network".to_string(), json!(network.file_path.to_string_lossy().to_string()));
-        args.insert("depots".to_string(), json!(depots.file_path.to_string_lossy().to_string()));
-        args.insert("stops".to_string(), json!(stops.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "network".to_string(),
+            json!(network.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "depots".to_string(),
+            json!(depots.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "stops".to_string(),
+            json!(stops.file_path.to_string_lossy().to_string()),
+        );
         args.insert("vehicles_csv".to_string(), json!(vehicles_csv));
         args.insert(
             "routes_output".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(routes_output)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(routes_output))
+                .unwrap()),
         );
         args.insert(
             "assignment_csv_output".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(assignment_csv_output)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(assignment_csv_output))
+                .unwrap()),
         );
         args.insert(
             "route_kpis_csv_output".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(route_kpis_csv_output)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(route_kpis_csv_output))
+                .unwrap()),
         );
         args.insert(
             "exceptions_csv_output".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(exceptions_csv_output)).unwrap()),
+            json!(self
+                .resolve_output_path_for_wd(Some(exceptions_csv_output))
+                .unwrap()),
         );
         args.insert("objective".to_string(), json!(objective));
         if let Some(path) = restrictions {
@@ -12479,11 +14735,17 @@ impl WbEnvironment {
         let outputs = response.get("outputs").unwrap_or(&response);
         let html_report_path = outputs
             .get("html_report")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
             .map(|p| PathBuf::from(p).to_string_lossy().to_string());
 
         Ok((
-            Vector { file_path: routes_path },
+            Vector {
+                file_path: routes_path,
+            },
             assignment_csv,
             route_kpis_csv,
             exceptions_csv,
@@ -12563,7 +14825,10 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "output_prefix".to_string(),
             json!(output_prefix_path.to_string_lossy().to_string()),
@@ -12573,17 +14838,32 @@ impl WbEnvironment {
         args.insert("swath_width".to_string(), json!(swath_width));
         args.insert("header_field_name".to_string(), json!(header_field_name));
         args.insert("use_field_aliases".to_string(), json!(use_field_aliases));
-        args.insert("target_moisture_pct".to_string(), json!(target_moisture_pct));
+        args.insert(
+            "target_moisture_pct".to_string(),
+            json!(target_moisture_pct),
+        );
         args.insert("min_speed_kmh".to_string(), json!(min_speed_kmh));
         args.insert("max_speed_kmh".to_string(), json!(max_speed_kmh));
-        args.insert("max_heading_change_deg".to_string(), json!(max_heading_change_deg));
-        args.insert("lag_correction_mode".to_string(), json!(lag_correction_mode));
+        args.insert(
+            "max_heading_change_deg".to_string(),
+            json!(max_heading_change_deg),
+        );
+        args.insert(
+            "lag_correction_mode".to_string(),
+            json!(lag_correction_mode),
+        );
         args.insert("lag_distance_m".to_string(), json!(lag_distance_m));
         args.insert("filtering_mode".to_string(), json!(filtering_mode));
-        args.insert("robust_mad_threshold".to_string(), json!(robust_mad_threshold));
+        args.insert(
+            "robust_mad_threshold".to_string(),
+            json!(robust_mad_threshold),
+        );
         args.insert("standardize".to_string(), json!(standardize));
         args.insert("ignore_zeros".to_string(), json!(ignore_zeros));
-        args.insert("max_change_in_heading".to_string(), json!(max_change_in_heading));
+        args.insert(
+            "max_change_in_heading".to_string(),
+            json!(max_change_in_heading),
+        );
 
         if let Some(v) = edge_radius {
             args.insert("edge_radius".to_string(), json!(v));
@@ -12624,7 +14904,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("yield_data_conditioning_and_qa", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "yield_data_conditioning_and_qa",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -12636,17 +14920,36 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let qa_flags = extract_output_path_by_key("yield_data_conditioning_and_qa", &response, "qa_flags")?;
-        let clean_points = extract_output_path_by_key("yield_data_conditioning_and_qa", &response, "clean_points")?;
-        let clean_map = extract_output_path_by_key("yield_data_conditioning_and_qa", &response, "clean_map")?;
-        let confidence_points = extract_output_path_by_key("yield_data_conditioning_and_qa", &response, "confidence_points")?;
-        let summary = extract_output_string_by_key("yield_data_conditioning_and_qa", &response, "summary")?;
+        let qa_flags =
+            extract_output_path_by_key("yield_data_conditioning_and_qa", &response, "qa_flags")?;
+        let clean_points = extract_output_path_by_key(
+            "yield_data_conditioning_and_qa",
+            &response,
+            "clean_points",
+        )?;
+        let clean_map =
+            extract_output_path_by_key("yield_data_conditioning_and_qa", &response, "clean_map")?;
+        let confidence_points = extract_output_path_by_key(
+            "yield_data_conditioning_and_qa",
+            &response,
+            "confidence_points",
+        )?;
+        let summary =
+            extract_output_string_by_key("yield_data_conditioning_and_qa", &response, "summary")?;
 
         Ok((
-            Vector { file_path: qa_flags },
-            Vector { file_path: clean_points },
-            Vector { file_path: clean_map },
-            Vector { file_path: confidence_points },
+            Vector {
+                file_path: qa_flags,
+            },
+            Vector {
+                file_path: clean_points,
+            },
+            Vector {
+                file_path: clean_map,
+            },
+            Vector {
+                file_path: confidence_points,
+            },
             summary,
         ))
     }
@@ -12663,9 +14966,15 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Raster, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("input_stack".to_string(), json!(input_stack.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input_stack".to_string(),
+            json!(input_stack.file_path.to_string_lossy().to_string()),
+        );
         if let Some(qa) = qa_stack {
-            args.insert("qa_stack".to_string(), json!(qa.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "qa_stack".to_string(),
+                json!(qa.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("algorithm_mode".to_string(), json!(algorithm_mode));
         args.insert("min_observations".to_string(), json!(min_observations));
@@ -12681,7 +14990,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("time_series_change_intelligence", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "time_series_change_intelligence",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -12693,17 +15006,46 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let trend_path = extract_output_path_by_key("time_series_change_intelligence", &response, "trend_change")?;
-        let count_path = extract_output_path_by_key("time_series_change_intelligence", &response, "breakpoint_count")?;
-        let date_path = extract_output_path_by_key("time_series_change_intelligence", &response, "breakpoint_date")?;
-        let conf_path = extract_output_path_by_key("time_series_change_intelligence", &response, "change_confidence")?;
-        let summary_path = extract_output_path_by_key("time_series_change_intelligence", &response, "summary")?;
+        let trend_path = extract_output_path_by_key(
+            "time_series_change_intelligence",
+            &response,
+            "trend_change",
+        )?;
+        let count_path = extract_output_path_by_key(
+            "time_series_change_intelligence",
+            &response,
+            "breakpoint_count",
+        )?;
+        let date_path = extract_output_path_by_key(
+            "time_series_change_intelligence",
+            &response,
+            "breakpoint_date",
+        )?;
+        let conf_path = extract_output_path_by_key(
+            "time_series_change_intelligence",
+            &response,
+            "change_confidence",
+        )?;
+        let summary_path =
+            extract_output_path_by_key("time_series_change_intelligence", &response, "summary")?;
 
         Ok((
-            Raster { file_path: trend_path, active_band: input_stack.active_band },
-            Raster { file_path: count_path, active_band: input_stack.active_band },
-            Raster { file_path: date_path, active_band: input_stack.active_band },
-            Raster { file_path: conf_path, active_band: input_stack.active_band },
+            Raster {
+                file_path: trend_path,
+                active_band: input_stack.active_band,
+            },
+            Raster {
+                file_path: count_path,
+                active_band: input_stack.active_band,
+            },
+            Raster {
+                file_path: date_path,
+                active_band: input_stack.active_band,
+            },
+            Raster {
+                file_path: conf_path,
+                active_band: input_stack.active_band,
+            },
             summary_path.to_string_lossy().to_string(),
         ))
     }
@@ -12726,12 +15068,29 @@ impl WbEnvironment {
         z_factor: f64,
         output_prefix: Option<&str>,
         callback: Option<Py<PyAny>>,
-    ) -> PyResult<(Raster, Raster, Raster, Option<Raster>, String, String, String)> {
+    ) -> PyResult<(
+        Raster,
+        Raster,
+        Raster,
+        Option<Raster>,
+        String,
+        String,
+        String,
+    )> {
         let mut args = serde_json::Map::new();
-        args.insert("input_sar".to_string(), json!(input_sar.file_path.to_string_lossy().to_string()));
-        args.insert("input_dem".to_string(), json!(input_dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input_sar".to_string(),
+            json!(input_sar.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input_dem".to_string(),
+            json!(input_dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(pair) = pair_sar {
-            args.insert("pair_sar".to_string(), json!(pair.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "pair_sar".to_string(),
+                json!(pair.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(v) = input_look_angle_deg {
             args.insert("input_look_angle_deg".to_string(), json!(v));
@@ -12739,11 +15098,23 @@ impl WbEnvironment {
         if let Some(v) = pair_look_angle_deg {
             args.insert("pair_look_angle_deg".to_string(), json!(v));
         }
-        args.insert("max_look_angle_diff_deg".to_string(), json!(max_look_angle_diff_deg));
-        args.insert("auto_coregister_pair".to_string(), json!(auto_coregister_pair));
-        args.insert("coreg_max_offset_px".to_string(), json!(coreg_max_offset_px));
+        args.insert(
+            "max_look_angle_diff_deg".to_string(),
+            json!(max_look_angle_diff_deg),
+        );
+        args.insert(
+            "auto_coregister_pair".to_string(),
+            json!(auto_coregister_pair),
+        );
+        args.insert(
+            "coreg_max_offset_px".to_string(),
+            json!(coreg_max_offset_px),
+        );
         args.insert("coreg_decimation".to_string(), json!(coreg_decimation));
-        args.insert("coreg_min_overlap_fraction".to_string(), json!(coreg_min_overlap_fraction));
+        args.insert(
+            "coreg_min_overlap_fraction".to_string(),
+            json!(coreg_min_overlap_fraction),
+        );
         args.insert("speckle_window".to_string(), json!(speckle_window));
         args.insert("z_factor".to_string(), json!(z_factor));
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
@@ -12770,24 +15141,50 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let calibrated = extract_output_path_by_key("sar_analysis_readiness", &response, "sar_backscatter_calibrated")?;
-        let speckle = extract_output_path_by_key("sar_analysis_readiness", &response, "speckle_filtered")?;
+        let calibrated = extract_output_path_by_key(
+            "sar_analysis_readiness",
+            &response,
+            "sar_backscatter_calibrated",
+        )?;
+        let speckle =
+            extract_output_path_by_key("sar_analysis_readiness", &response, "speckle_filtered")?;
         let rtc = extract_output_path_by_key("sar_analysis_readiness", &response, "rtc_factor")?;
         let coherence_proxy = {
             let outputs = response.get("outputs").unwrap_or(&response);
             outputs
-            .get("coherence_proxy")
-                .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
-                .map(|p| Raster { file_path: PathBuf::from(p), active_band: input_sar.active_band })
+                .get("coherence_proxy")
+                .and_then(|v| {
+                    v.get("path")
+                        .and_then(serde_json::Value::as_str)
+                        .or_else(|| v.as_str())
+                })
+                .map(|p| Raster {
+                    file_path: PathBuf::from(p),
+                    active_band: input_sar.active_band,
+                })
         };
         let summary = extract_output_path_by_key("sar_analysis_readiness", &response, "summary")?;
-        let readiness_rule_trace = extract_output_path_by_key("sar_analysis_readiness", &response, "readiness_rule_trace")?;
-        let readiness_blockers = extract_output_path_by_key("sar_analysis_readiness", &response, "readiness_blockers")?;
+        let readiness_rule_trace = extract_output_path_by_key(
+            "sar_analysis_readiness",
+            &response,
+            "readiness_rule_trace",
+        )?;
+        let readiness_blockers =
+            extract_output_path_by_key("sar_analysis_readiness", &response, "readiness_blockers")?;
 
         Ok((
-            Raster { file_path: calibrated, active_band: input_sar.active_band },
-            Raster { file_path: speckle, active_band: input_sar.active_band },
-            Raster { file_path: rtc, active_band: input_sar.active_band },
+            Raster {
+                file_path: calibrated,
+                active_band: input_sar.active_band,
+            },
+            Raster {
+                file_path: speckle,
+                active_band: input_sar.active_band,
+            },
+            Raster {
+                file_path: rtc,
+                active_band: input_sar.active_band,
+            },
             coherence_proxy,
             summary.to_string_lossy().to_string(),
             readiness_rule_trace.to_string_lossy().to_string(),
@@ -12810,12 +15207,21 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Raster, String, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("reference_sar".to_string(), json!(reference_sar.file_path.to_string_lossy().to_string()));
-        args.insert("moving_sar".to_string(), json!(moving_sar.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "reference_sar".to_string(),
+            json!(reference_sar.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "moving_sar".to_string(),
+            json!(moving_sar.file_path.to_string_lossy().to_string()),
+        );
         args.insert("coreg_mode".to_string(), json!(coreg_mode));
         args.insert("max_offset_px".to_string(), json!(max_offset_px));
         args.insert("decimation".to_string(), json!(decimation));
-        args.insert("min_overlap_fraction".to_string(), json!(min_overlap_fraction));
+        args.insert(
+            "min_overlap_fraction".to_string(),
+            json!(min_overlap_fraction),
+        );
         args.insert("resample_method".to_string(), json!(resample_method));
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
@@ -12841,16 +15247,26 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let aligned = extract_output_path_by_key("sar_coregistration", &response, "moving_aligned")?;
+        let aligned =
+            extract_output_path_by_key("sar_coregistration", &response, "moving_aligned")?;
         let offset_x = extract_output_path_by_key("sar_coregistration", &response, "offset_x")?;
         let offset_y = extract_output_path_by_key("sar_coregistration", &response, "offset_y")?;
         let transform = extract_output_path_by_key("sar_coregistration", &response, "transform")?;
         let summary = extract_output_path_by_key("sar_coregistration", &response, "summary")?;
 
         Ok((
-            Raster { file_path: aligned, active_band: moving_sar.active_band },
-            Raster { file_path: offset_x, active_band: moving_sar.active_band },
-            Raster { file_path: offset_y, active_band: moving_sar.active_band },
+            Raster {
+                file_path: aligned,
+                active_band: moving_sar.active_band,
+            },
+            Raster {
+                file_path: offset_x,
+                active_band: moving_sar.active_band,
+            },
+            Raster {
+                file_path: offset_y,
+                active_band: moving_sar.active_band,
+            },
             transform.to_string_lossy().to_string(),
             summary.to_string_lossy().to_string(),
         ))
@@ -12878,18 +15294,45 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Option<Raster>, Option<Raster>, Option<Raster>, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("reference_sar".to_string(), json!(reference_sar.file_path.to_string_lossy().to_string()));
-        args.insert("moving_sar".to_string(), json!(moving_sar.file_path.to_string_lossy().to_string()));
-        args.insert("auto_coregister_pair".to_string(), json!(auto_coregister_pair));
-        args.insert("assume_prealigned_pair".to_string(), json!(assume_prealigned_pair));
+        args.insert(
+            "reference_sar".to_string(),
+            json!(reference_sar.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "moving_sar".to_string(),
+            json!(moving_sar.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "auto_coregister_pair".to_string(),
+            json!(auto_coregister_pair),
+        );
+        args.insert(
+            "assume_prealigned_pair".to_string(),
+            json!(assume_prealigned_pair),
+        );
         args.insert("coreg_mode".to_string(), json!(coreg_mode));
-        args.insert("coreg_max_offset_px".to_string(), json!(coreg_max_offset_px));
+        args.insert(
+            "coreg_max_offset_px".to_string(),
+            json!(coreg_max_offset_px),
+        );
         args.insert("coreg_decimation".to_string(), json!(coreg_decimation));
-        args.insert("coreg_min_overlap_fraction".to_string(), json!(coreg_min_overlap_fraction));
-        args.insert("performance_profile".to_string(), json!(performance_profile));
-        args.insert("coherence_decimation".to_string(), json!(coherence_decimation));
+        args.insert(
+            "coreg_min_overlap_fraction".to_string(),
+            json!(coreg_min_overlap_fraction),
+        );
+        args.insert(
+            "performance_profile".to_string(),
+            json!(performance_profile),
+        );
+        args.insert(
+            "coherence_decimation".to_string(),
+            json!(coherence_decimation),
+        );
         args.insert("coherence_window".to_string(), json!(coherence_window));
-        args.insert("write_interferogram".to_string(), json!(write_interferogram));
+        args.insert(
+            "write_interferogram".to_string(),
+            json!(write_interferogram),
+        );
         args.insert("write_coherence".to_string(), json!(write_coherence));
         args.insert("write_valid_mask".to_string(), json!(write_valid_mask));
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
@@ -12919,17 +15362,39 @@ impl WbEnvironment {
         let outputs = response.get("outputs").unwrap_or(&response);
         let interferogram = outputs
             .get("interferogram")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
-            .map(|p| Raster { file_path: PathBuf::from(p), active_band: reference_sar.active_band });
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
+            .map(|p| Raster {
+                file_path: PathBuf::from(p),
+                active_band: reference_sar.active_band,
+            });
         let coherence = outputs
             .get("coherence")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
-            .map(|p| Raster { file_path: PathBuf::from(p), active_band: reference_sar.active_band });
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
+            .map(|p| Raster {
+                file_path: PathBuf::from(p),
+                active_band: reference_sar.active_band,
+            });
         let valid_mask = outputs
             .get("valid_mask")
-            .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
-            .map(|p| Raster { file_path: PathBuf::from(p), active_band: reference_sar.active_band });
-        let summary = extract_output_path_by_key("sar_interferogram_coherence", &response, "summary")?;
+            .and_then(|v| {
+                v.get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| v.as_str())
+            })
+            .map(|p| Raster {
+                file_path: PathBuf::from(p),
+                active_band: reference_sar.active_band,
+            });
+        let summary =
+            extract_output_path_by_key("sar_interferogram_coherence", &response, "summary")?;
 
         Ok((
             interferogram,
@@ -12950,9 +15415,18 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Vector, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
-        args.insert("wetland_mask".to_string(), json!(wetland_mask.file_path.to_string_lossy().to_string()));
-        args.insert("max_polygon_features".to_string(), json!(max_polygon_features));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "wetland_mask".to_string(),
+            json!(wetland_mask.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "max_polygon_features".to_string(),
+            json!(max_polygon_features),
+        );
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
         }
@@ -12965,7 +15439,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("wetland_hydrogeomorphic_classification", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "wetland_hydrogeomorphic_classification",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -12977,15 +15455,37 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let cls = extract_output_path_by_key("wetland_hydrogeomorphic_classification", &response, "hgm_class")?;
-        let polys = extract_output_path_by_key("wetland_hydrogeomorphic_classification", &response, "wetland_polygons")?;
-        let conf = extract_output_path_by_key("wetland_hydrogeomorphic_classification", &response, "confidence")?;
-        let summary = extract_output_path_by_key("wetland_hydrogeomorphic_classification", &response, "summary")?;
+        let cls = extract_output_path_by_key(
+            "wetland_hydrogeomorphic_classification",
+            &response,
+            "hgm_class",
+        )?;
+        let polys = extract_output_path_by_key(
+            "wetland_hydrogeomorphic_classification",
+            &response,
+            "wetland_polygons",
+        )?;
+        let conf = extract_output_path_by_key(
+            "wetland_hydrogeomorphic_classification",
+            &response,
+            "confidence",
+        )?;
+        let summary = extract_output_path_by_key(
+            "wetland_hydrogeomorphic_classification",
+            &response,
+            "summary",
+        )?;
 
         Ok((
-            Raster { file_path: cls, active_band: dem.active_band },
+            Raster {
+                file_path: cls,
+                active_band: dem.active_band,
+            },
             Vector { file_path: polys },
-            Raster { file_path: conf, active_band: dem.active_band },
+            Raster {
+                file_path: conf,
+                active_band: dem.active_band,
+            },
             summary.to_string_lossy().to_string(),
         ))
     }
@@ -13002,11 +15502,23 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Vector, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("baseline_urban".to_string(), json!(baseline_urban.file_path.to_string_lossy().to_string()));
-        args.insert("scenario_urban".to_string(), json!(scenario_urban.file_path.to_string_lossy().to_string()));
-        args.insert("streams".to_string(), json!(streams.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "baseline_urban".to_string(),
+            json!(baseline_urban.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "scenario_urban".to_string(),
+            json!(scenario_urban.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "streams".to_string(),
+            json!(streams.file_path.to_string_lossy().to_string()),
+        );
         if let Some(hs) = habitat_sensitivity {
-            args.insert("habitat_sensitivity".to_string(), json!(hs.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "habitat_sensitivity".to_string(),
+                json!(hs.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
@@ -13020,7 +15532,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("urban_expansion_impact_assessment", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "urban_expansion_impact_assessment",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -13032,15 +15548,36 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let impact = extract_output_path_by_key("urban_expansion_impact_assessment", &response, "impact_severity")?;
-        let affected = extract_output_path_by_key("urban_expansion_impact_assessment", &response, "affected_streams")?;
-        let habitat = extract_output_path_by_key("urban_expansion_impact_assessment", &response, "habitat_loss")?;
-        let summary = extract_output_path_by_key("urban_expansion_impact_assessment", &response, "summary")?;
+        let impact = extract_output_path_by_key(
+            "urban_expansion_impact_assessment",
+            &response,
+            "impact_severity",
+        )?;
+        let affected = extract_output_path_by_key(
+            "urban_expansion_impact_assessment",
+            &response,
+            "affected_streams",
+        )?;
+        let habitat = extract_output_path_by_key(
+            "urban_expansion_impact_assessment",
+            &response,
+            "habitat_loss",
+        )?;
+        let summary =
+            extract_output_path_by_key("urban_expansion_impact_assessment", &response, "summary")?;
 
         Ok((
-            Raster { file_path: impact, active_band: baseline_urban.active_band },
-            Vector { file_path: affected },
-            Raster { file_path: habitat, active_band: baseline_urban.active_band },
+            Raster {
+                file_path: impact,
+                active_band: baseline_urban.active_band,
+            },
+            Vector {
+                file_path: affected,
+            },
+            Raster {
+                file_path: habitat,
+                active_band: baseline_urban.active_band,
+            },
             summary.to_string_lossy().to_string(),
         ))
     }
@@ -13061,24 +15598,45 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Vector, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = transmission_lines {
-            args.insert("transmission_lines".to_string(), json!(v.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "transmission_lines".to_string(),
+                json!(v.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(v) = substations {
-            args.insert("substations".to_string(), json!(v.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "substations".to_string(),
+                json!(v.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(v) = road_network {
-            args.insert("road_network".to_string(), json!(v.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "road_network".to_string(),
+                json!(v.file_path.to_string_lossy().to_string()),
+            );
         }
-        args.insert("infra_weight_profile".to_string(), json!(infra_weight_profile));
-        args.insert("candidate_threshold".to_string(), json!(candidate_threshold));
-        args.insert("max_candidate_sites".to_string(), json!(max_candidate_sites));
+        args.insert(
+            "infra_weight_profile".to_string(),
+            json!(infra_weight_profile),
+        );
+        args.insert(
+            "candidate_threshold".to_string(),
+            json!(candidate_threshold),
+        );
+        args.insert(
+            "max_candidate_sites".to_string(),
+            json!(max_candidate_sites),
+        );
         if let Some(raw) = sweep_spec_json {
             let parsed: JsonValue = serde_json::from_str(raw).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    format!("invalid sweep_spec_json; expected JSON object string: {e}"),
-                )
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "invalid sweep_spec_json; expected JSON object string: {e}"
+                ))
             })?;
             args.insert("sweep_spec".to_string(), parsed);
         }
@@ -13094,7 +15652,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("solar_site_suitability_analysis", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "solar_site_suitability_analysis",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -13106,14 +15668,33 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let score = extract_output_path_by_key("solar_site_suitability_analysis", &response, "suitability_score")?;
-        let impact = extract_output_path_by_key("solar_site_suitability_analysis", &response, "visual_impact")?;
-        let sites = extract_output_path_by_key("solar_site_suitability_analysis", &response, "candidate_sites")?;
-        let summary = extract_output_path_by_key("solar_site_suitability_analysis", &response, "summary")?;
+        let score = extract_output_path_by_key(
+            "solar_site_suitability_analysis",
+            &response,
+            "suitability_score",
+        )?;
+        let impact = extract_output_path_by_key(
+            "solar_site_suitability_analysis",
+            &response,
+            "visual_impact",
+        )?;
+        let sites = extract_output_path_by_key(
+            "solar_site_suitability_analysis",
+            &response,
+            "candidate_sites",
+        )?;
+        let summary =
+            extract_output_path_by_key("solar_site_suitability_analysis", &response, "summary")?;
 
         Ok((
-            Raster { file_path: score, active_band: dem.active_band },
-            Raster { file_path: impact, active_band: dem.active_band },
+            Raster {
+                file_path: score,
+                active_band: dem.active_band,
+            },
+            Raster {
+                file_path: impact,
+                active_band: dem.active_band,
+            },
             Vector { file_path: sites },
             summary.to_string_lossy().to_string(),
         ))
@@ -13134,7 +15715,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Vector, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "start_features".to_string(),
             json!(start_features.file_path.to_string_lossy().to_string()),
@@ -13144,10 +15728,16 @@ impl WbEnvironment {
             json!(end_features.file_path.to_string_lossy().to_string()),
         );
         if let Some(c) = constraints {
-            args.insert("constraints".to_string(), json!(c.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "constraints".to_string(),
+                json!(c.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("cost_profile".to_string(), json!(cost_profile));
-        args.insert("terminal_anchor_strategy".to_string(), json!(terminal_anchor_strategy));
+        args.insert(
+            "terminal_anchor_strategy".to_string(),
+            json!(terminal_anchor_strategy),
+        );
         args.insert("corridor_tolerance".to_string(), json!(corridor_tolerance));
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
@@ -13161,7 +15751,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("corridor_mapping_intelligence", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "corridor_mapping_intelligence",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -13173,17 +15767,42 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let cost_surface = extract_output_path_by_key("corridor_mapping_intelligence", &response, "cost_surface")?;
-        let accumulated_cost = extract_output_path_by_key("corridor_mapping_intelligence", &response, "accumulated_cost")?;
-        let optimal_route = extract_output_path_by_key("corridor_mapping_intelligence", &response, "optimal_route")?;
-        let corridor_suitability = extract_output_path_by_key("corridor_mapping_intelligence", &response, "corridor_suitability")?;
-        let summary = extract_output_path_by_key("corridor_mapping_intelligence", &response, "summary")?;
+        let cost_surface =
+            extract_output_path_by_key("corridor_mapping_intelligence", &response, "cost_surface")?;
+        let accumulated_cost = extract_output_path_by_key(
+            "corridor_mapping_intelligence",
+            &response,
+            "accumulated_cost",
+        )?;
+        let optimal_route = extract_output_path_by_key(
+            "corridor_mapping_intelligence",
+            &response,
+            "optimal_route",
+        )?;
+        let corridor_suitability = extract_output_path_by_key(
+            "corridor_mapping_intelligence",
+            &response,
+            "corridor_suitability",
+        )?;
+        let summary =
+            extract_output_path_by_key("corridor_mapping_intelligence", &response, "summary")?;
 
         Ok((
-            Raster { file_path: cost_surface, active_band: dem.active_band },
-            Raster { file_path: accumulated_cost, active_band: dem.active_band },
-            Vector { file_path: optimal_route },
-            Raster { file_path: corridor_suitability, active_band: dem.active_band },
+            Raster {
+                file_path: cost_surface,
+                active_band: dem.active_band,
+            },
+            Raster {
+                file_path: accumulated_cost,
+                active_band: dem.active_band,
+            },
+            Vector {
+                file_path: optimal_route,
+            },
+            Raster {
+                file_path: corridor_suitability,
+                active_band: dem.active_band,
+            },
             summary.to_string_lossy().to_string(),
         ))
     }
@@ -13201,12 +15820,21 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Raster, Vector, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(rain) = rainfall_intensity {
-            args.insert("rainfall_intensity".to_string(), json!(rain.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "rainfall_intensity".to_string(),
+                json!(rain.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("profile".to_string(), json!(profile));
-        args.insert("susceptibility_threshold".to_string(), json!(susceptibility_threshold));
+        args.insert(
+            "susceptibility_threshold".to_string(),
+            json!(susceptibility_threshold),
+        );
         args.insert("max_zone_features".to_string(), json!(max_zone_features));
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
@@ -13220,7 +15848,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("landslide_susceptibility_assessment", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "landslide_susceptibility_assessment",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -13232,16 +15864,45 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let susceptibility = extract_output_path_by_key("landslide_susceptibility_assessment", &response, "susceptibility")?;
-        let trigger = extract_output_path_by_key("landslide_susceptibility_assessment", &response, "trigger_pressure")?;
-        let confidence = extract_output_path_by_key("landslide_susceptibility_assessment", &response, "confidence")?;
-        let zones = extract_output_path_by_key("landslide_susceptibility_assessment", &response, "risk_zones")?;
-        let summary = extract_output_path_by_key("landslide_susceptibility_assessment", &response, "summary")?;
+        let susceptibility = extract_output_path_by_key(
+            "landslide_susceptibility_assessment",
+            &response,
+            "susceptibility",
+        )?;
+        let trigger = extract_output_path_by_key(
+            "landslide_susceptibility_assessment",
+            &response,
+            "trigger_pressure",
+        )?;
+        let confidence = extract_output_path_by_key(
+            "landslide_susceptibility_assessment",
+            &response,
+            "confidence",
+        )?;
+        let zones = extract_output_path_by_key(
+            "landslide_susceptibility_assessment",
+            &response,
+            "risk_zones",
+        )?;
+        let summary = extract_output_path_by_key(
+            "landslide_susceptibility_assessment",
+            &response,
+            "summary",
+        )?;
 
         Ok((
-            Raster { file_path: susceptibility, active_band: dem.active_band },
-            Raster { file_path: trigger, active_band: dem.active_band },
-            Raster { file_path: confidence, active_band: dem.active_band },
+            Raster {
+                file_path: susceptibility,
+                active_band: dem.active_band,
+            },
+            Raster {
+                file_path: trigger,
+                active_band: dem.active_band,
+            },
+            Raster {
+                file_path: confidence,
+                active_band: dem.active_band,
+            },
             Vector { file_path: zones },
             summary.to_string_lossy().to_string(),
         ))
@@ -13258,8 +15919,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Raster, Vector, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
-        args.insert("streams".to_string(), json!(streams.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "streams".to_string(),
+            json!(streams.file_path.to_string_lossy().to_string()),
+        );
         args.insert("profile".to_string(), json!(profile));
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
@@ -13273,7 +15940,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("river_corridor_health_assessment", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "river_corridor_health_assessment",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -13285,16 +15956,42 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let erosion = extract_output_path_by_key("river_corridor_health_assessment", &response, "erosion_pressure")?;
-        let confidence = extract_output_path_by_key("river_corridor_health_assessment", &response, "corridor_confidence")?;
-        let health = extract_output_path_by_key("river_corridor_health_assessment", &response, "stream_health_score")?;
-        let zones = extract_output_path_by_key("river_corridor_health_assessment", &response, "restoration_zones")?;
-        let summary = extract_output_path_by_key("river_corridor_health_assessment", &response, "summary")?;
+        let erosion = extract_output_path_by_key(
+            "river_corridor_health_assessment",
+            &response,
+            "erosion_pressure",
+        )?;
+        let confidence = extract_output_path_by_key(
+            "river_corridor_health_assessment",
+            &response,
+            "corridor_confidence",
+        )?;
+        let health = extract_output_path_by_key(
+            "river_corridor_health_assessment",
+            &response,
+            "stream_health_score",
+        )?;
+        let zones = extract_output_path_by_key(
+            "river_corridor_health_assessment",
+            &response,
+            "restoration_zones",
+        )?;
+        let summary =
+            extract_output_path_by_key("river_corridor_health_assessment", &response, "summary")?;
 
         Ok((
-            Raster { file_path: erosion, active_band: dem.active_band },
-            Raster { file_path: confidence, active_band: dem.active_band },
-            Raster { file_path: health, active_band: dem.active_band },
+            Raster {
+                file_path: erosion,
+                active_band: dem.active_band,
+            },
+            Raster {
+                file_path: confidence,
+                active_band: dem.active_band,
+            },
+            Raster {
+                file_path: health,
+                active_band: dem.active_band,
+            },
             Vector { file_path: zones },
             summary.to_string_lossy().to_string(),
         ))
@@ -13314,9 +16011,15 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(m) = soil_moisture {
-            args.insert("soil_moisture".to_string(), json!(m.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "soil_moisture".to_string(),
+                json!(m.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("profile".to_string(), json!(profile));
         args.insert("target_moisture".to_string(), json!(target_moisture));
@@ -13341,7 +16044,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("precision_irrigation_optimization", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "precision_irrigation_optimization",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -13353,15 +16060,37 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let prescription = extract_output_path_by_key("precision_irrigation_optimization", &response, "irrigation_prescription")?;
-        let stress = extract_output_path_by_key("precision_irrigation_optimization", &response, "moisture_stress_risk")?;
-        let zones = extract_output_path_by_key("precision_irrigation_optimization", &response, "vri_zones")?;
-        let summary = extract_output_path_by_key("precision_irrigation_optimization", &response, "summary")?;
+        let prescription = extract_output_path_by_key(
+            "precision_irrigation_optimization",
+            &response,
+            "irrigation_prescription",
+        )?;
+        let stress = extract_output_path_by_key(
+            "precision_irrigation_optimization",
+            &response,
+            "moisture_stress_risk",
+        )?;
+        let zones = extract_output_path_by_key(
+            "precision_irrigation_optimization",
+            &response,
+            "vri_zones",
+        )?;
+        let summary =
+            extract_output_path_by_key("precision_irrigation_optimization", &response, "summary")?;
 
         Ok((
-            Raster { file_path: prescription, active_band: dem.active_band },
-            Raster { file_path: stress, active_band: dem.active_band },
-            Raster { file_path: zones, active_band: dem.active_band },
+            Raster {
+                file_path: prescription,
+                active_band: dem.active_band,
+            },
+            Raster {
+                file_path: stress,
+                active_band: dem.active_band,
+            },
+            Raster {
+                file_path: zones,
+                active_band: dem.active_band,
+            },
             summary.to_string_lossy().to_string(),
         ))
     }
@@ -13380,9 +16109,15 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Vector, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("yield_surface".to_string(), json!(yield_surface.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "yield_surface".to_string(),
+            json!(yield_surface.file_path.to_string_lossy().to_string()),
+        );
         if let Some(t) = terrain_context {
-            args.insert("terrain_context".to_string(), json!(t.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "terrain_context".to_string(),
+                json!(t.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("profile".to_string(), json!(profile));
         args.insert("zone_count".to_string(), json!(zone_count));
@@ -13407,7 +16142,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("precision_ag_yield_zone_intelligence", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "precision_ag_yield_zone_intelligence",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -13419,17 +16158,48 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let stability = extract_output_path_by_key("precision_ag_yield_zone_intelligence", &response, "yield_stability")?;
-        let zones = extract_output_path_by_key("precision_ag_yield_zone_intelligence", &response, "management_zones")?;
-        let zones_vec = extract_output_path_by_key("precision_ag_yield_zone_intelligence", &response, "management_zones_vector")?;
-        let conf = extract_output_path_by_key("precision_ag_yield_zone_intelligence", &response, "zone_confidence")?;
-        let summary = extract_output_path_by_key("precision_ag_yield_zone_intelligence", &response, "summary")?;
+        let stability = extract_output_path_by_key(
+            "precision_ag_yield_zone_intelligence",
+            &response,
+            "yield_stability",
+        )?;
+        let zones = extract_output_path_by_key(
+            "precision_ag_yield_zone_intelligence",
+            &response,
+            "management_zones",
+        )?;
+        let zones_vec = extract_output_path_by_key(
+            "precision_ag_yield_zone_intelligence",
+            &response,
+            "management_zones_vector",
+        )?;
+        let conf = extract_output_path_by_key(
+            "precision_ag_yield_zone_intelligence",
+            &response,
+            "zone_confidence",
+        )?;
+        let summary = extract_output_path_by_key(
+            "precision_ag_yield_zone_intelligence",
+            &response,
+            "summary",
+        )?;
 
         Ok((
-            Raster { file_path: stability, active_band: yield_surface.active_band },
-            Raster { file_path: zones, active_band: yield_surface.active_band },
-            Vector { file_path: zones_vec },
-            Raster { file_path: conf, active_band: yield_surface.active_band },
+            Raster {
+                file_path: stability,
+                active_band: yield_surface.active_band,
+            },
+            Raster {
+                file_path: zones,
+                active_band: yield_surface.active_band,
+            },
+            Vector {
+                file_path: zones_vec,
+            },
+            Raster {
+                file_path: conf,
+                active_band: yield_surface.active_band,
+            },
             summary.to_string_lossy().to_string(),
         ))
     }
@@ -13457,28 +16227,73 @@ impl WbEnvironment {
         vector_output_format: &str,
         output_prefix: Option<&str>,
         callback: Option<Py<PyAny>>,
-    ) -> PyResult<(Raster, Raster, Raster, Raster, Vector, String, String, String)> {
+    ) -> PyResult<(
+        Raster,
+        Raster,
+        Raster,
+        Raster,
+        Vector,
+        String,
+        String,
+        String,
+    )> {
         let mut args = serde_json::Map::new();
-        args.insert("baseline_bundle".to_string(), json!(baseline_bundle.file_path.to_string_lossy().to_string()));
-        args.insert("baseline_red_band_index".to_string(), json!(baseline_red_band_index));
-        args.insert("baseline_nir_band_index".to_string(), json!(baseline_nir_band_index));
-        args.insert("change_bundle".to_string(), json!(change_bundle.file_path.to_string_lossy().to_string()));
-        args.insert("change_red_band_index".to_string(), json!(change_red_band_index));
-        args.insert("change_nir_band_index".to_string(), json!(change_nir_band_index));
-        args.insert("input_sar".to_string(), json!(input_sar.file_path.to_string_lossy().to_string()));
-        args.insert("input_dem".to_string(), json!(input_dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "baseline_bundle".to_string(),
+            json!(baseline_bundle.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "baseline_red_band_index".to_string(),
+            json!(baseline_red_band_index),
+        );
+        args.insert(
+            "baseline_nir_band_index".to_string(),
+            json!(baseline_nir_band_index),
+        );
+        args.insert(
+            "change_bundle".to_string(),
+            json!(change_bundle.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "change_red_band_index".to_string(),
+            json!(change_red_band_index),
+        );
+        args.insert(
+            "change_nir_band_index".to_string(),
+            json!(change_nir_band_index),
+        );
+        args.insert(
+            "input_sar".to_string(),
+            json!(input_sar.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input_dem".to_string(),
+            json!(input_dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(pair) = pair_sar {
-            args.insert("pair_sar".to_string(), json!(pair.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "pair_sar".to_string(),
+                json!(pair.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(thermal) = thermal_bundle {
-            args.insert("thermal_bundle".to_string(), json!(thermal.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "thermal_bundle".to_string(),
+                json!(thermal.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("thermal_band_index".to_string(), json!(thermal_band_index));
         args.insert("profile".to_string(), json!(profile));
         args.insert("harmonization_mode".to_string(), json!(harmonization_mode));
-        args.insert("high_confidence_threshold".to_string(), json!(high_confidence_threshold));
+        args.insert(
+            "high_confidence_threshold".to_string(),
+            json!(high_confidence_threshold),
+        );
         args.insert("max_zone_features".to_string(), json!(max_zone_features));
-        args.insert("vector_output_format".to_string(), json!(vector_output_format));
+        args.insert(
+            "vector_output_format".to_string(),
+            json!(vector_output_format),
+        );
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
         }
@@ -13491,7 +16306,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("multi_sensor_fusion_monitoring", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "multi_sensor_fusion_monitoring",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -13503,20 +16322,61 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let fused = extract_output_path_by_key("multi_sensor_fusion_monitoring", &response, "fused_change_probability")?;
-        let agreement = extract_output_path_by_key("multi_sensor_fusion_monitoring", &response, "sensor_agreement")?;
-        let terrain = extract_output_path_by_key("multi_sensor_fusion_monitoring", &response, "terrain_context")?;
-        let uncertainty = extract_output_path_by_key("multi_sensor_fusion_monitoring", &response, "uncertainty_inflation")?;
-        let zones = extract_output_path_by_key("multi_sensor_fusion_monitoring", &response, "high_confidence_change_zones")?;
-        let thermal_contract = extract_output_path_by_key("multi_sensor_fusion_monitoring", &response, "thermal_input_contract")?;
-        let modality_diag = extract_output_path_by_key("multi_sensor_fusion_monitoring", &response, "modality_contribution_diagnostics")?;
-        let summary = extract_output_path_by_key("multi_sensor_fusion_monitoring", &response, "summary")?;
+        let fused = extract_output_path_by_key(
+            "multi_sensor_fusion_monitoring",
+            &response,
+            "fused_change_probability",
+        )?;
+        let agreement = extract_output_path_by_key(
+            "multi_sensor_fusion_monitoring",
+            &response,
+            "sensor_agreement",
+        )?;
+        let terrain = extract_output_path_by_key(
+            "multi_sensor_fusion_monitoring",
+            &response,
+            "terrain_context",
+        )?;
+        let uncertainty = extract_output_path_by_key(
+            "multi_sensor_fusion_monitoring",
+            &response,
+            "uncertainty_inflation",
+        )?;
+        let zones = extract_output_path_by_key(
+            "multi_sensor_fusion_monitoring",
+            &response,
+            "high_confidence_change_zones",
+        )?;
+        let thermal_contract = extract_output_path_by_key(
+            "multi_sensor_fusion_monitoring",
+            &response,
+            "thermal_input_contract",
+        )?;
+        let modality_diag = extract_output_path_by_key(
+            "multi_sensor_fusion_monitoring",
+            &response,
+            "modality_contribution_diagnostics",
+        )?;
+        let summary =
+            extract_output_path_by_key("multi_sensor_fusion_monitoring", &response, "summary")?;
 
         Ok((
-            Raster { file_path: fused, active_band: baseline_bundle.active_band },
-            Raster { file_path: agreement, active_band: baseline_bundle.active_band },
-            Raster { file_path: terrain, active_band: baseline_bundle.active_band },
-            Raster { file_path: uncertainty, active_band: baseline_bundle.active_band },
+            Raster {
+                file_path: fused,
+                active_band: baseline_bundle.active_band,
+            },
+            Raster {
+                file_path: agreement,
+                active_band: baseline_bundle.active_band,
+            },
+            Raster {
+                file_path: terrain,
+                active_band: baseline_bundle.active_band,
+            },
+            Raster {
+                file_path: uncertainty,
+                active_band: baseline_bundle.active_band,
+            },
             Vector { file_path: zones },
             thermal_contract.to_string_lossy().to_string(),
             modality_diag.to_string_lossy().to_string(),
@@ -13539,13 +16399,25 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("input_red".to_string(), json!(input_red.file_path.to_string_lossy().to_string()));
-        args.insert("input_nir".to_string(), json!(input_nir.file_path.to_string_lossy().to_string()));
-        args.insert("input_dem".to_string(), json!(input_dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input_red".to_string(),
+            json!(input_red.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input_nir".to_string(),
+            json!(input_nir.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input_dem".to_string(),
+            json!(input_dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("solar_zenith_deg".to_string(), json!(solar_zenith_deg));
         args.insert("solar_azimuth_deg".to_string(), json!(solar_azimuth_deg));
         if let Some(g) = input_green {
-            args.insert("input_green".to_string(), json!(g.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input_green".to_string(),
+                json!(g.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("profile".to_string(), json!(profile));
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
@@ -13560,7 +16432,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("brdf_surface_reflectance_consistency", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "brdf_surface_reflectance_consistency",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -13572,15 +16448,40 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let normalized = extract_output_path_by_key("brdf_surface_reflectance_consistency", &response, "brdf_normalized_reflectance")?;
-        let delta = extract_output_path_by_key("brdf_surface_reflectance_consistency", &response, "normalization_delta")?;
-        let confidence = extract_output_path_by_key("brdf_surface_reflectance_consistency", &response, "consistency_confidence")?;
-        let summary = extract_output_path_by_key("brdf_surface_reflectance_consistency", &response, "summary")?;
+        let normalized = extract_output_path_by_key(
+            "brdf_surface_reflectance_consistency",
+            &response,
+            "brdf_normalized_reflectance",
+        )?;
+        let delta = extract_output_path_by_key(
+            "brdf_surface_reflectance_consistency",
+            &response,
+            "normalization_delta",
+        )?;
+        let confidence = extract_output_path_by_key(
+            "brdf_surface_reflectance_consistency",
+            &response,
+            "consistency_confidence",
+        )?;
+        let summary = extract_output_path_by_key(
+            "brdf_surface_reflectance_consistency",
+            &response,
+            "summary",
+        )?;
 
         Ok((
-            Raster { file_path: normalized, active_band: input_red.active_band },
-            Raster { file_path: delta, active_band: input_red.active_band },
-            Raster { file_path: confidence, active_band: input_red.active_band },
+            Raster {
+                file_path: normalized,
+                active_band: input_red.active_band,
+            },
+            Raster {
+                file_path: delta,
+                active_band: input_red.active_band,
+            },
+            Raster {
+                file_path: confidence,
+                active_band: input_red.active_band,
+            },
             summary.to_string_lossy().to_string(),
         ))
     }
@@ -13601,7 +16502,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("out_type".to_string(), json!(out_type));
         args.insert("exponent".to_string(), json!(exponent));
         if let Some(t) = threshold {
@@ -13656,7 +16560,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("out_type".to_string(), json!(out_type));
         args.insert("exponent".to_string(), json!(exponent));
         args.insert("max_slope".to_string(), json!(max_slope));
@@ -13711,7 +16618,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("out_type".to_string(), json!(out_type));
         args.insert("exponent".to_string(), json!(exponent));
         if let Some(t) = threshold {
@@ -13794,7 +16704,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("minimal_dispersion_flow_algorithm", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "minimal_dispersion_flow_algorithm",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -13806,8 +16720,16 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let dir_path = extract_typed_output_path_by_key("minimal_dispersion_flow_algorithm", &response, "flow_dir")?;
-        let accum_path = extract_typed_output_path_by_key("minimal_dispersion_flow_algorithm", &response, "flow_accum")?;
+        let dir_path = extract_typed_output_path_by_key(
+            "minimal_dispersion_flow_algorithm",
+            &response,
+            "flow_dir",
+        )?;
+        let accum_path = extract_typed_output_path_by_key(
+            "minimal_dispersion_flow_algorithm",
+            &response,
+            "flow_accum",
+        )?;
 
         Ok((
             Raster {
@@ -13839,7 +16761,10 @@ impl WbEnvironment {
         let resolved_accum_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("out_type".to_string(), json!(out_type));
         args.insert("log_transform".to_string(), json!(log_transform));
         args.insert("clip".to_string(), json!(clip));
@@ -13874,9 +16799,15 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let dem_path = extract_typed_output_path_by_key("flow_accum_full_workflow", &response, "breached_dem")?;
-        let dir_path = extract_typed_output_path_by_key("flow_accum_full_workflow", &response, "flow_dir")?;
-        let accum_path = extract_typed_output_path_by_key("flow_accum_full_workflow", &response, "flow_accum")?;
+        let dem_path = extract_typed_output_path_by_key(
+            "flow_accum_full_workflow",
+            &response,
+            "breached_dem",
+        )?;
+        let dir_path =
+            extract_typed_output_path_by_key("flow_accum_full_workflow", &response, "flow_dir")?;
+        let accum_path =
+            extract_typed_output_path_by_key("flow_accum_full_workflow", &response, "flow_accum")?;
 
         Ok((
             Raster {
@@ -13903,7 +16834,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("esri_pntr".to_string(), json!(esri_pntr));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -13924,7 +16858,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("out_type".to_string(), json!(out_type));
         args.insert("log_transform".to_string(), json!(log_transform));
         args.insert("clip".to_string(), json!(clip));
@@ -13944,7 +16881,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -13964,7 +16904,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("out_type".to_string(), json!(out_type));
         if let Some(threshold) = convergence_threshold {
             args.insert("convergence_threshold".to_string(), json!(threshold));
@@ -13986,7 +16929,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -14006,7 +16952,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("out_type".to_string(), json!(out_type));
         args.insert("exponent".to_string(), json!(exponent));
         if let Some(threshold) = convergence_threshold {
@@ -14029,7 +16978,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("esri_pntr".to_string(), json!(esri_pntr));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -14050,7 +17002,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("out_type".to_string(), json!(out_type));
         args.insert("log_transform".to_string(), json!(log_transform));
         args.insert("clip".to_string(), json!(clip));
@@ -14082,12 +17037,21 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(direction_output_path) {
             args.insert("direction_output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "change_vector_analysis", args, callback)?;
-        let magnitude = extract_output_path_by_key("change_vector_analysis", &response, "magnitude")?;
-        let direction = extract_output_path_by_key("change_vector_analysis", &response, "direction")?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "change_vector_analysis", args, callback)?;
+        let magnitude =
+            extract_output_path_by_key("change_vector_analysis", &response, "magnitude")?;
+        let direction =
+            extract_output_path_by_key("change_vector_analysis", &response, "direction")?;
         Ok((
-            Raster { file_path: magnitude, active_band: 0 },
-            Raster { file_path: direction, active_band: 0 },
+            Raster {
+                file_path: magnitude,
+                active_band: 0,
+            },
+            Raster {
+                file_path: direction,
+                active_band: 0,
+            },
         ))
     }
 
@@ -14112,7 +17076,10 @@ impl WbEnvironment {
         args.insert("clamp_non_negative".to_string(), json!(clamp_non_negative));
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
@@ -14120,7 +17087,8 @@ impl WbEnvironment {
         if let Some(diag_out) = self.resolve_output_path_for_wd(output_diagnostic_offsets) {
             args.insert("output_diagnostic_offsets".to_string(), json!(diag_out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "dark_object_subtraction", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "dark_object_subtraction", args, callback)?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14157,16 +17125,26 @@ impl WbEnvironment {
         if let Some(v) = sun_elevation_deg {
             args.insert("sun_elevation_deg".to_string(), json!(v));
         }
-        args.insert("apply_solar_correction".to_string(), json!(apply_solar_correction));
-        args.insert("clamp_unit_interval".to_string(), json!(clamp_unit_interval));
+        args.insert(
+            "apply_solar_correction".to_string(),
+            json!(apply_solar_correction),
+        );
+        args.insert(
+            "clamp_unit_interval".to_string(),
+            json!(clamp_unit_interval),
+        );
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "dn_to_toa_reflectance", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "dn_to_toa_reflectance", args, callback)?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14187,21 +17165,34 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Py<PyAny>> {
         let mut args = serde_json::Map::new();
-        args.insert("red_input".to_string(), json!(red_input.file_path.to_string_lossy().to_string()));
-        args.insert("nir_input".to_string(), json!(nir_input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "red_input".to_string(),
+            json!(red_input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "nir_input".to_string(),
+            json!(nir_input.file_path.to_string_lossy().to_string()),
+        );
         merge_optional_json_object_args(&mut args, options)?;
         args.insert("ndvi_soil".to_string(), json!(ndvi_soil));
         args.insert("ndvi_vegetation".to_string(), json!(ndvi_vegetation));
         args.insert("emissivity_soil".to_string(), json!(emissivity_soil));
-        args.insert("emissivity_vegetation".to_string(), json!(emissivity_vegetation));
+        args.insert(
+            "emissivity_vegetation".to_string(),
+            json!(emissivity_vegetation),
+        );
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "ndvi_based_emissivity", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "ndvi_based_emissivity", args, callback)?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14233,15 +17224,27 @@ impl WbEnvironment {
             json!(thermal_input.file_path.to_string_lossy().to_string()),
         );
         merge_optional_json_object_args(&mut args, options)?;
-        args.insert("input_is_brightness_temp".to_string(), json!(input_is_brightness_temp));
+        args.insert(
+            "input_is_brightness_temp".to_string(),
+            json!(input_is_brightness_temp),
+        );
         if let Some(v) = emissivity_input {
-            args.insert("emissivity_input".to_string(), json!(v.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "emissivity_input".to_string(),
+                json!(v.file_path.to_string_lossy().to_string()),
+            );
         }
-        args.insert("emissivity_constant".to_string(), json!(emissivity_constant));
+        args.insert(
+            "emissivity_constant".to_string(),
+            json!(emissivity_constant),
+        );
         if let Some(v) = sensor_bundle_root {
             args.insert("sensor_bundle_root".to_string(), json!(v));
         }
-        args.insert("thermal_band_number".to_string(), json!(thermal_band_number));
+        args.insert(
+            "thermal_band_number".to_string(),
+            json!(thermal_band_number),
+        );
         if let Some(v) = radiance_mult {
             args.insert("radiance_mult".to_string(), json!(v));
         }
@@ -14260,7 +17263,10 @@ impl WbEnvironment {
         args.insert("output_units".to_string(), json!(output_units));
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
@@ -14319,28 +17325,65 @@ impl WbEnvironment {
             json!(thermal2_input.file_path.to_string_lossy().to_string()),
         );
         merge_optional_json_object_args(&mut args, options)?;
-        args.insert("input_is_brightness_temp".to_string(), json!(input_is_brightness_temp));
+        args.insert(
+            "input_is_brightness_temp".to_string(),
+            json!(input_is_brightness_temp),
+        );
         if let Some(v) = emissivity_mean_input {
-            args.insert("emissivity_mean_input".to_string(), json!(v.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "emissivity_mean_input".to_string(),
+                json!(v.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(v) = emissivity_delta_input {
-            args.insert("emissivity_delta_input".to_string(), json!(v.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "emissivity_delta_input".to_string(),
+                json!(v.file_path.to_string_lossy().to_string()),
+            );
         }
-        args.insert("emissivity_mean_constant".to_string(), json!(emissivity_mean_constant));
-        args.insert("emissivity_delta_constant".to_string(), json!(emissivity_delta_constant));
+        args.insert(
+            "emissivity_mean_constant".to_string(),
+            json!(emissivity_mean_constant),
+        );
+        args.insert(
+            "emissivity_delta_constant".to_string(),
+            json!(emissivity_delta_constant),
+        );
         if let Some(v) = sensor_bundle_root {
             args.insert("sensor_bundle_root".to_string(), json!(v));
         }
-        args.insert("thermal_band1_number".to_string(), json!(thermal_band1_number));
-        args.insert("thermal_band2_number".to_string(), json!(thermal_band2_number));
-        if let Some(v) = radiance1_mult { args.insert("radiance1_mult".to_string(), json!(v)); }
-        if let Some(v) = radiance1_add { args.insert("radiance1_add".to_string(), json!(v)); }
-        if let Some(v) = k1_1 { args.insert("k1_1".to_string(), json!(v)); }
-        if let Some(v) = k2_1 { args.insert("k2_1".to_string(), json!(v)); }
-        if let Some(v) = radiance2_mult { args.insert("radiance2_mult".to_string(), json!(v)); }
-        if let Some(v) = radiance2_add { args.insert("radiance2_add".to_string(), json!(v)); }
-        if let Some(v) = k1_2 { args.insert("k1_2".to_string(), json!(v)); }
-        if let Some(v) = k2_2 { args.insert("k2_2".to_string(), json!(v)); }
+        args.insert(
+            "thermal_band1_number".to_string(),
+            json!(thermal_band1_number),
+        );
+        args.insert(
+            "thermal_band2_number".to_string(),
+            json!(thermal_band2_number),
+        );
+        if let Some(v) = radiance1_mult {
+            args.insert("radiance1_mult".to_string(), json!(v));
+        }
+        if let Some(v) = radiance1_add {
+            args.insert("radiance1_add".to_string(), json!(v));
+        }
+        if let Some(v) = k1_1 {
+            args.insert("k1_1".to_string(), json!(v));
+        }
+        if let Some(v) = k2_1 {
+            args.insert("k2_1".to_string(), json!(v));
+        }
+        if let Some(v) = radiance2_mult {
+            args.insert("radiance2_mult".to_string(), json!(v));
+        }
+        if let Some(v) = radiance2_add {
+            args.insert("radiance2_add".to_string(), json!(v));
+        }
+        if let Some(v) = k1_2 {
+            args.insert("k1_2".to_string(), json!(v));
+        }
+        if let Some(v) = k2_2 {
+            args.insert("k2_2".to_string(), json!(v));
+        }
         args.insert("coeff_a0".to_string(), json!(coeff_a0));
         args.insert("coeff_a1".to_string(), json!(coeff_a1));
         args.insert("coeff_a2".to_string(), json!(coeff_a2));
@@ -14350,7 +17393,10 @@ impl WbEnvironment {
         args.insert("output_units".to_string(), json!(output_units));
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
@@ -14403,7 +17449,10 @@ impl WbEnvironment {
         }
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         let response = run_tool_response_with_args(
             &self.runtime,
@@ -14440,18 +17489,32 @@ impl WbEnvironment {
         args.insert("transition_scale".to_string(), json!(transition_scale));
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
         }
         if let Some(t1_remap) = t1_class_remap {
-            args.insert("t1_class_remap".to_string(), py_any_to_json_value(t1_remap)?);
+            args.insert(
+                "t1_class_remap".to_string(),
+                py_any_to_json_value(t1_remap)?,
+            );
         }
         if let Some(t2_remap) = t2_class_remap {
-            args.insert("t2_class_remap".to_string(), py_any_to_json_value(t2_remap)?);
+            args.insert(
+                "t2_class_remap".to_string(),
+                py_any_to_json_value(t2_remap)?,
+            );
         }
-        let response = run_tool_response_with_args(&self.runtime, "post_classification_change", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "post_classification_change",
+            args,
+            callback,
+        )?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14492,9 +17555,17 @@ impl WbEnvironment {
         }
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
-        let response = run_tool_response_with_args(&self.runtime, "pca_based_change_detection", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "pca_based_change_detection",
+            args,
+            callback,
+        )?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14522,7 +17593,10 @@ impl WbEnvironment {
         }
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
@@ -14530,7 +17604,8 @@ impl WbEnvironment {
         if let Some(out_ang) = self.resolve_output_path_for_wd(output_angle) {
             args.insert("output_angle".to_string(), json!(out_ang));
         }
-        let response = run_tool_response_with_args(&self.runtime, "spectral_angle_mapper", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "spectral_angle_mapper", args, callback)?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14555,12 +17630,16 @@ impl WbEnvironment {
         }
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "continuum_removal", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "continuum_removal", args, callback)?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14590,7 +17669,10 @@ impl WbEnvironment {
         args.insert("step_size".to_string(), json!(step_size));
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
@@ -14598,7 +17680,8 @@ impl WbEnvironment {
         if let Some(out_res) = self.resolve_output_path_for_wd(output_residual) {
             args.insert("output_residual".to_string(), json!(out_res));
         }
-        let response = run_tool_response_with_args(&self.runtime, "linear_spectral_unmixing", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "linear_spectral_unmixing", args, callback)?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14626,7 +17709,10 @@ impl WbEnvironment {
         args.insert("noise_mode".to_string(), json!(noise_mode));
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
@@ -14634,7 +17720,8 @@ impl WbEnvironment {
         if let Some(out_inv) = self.resolve_output_path_for_wd(output_inverse) {
             args.insert("output_inverse".to_string(), json!(out_inv));
         }
-        let response = run_tool_response_with_args(&self.runtime, "minimum_noise_fraction", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "minimum_noise_fraction", args, callback)?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14666,7 +17753,10 @@ impl WbEnvironment {
         args.insert("metric".to_string(), json!(metric));
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
@@ -14674,7 +17764,12 @@ impl WbEnvironment {
         if let Some(out_score) = self.resolve_output_path_for_wd(output_score) {
             args.insert("output_score".to_string(), json!(out_score));
         }
-        let response = run_tool_response_with_args(&self.runtime, "spectral_library_matching", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "spectral_library_matching",
+            args,
+            callback,
+        )?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14699,12 +17794,20 @@ impl WbEnvironment {
         }
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "cloude_pottier_decomposition", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "cloude_pottier_decomposition",
+            args,
+            callback,
+        )?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14730,7 +17833,10 @@ impl WbEnvironment {
         }
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
@@ -14738,7 +17844,12 @@ impl WbEnvironment {
         if let Some(out_clip) = self.resolve_output_path_for_wd(output_clip_mask) {
             args.insert("output_clip_mask".to_string(), json!(out_clip));
         }
-        let response = run_tool_response_with_args(&self.runtime, "freeman_durden_decomposition", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "freeman_durden_decomposition",
+            args,
+            callback,
+        )?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14763,12 +17874,20 @@ impl WbEnvironment {
         }
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output) {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "yamaguchi_4component_decomposition", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "yamaguchi_4component_decomposition",
+            args,
+            callback,
+        )?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -14787,19 +17906,36 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output);
 
         let mut args = serde_json::Map::new();
-        args.insert("h_raster".to_string(), json!(h_raster.file_path.to_string_lossy().to_string()));
-        args.insert("alpha_raster".to_string(), json!(alpha_raster.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "h_raster".to_string(),
+            json!(h_raster.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "alpha_raster".to_string(),
+            json!(alpha_raster.file_path.to_string_lossy().to_string()),
+        );
         merge_optional_json_object_args(&mut args, options)?;
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = &resolved_output {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "h_alpha_wisart_classification", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "h_alpha_wisart_classification",
+            args,
+            callback,
+        )?;
         let out_path = extract_typed_output_path("h_alpha_wisart_classification", &response)?;
-        Ok(Raster { file_path: out_path, active_band: 0 })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 0,
+        })
     }
 
     #[pyo3(signature = (h_raster, alpha_raster, max_iterations=10, convergence_threshold=0.99, auto_reproject=true, auto_reproject_method="", output=None, options=None, callback=None))]
@@ -14818,21 +17954,41 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output);
 
         let mut args = serde_json::Map::new();
-        args.insert("h_raster".to_string(), json!(h_raster.file_path.to_string_lossy().to_string()));
-        args.insert("alpha_raster".to_string(), json!(alpha_raster.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "h_raster".to_string(),
+            json!(h_raster.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "alpha_raster".to_string(),
+            json!(alpha_raster.file_path.to_string_lossy().to_string()),
+        );
         merge_optional_json_object_args(&mut args, options)?;
         args.insert("max_iterations".to_string(), json!(max_iterations));
-        args.insert("convergence_threshold".to_string(), json!(convergence_threshold));
+        args.insert(
+            "convergence_threshold".to_string(),
+            json!(convergence_threshold),
+        );
         args.insert("auto_reproject".to_string(), json!(auto_reproject));
         if !auto_reproject_method.is_empty() {
-            args.insert("auto_reproject_method".to_string(), json!(auto_reproject_method));
+            args.insert(
+                "auto_reproject_method".to_string(),
+                json!(auto_reproject_method),
+            );
         }
         if let Some(out) = &resolved_output {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "wisart_iterative_clustering", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "wisart_iterative_clustering",
+            args,
+            callback,
+        )?;
         let out_path = extract_typed_output_path("wisart_iterative_clustering", &response)?;
-        Ok(Raster { file_path: out_path, active_band: 0 })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 0,
+        })
     }
 
     #[pyo3(signature = (input, filter_size=5, options=None, output_path=None, callback=None))]
@@ -14847,15 +18003,22 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("filter_size".to_string(), json!(filter_size));
         merge_optional_json_object_args(&mut args, options)?;
         if let Some(out) = &resolved_output {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "refined_lee_filter", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "refined_lee_filter", args, callback)?;
         let out_path = extract_typed_output_path("refined_lee_filter", &response)?;
-        Ok(Raster { file_path: out_path, active_band: 0 })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 0,
+        })
     }
 
     #[pyo3(signature = (input, filter_size=5, enl=4.0, options=None, output_path=None, callback=None))]
@@ -14871,16 +18034,23 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("filter_size".to_string(), json!(filter_size));
         args.insert("enl".to_string(), json!(enl));
         merge_optional_json_object_args(&mut args, options)?;
         if let Some(out) = &resolved_output {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "enhanced_lee_filter", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "enhanced_lee_filter", args, callback)?;
         let out_path = extract_typed_output_path("enhanced_lee_filter", &response)?;
-        Ok(Raster { file_path: out_path, active_band: 0 })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 0,
+        })
     }
 
     #[pyo3(signature = (input, pp, focal_length=304.8, image_width=228.6, n=4.0, output_path=None, callback=None))]
@@ -14895,8 +18065,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("pp".to_string(), json!(pp.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "pp".to_string(),
+            json!(pp.file_path.to_string_lossy().to_string()),
+        );
         args.insert("focal_length".to_string(), json!(focal_length));
         args.insert("image_width".to_string(), json!(image_width));
         args.insert("n".to_string(), json!(n));
@@ -14918,15 +18094,26 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("sigma_dist".to_string(), json!(sigma_dist));
         args.insert("sigma_int".to_string(), json!(sigma_int));
         args.insert("treat_as_rgb".to_string(), json!(treat_as_rgb));
-        args.insert("assume_three_band_rgb".to_string(), json!(assume_three_band_rgb));
+        args.insert(
+            "assume_three_band_rgb".to_string(),
+            json!(assume_three_band_rgb),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("high_pass_bilateral_filter", args, input.active_band, callback)
+        self._run_raster_tool_with_args(
+            "high_pass_bilateral_filter",
+            args,
+            input.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (intensity, hue, saturation, red_output_path=None, green_output_path=None, blue_output_path=None, callback=None))]
@@ -14941,9 +18128,18 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Raster)> {
         let mut args = serde_json::Map::new();
-        args.insert("intensity".to_string(), json!(intensity.file_path.to_string_lossy().to_string()));
-        args.insert("hue".to_string(), json!(hue.file_path.to_string_lossy().to_string()));
-        args.insert("saturation".to_string(), json!(saturation.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "intensity".to_string(),
+            json!(intensity.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "hue".to_string(),
+            json!(hue.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "saturation".to_string(),
+            json!(saturation.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(red_output_path) {
             args.insert("red_output".to_string(), json!(out));
         }
@@ -14958,9 +18154,18 @@ impl WbEnvironment {
         let green = extract_output_path_by_key("ihs_to_rgb", &response, "green")?;
         let blue = extract_output_path_by_key("ihs_to_rgb", &response, "blue")?;
         Ok((
-            Raster { file_path: red, active_band: 0 },
-            Raster { file_path: green, active_band: 0 },
-            Raster { file_path: blue, active_band: 0 },
+            Raster {
+                file_path: red,
+                active_band: 0,
+            },
+            Raster {
+                file_path: green,
+                active_band: 0,
+            },
+            Raster {
+                file_path: blue,
+                active_band: 0,
+            },
         ))
     }
 
@@ -14975,11 +18180,15 @@ impl WbEnvironment {
         let input_paths = extract_raster_input_paths(inputs, "inputs")?;
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), json!(input_paths));
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_html) {
             args.insert("output_html".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "image_stack_profile", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "image_stack_profile", args, callback)?;
         let outputs = response.get("outputs").unwrap_or(&response);
         Python::attach(|py| json_value_to_pyobject(py, outputs))
     }
@@ -15012,7 +18221,8 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "k_means_clustering", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "k_means_clustering", args, callback)?;
         let raster = extract_typed_output_path("k_means_clustering", &response)?;
         let outputs = response.get("outputs").unwrap_or(&response);
         let num_classes = outputs
@@ -15024,7 +18234,10 @@ impl WbEnvironment {
             .and_then(serde_json::Value::as_str)
             .map(|s| s.to_string());
         Ok((
-            Raster { file_path: raster, active_band: 0 },
+            Raster {
+                file_path: raster,
+                active_band: 0,
+            },
             num_classes,
             report_path,
         ))
@@ -15056,7 +18269,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "modified_k_means_clustering", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "modified_k_means_clustering",
+            args,
+            callback,
+        )?;
         let raster = extract_typed_output_path("modified_k_means_clustering", &response)?;
         let outputs = response.get("outputs").unwrap_or(&response);
         let num_classes = outputs
@@ -15068,7 +18286,10 @@ impl WbEnvironment {
             .and_then(serde_json::Value::as_str)
             .map(|s| s.to_string());
         Ok((
-            Raster { file_path: raster, active_band: 0 },
+            Raster {
+                file_path: raster,
+                active_band: 0,
+            },
             num_classes,
             report_path,
         ))
@@ -15103,8 +18324,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
         args.insert("method".to_string(), json!(method));
         args.insert("weight".to_string(), json!(weight));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -15128,18 +18355,33 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("pan".to_string(), json!(pan.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "pan".to_string(),
+            json!(pan.file_path.to_string_lossy().to_string()),
+        );
         if let Some(r) = red {
-            args.insert("red".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "red".to_string(),
+                json!(r.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(g) = green {
-            args.insert("green".to_string(), json!(g.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "green".to_string(),
+                json!(g.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(b) = blue {
-            args.insert("blue".to_string(), json!(b.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "blue".to_string(),
+                json!(b.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(c) = composite {
-            args.insert("composite".to_string(), json!(c.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "composite".to_string(),
+                json!(c.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("method".to_string(), json!(method));
         args.insert("output_mode".to_string(), json!(output_mode));
@@ -15163,7 +18405,10 @@ impl WbEnvironment {
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), json!(input_paths));
         if let Some(base) = base {
-            args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(cell_size) = cell_size {
             args.insert("cell_size".to_string(), json!(cell_size));
@@ -15190,16 +18435,28 @@ impl WbEnvironment {
     ) -> PyResult<(Raster, Raster, Raster)> {
         let mut args = serde_json::Map::new();
         if let Some(r) = red {
-            args.insert("red".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "red".to_string(),
+                json!(r.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(g) = green {
-            args.insert("green".to_string(), json!(g.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "green".to_string(),
+                json!(g.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(b) = blue {
-            args.insert("blue".to_string(), json!(b.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "blue".to_string(),
+                json!(b.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(c) = composite {
-            args.insert("composite".to_string(), json!(c.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "composite".to_string(),
+                json!(c.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(intensity_output_path) {
             args.insert("intensity_output".to_string(), json!(out));
@@ -15215,9 +18472,18 @@ impl WbEnvironment {
         let hue = extract_output_path_by_key("rgb_to_ihs", &response, "hue")?;
         let saturation = extract_output_path_by_key("rgb_to_ihs", &response, "saturation")?;
         Ok((
-            Raster { file_path: intensity, active_band: 0 },
-            Raster { file_path: hue, active_band: 0 },
-            Raster { file_path: saturation, active_band: 0 },
+            Raster {
+                file_path: intensity,
+                active_band: 0,
+            },
+            Raster {
+                file_path: hue,
+                active_band: 0,
+            },
+            Raster {
+                file_path: saturation,
+                active_band: 0,
+            },
         ))
     }
 
@@ -15231,7 +18497,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Raster)> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(red_output_path) {
             args.insert("red_output".to_string(), json!(out));
         }
@@ -15241,14 +18510,24 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(blue_output_path) {
             args.insert("blue_output".to_string(), json!(out));
         }
-        let response = run_tool_response_with_args(&self.runtime, "split_colour_composite", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "split_colour_composite", args, callback)?;
         let red = extract_output_path_by_key("split_colour_composite", &response, "red")?;
         let green = extract_output_path_by_key("split_colour_composite", &response, "green")?;
         let blue = extract_output_path_by_key("split_colour_composite", &response, "blue")?;
         Ok((
-            Raster { file_path: red, active_band: 0 },
-            Raster { file_path: green, active_band: 0 },
-            Raster { file_path: blue, active_band: 0 },
+            Raster {
+                file_path: red,
+                active_band: 0,
+            },
+            Raster {
+                file_path: green,
+                active_band: 0,
+            },
+            Raster {
+                file_path: blue,
+                active_band: 0,
+            },
         ))
     }
 
@@ -15262,10 +18541,19 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
         if let Some(input3) = input3 {
-            args.insert("input3".to_string(), json!(input3.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input3".to_string(),
+                json!(input3.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -15290,17 +18578,41 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("baseline_bundle".to_string(), json!(baseline_bundle.file_path.to_string_lossy().to_string()));
-        args.insert("baseline_red_band_index".to_string(), json!(baseline_red_band_index));
-        args.insert("baseline_nir_band_index".to_string(), json!(baseline_nir_band_index));
-        args.insert("change_bundle".to_string(), json!(change_bundle.file_path.to_string_lossy().to_string()));
-        args.insert("change_red_band_index".to_string(), json!(change_red_band_index));
-        args.insert("change_nir_band_index".to_string(), json!(change_nir_band_index));
+        args.insert(
+            "baseline_bundle".to_string(),
+            json!(baseline_bundle.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "baseline_red_band_index".to_string(),
+            json!(baseline_red_band_index),
+        );
+        args.insert(
+            "baseline_nir_band_index".to_string(),
+            json!(baseline_nir_band_index),
+        );
+        args.insert(
+            "change_bundle".to_string(),
+            json!(change_bundle.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "change_red_band_index".to_string(),
+            json!(change_red_band_index),
+        );
+        args.insert(
+            "change_nir_band_index".to_string(),
+            json!(change_nir_band_index),
+        );
         if let Some(ndvi) = intermediate_ndvi {
-            args.insert("intermediate_ndvi".to_string(), json!(ndvi.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "intermediate_ndvi".to_string(),
+                json!(ndvi.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("profile".to_string(), json!(profile));
-        args.insert("high_confidence_threshold".to_string(), json!(high_confidence_threshold));
+        args.insert(
+            "high_confidence_threshold".to_string(),
+            json!(high_confidence_threshold),
+        );
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
         }
@@ -15313,7 +18625,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("remote_sensing_change_detection", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "remote_sensing_change_detection",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -15325,9 +18641,12 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let change_path = extract_output_path_by_key("remote_sensing_change_detection", &response, "change_map")?;
-        let confidence_path = extract_output_path_by_key("remote_sensing_change_detection", &response, "confidence")?;
-        let summary_path = extract_output_path_by_key("remote_sensing_change_detection", &response, "summary")?;
+        let change_path =
+            extract_output_path_by_key("remote_sensing_change_detection", &response, "change_map")?;
+        let confidence_path =
+            extract_output_path_by_key("remote_sensing_change_detection", &response, "confidence")?;
+        let summary_path =
+            extract_output_path_by_key("remote_sensing_change_detection", &response, "summary")?;
 
         Ok((
             Raster {
@@ -15367,23 +18686,47 @@ impl WbEnvironment {
         z_factor: f64,
         output_prefix: Option<&str>,
         callback: Option<Py<PyAny>>,
-    ) -> PyResult<(Raster, Raster, Option<Raster>, Option<Raster>, Raster, Raster, Raster, String)> {
+    ) -> PyResult<(
+        Raster,
+        Raster,
+        Option<Raster>,
+        Option<Raster>,
+        Raster,
+        Raster,
+        Raster,
+        String,
+    )> {
         let mut args = serde_json::Map::new();
-        args.insert("input_dem".to_string(), json!(input_dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input_dem".to_string(),
+            json!(input_dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(root) = safe_root {
             args.insert("safe_root".to_string(), json!(root));
         }
         if let Some(red) = input_red {
-            args.insert("input_red".to_string(), json!(red.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input_red".to_string(),
+                json!(red.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(nir) = input_nir {
-            args.insert("input_nir".to_string(), json!(nir.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input_nir".to_string(),
+                json!(nir.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(green) = input_green {
-            args.insert("input_green".to_string(), json!(green.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input_green".to_string(),
+                json!(green.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(blue) = input_blue {
-            args.insert("input_blue".to_string(), json!(blue.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input_blue".to_string(),
+                json!(blue.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(dt) = acquisition_datetime_utc {
             args.insert("acquisition_datetime_utc".to_string(), json!(dt));
@@ -15401,7 +18744,10 @@ impl WbEnvironment {
             args.insert("shadow_threshold".to_string(), json!(shadow));
         }
         if let Some(mask) = qa_mask {
-            args.insert("qa_mask".to_string(), json!(mask.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "qa_mask".to_string(),
+                json!(mask.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("solar_mode".to_string(), json!(solar_mode));
         args.insert("solar_zenith_deg".to_string(), json!(solar_zenith_deg));
@@ -15422,7 +18768,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("terrain_corrected_optical_analytics", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "terrain_corrected_optical_analytics",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -15434,26 +18784,58 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let red_path = extract_output_path_by_key("terrain_corrected_optical_analytics", &response, "red_corrected")?;
-        let nir_path = extract_output_path_by_key("terrain_corrected_optical_analytics", &response, "nir_corrected")?;
+        let red_path = extract_output_path_by_key(
+            "terrain_corrected_optical_analytics",
+            &response,
+            "red_corrected",
+        )?;
+        let nir_path = extract_output_path_by_key(
+            "terrain_corrected_optical_analytics",
+            &response,
+            "nir_corrected",
+        )?;
         let green_path = {
             let outputs = response.get("outputs").unwrap_or(&response);
             outputs
                 .get("green_corrected")
-                .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
+                .and_then(|v| {
+                    v.get("path")
+                        .and_then(serde_json::Value::as_str)
+                        .or_else(|| v.as_str())
+                })
                 .map(PathBuf::from)
         };
         let blue_path = {
             let outputs = response.get("outputs").unwrap_or(&response);
             outputs
                 .get("blue_corrected")
-                .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
+                .and_then(|v| {
+                    v.get("path")
+                        .and_then(serde_json::Value::as_str)
+                        .or_else(|| v.as_str())
+                })
                 .map(PathBuf::from)
         };
-        let mask_path = extract_output_path_by_key("terrain_corrected_optical_analytics", &response, "cloud_shadow_mask")?;
-        let factor_path = extract_output_path_by_key("terrain_corrected_optical_analytics", &response, "topographic_correction_factor")?;
-        let quality_path = extract_output_path_by_key("terrain_corrected_optical_analytics", &response, "quality_confidence")?;
-        let summary_path = extract_output_path_by_key("terrain_corrected_optical_analytics", &response, "summary")?;
+        let mask_path = extract_output_path_by_key(
+            "terrain_corrected_optical_analytics",
+            &response,
+            "cloud_shadow_mask",
+        )?;
+        let factor_path = extract_output_path_by_key(
+            "terrain_corrected_optical_analytics",
+            &response,
+            "topographic_correction_factor",
+        )?;
+        let quality_path = extract_output_path_by_key(
+            "terrain_corrected_optical_analytics",
+            &response,
+            "quality_confidence",
+        )?;
+        let summary_path = extract_output_path_by_key(
+            "terrain_corrected_optical_analytics",
+            &response,
+            "summary",
+        )?;
         let default_active_band = input_red
             .map(|r| r.active_band)
             .unwrap_or(input_dem.active_band);
@@ -15513,10 +18895,22 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Vector, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("flat_slope_threshold".to_string(), json!(flat_slope_threshold));
-        args.insert("profile_curvature_threshold".to_string(), json!(profile_curvature_threshold));
-        args.insert("plan_curvature_threshold".to_string(), json!(plan_curvature_threshold));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "flat_slope_threshold".to_string(),
+            json!(flat_slope_threshold),
+        );
+        args.insert(
+            "profile_curvature_threshold".to_string(),
+            json!(profile_curvature_threshold),
+        );
+        args.insert(
+            "plan_curvature_threshold".to_string(),
+            json!(plan_curvature_threshold),
+        );
         args.insert("fine_scale".to_string(), json!(fine_scale));
         args.insert("coarse_scale".to_string(), json!(coarse_scale));
         args.insert("z_factor".to_string(), json!(z_factor));
@@ -15535,7 +18929,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("soil_landscape_classification", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "soil_landscape_classification",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -15547,10 +18945,23 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let landform_units_path = extract_output_path_by_key("soil_landscape_classification", &response, "landform_units")?;
-        let multiscale_signature_path = extract_output_path_by_key("soil_landscape_classification", &response, "multiscale_signature")?;
-        let polygons_path = extract_output_path_by_key("soil_landscape_classification", &response, "landform_polygons")?;
-        let summary_path = extract_output_path_by_key("soil_landscape_classification", &response, "summary")?;
+        let landform_units_path = extract_output_path_by_key(
+            "soil_landscape_classification",
+            &response,
+            "landform_units",
+        )?;
+        let multiscale_signature_path = extract_output_path_by_key(
+            "soil_landscape_classification",
+            &response,
+            "multiscale_signature",
+        )?;
+        let polygons_path = extract_output_path_by_key(
+            "soil_landscape_classification",
+            &response,
+            "landform_polygons",
+        )?;
+        let summary_path =
+            extract_output_path_by_key("soil_landscape_classification", &response, "summary")?;
 
         Ok((
             Raster {
@@ -15584,20 +18995,29 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, String, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
-        args.insert("settlements".to_string(), json!(settlements.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "settlements".to_string(),
+            json!(settlements.file_path.to_string_lossy().to_string()),
+        );
         if let Some(epsg) = settlements_epsg {
             args.insert("settlements_epsg".to_string(), json!(epsg));
         }
-        args.insert("visibility_radius_meters".to_string(), json!(visibility_radius_meters));
+        args.insert(
+            "visibility_radius_meters".to_string(),
+            json!(visibility_radius_meters),
+        );
         args.insert("min_slope_degrees".to_string(), json!(min_slope_degrees));
         args.insert("max_slope_degrees".to_string(), json!(max_slope_degrees));
         args.insert("profile".to_string(), json!(profile));
         if let Some(raw) = sweep_spec_json {
             let parsed: JsonValue = serde_json::from_str(raw).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                    format!("invalid sweep_spec_json; expected JSON object string: {e}"),
-                )
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "invalid sweep_spec_json; expected JSON object string: {e}"
+                ))
             })?;
             args.insert("sweep_spec".to_string(), parsed);
         }
@@ -15625,8 +19045,10 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let score_path = extract_output_path_by_key("wind_turbine_siting", &response, "siting_score")?;
-        let confidence_path = extract_output_path_by_key("wind_turbine_siting", &response, "confidence")?;
+        let score_path =
+            extract_output_path_by_key("wind_turbine_siting", &response, "siting_score")?;
+        let confidence_path =
+            extract_output_path_by_key("wind_turbine_siting", &response, "confidence")?;
         let summary_path = extract_output_path_by_key("wind_turbine_siting", &response, "summary")?;
         let threshold_sensitivity_path = extract_output_path_by_key(
             "wind_turbine_siting",
@@ -15664,13 +19086,19 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Lidar, Raster, Raster, Raster, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("profile".to_string(), json!(profile));
         args.insert("block_size".to_string(), json!(block_size));
         args.insert("max_building_size".to_string(), json!(max_building_size));
         args.insert("slope_threshold".to_string(), json!(slope_threshold));
         args.insert("elev_threshold".to_string(), json!(elev_threshold));
-        args.insert("high_confidence_threshold".to_string(), json!(high_confidence_threshold));
+        args.insert(
+            "high_confidence_threshold".to_string(),
+            json!(high_confidence_threshold),
+        );
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
         }
@@ -15698,12 +19126,17 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let classified_lidar = extract_output_path_by_key("lidar_qa_and_confidence", &response, "classified_lidar")?;
+        let classified_lidar =
+            extract_output_path_by_key("lidar_qa_and_confidence", &response, "classified_lidar")?;
         let dtm_path = extract_output_path_by_key("lidar_qa_and_confidence", &response, "dtm")?;
-        let confidence_path = extract_output_path_by_key("lidar_qa_and_confidence", &response, "confidence")?;
-        let uncertainty_path = extract_output_path_by_key("lidar_qa_and_confidence", &response, "uncertainty")?;
-        let qa_flags_path = extract_output_path_by_key("lidar_qa_and_confidence", &response, "qa_flags")?;
-        let summary_path = extract_output_path_by_key("lidar_qa_and_confidence", &response, "summary")?;
+        let confidence_path =
+            extract_output_path_by_key("lidar_qa_and_confidence", &response, "confidence")?;
+        let uncertainty_path =
+            extract_output_path_by_key("lidar_qa_and_confidence", &response, "uncertainty")?;
+        let qa_flags_path =
+            extract_output_path_by_key("lidar_qa_and_confidence", &response, "qa_flags")?;
+        let summary_path =
+            extract_output_path_by_key("lidar_qa_and_confidence", &response, "summary")?;
 
         Ok((
             Lidar {
@@ -15746,9 +19179,21 @@ impl WbEnvironment {
         output_prefix: Option<&str>,
         output_path: Option<&str>,
         callback: Option<Py<PyAny>>,
-    ) -> PyResult<(Raster, Raster, Raster, Raster, Raster, Raster, String, Option<Lidar>)> {
+    ) -> PyResult<(
+        Raster,
+        Raster,
+        Raster,
+        Raster,
+        Raster,
+        Raster,
+        String,
+        Option<Lidar>,
+    )> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("profile".to_string(), json!(profile));
         args.insert("block_size".to_string(), json!(block_size));
         args.insert("max_building_size".to_string(), json!(max_building_size));
@@ -15757,7 +19202,10 @@ impl WbEnvironment {
         args.insert("z_factor".to_string(), json!(z_factor));
         args.insert("hillshade_azimuth".to_string(), json!(hillshade_azimuth));
         args.insert("hillshade_altitude".to_string(), json!(hillshade_altitude));
-        args.insert("high_confidence_threshold".to_string(), json!(high_confidence_threshold));
+        args.insert(
+            "high_confidence_threshold".to_string(),
+            json!(high_confidence_threshold),
+        );
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
         }
@@ -15787,17 +19235,26 @@ impl WbEnvironment {
 
         let dtm_path = extract_output_path_by_key("lidar_terrain_product_suite", &response, "dtm")?;
         let dsm_path = extract_output_path_by_key("lidar_terrain_product_suite", &response, "dsm")?;
-        let slope_path = extract_output_path_by_key("lidar_terrain_product_suite", &response, "slope")?;
-        let hillshade_path = extract_output_path_by_key("lidar_terrain_product_suite", &response, "hillshade")?;
-        let confidence_path = extract_output_path_by_key("lidar_terrain_product_suite", &response, "confidence")?;
-        let uncertainty_path = extract_output_path_by_key("lidar_terrain_product_suite", &response, "uncertainty")?;
-        let metadata_path = extract_output_path_by_key("lidar_terrain_product_suite", &response, "metadata")?;
+        let slope_path =
+            extract_output_path_by_key("lidar_terrain_product_suite", &response, "slope")?;
+        let hillshade_path =
+            extract_output_path_by_key("lidar_terrain_product_suite", &response, "hillshade")?;
+        let confidence_path =
+            extract_output_path_by_key("lidar_terrain_product_suite", &response, "confidence")?;
+        let uncertainty_path =
+            extract_output_path_by_key("lidar_terrain_product_suite", &response, "uncertainty")?;
+        let metadata_path =
+            extract_output_path_by_key("lidar_terrain_product_suite", &response, "metadata")?;
 
         let classified_lidar = {
             let outputs = response.get("outputs").unwrap_or(&response);
             outputs
                 .get("classified_lidar")
-                .and_then(|v| v.get("path").and_then(serde_json::Value::as_str).or_else(|| v.as_str()))
+                .and_then(|v| {
+                    v.get("path")
+                        .and_then(serde_json::Value::as_str)
+                        .or_else(|| v.as_str())
+                })
                 .map(|path| Lidar {
                     file_path: PathBuf::from(path),
                 })
@@ -15849,12 +19306,24 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Vector, Vector, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("corridors".to_string(), json!(corridors.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "corridors".to_string(),
+            json!(corridors.file_path.to_string_lossy().to_string()),
+        );
         args.insert("profile".to_string(), json!(profile));
         args.insert("resolution".to_string(), json!(resolution));
-        args.insert("risk_height_threshold".to_string(), json!(risk_height_threshold));
-        args.insert("corridor_influence_distance".to_string(), json!(corridor_influence_distance));
+        args.insert(
+            "risk_height_threshold".to_string(),
+            json!(risk_height_threshold),
+        );
+        args.insert(
+            "corridor_influence_distance".to_string(),
+            json!(corridor_influence_distance),
+        );
         if let Some(v) = priority_zone_threshold {
             args.insert("priority_zone_threshold".to_string(), json!(v));
         }
@@ -15871,7 +19340,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("utility_corridor_encroachment_intelligence", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "utility_corridor_encroachment_intelligence",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -15879,15 +19352,38 @@ impl WbEnvironment {
             r
         } else {
             self.runtime
-                .run_tool_json_with_progress("utility_corridor_encroachment_intelligence", &args_json)
+                .run_tool_json_with_progress(
+                    "utility_corridor_encroachment_intelligence",
+                    &args_json,
+                )
                 .map_err(map_tool_error)?
         };
 
-        let risk_path = extract_output_path_by_key("utility_corridor_encroachment_intelligence", &response, "encroachment_risk")?;
-        let zones_path = extract_output_path_by_key("utility_corridor_encroachment_intelligence", &response, "corridor_priority_zones")?;
-        let table_path = extract_output_path_by_key("utility_corridor_encroachment_intelligence", &response, "asset_risk_table")?;
-        let confidence_path = extract_output_path_by_key("utility_corridor_encroachment_intelligence", &response, "classification_confidence")?;
-        let summary_path = extract_output_path_by_key("utility_corridor_encroachment_intelligence", &response, "summary")?;
+        let risk_path = extract_output_path_by_key(
+            "utility_corridor_encroachment_intelligence",
+            &response,
+            "encroachment_risk",
+        )?;
+        let zones_path = extract_output_path_by_key(
+            "utility_corridor_encroachment_intelligence",
+            &response,
+            "corridor_priority_zones",
+        )?;
+        let table_path = extract_output_path_by_key(
+            "utility_corridor_encroachment_intelligence",
+            &response,
+            "asset_risk_table",
+        )?;
+        let confidence_path = extract_output_path_by_key(
+            "utility_corridor_encroachment_intelligence",
+            &response,
+            "classification_confidence",
+        )?;
+        let summary_path = extract_output_path_by_key(
+            "utility_corridor_encroachment_intelligence",
+            &response,
+            "summary",
+        )?;
 
         Ok((
             Raster {
@@ -15922,7 +19418,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Vector, Raster, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("profile".to_string(), json!(profile));
         args.insert("resolution".to_string(), json!(resolution));
         args.insert("stand_block_cells".to_string(), json!(stand_block_cells));
@@ -15940,7 +19439,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("forestry_structure_and_biomass_intelligence", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "forestry_structure_and_biomass_intelligence",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -15948,7 +19451,10 @@ impl WbEnvironment {
             r
         } else {
             self.runtime
-                .run_tool_json_with_progress("forestry_structure_and_biomass_intelligence", &args_json)
+                .run_tool_json_with_progress(
+                    "forestry_structure_and_biomass_intelligence",
+                    &args_json,
+                )
                 .map_err(map_tool_error)?
         };
 
@@ -16007,7 +19513,6 @@ impl WbEnvironment {
         ))
     }
 
-
     /// [PRO] carbon_sequestration_verification_audit — MRV-ready carbon sequestration verification using dual-date optical bundles.
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (baseline_bundle, current_bundle, biomass_proxy=None, baseline_red_band_index=0, baseline_nir_band_index=1, current_red_band_index=0, current_nir_band_index=1, biome_class="none", profile="balanced", zone_block_cells=16, baseline_date=None, current_date=None, mrv_template=None, methodology_reference=None, output_prefix=None, callback=None))]
@@ -16029,24 +19534,62 @@ impl WbEnvironment {
         methodology_reference: Option<&str>,
         output_prefix: Option<&str>,
         callback: Option<Py<PyAny>>,
-    ) -> PyResult<(Raster, Raster, Raster, Raster, Vector, String, String, String)> {
+    ) -> PyResult<(
+        Raster,
+        Raster,
+        Raster,
+        Raster,
+        Vector,
+        String,
+        String,
+        String,
+    )> {
         let mut args = serde_json::Map::new();
-        args.insert("baseline_bundle".to_string(), json!(baseline_bundle.file_path.to_string_lossy().to_string()));
-        args.insert("current_bundle".to_string(), json!(current_bundle.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "baseline_bundle".to_string(),
+            json!(baseline_bundle.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "current_bundle".to_string(),
+            json!(current_bundle.file_path.to_string_lossy().to_string()),
+        );
         if let Some(b) = biomass_proxy {
-            args.insert("biomass_proxy".to_string(), json!(b.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "biomass_proxy".to_string(),
+                json!(b.file_path.to_string_lossy().to_string()),
+            );
         }
-        args.insert("baseline_red_band_index".to_string(), json!(baseline_red_band_index));
-        args.insert("baseline_nir_band_index".to_string(), json!(baseline_nir_band_index));
-        args.insert("current_red_band_index".to_string(), json!(current_red_band_index));
-        args.insert("current_nir_band_index".to_string(), json!(current_nir_band_index));
+        args.insert(
+            "baseline_red_band_index".to_string(),
+            json!(baseline_red_band_index),
+        );
+        args.insert(
+            "baseline_nir_band_index".to_string(),
+            json!(baseline_nir_band_index),
+        );
+        args.insert(
+            "current_red_band_index".to_string(),
+            json!(current_red_band_index),
+        );
+        args.insert(
+            "current_nir_band_index".to_string(),
+            json!(current_nir_band_index),
+        );
         args.insert("biome_class".to_string(), json!(biome_class));
         args.insert("profile".to_string(), json!(profile));
         args.insert("zone_block_cells".to_string(), json!(zone_block_cells));
-        if let Some(d) = baseline_date { args.insert("baseline_date".to_string(), json!(d)); }
-        if let Some(d) = current_date { args.insert("current_date".to_string(), json!(d)); }
-        if let Some(t) = mrv_template { args.insert("mrv_template".to_string(), json!(t)); }
-        if let Some(r) = methodology_reference { args.insert("methodology_reference".to_string(), json!(r)); }
+        if let Some(d) = baseline_date {
+            args.insert("baseline_date".to_string(), json!(d));
+        }
+        if let Some(d) = current_date {
+            args.insert("current_date".to_string(), json!(d));
+        }
+        if let Some(t) = mrv_template {
+            args.insert("mrv_template".to_string(), json!(t));
+        }
+        if let Some(r) = methodology_reference {
+            args.insert("methodology_reference".to_string(), json!(r));
+        }
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
         }
@@ -16059,7 +19602,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("carbon_sequestration_verification_audit", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "carbon_sequestration_verification_audit",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -16071,21 +19618,67 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let carbon_proxy = extract_output_path_by_key("carbon_sequestration_verification_audit", &response, "carbon_proxy")?;
-        let ndvi_delta = extract_output_path_by_key("carbon_sequestration_verification_audit", &response, "ndvi_delta")?;
-        let change_confidence = extract_output_path_by_key("carbon_sequestration_verification_audit", &response, "change_confidence")?;
-        let uncertainty = extract_output_path_by_key("carbon_sequestration_verification_audit", &response, "uncertainty")?;
-        let verification_zones = extract_output_path_by_key("carbon_sequestration_verification_audit", &response, "verification_zones")?;
-        let audit_contract = extract_output_path_by_key("carbon_sequestration_verification_audit", &response, "audit_contract")?;
-        let compliance_evidence_packet = extract_output_path_by_key("carbon_sequestration_verification_audit", &response, "compliance_evidence_packet")?;
-        let regulator_ready_table = extract_output_path_by_key("carbon_sequestration_verification_audit", &response, "regulator_ready_table")?;
+        let carbon_proxy = extract_output_path_by_key(
+            "carbon_sequestration_verification_audit",
+            &response,
+            "carbon_proxy",
+        )?;
+        let ndvi_delta = extract_output_path_by_key(
+            "carbon_sequestration_verification_audit",
+            &response,
+            "ndvi_delta",
+        )?;
+        let change_confidence = extract_output_path_by_key(
+            "carbon_sequestration_verification_audit",
+            &response,
+            "change_confidence",
+        )?;
+        let uncertainty = extract_output_path_by_key(
+            "carbon_sequestration_verification_audit",
+            &response,
+            "uncertainty",
+        )?;
+        let verification_zones = extract_output_path_by_key(
+            "carbon_sequestration_verification_audit",
+            &response,
+            "verification_zones",
+        )?;
+        let audit_contract = extract_output_path_by_key(
+            "carbon_sequestration_verification_audit",
+            &response,
+            "audit_contract",
+        )?;
+        let compliance_evidence_packet = extract_output_path_by_key(
+            "carbon_sequestration_verification_audit",
+            &response,
+            "compliance_evidence_packet",
+        )?;
+        let regulator_ready_table = extract_output_path_by_key(
+            "carbon_sequestration_verification_audit",
+            &response,
+            "regulator_ready_table",
+        )?;
 
         Ok((
-            Raster { file_path: carbon_proxy, active_band: baseline_bundle.active_band },
-            Raster { file_path: ndvi_delta, active_band: baseline_bundle.active_band },
-            Raster { file_path: change_confidence, active_band: baseline_bundle.active_band },
-            Raster { file_path: uncertainty, active_band: baseline_bundle.active_band },
-            Vector { file_path: verification_zones },
+            Raster {
+                file_path: carbon_proxy,
+                active_band: baseline_bundle.active_band,
+            },
+            Raster {
+                file_path: ndvi_delta,
+                active_band: baseline_bundle.active_band,
+            },
+            Raster {
+                file_path: change_confidence,
+                active_band: baseline_bundle.active_band,
+            },
+            Raster {
+                file_path: uncertainty,
+                active_band: baseline_bundle.active_band,
+            },
+            Vector {
+                file_path: verification_zones,
+            },
             audit_contract.to_string_lossy().to_string(),
             compliance_evidence_packet.to_string_lossy().to_string(),
             regulator_ready_table.to_string_lossy().to_string(),
@@ -16118,7 +19711,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("guided_uav_image_intake_workflow", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "guided_uav_image_intake_workflow",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -16130,9 +19727,18 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let centers = extract_output_path_by_key("guided_uav_image_intake_workflow", &response, "image_centers")?;
-        let lines = extract_output_path_by_key("guided_uav_image_intake_workflow", &response, "flight_path_lines")?;
-        let summary = extract_output_path_by_key("guided_uav_image_intake_workflow", &response, "summary")?;
+        let centers = extract_output_path_by_key(
+            "guided_uav_image_intake_workflow",
+            &response,
+            "image_centers",
+        )?;
+        let lines = extract_output_path_by_key(
+            "guided_uav_image_intake_workflow",
+            &response,
+            "flight_path_lines",
+        )?;
+        let summary =
+            extract_output_path_by_key("guided_uav_image_intake_workflow", &response, "summary")?;
 
         Ok((
             Vector { file_path: centers },
@@ -16167,23 +19773,65 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Vector, String, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("baseline_bundle".to_string(), json!(baseline_bundle.file_path.to_string_lossy().to_string()));
-        args.insert("current_bundle".to_string(), json!(current_bundle.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "baseline_bundle".to_string(),
+            json!(baseline_bundle.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "current_bundle".to_string(),
+            json!(current_bundle.file_path.to_string_lossy().to_string()),
+        );
         if let Some(s) = slope {
-            args.insert("slope".to_string(), json!(s.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "slope".to_string(),
+                json!(s.file_path.to_string_lossy().to_string()),
+            );
         }
-        args.insert("baseline_red_band_index".to_string(), json!(baseline_red_band_index));
-        args.insert("baseline_nir_band_index".to_string(), json!(baseline_nir_band_index));
-        args.insert("current_red_band_index".to_string(), json!(current_red_band_index));
-        args.insert("current_nir_band_index".to_string(), json!(current_nir_band_index));
-        args.insert("reclamation_target_ndvi".to_string(), json!(reclamation_target_ndvi));
-        args.insert("slope_stability_max_deg".to_string(), json!(slope_stability_max_deg));
-        if let Some(j) = jurisdiction { args.insert("jurisdiction".to_string(), json!(j)); }
-        if let Some(e) = monitoring_epoch { args.insert("monitoring_epoch".to_string(), json!(e)); }
-        if let Some(n) = site_name { args.insert("site_name".to_string(), json!(n)); }
-        args.insert("has_hydrology_evidence".to_string(), json!(has_hydrology_evidence));
-        args.insert("has_soil_ph_evidence".to_string(), json!(has_soil_ph_evidence));
-        args.insert("has_perennial_vegetation_evidence".to_string(), json!(has_perennial_vegetation_evidence));
+        args.insert(
+            "baseline_red_band_index".to_string(),
+            json!(baseline_red_band_index),
+        );
+        args.insert(
+            "baseline_nir_band_index".to_string(),
+            json!(baseline_nir_band_index),
+        );
+        args.insert(
+            "current_red_band_index".to_string(),
+            json!(current_red_band_index),
+        );
+        args.insert(
+            "current_nir_band_index".to_string(),
+            json!(current_nir_band_index),
+        );
+        args.insert(
+            "reclamation_target_ndvi".to_string(),
+            json!(reclamation_target_ndvi),
+        );
+        args.insert(
+            "slope_stability_max_deg".to_string(),
+            json!(slope_stability_max_deg),
+        );
+        if let Some(j) = jurisdiction {
+            args.insert("jurisdiction".to_string(), json!(j));
+        }
+        if let Some(e) = monitoring_epoch {
+            args.insert("monitoring_epoch".to_string(), json!(e));
+        }
+        if let Some(n) = site_name {
+            args.insert("site_name".to_string(), json!(n));
+        }
+        args.insert(
+            "has_hydrology_evidence".to_string(),
+            json!(has_hydrology_evidence),
+        );
+        args.insert(
+            "has_soil_ph_evidence".to_string(),
+            json!(has_soil_ph_evidence),
+        );
+        args.insert(
+            "has_perennial_vegetation_evidence".to_string(),
+            json!(has_perennial_vegetation_evidence),
+        );
         if let Some(interval) = report_interval_months {
             args.insert("report_interval_months".to_string(), json!(interval));
         }
@@ -16200,7 +19848,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("mine_site_reclamation_compliance_tracker", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "mine_site_reclamation_compliance_tracker",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -16212,16 +19864,44 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let vegetation_recovery = extract_output_path_by_key("mine_site_reclamation_compliance_tracker", &response, "vegetation_recovery")?;
-        let reclamation_progress = extract_output_path_by_key("mine_site_reclamation_compliance_tracker", &response, "reclamation_progress")?;
-        let compliance_zones = extract_output_path_by_key("mine_site_reclamation_compliance_tracker", &response, "compliance_zones")?;
-        let compliance_contract = extract_output_path_by_key("mine_site_reclamation_compliance_tracker", &response, "compliance_contract")?;
-        let validation_diagnostics = extract_output_path_by_key("mine_site_reclamation_compliance_tracker", &response, "validation_diagnostics")?;
+        let vegetation_recovery = extract_output_path_by_key(
+            "mine_site_reclamation_compliance_tracker",
+            &response,
+            "vegetation_recovery",
+        )?;
+        let reclamation_progress = extract_output_path_by_key(
+            "mine_site_reclamation_compliance_tracker",
+            &response,
+            "reclamation_progress",
+        )?;
+        let compliance_zones = extract_output_path_by_key(
+            "mine_site_reclamation_compliance_tracker",
+            &response,
+            "compliance_zones",
+        )?;
+        let compliance_contract = extract_output_path_by_key(
+            "mine_site_reclamation_compliance_tracker",
+            &response,
+            "compliance_contract",
+        )?;
+        let validation_diagnostics = extract_output_path_by_key(
+            "mine_site_reclamation_compliance_tracker",
+            &response,
+            "validation_diagnostics",
+        )?;
 
         Ok((
-            Raster { file_path: vegetation_recovery, active_band: baseline_bundle.active_band },
-            Raster { file_path: reclamation_progress, active_band: baseline_bundle.active_band },
-            Vector { file_path: compliance_zones },
+            Raster {
+                file_path: vegetation_recovery,
+                active_band: baseline_bundle.active_band,
+            },
+            Raster {
+                file_path: reclamation_progress,
+                active_band: baseline_bundle.active_band,
+            },
+            Vector {
+                file_path: compliance_zones,
+            },
             compliance_contract.to_string_lossy().to_string(),
             validation_diagnostics.to_string_lossy().to_string(),
         ))
@@ -16244,11 +19924,20 @@ impl WbEnvironment {
     ) -> PyResult<(String, String)> {
         let mut args = serde_json::Map::new();
         args.insert("mode".to_string(), json!(mode));
-        if let Some(d) = images_dir { args.insert("images_dir".to_string(), json!(d)); }
-        if let Some(l) = left_image { args.insert("left_image".to_string(), json!(l)); }
-        if let Some(r) = right_image { args.insert("right_image".to_string(), json!(r)); }
+        if let Some(d) = images_dir {
+            args.insert("images_dir".to_string(), json!(d));
+        }
+        if let Some(l) = left_image {
+            args.insert("left_image".to_string(), json!(l));
+        }
+        if let Some(r) = right_image {
+            args.insert("right_image".to_string(), json!(r));
+        }
         args.insert("max_pairs".to_string(), json!(max_pairs));
-        args.insert("max_features_per_image".to_string(), json!(max_features_per_image));
+        args.insert(
+            "max_features_per_image".to_string(),
+            json!(max_features_per_image),
+        );
         args.insert("ratio_test".to_string(), json!(ratio_test));
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
@@ -16262,7 +19951,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("registration_oriented_feature_workflow", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "registration_oriented_feature_workflow",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -16274,8 +19967,16 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let tie_points = extract_output_path_by_key("registration_oriented_feature_workflow", &response, "tie_points")?;
-        let match_summary = extract_output_path_by_key("registration_oriented_feature_workflow", &response, "match_summary")?;
+        let tie_points = extract_output_path_by_key(
+            "registration_oriented_feature_workflow",
+            &response,
+            "tie_points",
+        )?;
+        let match_summary = extract_output_path_by_key(
+            "registration_oriented_feature_workflow",
+            &response,
+            "match_summary",
+        )?;
 
         Ok((
             tie_points.to_string_lossy().to_string(),
@@ -16297,12 +19998,24 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Vector, Raster, Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("building_footprints".to_string(), json!(building_footprints.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "building_footprints".to_string(),
+            json!(building_footprints.file_path.to_string_lossy().to_string()),
+        );
         args.insert("profile".to_string(), json!(profile));
         args.insert("resolution".to_string(), json!(resolution));
-        args.insert("max_candidate_roofs".to_string(), json!(max_candidate_roofs));
-        args.insert("min_candidate_score".to_string(), json!(min_candidate_score));
+        args.insert(
+            "max_candidate_roofs".to_string(),
+            json!(max_candidate_roofs),
+        );
+        args.insert(
+            "min_candidate_score".to_string(),
+            json!(min_candidate_score),
+        );
         if let Some(prefix) = self.resolve_output_path_for_wd(output_prefix) {
             args.insert("output_prefix".to_string(), json!(prefix));
         }
@@ -16315,7 +20028,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("rooftop_solar_structural_readiness_intelligence", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "rooftop_solar_structural_readiness_intelligence",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -16323,21 +20040,55 @@ impl WbEnvironment {
             r
         } else {
             self.runtime
-                .run_tool_json_with_progress("rooftop_solar_structural_readiness_intelligence", &args_json)
+                .run_tool_json_with_progress(
+                    "rooftop_solar_structural_readiness_intelligence",
+                    &args_json,
+                )
                 .map_err(map_tool_error)?
         };
 
-        let suitability = extract_output_path_by_key("rooftop_solar_structural_readiness_intelligence", &response, "rooftop_suitability")?;
-        let candidates = extract_output_path_by_key("rooftop_solar_structural_readiness_intelligence", &response, "candidate_roofs")?;
-        let shading = extract_output_path_by_key("rooftop_solar_structural_readiness_intelligence", &response, "shading_risk")?;
-        let readiness = extract_output_path_by_key("rooftop_solar_structural_readiness_intelligence", &response, "readiness_score")?;
-        let summary = extract_output_path_by_key("rooftop_solar_structural_readiness_intelligence", &response, "summary")?;
+        let suitability = extract_output_path_by_key(
+            "rooftop_solar_structural_readiness_intelligence",
+            &response,
+            "rooftop_suitability",
+        )?;
+        let candidates = extract_output_path_by_key(
+            "rooftop_solar_structural_readiness_intelligence",
+            &response,
+            "candidate_roofs",
+        )?;
+        let shading = extract_output_path_by_key(
+            "rooftop_solar_structural_readiness_intelligence",
+            &response,
+            "shading_risk",
+        )?;
+        let readiness = extract_output_path_by_key(
+            "rooftop_solar_structural_readiness_intelligence",
+            &response,
+            "readiness_score",
+        )?;
+        let summary = extract_output_path_by_key(
+            "rooftop_solar_structural_readiness_intelligence",
+            &response,
+            "summary",
+        )?;
 
         Ok((
-            Raster { file_path: suitability, active_band: 0 },
-            Vector { file_path: candidates },
-            Raster { file_path: shading, active_band: 0 },
-            Raster { file_path: readiness, active_band: 0 },
+            Raster {
+                file_path: suitability,
+                active_band: 0,
+            },
+            Vector {
+                file_path: candidates,
+            },
+            Raster {
+                file_path: shading,
+                active_band: 0,
+            },
+            Raster {
+                file_path: readiness,
+                active_band: 0,
+            },
             summary.to_string_lossy().to_string(),
         ))
     }
@@ -16360,17 +20111,29 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Raster, Raster, Vector, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("optical_bundle".to_string(), json!(optical_bundle.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "optical_bundle".to_string(),
+            json!(optical_bundle.file_path.to_string_lossy().to_string()),
+        );
         args.insert("red_band_index".to_string(), json!(red_band_index));
         args.insert("nir_band_index".to_string(), json!(nir_band_index));
         if let Some(b) = biomass_proxy {
-            args.insert("biomass_proxy".to_string(), json!(b.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "biomass_proxy".to_string(),
+                json!(b.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(s) = slope {
-            args.insert("slope".to_string(), json!(s.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "slope".to_string(),
+                json!(s.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(a) = aspect {
-            args.insert("aspect".to_string(), json!(a.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "aspect".to_string(),
+                json!(a.file_path.to_string_lossy().to_string()),
+            );
         }
         args.insert("fuel_model".to_string(), json!(fuel_model));
         args.insert("profile".to_string(), json!(profile));
@@ -16387,7 +20150,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("wildfire_fuel_loading_and_risk_matrix", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "wildfire_fuel_loading_and_risk_matrix",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -16399,19 +20166,57 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let moisture_index = extract_output_path_by_key("wildfire_fuel_loading_and_risk_matrix", &response, "moisture_index")?;
-        let fuel_load_class = extract_output_path_by_key("wildfire_fuel_loading_and_risk_matrix", &response, "fuel_load_class")?;
-        let ladder_fuel = extract_output_path_by_key("wildfire_fuel_loading_and_risk_matrix", &response, "ladder_fuel_continuity")?;
-        let risk_matrix = extract_output_path_by_key("wildfire_fuel_loading_and_risk_matrix", &response, "risk_matrix")?;
-        let risk_zones = extract_output_path_by_key("wildfire_fuel_loading_and_risk_matrix", &response, "risk_zones")?;
-        let summary = extract_output_path_by_key("wildfire_fuel_loading_and_risk_matrix", &response, "summary")?;
+        let moisture_index = extract_output_path_by_key(
+            "wildfire_fuel_loading_and_risk_matrix",
+            &response,
+            "moisture_index",
+        )?;
+        let fuel_load_class = extract_output_path_by_key(
+            "wildfire_fuel_loading_and_risk_matrix",
+            &response,
+            "fuel_load_class",
+        )?;
+        let ladder_fuel = extract_output_path_by_key(
+            "wildfire_fuel_loading_and_risk_matrix",
+            &response,
+            "ladder_fuel_continuity",
+        )?;
+        let risk_matrix = extract_output_path_by_key(
+            "wildfire_fuel_loading_and_risk_matrix",
+            &response,
+            "risk_matrix",
+        )?;
+        let risk_zones = extract_output_path_by_key(
+            "wildfire_fuel_loading_and_risk_matrix",
+            &response,
+            "risk_zones",
+        )?;
+        let summary = extract_output_path_by_key(
+            "wildfire_fuel_loading_and_risk_matrix",
+            &response,
+            "summary",
+        )?;
 
         Ok((
-            Raster { file_path: moisture_index, active_band: optical_bundle.active_band },
-            Raster { file_path: fuel_load_class, active_band: optical_bundle.active_band },
-            Raster { file_path: ladder_fuel, active_band: optical_bundle.active_band },
-            Raster { file_path: risk_matrix, active_band: optical_bundle.active_band },
-            Vector { file_path: risk_zones },
+            Raster {
+                file_path: moisture_index,
+                active_band: optical_bundle.active_band,
+            },
+            Raster {
+                file_path: fuel_load_class,
+                active_band: optical_bundle.active_band,
+            },
+            Raster {
+                file_path: ladder_fuel,
+                active_band: optical_bundle.active_band,
+            },
+            Raster {
+                file_path: risk_matrix,
+                active_band: optical_bundle.active_band,
+            },
+            Vector {
+                file_path: risk_zones,
+            },
             summary.to_string_lossy().to_string(),
         ))
     }
@@ -16427,7 +20232,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("interior_only".to_string(), json!(interior_only));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
@@ -16470,7 +20278,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -16566,7 +20377,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("flow_type".to_string(), json!(flow_type));
         args.insert("z_factor".to_string(), json!(z_factor));
         if let Some(ref out) = resolved_output {
@@ -16613,7 +20427,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "loading".to_string(),
             json!(loading.file_path.to_string_lossy().to_string()),
@@ -16719,7 +20536,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(value) = max_cost {
             args.insert("max_cost".to_string(), json!(value));
         }
@@ -16732,7 +20552,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("breach_depressions_least_cost", args, dem.active_band, callback)
+        self._run_raster_tool_with_args(
+            "breach_depressions_least_cost",
+            args,
+            dem.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, output_path=None, callback=None))]
@@ -16743,7 +20568,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -16762,7 +20590,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("fix_flats".to_string(), json!(fix_flats));
         args.insert("flat_resolution".to_string(), json!(flat_resolution));
         if let Some(value) = flat_increment {
@@ -16787,7 +20618,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("fix_flats".to_string(), json!(fix_flats));
         if let Some(value) = flat_increment {
             args.insert("flat_increment".to_string(), json!(value));
@@ -16795,7 +20629,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("fill_depressions_planchon_and_darboux", args, dem.active_band, callback)
+        self._run_raster_tool_with_args(
+            "fill_depressions_planchon_and_darboux",
+            args,
+            dem.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, fix_flats=true, flat_increment=0.0001, output_path=None, callback=None))]
@@ -16808,7 +20647,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("fix_flats".to_string(), json!(fix_flats));
         if let Some(value) = flat_increment {
             args.insert("flat_increment".to_string(), json!(value));
@@ -16816,7 +20658,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("fill_depressions_wang_and_liu", args, dem.active_band, callback)
+        self._run_raster_tool_with_args(
+            "fill_depressions_wang_and_liu",
+            args,
+            dem.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, output_path=None, callback=None))]
@@ -16827,7 +20674,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -16845,8 +20695,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
-        args.insert("loading".to_string(), json!(loading.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "loading".to_string(),
+            json!(loading.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "efficiency".to_string(),
             json!(efficiency.file_path.to_string_lossy().to_string()),
@@ -16892,7 +20748,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("downslope_flowpath_length", args, d8_pointer.active_band, callback)
+        self._run_raster_tool_with_args(
+            "downslope_flowpath_length",
+            args,
+            d8_pointer.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, output_path=None, callback=None))]
@@ -16903,11 +20764,19 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("max_upslope_flowpath_length", args, dem.active_band, callback)
+        self._run_raster_tool_with_args(
+            "max_upslope_flowpath_length",
+            args,
+            dem.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, output_path=None, callback=None))]
@@ -16918,11 +20787,19 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("average_upslope_flowpath_length", args, dem.active_band, callback)
+        self._run_raster_tool_with_args(
+            "average_upslope_flowpath_length",
+            args,
+            dem.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, streams, output_path=None, callback=None))]
@@ -16934,7 +20811,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "streams".to_string(),
             json!(streams.file_path.to_string_lossy().to_string()),
@@ -16954,7 +20834,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "streams".to_string(),
             json!(streams.file_path.to_string_lossy().to_string()),
@@ -16962,7 +20845,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("elevation_above_stream_euclidean", args, dem.active_band, callback)
+        self._run_raster_tool_with_args(
+            "elevation_above_stream_euclidean",
+            args,
+            dem.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, streams, dinf=false, output_path=None, callback=None))]
@@ -16975,7 +20863,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "streams".to_string(),
             json!(streams.file_path.to_string_lossy().to_string()),
@@ -16984,7 +20875,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("downslope_distance_to_stream", args, dem.active_band, callback)
+        self._run_raster_tool_with_args(
+            "downslope_distance_to_stream",
+            args,
+            dem.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, streams=None, lakes=None, output_path=None, callback=None))]
@@ -17003,7 +20899,10 @@ impl WbEnvironment {
         }
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(layer) = streams {
             args.insert(
                 "streams".to_string(),
@@ -17031,7 +20930,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "streams".to_string(),
             json!(streams.file_path.to_string_lossy().to_string()),
@@ -17053,7 +20955,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "streams".to_string(),
             json!(streams.file_path.to_string_lossy().to_string()),
@@ -17093,7 +20998,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("trace_downslope_flowpaths", args, d8_pointer.active_band, callback)
+        self._run_raster_tool_with_args(
+            "trace_downslope_flowpaths",
+            args,
+            d8_pointer.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, output_path=None, callback=None))]
@@ -17104,7 +21014,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -17121,7 +21034,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "dam_points".to_string(),
             json!(dam_points.file_path.to_string_lossy().to_string()),
@@ -17144,7 +21060,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "walls".to_string(),
             json!(walls.file_path.to_string_lossy().to_string()),
@@ -17176,7 +21095,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster, Raster, Raster)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "streams".to_string(),
             json!(streams.file_path.to_string_lossy().to_string()),
@@ -17195,11 +21117,16 @@ impl WbEnvironment {
             args.insert("out_fa".to_string(), json!(out));
         }
 
-        let response = run_tool_response_with_args(&self.runtime, "topological_breach_burn", args, callback)?;
-        let streams_path = extract_typed_output_path_by_key("topological_breach_burn", &response, "streams")?;
-        let dem_path = extract_typed_output_path_by_key("topological_breach_burn", &response, "burned_dem")?;
-        let dir_path = extract_typed_output_path_by_key("topological_breach_burn", &response, "flow_dir")?;
-        let accum_path = extract_typed_output_path_by_key("topological_breach_burn", &response, "flow_accum")?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "topological_breach_burn", args, callback)?;
+        let streams_path =
+            extract_typed_output_path_by_key("topological_breach_burn", &response, "streams")?;
+        let dem_path =
+            extract_typed_output_path_by_key("topological_breach_burn", &response, "burned_dem")?;
+        let dir_path =
+            extract_typed_output_path_by_key("topological_breach_burn", &response, "flow_dir")?;
+        let accum_path =
+            extract_typed_output_path_by_key("topological_breach_burn", &response, "flow_accum")?;
 
         Ok((
             Raster {
@@ -17237,7 +21164,10 @@ impl WbEnvironment {
             "streams".to_string(),
             json!(streams.file_path.to_string_lossy().to_string()),
         );
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("threshold".to_string(), json!(threshold));
         args.insert("snap_distance".to_string(), json!(snap_distance));
         args.insert(
@@ -17285,7 +21215,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Vector, Vector)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("filter_size".to_string(), json!(filter_size));
         args.insert("ep_threshold".to_string(), json!(ep_threshold));
         args.insert("slope_threshold".to_string(), json!(slope_threshold));
@@ -17297,13 +21230,23 @@ impl WbEnvironment {
             args.insert("output_valleys".to_string(), json!(out));
         }
 
-        let response = run_tool_response_with_args(&self.runtime, "ridge_and_valley_vectors", args, callback)?;
-        let ridges_path = extract_typed_output_path_by_key("ridge_and_valley_vectors", &response, "ridges_path")?;
-        let valleys_path = extract_typed_output_path_by_key("ridge_and_valley_vectors", &response, "valleys_path")?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "ridge_and_valley_vectors", args, callback)?;
+        let ridges_path =
+            extract_typed_output_path_by_key("ridge_and_valley_vectors", &response, "ridges_path")?;
+        let valleys_path = extract_typed_output_path_by_key(
+            "ridge_and_valley_vectors",
+            &response,
+            "valleys_path",
+        )?;
 
         Ok((
-            Vector { file_path: ridges_path },
-            Vector { file_path: valleys_path },
+            Vector {
+                file_path: ridges_path,
+            },
+            Vector {
+                file_path: valleys_path,
+            },
         ))
     }
 
@@ -17318,14 +21261,22 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("rmse".to_string(), json!(rmse));
         args.insert("range".to_string(), json!(range));
         args.insert("iterations".to_string(), json!(iterations));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("stochastic_depression_analysis", args, dem.active_band, callback)
+        self._run_raster_tool_with_args(
+            "stochastic_depression_analysis",
+            args,
+            dem.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (d8_pointer, pour_points, esri_pntr=false, output_path=None, callback=None))]
@@ -17370,11 +21321,19 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("upslope_depression_storage", args, dem.active_band, callback)
+        self._run_raster_tool_with_args(
+            "upslope_depression_storage",
+            args,
+            dem.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, lakes, output_path=None, callback=None))]
@@ -17386,7 +21345,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "lakes".to_string(),
             json!(lakes.file_path.to_string_lossy().to_string()),
@@ -17409,9 +21371,15 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, Raster)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("exponent".to_string(), json!(exponent));
-        args.insert("convergence_threshold".to_string(), json!(convergence_threshold));
+        args.insert(
+            "convergence_threshold".to_string(),
+            json!(convergence_threshold),
+        );
         args.insert("z_factor".to_string(), json!(z_factor));
         if let Some(out) = self.resolve_output_path_for_wd(output1_path) {
             args.insert("output1".to_string(), json!(out));
@@ -17420,9 +21388,12 @@ impl WbEnvironment {
             args.insert("output2".to_string(), json!(out));
         }
 
-        let response = run_tool_response_with_args(&self.runtime, "hydrologic_connectivity", args, callback)?;
-        let dul_path = extract_typed_output_path_by_key("hydrologic_connectivity", &response, "dul")?;
-        let udsa_path = extract_typed_output_path_by_key("hydrologic_connectivity", &response, "udsa")?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "hydrologic_connectivity", args, callback)?;
+        let dul_path =
+            extract_typed_output_path_by_key("hydrologic_connectivity", &response, "dul")?;
+        let udsa_path =
+            extract_typed_output_path_by_key("hydrologic_connectivity", &response, "udsa")?;
 
         Ok((
             Raster {
@@ -17452,7 +21423,13 @@ impl WbEnvironment {
         area_output_path: Option<&str>,
         dam_height_output_path: Option<&str>,
         callback: Option<Py<PyAny>>,
-    ) -> PyResult<(Option<Raster>, Option<Raster>, Option<Raster>, Option<Raster>, Option<Raster>)> {
+    ) -> PyResult<(
+        Option<Raster>,
+        Option<Raster>,
+        Option<Raster>,
+        Option<Raster>,
+        Option<Raster>,
+    )> {
         if !(output_mean
             || output_max
             || output_volume
@@ -17470,7 +21447,10 @@ impl WbEnvironment {
         }
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("max_dam_length".to_string(), json!(max_dam_length));
         args.insert("output_mean".to_string(), json!(output_mean));
         args.insert("output_max".to_string(), json!(output_max));
@@ -17493,27 +21473,37 @@ impl WbEnvironment {
             args.insert("out_dam_height".to_string(), json!(out));
         }
 
-        let response = run_tool_response_with_args(&self.runtime, "impoundment_size_index", args, callback)?;
-        let mean = extract_optional_typed_output_path_by_key(&response, "mean").map(|file_path| Raster {
-            file_path,
-            active_band: dem.active_band,
-        });
-        let max = extract_optional_typed_output_path_by_key(&response, "max").map(|file_path| Raster {
-            file_path,
-            active_band: dem.active_band,
-        });
-        let volume = extract_optional_typed_output_path_by_key(&response, "volume").map(|file_path| Raster {
-            file_path,
-            active_band: dem.active_band,
-        });
-        let area = extract_optional_typed_output_path_by_key(&response, "area").map(|file_path| Raster {
-            file_path,
-            active_band: dem.active_band,
-        });
-        let dam_height = extract_optional_typed_output_path_by_key(&response, "dam_height").map(|file_path| Raster {
-            file_path,
-            active_band: dem.active_band,
-        });
+        let response =
+            run_tool_response_with_args(&self.runtime, "impoundment_size_index", args, callback)?;
+        let mean =
+            extract_optional_typed_output_path_by_key(&response, "mean").map(|file_path| Raster {
+                file_path,
+                active_band: dem.active_band,
+            });
+        let max =
+            extract_optional_typed_output_path_by_key(&response, "max").map(|file_path| Raster {
+                file_path,
+                active_band: dem.active_band,
+            });
+        let volume =
+            extract_optional_typed_output_path_by_key(&response, "volume").map(|file_path| {
+                Raster {
+                    file_path,
+                    active_band: dem.active_band,
+                }
+            });
+        let area =
+            extract_optional_typed_output_path_by_key(&response, "area").map(|file_path| Raster {
+                file_path,
+                active_band: dem.active_band,
+            });
+        let dam_height =
+            extract_optional_typed_output_path_by_key(&response, "dam_height").map(|file_path| {
+                Raster {
+                    file_path,
+                    active_band: dem.active_band,
+                }
+            });
 
         Ok((mean, max, volume, area, dam_height))
     }
@@ -17526,7 +21516,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -17542,8 +21535,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
-        args.insert("values".to_string(), json!(values.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "values".to_string(),
+            json!(values.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -17559,11 +21558,19 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Vector> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
-        args.insert("basins".to_string(), json!(basins.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "basins".to_string(),
+            json!(basins.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "output".to_string(),
-            json!(self.resolve_output_path_for_wd(Some(output_path)).unwrap_or_else(|| output_path.to_string())),
+            json!(self
+                .resolve_output_path_for_wd(Some(output_path))
+                .unwrap_or_else(|| output_path.to_string())),
         );
         self._run_vector_tool_with_args("longest_flowpath", args, callback)
     }
@@ -17626,7 +21633,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("zero_background".to_string(), json!(zero_background));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
@@ -17670,7 +21680,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("zero_background".to_string(), json!(zero_background));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
@@ -17736,7 +21749,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("watershed_from_raster_pour_points", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "watershed_from_raster_pour_points",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -17837,7 +21854,10 @@ impl WbEnvironment {
             json!(streams.file_path.to_string_lossy().to_string()),
         );
         args.insert("snap_dist".to_string(), json!(snap_dist));
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -17893,7 +21913,10 @@ impl WbEnvironment {
             json!(flow_accum.file_path.to_string_lossy().to_string()),
         );
         args.insert("snap_dist".to_string(), json!(snap_dist));
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -17930,24 +21953,41 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("d8_pntr".to_string(), json!(d8_pointer.file_path.to_string_lossy().to_string()));
-        args.insert("streams".to_string(), json!(streams.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "d8_pntr".to_string(),
+            json!(d8_pointer.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "streams".to_string(),
+            json!(streams.file_path.to_string_lossy().to_string()),
+        );
         args.insert("esri_pntr".to_string(), json!(esri_pntr));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
-        let args_json = serde_json::to_string(&serde_json::Value::Object(args))
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}")))?;
+        let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
+        })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
-            let r = self.runtime.run_tool_json_with_progress_sink("subbasins", &args_json, &sink).map_err(map_tool_error)?;
-            if let Some(msg) = sink.take_error() { return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg)); }
+            let r = self
+                .runtime
+                .run_tool_json_with_progress_sink("subbasins", &args_json, &sink)
+                .map_err(map_tool_error)?;
+            if let Some(msg) = sink.take_error() {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
+            }
             r
         } else {
-            self.runtime.run_tool_json_with_progress("subbasins", &args_json).map_err(map_tool_error)?
+            self.runtime
+                .run_tool_json_with_progress("subbasins", &args_json)
+                .map_err(map_tool_error)?
         };
         let out_path = extract_typed_output_path("subbasins", &response)?;
-        Ok(Raster { file_path: out_path, active_band: d8_pointer.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: d8_pointer.active_band,
+        })
     }
 
     #[pyo3(signature = (d8_pointer, streams, esri_pntr=false, output_path=None, callback=None))]
@@ -17961,24 +22001,41 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("d8_pntr".to_string(), json!(d8_pointer.file_path.to_string_lossy().to_string()));
-        args.insert("streams".to_string(), json!(streams.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "d8_pntr".to_string(),
+            json!(d8_pointer.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "streams".to_string(),
+            json!(streams.file_path.to_string_lossy().to_string()),
+        );
         args.insert("esri_pntr".to_string(), json!(esri_pntr));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
-        let args_json = serde_json::to_string(&serde_json::Value::Object(args))
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}")))?;
+        let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
+        })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
-            let r = self.runtime.run_tool_json_with_progress_sink("hillslopes", &args_json, &sink).map_err(map_tool_error)?;
-            if let Some(msg) = sink.take_error() { return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg)); }
+            let r = self
+                .runtime
+                .run_tool_json_with_progress_sink("hillslopes", &args_json, &sink)
+                .map_err(map_tool_error)?;
+            if let Some(msg) = sink.take_error() {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
+            }
             r
         } else {
-            self.runtime.run_tool_json_with_progress("hillslopes", &args_json).map_err(map_tool_error)?
+            self.runtime
+                .run_tool_json_with_progress("hillslopes", &args_json)
+                .map_err(map_tool_error)?
         };
         let out_path = extract_typed_output_path("hillslopes", &response)?;
-        Ok(Raster { file_path: out_path, active_band: d8_pointer.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: d8_pointer.active_band,
+        })
     }
 
     #[pyo3(signature = (d8_pointer, streams, esri_pntr=false, output_path=None, callback=None))]
@@ -17992,24 +22049,41 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("d8_pntr".to_string(), json!(d8_pointer.file_path.to_string_lossy().to_string()));
-        args.insert("streams".to_string(), json!(streams.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "d8_pntr".to_string(),
+            json!(d8_pointer.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "streams".to_string(),
+            json!(streams.file_path.to_string_lossy().to_string()),
+        );
         args.insert("esri_pntr".to_string(), json!(esri_pntr));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
-        let args_json = serde_json::to_string(&serde_json::Value::Object(args))
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}")))?;
+        let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
+        })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
-            let r = self.runtime.run_tool_json_with_progress_sink("strahler_order_basins", &args_json, &sink).map_err(map_tool_error)?;
-            if let Some(msg) = sink.take_error() { return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg)); }
+            let r = self
+                .runtime
+                .run_tool_json_with_progress_sink("strahler_order_basins", &args_json, &sink)
+                .map_err(map_tool_error)?;
+            if let Some(msg) = sink.take_error() {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
+            }
             r
         } else {
-            self.runtime.run_tool_json_with_progress("strahler_order_basins", &args_json).map_err(map_tool_error)?
+            self.runtime
+                .run_tool_json_with_progress("strahler_order_basins", &args_json)
+                .map_err(map_tool_error)?
         };
         let out_path = extract_typed_output_path("strahler_order_basins", &response)?;
-        Ok(Raster { file_path: out_path, active_band: d8_pointer.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: d8_pointer.active_band,
+        })
     }
 
     #[pyo3(signature = (d8_pointer, streams, esri_pntr=false, zero_background=false, output_path=None, callback=None))]
@@ -18036,7 +22110,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("strahler_stream_order", args, d8_pointer.active_band, callback)
+        self._run_raster_tool_with_args(
+            "strahler_stream_order",
+            args,
+            d8_pointer.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (d8_pointer, streams, esri_pntr=false, zero_background=false, output_path=None, callback=None))]
@@ -18063,7 +22142,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("horton_stream_order", args, d8_pointer.active_band, callback)
+        self._run_raster_tool_with_args(
+            "horton_stream_order",
+            args,
+            d8_pointer.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (d8_pointer, streams, esri_pntr=false, zero_background=false, output_path=None, callback=None))]
@@ -18117,7 +22201,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("shreve_stream_magnitude", args, d8_pointer.active_band, callback)
+        self._run_raster_tool_with_args(
+            "shreve_stream_magnitude",
+            args,
+            d8_pointer.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (dem, streams, decrement_value=5.0, gradient_distance=5, output_path=None, callback=None))]
@@ -18131,7 +22220,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "streams".to_string(),
             json!(streams.file_path.to_string_lossy().to_string()),
@@ -18153,7 +22245,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(f64, f64, f64, f64, Option<String>)> {
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "streams".to_string(),
             json!(streams.file_path.to_string_lossy().to_string()),
@@ -18167,27 +22262,35 @@ impl WbEnvironment {
         let bifurcation_ratio = outputs
             .get("bifurcation_ratio")
             .and_then(serde_json::Value::as_f64)
-            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                "tool 'horton_ratios' did not return 'bifurcation_ratio'",
-            ))?;
+            .ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "tool 'horton_ratios' did not return 'bifurcation_ratio'",
+                )
+            })?;
         let length_ratio = outputs
             .get("length_ratio")
             .and_then(serde_json::Value::as_f64)
-            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                "tool 'horton_ratios' did not return 'length_ratio'",
-            ))?;
+            .ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "tool 'horton_ratios' did not return 'length_ratio'",
+                )
+            })?;
         let area_ratio = outputs
             .get("area_ratio")
             .and_then(serde_json::Value::as_f64)
-            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                "tool 'horton_ratios' did not return 'area_ratio'",
-            ))?;
+            .ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "tool 'horton_ratios' did not return 'area_ratio'",
+                )
+            })?;
         let slope_ratio = outputs
             .get("slope_ratio")
             .and_then(serde_json::Value::as_f64)
-            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
-                "tool 'horton_ratios' did not return 'slope_ratio'",
-            ))?;
+            .ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(
+                    "tool 'horton_ratios' did not return 'slope_ratio'",
+                )
+            })?;
         let report_path = outputs
             .get("report_path")
             .and_then(serde_json::Value::as_str)
@@ -18212,184 +22315,546 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(dem.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
         args.insert("target_size".to_string(), json!(target_size));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
-        let args_json = serde_json::to_string(&serde_json::Value::Object(args))
-            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}")))?;
+        let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
+        })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
-            let r = self.runtime.run_tool_json_with_progress_sink("isobasins", &args_json, &sink).map_err(map_tool_error)?;
-            if let Some(msg) = sink.take_error() { return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg)); }
+            let r = self
+                .runtime
+                .run_tool_json_with_progress_sink("isobasins", &args_json, &sink)
+                .map_err(map_tool_error)?;
+            if let Some(msg) = sink.take_error() {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
+            }
             r
         } else {
-            self.runtime.run_tool_json_with_progress("isobasins", &args_json).map_err(map_tool_error)?
+            self.runtime
+                .run_tool_json_with_progress("isobasins", &args_json)
+                .map_err(map_tool_error)?
         };
         let out_path = extract_typed_output_path("isobasins", &response)?;
-        Ok(Raster { file_path: out_path, active_band: dem.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: dem.active_band,
+        })
     }
 
     // Unary raster math tools
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn abs(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn abs(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("abs", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn ceil(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn ceil(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("ceil", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn floor(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("floor", input, output_path, callback, Some(band_mode), bands)
+    fn floor(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "floor",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn round(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("round", input, output_path, callback, Some(band_mode), bands)
+    fn round(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "round",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn sqrt(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn sqrt(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("sqrt", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn square(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("square", input, output_path, callback, Some(band_mode), bands)
+    fn square(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "square",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn ln(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn ln(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("ln", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn log10(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("log10", input, output_path, callback, Some(band_mode), bands)
+    fn log10(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "log10",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn sin(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn sin(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("sin", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn cos(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn cos(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("cos", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn tan(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn tan(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("tan", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn arcsin(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("arcsin", input, output_path, callback, Some(band_mode), bands)
+    fn arcsin(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "arcsin",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn arccos(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("arccos", input, output_path, callback, Some(band_mode), bands)
+    fn arccos(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "arccos",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn arctan(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("arctan", input, output_path, callback, Some(band_mode), bands)
+    fn arctan(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "arctan",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn sinh(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn sinh(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("sinh", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn cosh(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn cosh(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("cosh", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn tanh(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn tanh(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("tanh", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn arsinh(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("arsinh", input, output_path, callback, Some(band_mode), bands)
+    fn arsinh(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "arsinh",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn arcosh(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("arcosh", input, output_path, callback, Some(band_mode), bands)
+    fn arcosh(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "arcosh",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn artanh(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("artanh", input, output_path, callback, Some(band_mode), bands)
+    fn artanh(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "artanh",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn exp(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn exp(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("exp", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn exp2(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn exp2(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("exp2", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn log2(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
+    fn log2(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("log2", input, output_path, callback, Some(band_mode), bands)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn negate(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("negate", input, output_path, callback, Some(band_mode), bands)
+    fn negate(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "negate",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn reciprocal(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("reciprocal", input, output_path, callback, Some(band_mode), bands)
+    fn reciprocal(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "reciprocal",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn truncate(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("truncate", input, output_path, callback, Some(band_mode), bands)
+    fn truncate(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "truncate",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn increment_raster(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("increment", input, output_path, callback, Some(band_mode), bands)
+    fn increment_raster(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "increment",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn decrement_raster(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("decrement", input, output_path, callback, Some(band_mode), bands)
+    fn decrement_raster(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "decrement",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn to_degrees(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("to_degrees", input, output_path, callback, Some(band_mode), bands)
+    fn to_degrees(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "to_degrees",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn to_radians(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("to_radians", input, output_path, callback, Some(band_mode), bands)
+    fn to_radians(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "to_radians",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None))]
-    fn is_nodata_raster(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
+    fn is_nodata_raster(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
         self._run_unary_tool("is_nodata", input, output_path, callback, None, None)
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None, band_mode="all", bands=None))]
-    fn bool_not(&self, input: &Raster, output_path: Option<&str>, callback: Option<Py<PyAny>>, band_mode: &str, bands: Option<Vec<usize>>) -> PyResult<Raster> {
-        self._run_unary_tool("bool_not", input, output_path, callback, Some(band_mode), bands)
+    fn bool_not(
+        &self,
+        input: &Raster,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+        band_mode: &str,
+        bands: Option<Vec<usize>>,
+    ) -> PyResult<Raster> {
+        self._run_unary_tool(
+            "bool_not",
+            input,
+            output_path,
+            callback,
+            Some(band_mode),
+            bands,
+        )
     }
 
     #[pyo3(signature = (input, callback=None))]
@@ -18399,7 +22864,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -18432,7 +22900,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("bins".to_string(), json!(bins));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
@@ -18468,7 +22939,10 @@ impl WbEnvironment {
     ) -> PyResult<String> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("max_values".to_string(), json!(max_values));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
@@ -18506,7 +22980,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -18530,7 +23007,10 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
         let out_path = extract_typed_output_path("z_scores", &response)?;
-        Ok(Raster { file_path: out_path, active_band: input.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input.active_band,
+        })
     }
 
     #[pyo3(signature = (input, out_min, out_max, clip_min=None, clip_max=None, output_path=None, callback=None))]
@@ -18546,7 +23026,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("out_min".to_string(), json!(out_min));
         args.insert("out_max".to_string(), json!(out_max));
         if let Some(v) = clip_min {
@@ -18578,7 +23061,10 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
         let out_path = extract_typed_output_path("rescale_value_range", &response)?;
-        Ok(Raster { file_path: out_path, active_band: input.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input.active_band,
+        })
     }
 
     #[pyo3(signature = (input1, input2, output_path=None, callback=None))]
@@ -18593,7 +23079,10 @@ impl WbEnvironment {
         let mut args = serde_json::Map::new();
         let mut has_raster_operand = false;
         if let Ok(r) = input1.extract::<PyRef<Raster>>() {
-            args.insert("input1".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input1".to_string(),
+                json!(r.file_path.to_string_lossy().to_string()),
+            );
             has_raster_operand = true;
         } else if let Ok(v) = input1.extract::<f64>() {
             args.insert("input1".to_string(), json!(v));
@@ -18603,7 +23092,10 @@ impl WbEnvironment {
             ));
         }
         if let Ok(r) = input2.extract::<PyRef<Raster>>() {
-            args.insert("input2".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input2".to_string(),
+                json!(r.file_path.to_string_lossy().to_string()),
+            );
             has_raster_operand = true;
         } else if let Ok(v) = input2.extract::<f64>() {
             args.insert("input2".to_string(), json!(v));
@@ -18641,7 +23133,10 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("max", &response)?;
-        Ok(Raster { file_path: out_path, active_band: 0 })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 0,
+        })
     }
 
     #[pyo3(signature = (input1, input2, output_path=None, callback=None))]
@@ -18656,7 +23151,10 @@ impl WbEnvironment {
         let mut args = serde_json::Map::new();
         let mut has_raster_operand = false;
         if let Ok(r) = input1.extract::<PyRef<Raster>>() {
-            args.insert("input1".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input1".to_string(),
+                json!(r.file_path.to_string_lossy().to_string()),
+            );
             has_raster_operand = true;
         } else if let Ok(v) = input1.extract::<f64>() {
             args.insert("input1".to_string(), json!(v));
@@ -18666,7 +23164,10 @@ impl WbEnvironment {
             ));
         }
         if let Ok(r) = input2.extract::<PyRef<Raster>>() {
-            args.insert("input2".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input2".to_string(),
+                json!(r.file_path.to_string_lossy().to_string()),
+            );
             has_raster_operand = true;
         } else if let Ok(v) = input2.extract::<f64>() {
             args.insert("input2".to_string(), json!(v));
@@ -18704,7 +23205,10 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("min", &response)?;
-        Ok(Raster { file_path: out_path, active_band: 0 })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 0,
+        })
     }
 
     #[pyo3(signature = (input, num_quantiles=5, output_path=None, callback=None))]
@@ -18717,7 +23221,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("num_quantiles".to_string(), json!(num_quantiles));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
@@ -18743,7 +23250,10 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
         let out_path = extract_typed_output_path("quantiles", &response)?;
-        Ok(Raster { file_path: out_path, active_band: input.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input.active_band,
+        })
     }
 
     #[pyo3(signature = (input, field_name, output_path=None, callback=None))]
@@ -18756,7 +23266,10 @@ impl WbEnvironment {
     ) -> PyResult<String> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field".to_string(), json!(field_name));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
@@ -18793,8 +23306,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "base".to_string(),
+            json!(base.file_path.to_string_lossy().to_string()),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -18828,7 +23347,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "base".to_string(),
+            json!(base.file_path.to_string_lossy().to_string()),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -18853,7 +23375,10 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("random_field", &response)?;
-        Ok(Raster { file_path: out_path, active_band: base.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: base.active_band,
+        })
     }
 
     #[pyo3(signature = (base, num_samples=1000, output_path=None, callback=None))]
@@ -18866,7 +23391,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "base".to_string(),
+            json!(base.file_path.to_string_lossy().to_string()),
+        );
         args.insert("num_samples".to_string(), json!(num_samples));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
@@ -18892,7 +23420,10 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("random_sample", &response)?;
-        Ok(Raster { file_path: out_path, active_band: base.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: base.active_band,
+        })
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None))]
@@ -18904,7 +23435,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -18929,17 +23463,19 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("cumulative_distribution", &response)?;
-        Ok(Raster { file_path: out_path, active_band: input.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input.active_band,
+        })
     }
 
     #[pyo3(signature = (input, callback=None))]
-    fn crispness_index(
-        &self,
-        input: &Raster,
-        callback: Option<Py<PyAny>>,
-    ) -> PyResult<String> {
+    fn crispness_index(&self, input: &Raster, callback: Option<Py<PyAny>>) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -18971,7 +23507,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = num_samples {
             args.insert("num_samples".to_string(), json!(v));
         }
@@ -19010,12 +23549,18 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("statement".to_string(), json!(statement));
 
         if let Some(v) = true_value {
             if let Ok(r) = v.extract::<PyRef<Raster>>() {
-                args.insert("true".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+                args.insert(
+                    "true".to_string(),
+                    json!(r.file_path.to_string_lossy().to_string()),
+                );
             } else if let Ok(n) = v.extract::<f64>() {
                 args.insert("true".to_string(), json!(n));
             } else if let Ok(s) = v.extract::<String>() {
@@ -19029,7 +23574,10 @@ impl WbEnvironment {
 
         if let Some(v) = false_value {
             if let Ok(r) = v.extract::<PyRef<Raster>>() {
-                args.insert("false".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+                args.insert(
+                    "false".to_string(),
+                    json!(r.file_path.to_string_lossy().to_string()),
+                );
             } else if let Ok(n) = v.extract::<f64>() {
                 args.insert("false".to_string(), json!(n));
             } else if let Ok(s) = v.extract::<String>() {
@@ -19065,7 +23613,10 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("conditional_evaluation", &response)?;
-        Ok(Raster { file_path: out_path, active_band: input.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input.active_band,
+        })
     }
 
     #[pyo3(signature = (input, features, callback=None))]
@@ -19076,8 +23627,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("features".to_string(), json!(features.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "features".to_string(),
+            json!(features.file_path.to_string_lossy().to_string()),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -19109,8 +23666,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -19143,8 +23706,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = num_samples {
             args.insert("num_samples".to_string(), json!(v));
         }
@@ -19179,8 +23748,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -19325,8 +23900,14 @@ impl WbEnvironment {
         let resolved_output2 = self.resolve_output_path_for_wd(output2_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
         args.insert("filter_size".to_string(), json!(filter_size));
         args.insert("correlation_stat".to_string(), json!(correlation_stat));
         if let Some(ref out) = resolved_output1 {
@@ -19344,7 +23925,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("image_correlation_neighbourhood_analysis", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "image_correlation_neighbourhood_analysis",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -19397,7 +23982,10 @@ impl WbEnvironment {
             "input2".to_string(),
             json!(dependent_variable.file_path.to_string_lossy().to_string()),
         );
-        args.insert("standardize_residuals".to_string(), json!(standardize_residuals));
+        args.insert(
+            "standardize_residuals".to_string(),
+            json!(standardize_residuals),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -19513,8 +24101,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = num_samples {
             args.insert("num_samples".to_string(), json!(v));
         }
@@ -19550,8 +24144,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = num_samples {
             args.insert("num_samples".to_string(), json!(v));
         }
@@ -19586,7 +24186,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field".to_string(), json!(field_name));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
@@ -19620,7 +24223,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("fieldx".to_string(), json!(field_name_x));
         args.insert("fieldy".to_string(), json!(field_name_y));
         args.insert("trendline".to_string(), json!(trendline));
@@ -19653,7 +24259,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -19684,8 +24293,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -19716,9 +24331,15 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
         if let Ok(r) = input2.extract::<PyRef<Raster>>() {
-            args.insert("input2".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input2".to_string(),
+                json!(r.file_path.to_string_lossy().to_string()),
+            );
         } else if let Ok(v) = input2.extract::<f64>() {
             args.insert("input2".to_string(), json!(v));
         } else {
@@ -19747,7 +24368,10 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("inplace_add", &response)?;
-        Ok(Raster { file_path: out_path, active_band: input1.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input1.active_band,
+        })
     }
 
     #[pyo3(signature = (input1, input2, callback=None))]
@@ -19758,9 +24382,15 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
         if let Ok(r) = input2.extract::<PyRef<Raster>>() {
-            args.insert("input2".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input2".to_string(),
+                json!(r.file_path.to_string_lossy().to_string()),
+            );
         } else if let Ok(v) = input2.extract::<f64>() {
             args.insert("input2".to_string(), json!(v));
         } else {
@@ -19789,7 +24419,10 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("inplace_subtract", &response)?;
-        Ok(Raster { file_path: out_path, active_band: input1.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input1.active_band,
+        })
     }
 
     #[pyo3(signature = (input1, input2, callback=None))]
@@ -19800,9 +24433,15 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
         if let Ok(r) = input2.extract::<PyRef<Raster>>() {
-            args.insert("input2".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input2".to_string(),
+                json!(r.file_path.to_string_lossy().to_string()),
+            );
         } else if let Ok(v) = input2.extract::<f64>() {
             args.insert("input2".to_string(), json!(v));
         } else {
@@ -19831,7 +24470,10 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("inplace_multiply", &response)?;
-        Ok(Raster { file_path: out_path, active_band: input1.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input1.active_band,
+        })
     }
 
     #[pyo3(signature = (input1, input2, callback=None))]
@@ -19842,9 +24484,15 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
         if let Ok(r) = input2.extract::<PyRef<Raster>>() {
-            args.insert("input2".to_string(), json!(r.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input2".to_string(),
+                json!(r.file_path.to_string_lossy().to_string()),
+            );
         } else if let Ok(v) = input2.extract::<f64>() {
             args.insert("input2".to_string(), json!(v));
         } else {
@@ -19873,7 +24521,10 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("inplace_divide", &response)?;
-        Ok(Raster { file_path: out_path, active_band: input1.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input1.active_band,
+        })
     }
 
     #[pyo3(signature = (input1, input2, output_path=None, callback=None))]
@@ -20053,7 +24704,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "base".to_string(),
+            json!(base.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = out_val {
             args.insert("out_val".to_string(), json!(v));
         }
@@ -20100,7 +24754,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "base".to_string(),
+            json!(base.file_path.to_string_lossy().to_string()),
+        );
         args.insert("cell_size".to_string(), json!(cell_size));
         if let Some(v) = out_val {
             args.insert("out_val".to_string(), json!(v));
@@ -20154,7 +24811,8 @@ impl WbEnvironment {
                 .file_stem()
                 .and_then(|s| s.to_str())
                 .unwrap_or("csv_points");
-            self.working_directory.join(format!("{}_points.geojson", stem))
+            self.working_directory
+                .join(format!("{}_points.geojson", stem))
         };
 
         let mut args = serde_json::Map::new();
@@ -20164,7 +24822,10 @@ impl WbEnvironment {
         if let Some(code) = epsg {
             args.insert("epsg".to_string(), json!(code));
         }
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("csv_points_to_vector", args, callback)
     }
 
@@ -20188,7 +24849,10 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "output_csv_file".to_string(),
             json!(resolved_output.to_string_lossy().to_string()),
@@ -20236,9 +24900,15 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("snap".to_string(), json!(snap_dist));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("fix_dangling_arcs", args, callback)
     }
 
@@ -20276,7 +24946,10 @@ impl WbEnvironment {
         if let Some(name) = import_field {
             args.insert("import_field".to_string(), json!(name));
         }
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("join_tables", args, callback)
     }
 
@@ -20306,12 +24979,18 @@ impl WbEnvironment {
             json!(primary_vector.file_path.to_string_lossy().to_string()),
         );
         args.insert("primary_key_field".to_string(), json!(primary_key_field));
-        args.insert("foreign_csv_filename".to_string(), json!(foreign_csv_filename));
+        args.insert(
+            "foreign_csv_filename".to_string(),
+            json!(foreign_csv_filename),
+        );
         args.insert("foreign_key_field".to_string(), json!(foreign_key_field));
         if let Some(name) = import_field {
             args.insert("import_field".to_string(), json!(name));
         }
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("merge_table_with_csv", args, callback)
     }
 
@@ -20332,8 +25011,14 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("polygons_to_lines", args, callback)
     }
 
@@ -20354,8 +25039,14 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("reinitialize_attribute_table", args, callback)
     }
 
@@ -20376,8 +25067,14 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("add_point_coordinates_to_table", args, callback)
     }
 
@@ -20398,19 +25095,24 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("lines_to_polygons", args, callback)
     }
 
     #[pyo3(signature = (input, callback=None))]
-    fn print_geotiff_tags(
-        &self,
-        input: &Raster,
-        callback: Option<Py<PyAny>>,
-    ) -> PyResult<String> {
+    fn print_geotiff_tags(&self, input: &Raster, callback: Option<Py<PyAny>>) -> PyResult<String> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
@@ -20451,8 +25153,14 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("raster_to_vector_points", args, callback)
     }
 
@@ -20473,8 +25181,14 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("raster_to_vector_lines", args, callback)
     }
 
@@ -20495,8 +25209,14 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("raster_to_vector_polygons", args, callback)
     }
 
@@ -20513,7 +25233,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(field) = field_name {
             args.insert("field".to_string(), json!(field));
         }
@@ -20523,7 +25246,10 @@ impl WbEnvironment {
             args.insert("cell_size".to_string(), json!(cell_size));
         }
         if let Some(base) = base_raster {
-            args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(path) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(path));
@@ -20568,7 +25294,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(field) = field_name {
             args.insert("field".to_string(), json!(field));
         }
@@ -20577,7 +25306,10 @@ impl WbEnvironment {
             args.insert("cell_size".to_string(), json!(cell_size));
         }
         if let Some(base) = base_raster {
-            args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(path) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(path));
@@ -20622,7 +25354,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(field) = field_name {
             args.insert("field".to_string(), json!(field));
         }
@@ -20631,7 +25366,10 @@ impl WbEnvironment {
             args.insert("cell_size".to_string(), json!(cell_size));
         }
         if let Some(base) = base_raster {
-            args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(path) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(path));
@@ -20681,8 +25419,14 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("remove_polygon_holes", args, callback)
     }
 
@@ -20696,7 +25440,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(threshold) = threshold_size {
             args.insert("threshold".to_string(), json!(threshold));
         }
@@ -20749,8 +25496,14 @@ impl WbEnvironment {
         };
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("clean_vector", args, callback)
     }
 
@@ -20763,7 +25516,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("new_value".to_string(), json!(new_value));
         if let Some(path) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(path));
@@ -20805,7 +25561,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("back_value".to_string(), json!(back_value));
         if let Some(path) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(path));
@@ -20855,8 +25614,14 @@ impl WbEnvironment {
             self.working_directory.join(resolved_output)
         };
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         args.insert("exclude_holes".to_string(), json!(exclude_holes));
         self._run_vector_tool_with_args("multipart_to_singlepart", args, callback)
     }
@@ -20878,8 +25643,14 @@ impl WbEnvironment {
             self.working_directory.join(resolved_output)
         };
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         if let Some(f) = field {
             args.insert("field".to_string(), json!(f));
         }
@@ -20913,7 +25684,10 @@ impl WbEnvironment {
             .collect();
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::Value::Array(input_paths));
-        args.insert("output".to_string(), json!(resolved_output.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(resolved_output.to_string_lossy().to_string()),
+        );
         self._run_vector_tool_with_args("merge_vectors", args, callback)
     }
 
@@ -21228,7 +26002,10 @@ impl WbEnvironment {
         if self.verbose {
             println!("Completed slope tool");
         }
-        Ok(Raster { file_path: out_path, active_band: input.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input.active_band,
+        })
     }
 
     #[pyo3(signature = (input, z_factor=1.0, output_path=None, callback=None))]
@@ -21308,108 +26085,391 @@ impl WbEnvironment {
         if self.verbose {
             println!("Completed hillshade tool");
         }
-        Ok(Raster { file_path: out_path, active_band: input.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input.active_band,
+        })
     }
 
     // Geomorphometry curvature tools
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn plan_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("plan_curvature", input, z_factor, log_transform, output_path, callback)
+    fn plan_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "plan_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn profile_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("profile_curvature", input, z_factor, log_transform, output_path, callback)
+    fn profile_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "profile_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn tangential_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("tangential_curvature", input, z_factor, log_transform, output_path, callback)
+    fn tangential_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "tangential_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn total_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("total_curvature", input, z_factor, log_transform, output_path, callback)
+    fn total_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "total_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn mean_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("mean_curvature", input, z_factor, log_transform, output_path, callback)
+    fn mean_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "mean_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn gaussian_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("gaussian_curvature", input, z_factor, log_transform, output_path, callback)
+    fn gaussian_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "gaussian_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn minimal_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("minimal_curvature", input, z_factor, log_transform, output_path, callback)
+    fn minimal_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "minimal_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn maximal_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("maximal_curvature", input, z_factor, log_transform, output_path, callback)
+    fn maximal_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "maximal_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn shape_index(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("shape_index", input, z_factor, log_transform, output_path, callback)
+    fn shape_index(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "shape_index",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn curvedness(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("curvedness", input, z_factor, log_transform, output_path, callback)
+    fn curvedness(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "curvedness",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn unsphericity(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("unsphericity", input, z_factor, log_transform, output_path, callback)
+    fn unsphericity(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "unsphericity",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn ring_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("ring_curvature", input, z_factor, log_transform, output_path, callback)
+    fn ring_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "ring_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn rotor(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("rotor", input, z_factor, log_transform, output_path, callback)
+    fn rotor(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "rotor",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn difference_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("difference_curvature", input, z_factor, log_transform, output_path, callback)
+    fn difference_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "difference_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn horizontal_excess_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("horizontal_excess_curvature", input, z_factor, log_transform, output_path, callback)
+    fn horizontal_excess_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "horizontal_excess_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn vertical_excess_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("vertical_excess_curvature", input, z_factor, log_transform, output_path, callback)
+    fn vertical_excess_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "vertical_excess_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn accumulation_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("accumulation_curvature", input, z_factor, log_transform, output_path, callback)
+    fn accumulation_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "accumulation_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn generating_function(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("generating_function", input, z_factor, log_transform, output_path, callback)
+    fn generating_function(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "generating_function",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn principal_curvature_direction(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("principal_curvature_direction", input, z_factor, log_transform, output_path, callback)
+    fn principal_curvature_direction(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "principal_curvature_direction",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, z_factor=1.0, log_transform=false, output_path=None, callback=None))]
-    fn casorati_curvature(&self, input: &Raster, z_factor: f64, log_transform: bool, output_path: Option<&str>, callback: Option<Py<PyAny>>) -> PyResult<Raster> {
-        self._run_geomorphometry_tool("casorati_curvature", input, z_factor, log_transform, output_path, callback)
+    fn casorati_curvature(
+        &self,
+        input: &Raster,
+        z_factor: f64,
+        log_transform: bool,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        self._run_geomorphometry_tool(
+            "casorati_curvature",
+            input,
+            z_factor,
+            log_transform,
+            output_path,
+            callback,
+        )
     }
 
     #[pyo3(signature = (
@@ -21456,9 +26516,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -21521,9 +26579,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -21581,9 +26637,7 @@ impl WbEnvironment {
             args.insert("output".to_string(), json!(out));
         }
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -21658,6 +26712,59 @@ impl WbEnvironment {
             output_path,
             callback,
         )
+    }
+
+    #[pyo3(signature = (dem, suction=0.0, slope_min=0.1, z_factor=1.0, output_path=None, callback=None))]
+    fn saga_wetness_index(
+        &self,
+        dem: &Raster,
+        suction: f64,
+        slope_min: f64,
+        z_factor: f64,
+        output_path: Option<&str>,
+        callback: Option<Py<PyAny>>,
+    ) -> PyResult<Raster> {
+        let resolved_output = self.resolve_output_path_for_wd(output_path);
+        let mut extra_args = serde_json::Map::new();
+        extra_args.insert(
+            "dem".to_string(),
+            json!(dem.file_path.to_string_lossy().to_string()),
+        );
+        extra_args.insert("suction".to_string(), json!(suction));
+        extra_args.insert("slope_min".to_string(), json!(slope_min));
+        extra_args.insert("z_factor".to_string(), json!(z_factor));
+        if let Some(ref out) = resolved_output {
+            extra_args.insert("output".to_string(), json!(out));
+        }
+        let args_json =
+            serde_json::to_string(&serde_json::Value::Object(extra_args)).map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "invalid JSON arguments: {e}"
+                ))
+            })?;
+        let response = if let Some(cb) = callback {
+            let sink = PyCallbackSink::new(cb);
+            let r = self
+                .runtime
+                .run_tool_json_with_progress_sink("saga_wetness_index", &args_json, &sink)
+                .map_err(map_tool_error)?;
+            if let Some(msg) = sink.take_error() {
+                return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
+            }
+            r
+        } else {
+            self.runtime
+                .run_tool_json_with_progress("saga_wetness_index", &args_json)
+                .map_err(map_tool_error)?
+        };
+        let out_path = extract_typed_output_path("saga_wetness_index", &response)?;
+        if self.verbose {
+            println!("Completed saga_wetness_index tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: dem.active_band,
+        })
     }
 
     #[pyo3(signature = (sca, slope, exponent=1.0, output_path=None, callback=None))]
@@ -21929,9 +27036,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -22029,9 +27134,7 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -22090,9 +27193,7 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -22152,9 +27253,7 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -22233,9 +27332,7 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -22540,7 +27637,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("average_normal_vector_angular_deviation", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "average_normal_vector_angular_deviation",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -22551,7 +27652,8 @@ impl WbEnvironment {
                 .run_tool_json_with_progress("average_normal_vector_angular_deviation", &args_json)
                 .map_err(map_tool_error)?
         };
-        let out_path = extract_typed_output_path("average_normal_vector_angular_deviation", &response)?;
+        let out_path =
+            extract_typed_output_path("average_normal_vector_angular_deviation", &response)?;
         if self.verbose {
             println!("Completed average_normal_vector_angular_deviation tool");
         }
@@ -22681,9 +27783,7 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -22703,7 +27803,9 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("contours_from_raster", &response)?;
-        Ok(Vector { file_path: out_path })
+        Ok(Vector {
+            file_path: out_path,
+        })
     }
 
     #[pyo3(signature = (input, field_name=None, use_z_values=false, max_triangle_edge_length=None, contour_interval=10.0, base_contour=0.0, smoothing_filter_size=9, output_path=None, callback=None))]
@@ -22746,9 +27848,7 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -22768,7 +27868,9 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("contours_from_points", &response)?;
-        Ok(Vector { file_path: out_path })
+        Ok(Vector {
+            file_path: out_path,
+        })
     }
 
     #[pyo3(signature = (dem, contour_interval=10.0, base_contour=0.0, deflection_tolerance=10.0, filter_size=9, separation=2.0, distmin=0.5, distmax=2.0, discretization=0.5, turnmax=45.0, slopemin=0.5, depth=16, output_path=None, callback=None))]
@@ -22817,9 +27919,7 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -22839,7 +27939,9 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("topographic_hachures", &response)?;
-        Ok(Vector { file_path: out_path })
+        Ok(Vector {
+            file_path: out_path,
+        })
     }
 
     #[pyo3(signature = (input, line_thin=true, output_path=None, callback=None))]
@@ -22907,9 +28009,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -22929,7 +28029,9 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("breakline_mapping", &response)?;
-        Ok(Vector { file_path: out_path })
+        Ok(Vector {
+            file_path: out_path,
+        })
     }
 
     #[pyo3(signature = (routes, dem, segment_length=100.0, search_radius=15, output_path=None, callback=None))]
@@ -22959,9 +28061,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -22981,7 +28081,9 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("assess_route", &response)?;
-        Ok(Vector { file_path: out_path })
+        Ok(Vector {
+            file_path: out_path,
+        })
     }
 
     #[pyo3(signature = (input, slope_threshold=3.0, prof_curv_threshold=0.1, plan_curv_threshold=0.0, z_factor=1.0, output_path=None, callback=None))]
@@ -23002,8 +28104,14 @@ impl WbEnvironment {
             json!(input.file_path.to_string_lossy().to_string()),
         );
         args.insert("slope_threshold".to_string(), json!(slope_threshold));
-        args.insert("prof_curv_threshold".to_string(), json!(prof_curv_threshold));
-        args.insert("plan_curv_threshold".to_string(), json!(plan_curv_threshold));
+        args.insert(
+            "prof_curv_threshold".to_string(),
+            json!(prof_curv_threshold),
+        );
+        args.insert(
+            "plan_curv_threshold".to_string(),
+            json!(plan_curv_threshold),
+        );
         args.insert("z_factor".to_string(), json!(z_factor));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
@@ -23015,7 +28123,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("pennock_landform_classification", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "pennock_landform_classification",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -23334,9 +28446,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -23383,15 +28493,16 @@ impl WbEnvironment {
         );
         args.insert("filter_size".to_string(), json!(filter_size));
         args.insert("weight".to_string(), json!(weight));
-        args.insert("exclude_edge_nodata".to_string(), json!(exclude_edge_nodata));
+        args.insert(
+            "exclude_edge_nodata".to_string(),
+            json!(exclude_edge_nodata),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -23444,9 +28555,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -23499,9 +28608,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -23570,8 +28677,14 @@ impl WbEnvironment {
             "typical_embankment_max_height".to_string(),
             json!(typical_embankment_max_height),
         );
-        args.insert("embankment_max_width".to_string(), json!(embankment_max_width));
-        args.insert("max_upwards_increment".to_string(), json!(max_upwards_increment));
+        args.insert(
+            "embankment_max_width".to_string(),
+            json!(embankment_max_width),
+        );
+        args.insert(
+            "max_upwards_increment".to_string(),
+            json!(max_upwards_increment),
+        );
         args.insert("spillout_slope".to_string(), json!(spillout_slope));
         args.insert("remove_embankments".to_string(), json!(remove_embankments));
         if let Some(ref out) = resolved_output {
@@ -23582,9 +28695,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -23645,9 +28756,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -23676,7 +28785,9 @@ impl WbEnvironment {
             println!("Completed low_points_on_headwater_divides tool");
         }
 
-        Ok(Vector { file_path: out_path })
+        Ok(Vector {
+            file_path: out_path,
+        })
     }
 
     #[pyo3(signature = (input, max_scale=30, dev_threshold=1.0, scale_threshold=5, output_path=None, callback=None))]
@@ -23703,9 +28814,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -23765,9 +28874,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -23848,9 +28955,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -23943,15 +29048,17 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("multiscale_topographic_position_class", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "multiscale_topographic_position_class",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -24016,15 +29123,17 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("multiscale_elevation_percentile", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "multiscale_elevation_percentile",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -24101,9 +29210,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -24186,9 +29293,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -24271,9 +29376,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -24354,9 +29457,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -24435,9 +29536,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -24518,9 +29617,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -24606,15 +29703,17 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("multiscale_std_dev_normals_signature", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "multiscale_std_dev_normals_signature",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -24670,15 +29769,10 @@ impl WbEnvironment {
         args.insert("min_scale".to_string(), json!(min_scale));
         args.insert("max_scale".to_string(), json!(max_scale));
         args.insert("step_size".to_string(), json!(step_size));
-        args.insert(
-            "output".to_string(),
-            json!(resolved_output),
-        );
+        args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -24743,9 +29837,7 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -24812,15 +29904,17 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("multiscale_roughness_signature", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "multiscale_roughness_signature",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -24885,7 +29979,10 @@ impl WbEnvironment {
         );
         args.insert("lightness".to_string(), json!(lightness));
         if let Some(path) = &requested_output {
-            args.insert("output".to_string(), json!(path.to_string_lossy().to_string()));
+            args.insert(
+                "output".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
         if let Some(hs) = hillshade {
             args.insert(
@@ -24895,9 +29992,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -24919,7 +30014,8 @@ impl WbEnvironment {
                 .run_tool_json_with_progress("multiscale_topographic_position_image", &args_json)
                 .map_err(map_tool_error)?
         };
-        let out_path = extract_typed_output_path("multiscale_topographic_position_image", &response)?;
+        let out_path =
+            extract_typed_output_path("multiscale_topographic_position_image", &response)?;
 
         if self.verbose {
             println!("Completed multiscale_topographic_position_image tool");
@@ -24955,7 +30051,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("palette".to_string(), json!(palette));
         args.insert("min_scale".to_string(), json!(min_scale));
         args.insert("num_steps".to_string(), json!(num_steps));
@@ -24973,7 +30072,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("topographic_position_animation", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "topographic_position_animation",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -25144,9 +30247,7 @@ impl WbEnvironment {
         args.insert("output".to_string(), json!(resolved_output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
@@ -25196,13 +30297,23 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
-        args.insert("class_field".to_string(), serde_json::json!(class_field_name));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "class_field".to_string(),
+            serde_json::json!(class_field_name),
+        );
         if let Some(t) = dist_threshold {
             args.insert("dist_threshold".to_string(), serde_json::json!(t));
         }
@@ -25229,8 +30340,13 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
         let out_path = extract_typed_output_path("min_dist_classification", &response)?;
-        if self.verbose { println!("Completed min_dist_classification tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed min_dist_classification tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, class_field_name, output_path=None, callback=None))]
@@ -25248,13 +30364,23 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
-        args.insert("class_field".to_string(), serde_json::json!(class_field_name));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "class_field".to_string(),
+            serde_json::json!(class_field_name),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), serde_json::json!(out));
         }
@@ -25266,7 +30392,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("parallelepiped_classification", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "parallelepiped_classification",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -25278,8 +30408,13 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
         let out_path = extract_typed_output_path("parallelepiped_classification", &response)?;
-        if self.verbose { println!("Completed parallelepiped_classification tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed parallelepiped_classification tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input, sigma=0.5, low_threshold=0.05, high_threshold=0.15, add_back=false, output_path=None, callback=None))]
@@ -25295,10 +30430,19 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), serde_json::json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            serde_json::json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("sigma".to_string(), serde_json::json!(sigma));
-        args.insert("low_threshold".to_string(), serde_json::json!(low_threshold));
-        args.insert("high_threshold".to_string(), serde_json::json!(high_threshold));
+        args.insert(
+            "low_threshold".to_string(),
+            serde_json::json!(low_threshold),
+        );
+        args.insert(
+            "high_threshold".to_string(),
+            serde_json::json!(high_threshold),
+        );
         args.insert("add_back".to_string(), serde_json::json!(add_back));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), serde_json::json!(out));
@@ -25323,8 +30467,13 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
         let out_path = extract_typed_output_path("canny_edge_detection", &response)?;
-        if self.verbose { println!("Completed canny_edge_detection tool"); }
-        Ok(Raster { file_path: out_path, active_band: input.active_band })
+        if self.verbose {
+            println!("Completed canny_edge_detection tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input.active_band,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, class_field_name, output_path=None, callback=None))]
@@ -25342,14 +30491,24 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
-        args.insert("class_field".to_string(), serde_json::json!(class_field_name));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "class_field".to_string(),
+            serde_json::json!(class_field_name),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), serde_json::json!(out));
         }
@@ -25403,13 +30562,23 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), serde_json::json!(raster.file_path.to_string_lossy().to_string()));
-        args.insert("similarity".to_string(), serde_json::json!(similarity_paths));
+        args.insert(
+            "input".to_string(),
+            serde_json::json!(raster.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "similarity".to_string(),
+            serde_json::json!(similarity_paths),
+        );
         args.insert("min_size".to_string(), serde_json::json!(min_size));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), serde_json::json!(out));
@@ -25435,8 +30604,13 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("generalize_with_similarity", &response)?;
-        if self.verbose { println!("Completed generalize_with_similarity tool"); }
-        Ok(Raster { file_path: out_path, active_band: raster.active_band })
+        if self.verbose {
+            println!("Completed generalize_with_similarity tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: raster.active_band,
+        })
     }
 
     #[pyo3(signature = (input_rasters, threshold=0.5, steps=10, min_area=4, output_path=None, callback=None))]
@@ -25455,7 +30629,11 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
@@ -25497,8 +30675,13 @@ impl WbEnvironment {
                     "tool 'image_segmentation' did not return a typed output path",
                 )
             })?;
-        if self.verbose { println!("Completed image_segmentation tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed image_segmentation tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, coarse_k=800.0, fine_k=250.0, output_prefix=None, callback=None))]
@@ -25515,7 +30698,11 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
@@ -25538,7 +30725,10 @@ impl WbEnvironment {
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
         args.insert("coarse_k".to_string(), serde_json::json!(coarse_k.max(1.0)));
         args.insert("fine_k".to_string(), serde_json::json!(fine_k.max(1.0)));
-        args.insert("output_prefix".to_string(), serde_json::json!(resolved_prefix));
+        args.insert(
+            "output_prefix".to_string(),
+            serde_json::json!(resolved_prefix),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -25548,7 +30738,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("segment_multiresolution_hierarchical", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "segment_multiresolution_hierarchical",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -25676,14 +30870,24 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
-        args.insert("class_field".to_string(), serde_json::json!(class_field_name));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "class_field".to_string(),
+            serde_json::json!(class_field_name),
+        );
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
         args.insert("k".to_string(), serde_json::json!(k));
         args.insert("clip".to_string(), serde_json::json!(use_clipping));
@@ -25711,8 +30915,13 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("knn_classification", &response)?;
-        if self.verbose { println!("Completed knn_classification tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed knn_classification tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, field_name, scaling_method="none", k=5, distance_weighting=false, output_path=None, callback=None))]
@@ -25733,17 +30942,27 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field".to_string(), serde_json::json!(field_name));
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
         args.insert("k".to_string(), serde_json::json!(k));
-        args.insert("distance_weighted".to_string(), serde_json::json!(distance_weighting));
+        args.insert(
+            "distance_weighted".to_string(),
+            serde_json::json!(distance_weighting),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), serde_json::json!(out));
         }
@@ -25768,8 +30987,13 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("knn_regression", &response)?;
-        if self.verbose { println!("Completed knn_regression tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed knn_regression tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, class_field_name, scaling_method="none", k=5, m=2.0, output_path=None, probability_output_path=None, callback=None))]
@@ -25792,14 +31016,24 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
-        args.insert("class_field".to_string(), serde_json::json!(class_field_name));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "class_field".to_string(),
+            serde_json::json!(class_field_name),
+        );
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
         args.insert("k".to_string(), serde_json::json!(k));
         args.insert("m".to_string(), serde_json::json!(m));
@@ -25839,10 +31073,18 @@ impl WbEnvironment {
                     "tool 'fuzzy_knn_classification' did not return output 'probability_output.path'",
                 )
             })?;
-        if self.verbose { println!("Completed fuzzy_knn_classification tool"); }
+        if self.verbose {
+            println!("Completed fuzzy_knn_classification tool");
+        }
         Ok((
-            Raster { file_path: class_path, active_band: 1 },
-            Raster { file_path: prob_path.into(), active_band: 1 },
+            Raster {
+                file_path: class_path,
+                active_band: 1,
+            },
+            Raster {
+                file_path: prob_path.into(),
+                active_band: 1,
+            },
         ))
     }
 
@@ -25865,18 +31107,34 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
-        args.insert("class_field".to_string(), serde_json::json!(class_field_name));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "class_field".to_string(),
+            serde_json::json!(class_field_name),
+        );
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
         args.insert("n_trees".to_string(), serde_json::json!(n_trees));
-        args.insert("min_samples_leaf".to_string(), serde_json::json!(min_samples_leaf));
-        args.insert("min_samples_split".to_string(), serde_json::json!(min_samples_split));
+        args.insert(
+            "min_samples_leaf".to_string(),
+            serde_json::json!(min_samples_leaf),
+        );
+        args.insert(
+            "min_samples_split".to_string(),
+            serde_json::json!(min_samples_split),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), serde_json::json!(out));
         }
@@ -25901,8 +31159,13 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("random_forest_classification", &response)?;
-        if self.verbose { println!("Completed random_forest_classification tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed random_forest_classification tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, field_name, scaling_method="none", n_trees=200, min_samples_leaf=1, min_samples_split=2, output_path=None, callback=None))]
@@ -25924,18 +31187,31 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field".to_string(), serde_json::json!(field_name));
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
         args.insert("n_trees".to_string(), serde_json::json!(n_trees));
-        args.insert("min_samples_leaf".to_string(), serde_json::json!(min_samples_leaf));
-        args.insert("min_samples_split".to_string(), serde_json::json!(min_samples_split));
+        args.insert(
+            "min_samples_leaf".to_string(),
+            serde_json::json!(min_samples_leaf),
+        );
+        args.insert(
+            "min_samples_split".to_string(),
+            serde_json::json!(min_samples_split),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), serde_json::json!(out));
         }
@@ -25960,8 +31236,13 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("random_forest_regression", &response)?;
-        if self.verbose { println!("Completed random_forest_regression tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed random_forest_regression tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, class_field_name, scaling_method="none", kernel="linear", c=1.0, gamma=None, epoch=2, output_path=None, callback=None))]
@@ -25984,14 +31265,24 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
-        args.insert("class_field".to_string(), serde_json::json!(class_field_name));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "class_field".to_string(),
+            serde_json::json!(class_field_name),
+        );
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
         args.insert("kernel".to_string(), serde_json::json!(kernel));
         args.insert("c".to_string(), serde_json::json!(c));
@@ -26023,8 +31314,13 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("svm_classification", &response)?;
-        if self.verbose { println!("Completed svm_classification tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed svm_classification tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, field_name, scaling_method="none", kernel="linear", c=1.0, gamma=None, eps=0.1, tol=1e-3, output_path=None, callback=None))]
@@ -26048,13 +31344,20 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field".to_string(), serde_json::json!(field_name));
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
         args.insert("kernel".to_string(), serde_json::json!(kernel));
@@ -26088,8 +31391,13 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("svm_regression", &response)?;
-        if self.verbose { println!("Completed svm_regression tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed svm_regression tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, class_field_name, scaling_method="none", alpha=0.0, output_path=None, callback=None))]
@@ -26109,14 +31417,24 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
-        args.insert("class_field".to_string(), serde_json::json!(class_field_name));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "class_field".to_string(),
+            serde_json::json!(class_field_name),
+        );
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
         args.insert("alpha".to_string(), serde_json::json!(alpha));
         if let Some(ref out) = resolved_output {
@@ -26143,8 +31461,13 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("logistic_regression", &response)?;
-        if self.verbose { println!("Completed logistic_regression tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed logistic_regression tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, class_field_name, scaling_method="none", split_criterion="gini", n_trees=200, min_samples_leaf=1, min_samples_split=2, test_proportion=0.2, callback=None))]
@@ -26166,20 +31489,42 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
-        args.insert("class_field".to_string(), serde_json::json!(class_field_name));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "class_field".to_string(),
+            serde_json::json!(class_field_name),
+        );
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
-        args.insert("split_criterion".to_string(), serde_json::json!(split_criterion));
+        args.insert(
+            "split_criterion".to_string(),
+            serde_json::json!(split_criterion),
+        );
         args.insert("n_trees".to_string(), serde_json::json!(n_trees));
-        args.insert("min_samples_leaf".to_string(), serde_json::json!(min_samples_leaf));
-        args.insert("min_samples_split".to_string(), serde_json::json!(min_samples_split));
-        args.insert("test_proportion".to_string(), serde_json::json!(test_proportion));
+        args.insert(
+            "min_samples_leaf".to_string(),
+            serde_json::json!(min_samples_leaf),
+        );
+        args.insert(
+            "min_samples_split".to_string(),
+            serde_json::json!(min_samples_split),
+        );
+        args.insert(
+            "test_proportion".to_string(),
+            serde_json::json!(test_proportion),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -26188,7 +31533,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("random_forest_classification_fit", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "random_forest_classification_fit",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -26200,8 +31549,14 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let model = extract_output_u8_vec_by_key("random_forest_classification_fit", &response, "model_bytes")?;
-        if self.verbose { println!("Completed random_forest_classification_fit tool"); }
+        let model = extract_output_u8_vec_by_key(
+            "random_forest_classification_fit",
+            &response,
+            "model_bytes",
+        )?;
+        if self.verbose {
+            println!("Completed random_forest_classification_fit tool");
+        }
         Ok(model)
     }
 
@@ -26219,7 +31574,11 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
@@ -26237,7 +31596,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("random_forest_classification_predict", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "random_forest_classification_predict",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -26249,9 +31612,15 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let out_path = extract_typed_output_path("random_forest_classification_predict", &response)?;
-        if self.verbose { println!("Completed random_forest_classification_predict tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        let out_path =
+            extract_typed_output_path("random_forest_classification_predict", &response)?;
+        if self.verbose {
+            println!("Completed random_forest_classification_predict tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, field_name, scaling_method="none", n_trees=200, min_samples_leaf=1, min_samples_split=2, test_proportion=0.2, callback=None))]
@@ -26272,19 +31641,35 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field".to_string(), serde_json::json!(field_name));
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
         args.insert("n_trees".to_string(), serde_json::json!(n_trees));
-        args.insert("min_samples_leaf".to_string(), serde_json::json!(min_samples_leaf));
-        args.insert("min_samples_split".to_string(), serde_json::json!(min_samples_split));
-        args.insert("test_proportion".to_string(), serde_json::json!(test_proportion));
+        args.insert(
+            "min_samples_leaf".to_string(),
+            serde_json::json!(min_samples_leaf),
+        );
+        args.insert(
+            "min_samples_split".to_string(),
+            serde_json::json!(min_samples_split),
+        );
+        args.insert(
+            "test_proportion".to_string(),
+            serde_json::json!(test_proportion),
+        );
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
@@ -26305,8 +31690,11 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let model = extract_output_u8_vec_by_key("random_forest_regression_fit", &response, "model_bytes")?;
-        if self.verbose { println!("Completed random_forest_regression_fit tool"); }
+        let model =
+            extract_output_u8_vec_by_key("random_forest_regression_fit", &response, "model_bytes")?;
+        if self.verbose {
+            println!("Completed random_forest_regression_fit tool");
+        }
         Ok(model)
     }
 
@@ -26324,7 +31712,11 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
@@ -26342,7 +31734,11 @@ impl WbEnvironment {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("random_forest_regression_predict", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "random_forest_regression_predict",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -26355,8 +31751,13 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("random_forest_regression_predict", &response)?;
-        if self.verbose { println!("Completed random_forest_regression_predict tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed random_forest_regression_predict tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input_rasters, training_data, class_field_name, scaling_method="none", z_threshold=1.96, outlier_is_zero=true, k=25, output_path=None, callback=None))]
@@ -26378,17 +31779,30 @@ impl WbEnvironment {
             .map(|item| {
                 item.cast::<Raster>()
                     .map(|r| r.borrow().file_path.to_string_lossy().to_string())
-                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!("expected Raster: {e}")))
+                    .map_err(|e| {
+                        PyErr::new::<pyo3::exceptions::PyTypeError, _>(format!(
+                            "expected Raster: {e}"
+                        ))
+                    })
             })
             .collect::<PyResult<_>>()?;
 
         let mut args = serde_json::Map::new();
         args.insert("inputs".to_string(), serde_json::json!(band_paths));
-        args.insert("training_data".to_string(), serde_json::json!(training_data.file_path.to_string_lossy().to_string()));
-        args.insert("class_field".to_string(), serde_json::json!(class_field_name));
+        args.insert(
+            "training_data".to_string(),
+            serde_json::json!(training_data.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "class_field".to_string(),
+            serde_json::json!(class_field_name),
+        );
         args.insert("scaling".to_string(), serde_json::json!(scaling_method));
         args.insert("z_threshold".to_string(), serde_json::json!(z_threshold));
-        args.insert("outlier_is_zero".to_string(), serde_json::json!(outlier_is_zero));
+        args.insert(
+            "outlier_is_zero".to_string(),
+            serde_json::json!(outlier_is_zero),
+        );
         args.insert("k".to_string(), serde_json::json!(k));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), serde_json::json!(out));
@@ -26414,8 +31828,13 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("nnd_classification", &response)?;
-        if self.verbose { println!("Completed nnd_classification tool"); }
-        Ok(Raster { file_path: out_path, active_band: 1 })
+        if self.verbose {
+            println!("Completed nnd_classification tool");
+        }
+        Ok(Raster {
+            file_path: out_path,
+            active_band: 1,
+        })
     }
 
     #[pyo3(signature = (input, azimuth=0.0, max_dist=None, output_path=None, callback=None))]
@@ -26429,7 +31848,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("azimuth".to_string(), json!(azimuth));
         if let Some(d) = max_dist {
             args.insert("max_dist".to_string(), json!(d));
@@ -26479,12 +31901,18 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("az_fraction".to_string(), json!(az_fraction));
         if let Some(d) = max_dist {
             args.insert("max_dist".to_string(), json!(d));
         }
-        args.insert("observer_hgt_offset".to_string(), json!(observer_hgt_offset));
+        args.insert(
+            "observer_hgt_offset".to_string(),
+            json!(observer_hgt_offset),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -26530,7 +31958,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("station_height".to_string(), json!(station_height));
         args.insert("resolution_factor".to_string(), json!(resolution_factor));
         if let Some(d) = max_dist {
@@ -26581,12 +32012,18 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("az_fraction".to_string(), json!(az_fraction));
         if let Some(d) = max_dist {
             args.insert("max_dist".to_string(), json!(d));
         }
-        args.insert("observer_hgt_offset".to_string(), json!(observer_hgt_offset));
+        args.insert(
+            "observer_hgt_offset".to_string(),
+            json!(observer_hgt_offset),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -26632,12 +32069,18 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("az_fraction".to_string(), json!(az_fraction));
         if let Some(d) = max_dist {
             args.insert("max_dist".to_string(), json!(d));
         }
-        args.insert("observer_hgt_offset".to_string(), json!(observer_hgt_offset));
+        args.insert(
+            "observer_hgt_offset".to_string(),
+            json!(observer_hgt_offset),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -26687,12 +32130,21 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let resolved_report = self.resolve_output_path_for_wd(report_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         if let Some(d) = max_dist {
             args.insert("max_dist".to_string(), json!(d));
         }
-        args.insert("observer_hgt_offset".to_string(), json!(observer_hgt_offset));
+        args.insert(
+            "observer_hgt_offset".to_string(),
+            json!(observer_hgt_offset),
+        );
         args.insert("output_as_polygons".to_string(), json!(output_as_polygons));
         args.insert("az_fraction".to_string(), json!(az_fraction));
         if let Some(ref out) = resolved_output {
@@ -26753,7 +32205,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("az_fraction".to_string(), json!(az_fraction));
         if let Some(d) = max_dist {
             args.insert("max_dist".to_string(), json!(d));
@@ -26873,9 +32328,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -26922,8 +32375,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("individual_feature_hulls".to_string(), json!(individual_feature_hulls));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "individual_feature_hulls".to_string(),
+            json!(individual_feature_hulls),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("minimum_convex_hull", args, callback)
     }
@@ -26945,9 +32404,15 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("min_criteria".to_string(), json!(min_criteria));
-        args.insert("individual_feature_hulls".to_string(), json!(individual_feature_hulls));
+        args.insert(
+            "individual_feature_hulls".to_string(),
+            json!(individual_feature_hulls),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("minimum_bounding_box", args, callback)
     }
@@ -26968,8 +32433,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("individual_feature_hulls".to_string(), json!(individual_feature_hulls));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "individual_feature_hulls".to_string(),
+            json!(individual_feature_hulls),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("minimum_bounding_circle", args, callback)
     }
@@ -26990,8 +32461,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("individual_feature_hulls".to_string(), json!(individual_feature_hulls));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "individual_feature_hulls".to_string(),
+            json!(individual_feature_hulls),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("minimum_bounding_envelope", args, callback)
     }
@@ -27006,7 +32483,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("reclass_values".to_string(), json!(reclass_values));
         args.insert("assign_mode".to_string(), json!(assign_mode));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -27026,7 +32506,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("interval_size".to_string(), json!(interval_size));
         if let Some(v) = start_value {
             args.insert("start_value".to_string(), json!(v));
@@ -27050,13 +32533,21 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("threshold".to_string(), json!(threshold));
         args.insert("zero_background".to_string(), json!(zero_background));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("filter_raster_features_by_area", args, input.active_band, callback)
+        self._run_raster_tool_with_args(
+            "filter_raster_features_by_area",
+            args,
+            input.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, threshold, output_path=None, callback=None))]
@@ -27075,7 +32566,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("threshold".to_string(), json!(threshold));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("filter_vector_features_by_area", args, callback)
@@ -27096,7 +32590,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("extract_nodes", args, callback)
     }
@@ -27117,7 +32614,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("statement".to_string(), json!(statement));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("extract_by_attribute", args, callback)
@@ -27140,7 +32640,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if !dissolve_field.trim().is_empty() {
             args.insert("dissolve_field".to_string(), json!(dissolve_field));
         }
@@ -27164,7 +32667,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("polygon_area", args, callback)
     }
@@ -27184,7 +32690,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("polygon_perimeter", args, callback)
     }
@@ -27204,7 +32713,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("polygon_short_axis", args, callback)
     }
@@ -27224,7 +32736,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("polygon_long_axis", args, callback)
     }
@@ -27244,7 +32759,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("centroid_vector", args, callback)
     }
@@ -27264,7 +32782,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("representative_point_vector", args, callback)
     }
@@ -27284,7 +32805,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("medoid", args, callback)
     }
@@ -27306,8 +32830,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("overlay".to_string(), json!(overlay.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "overlay".to_string(),
+            json!(overlay.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -27332,8 +32862,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("overlay".to_string(), json!(overlay.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "overlay".to_string(),
+            json!(overlay.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -27358,8 +32894,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("overlay".to_string(), json!(overlay.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "overlay".to_string(),
+            json!(overlay.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -27384,8 +32926,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("overlay".to_string(), json!(overlay.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "overlay".to_string(),
+            json!(overlay.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -27410,8 +32958,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("overlay".to_string(), json!(overlay.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "overlay".to_string(),
+            json!(overlay.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -27434,7 +32988,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("compactness_ratio", args, callback)
     }
@@ -27454,7 +33011,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("elongation_ratio", args, callback)
     }
@@ -27474,7 +33034,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("hole_proportion", args, callback)
     }
@@ -27494,7 +33057,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("linearity_index", args, callback)
     }
@@ -27514,7 +33080,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("narrowness_index_vector", args, callback)
     }
@@ -27534,7 +33103,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("patch_orientation", args, callback)
     }
@@ -27554,7 +33126,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("perimeter_area_ratio", args, callback)
     }
@@ -27574,7 +33149,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("related_circumscribing_circle", args, callback)
     }
@@ -27594,7 +33172,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("shape_complexity_index_vector", args, callback)
     }
@@ -27615,8 +33196,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("elongation_threshold".to_string(), json!(elongation_threshold));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "elongation_threshold".to_string(),
+            json!(elongation_threshold),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("deviation_from_regional_direction", args, callback)
     }
@@ -27629,11 +33216,19 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("boundary_shape_complexity", args, input.active_band, callback)
+        self._run_raster_tool_with_args(
+            "boundary_shape_complexity",
+            args,
+            input.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None))]
@@ -27644,7 +33239,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -27659,7 +33257,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -27674,7 +33275,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -27689,11 +33293,19 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("shape_complexity_index_raster", args, input.active_band, callback)
+        self._run_raster_tool_with_args(
+            "shape_complexity_index_raster",
+            args,
+            input.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, units="map units", zero_background=false, output_path=None, callback=None))]
@@ -27706,7 +33318,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("units".to_string(), json!(units));
         args.insert("zero_background".to_string(), json!(zero_background));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -27725,7 +33340,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("units".to_string(), json!(units));
         args.insert("zero_background".to_string(), json!(zero_background));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -27751,8 +33369,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("overlay".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "overlay".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -27776,7 +33400,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("snap_tolerance".to_string(), json!(snap_tolerance));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("merge_line_segments", args, callback)
@@ -27835,8 +33462,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("split".to_string(), json!(split_vector.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "split".to_string(),
+            json!(split_vector.file_path.to_string_lossy().to_string()),
+        );
         args.insert("snap_tolerance".to_string(), json!(snap_tolerance));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("split_with_lines", args, callback)
@@ -27858,7 +33491,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("snap_tolerance".to_string(), json!(snap_tolerance));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("split_lines_at_intersections", args, callback)
@@ -27881,20 +33517,30 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("snap_tolerance".to_string(), json!(snap_tolerance));
         args.insert("output".to_string(), json!(output));
         if let Some(out) = self.resolve_output_path_for_wd(nodes_output_path) {
             args.insert("nodes_output".to_string(), json!(out));
         }
 
-        let response = run_tool_response_with_args(&self.runtime, "build_network_topology", args, callback)?;
-        let edges_path = extract_typed_output_path_by_key("build_network_topology", &response, "path")?;
-        let nodes_path = extract_typed_output_path_by_key("build_network_topology", &response, "nodes_path")?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "build_network_topology", args, callback)?;
+        let edges_path =
+            extract_typed_output_path_by_key("build_network_topology", &response, "path")?;
+        let nodes_path =
+            extract_typed_output_path_by_key("build_network_topology", &response, "nodes_path")?;
 
         Ok((
-            Vector { file_path: edges_path },
-            Vector { file_path: nodes_path },
+            Vector {
+                file_path: edges_path,
+            },
+            Vector {
+                file_path: nodes_path,
+            },
         ))
     }
 
@@ -27918,8 +33564,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("target".to_string(), json!(target.file_path.to_string_lossy().to_string()));
-        args.insert("source".to_string(), json!(source.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "target".to_string(),
+            json!(target.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "source".to_string(),
+            json!(source.file_path.to_string_lossy().to_string()),
+        );
         args.insert("predicate".to_string(), json!(predicate));
         if let Some(v) = distance {
             args.insert("distance".to_string(), json!(v));
@@ -27947,7 +33599,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("distance".to_string(), json!(distance));
         args.insert("extend_direction".to_string(), json!(extend_direction));
         args.insert("output".to_string(), json!(output));
@@ -27970,7 +33625,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("snap_tolerance".to_string(), json!(snap_tolerance));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("snap_endnodes", args, callback)
@@ -28015,11 +33673,13 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("duration".to_string(), json!(duration));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("travelling_salesman_problem", args, callback)
-
     }
     #[pyo3(signature = (input_points, field_name="FID", max_triangle_edge_length=-1.0, output_path=None, callback=None))]
     fn construct_vector_tin(
@@ -28038,9 +33698,15 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input_points".to_string(), json!(input_points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input_points".to_string(),
+            json!(input_points.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field_name".to_string(), json!(field_name));
-        args.insert("max_triangle_edge_length".to_string(), json!(max_triangle_edge_length));
+        args.insert(
+            "max_triangle_edge_length".to_string(),
+            json!(max_triangle_edge_length),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("construct_vector_tin", args, callback)
     }
@@ -28062,7 +33728,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("vector_points".to_string(), json!(vector_points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "vector_points".to_string(),
+            json!(vector_points.file_path.to_string_lossy().to_string()),
+        );
         args.insert("width".to_string(), json!(width));
         args.insert("orientation".to_string(), json!(orientation));
         args.insert("output".to_string(), json!(output));
@@ -28085,7 +33754,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("segment_length".to_string(), json!(segment_length));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("split_vector_lines", args, callback)
@@ -28107,7 +33779,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("filter_size".to_string(), json!(filter_size));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("smooth_vectors", args, callback)
@@ -28130,7 +33805,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("spacing".to_string(), json!(spacing));
         args.insert("include_end".to_string(), json!(include_end));
         args.insert("output".to_string(), json!(output));
@@ -28155,8 +33833,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
-        args.insert("network".to_string(), json!(network.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "network".to_string(),
+            json!(network.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = max_snap_distance {
             args.insert("max_snap_distance".to_string(), json!(v));
         }
@@ -28182,8 +33866,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("routes".to_string(), json!(routes.file_path.to_string_lossy().to_string()));
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "routes".to_string(),
+            json!(routes.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = max_offset_distance {
             args.insert("max_offset_distance".to_string(), json!(v));
         }
@@ -28208,8 +33898,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("routes".to_string(), json!(routes.file_path.to_string_lossy().to_string()));
-        args.insert("events".to_string(), json!(events.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "routes".to_string(),
+            json!(routes.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "events".to_string(),
+            json!(events.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = max_offset_distance {
             args.insert("max_offset_distance".to_string(), json!(v));
         }
@@ -28236,7 +33932,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("routes".to_string(), json!(routes.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "routes".to_string(),
+            json!(routes.file_path.to_string_lossy().to_string()),
+        );
         args.insert("events".to_string(), json!(events));
         args.insert("event_route_field".to_string(), json!(event_route_field));
         args.insert("measure_field".to_string(), json!(measure_field));
@@ -28267,7 +33966,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("routes".to_string(), json!(routes.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "routes".to_string(),
+            json!(routes.file_path.to_string_lossy().to_string()),
+        );
         args.insert("events".to_string(), json!(events));
         args.insert("event_route_field".to_string(), json!(event_route_field));
         args.insert("from_measure_field".to_string(), json!(from_measure_field));
@@ -28300,8 +34002,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("routes".to_string(), json!(routes.file_path.to_string_lossy().to_string()));
-        args.insert("events".to_string(), json!(events.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "routes".to_string(),
+            json!(routes.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "events".to_string(),
+            json!(events.file_path.to_string_lossy().to_string()),
+        );
         args.insert("event_route_field".to_string(), json!(event_route_field));
         args.insert("measure_field".to_string(), json!(measure_field));
         if let Some(v) = route_id_field {
@@ -28335,8 +34043,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("routes".to_string(), json!(routes.file_path.to_string_lossy().to_string()));
-        args.insert("events".to_string(), json!(events.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "routes".to_string(),
+            json!(routes.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "events".to_string(),
+            json!(events.file_path.to_string_lossy().to_string()),
+        );
         args.insert("event_route_field".to_string(), json!(event_route_field));
         args.insert("from_measure_field".to_string(), json!(from_measure_field));
         args.insert("to_measure_field".to_string(), json!(to_measure_field));
@@ -28366,7 +34080,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field".to_string(), json!(field));
         args.insert("new_field".to_string(), json!(new_field));
         args.insert("output".to_string(), json!(output));
@@ -28389,7 +34106,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("fields".to_string(), json!(fields));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("delete_field", args, callback)
@@ -28413,7 +34133,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field".to_string(), json!(field));
         args.insert("field_type".to_string(), json!(field_type));
         if let Some(v) = default {
@@ -28440,7 +34163,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("max_edge_length".to_string(), json!(max_edge_length));
         args.insert("epsilon".to_string(), json!(epsilon));
         args.insert("output".to_string(), json!(output));
@@ -28464,7 +34190,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("num_points".to_string(), json!(num_points));
         if let Some(v) = seed {
             args.insert("seed".to_string(), json!(v));
@@ -28489,7 +34218,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("spacing".to_string(), json!(spacing));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("densify_features", args, callback)
@@ -28511,8 +34243,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("clip".to_string(), json!(clip.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "clip".to_string(),
+            json!(clip.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("line_polygon_clip", args, callback)
     }
@@ -28540,11 +34278,19 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("group_field".to_string(), json!(group_field));
         args.insert("value_field".to_string(), json!(value_field));
         args.insert("output".to_string(), json!(output));
-        let response = run_tool_response_with_args(&self.runtime, "vector_summary_statistics", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "vector_summary_statistics",
+            args,
+            callback,
+        )?;
         extract_output_string_by_key("vector_summary_statistics", &response, "path")
     }
 
@@ -28555,15 +34301,25 @@ impl WbEnvironment {
         output_path: &str,
         callback: Option<Py<PyAny>>,
     ) -> PyResult<String> {
-        let output = self.resolve_output_path_for_wd(Some(output_path)).ok_or_else(|| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "parameter 'output_path' is required",
-            )
-        })?;
+        let output = self
+            .resolve_output_path_for_wd(Some(output_path))
+            .ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                    "parameter 'output_path' is required",
+                )
+            })?;
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
-        let response = run_tool_response_with_args(&self.runtime, "topology_validation_report", args, callback)?;
+        let response = run_tool_response_with_args(
+            &self.runtime,
+            "topology_validation_report",
+            args,
+            callback,
+        )?;
         extract_output_string_by_key("topology_validation_report", &response, "path")
     }
 
@@ -28605,7 +34361,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("start_x".to_string(), json!(start_x));
         args.insert("start_y".to_string(), json!(start_y));
         args.insert("end_x".to_string(), json!(end_x));
@@ -28652,7 +34411,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -28697,8 +34459,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("origins".to_string(), json!(origins.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "origins".to_string(),
+            json!(origins.file_path.to_string_lossy().to_string()),
+        );
         args.insert("max_cost".to_string(), json!(max_cost));
         args.insert("output_mode".to_string(), json!(output_mode));
         Self::add_network_optional_args(
@@ -28743,7 +34511,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -28787,8 +34558,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("origins".to_string(), json!(origins.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "origins".to_string(),
+            json!(origins.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "destinations".to_string(),
             json!(destinations.file_path.to_string_lossy().to_string()),
@@ -28858,7 +34635,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("start_x".to_string(), json!(start_x));
         args.insert("start_y".to_string(), json!(start_y));
         args.insert("end_x".to_string(), json!(end_x));
@@ -28932,8 +34712,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("origins".to_string(), json!(origins.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "origins".to_string(),
+            json!(origins.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "destinations".to_string(),
             json!(destinations.file_path.to_string_lossy().to_string()),
@@ -28961,7 +34747,8 @@ impl WbEnvironment {
             temporal_profile_report,
         );
         args.insert("output".to_string(), json!(output));
-        let response = run_tool_response_with_args(&self.runtime, "network_od_cost_matrix", args, callback)?;
+        let response =
+            run_tool_response_with_args(&self.runtime, "network_od_cost_matrix", args, callback)?;
         extract_output_string_by_key("network_od_cost_matrix", &response, "path")
     }
 
@@ -28999,7 +34786,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "trajectory_points".to_string(),
             json!(trajectory_points.file_path.to_string_lossy().to_string()),
@@ -29062,7 +34852,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -29095,7 +34888,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -29120,8 +34916,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("overlay".to_string(), json!(overlay.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "overlay".to_string(),
+            json!(overlay.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -29139,9 +34941,18 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("polygons".to_string(), json!(polygons.file_path.to_string_lossy().to_string()));
-        args.insert("maintain_dimensions".to_string(), json!(maintain_dimensions));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "polygons".to_string(),
+            json!(polygons.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "maintain_dimensions".to_string(),
+            json!(maintain_dimensions),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -29157,12 +34968,23 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("polygons".to_string(), json!(polygons.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "polygons".to_string(),
+            json!(polygons.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("erase_polygon_from_raster", args, input.active_band, callback)
+        self._run_raster_tool_with_args(
+            "erase_polygon_from_raster",
+            args,
+            input.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input, aggregation_factor=2, aggregation_type="mean", output_path=None, callback=None))]
@@ -29175,7 +34997,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("aggregation_factor".to_string(), json!(aggregation_factor));
         args.insert("aggregation_type".to_string(), json!(aggregation_type));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -29195,7 +35020,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "base".to_string(),
+            json!(base.file_path.to_string_lossy().to_string()),
+        );
         args.insert("gradient".to_string(), json!(gradient));
         args.insert("aspect".to_string(), json!(aspect));
         args.insert("constant".to_string(), json!(constant));
@@ -29213,15 +35041,16 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<(Raster, String)> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -29242,7 +35071,13 @@ impl WbEnvironment {
 
         let out_path = extract_typed_output_path("centroid_raster", &response)?;
         let report = extract_output_string_by_key("centroid_raster", &response, "report")?;
-        Ok((Raster { file_path: out_path, active_band: input.active_band }, report))
+        Ok((
+            Raster {
+                file_path: out_path,
+                active_band: input.active_band,
+            },
+            report,
+        ))
     }
 
     #[pyo3(signature = (input, output_type="lowest", output_path=None, callback=None))]
@@ -29261,7 +35096,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("out_type".to_string(), json!(output_type));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("find_lowest_or_highest_points", args, callback)
@@ -29283,7 +35121,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("tolerance_dist".to_string(), json!(tolerance_dist));
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("eliminate_coincident_points", args, callback)
@@ -29304,7 +35145,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("layer_footprint_raster", args, callback)
     }
@@ -29322,7 +35166,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         args.insert("bandwidth".to_string(), json!(bandwidth));
         args.insert("kernel_function".to_string(), json!(kernel_function));
         if let Some(name) = field_name {
@@ -29332,7 +35179,10 @@ impl WbEnvironment {
             args.insert("cell_size".to_string(), json!(v));
         }
         if let Some(base) = base_raster {
-            args.insert("base_raster".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base_raster".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -29355,7 +35205,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field_name".to_string(), json!(field_name));
         args.insert("use_z".to_string(), json!(use_z));
         args.insert("weight".to_string(), json!(weight));
@@ -29365,7 +35218,10 @@ impl WbEnvironment {
             args.insert("cell_size".to_string(), json!(v));
         }
         if let Some(base) = base_raster {
-            args.insert("base_raster".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base_raster".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -29394,24 +35250,26 @@ impl WbEnvironment {
             let raster: PyRef<'_, Raster> = item.extract()?;
             raster_paths.push(raster.file_path.to_string_lossy().to_string());
         }
+        args.insert("rasters".to_string(), json!(raster_paths));
         args.insert(
-            "rasters".to_string(),
-            json!(raster_paths),
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
         );
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
         args.insert("output".to_string(), json!(output));
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
             let r = self
                 .runtime
-                .run_tool_json_with_progress_sink("extract_raster_values_at_points", &args_json, &sink)
+                .run_tool_json_with_progress_sink(
+                    "extract_raster_values_at_points",
+                    &args_json,
+                    &sink,
+                )
                 .map_err(map_tool_error)?;
             if let Some(msg) = sink.take_error() {
                 return Err(PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(msg));
@@ -29424,8 +35282,14 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path("extract_raster_values_at_points", &response)?;
-        let report = extract_output_string_by_key("extract_raster_values_at_points", &response, "report")?;
-        Ok((Vector { file_path: out_path }, report))
+        let report =
+            extract_output_string_by_key("extract_raster_values_at_points", &response, "report")?;
+        Ok((
+            Vector {
+                file_path: out_path,
+            },
+            report,
+        ))
     }
 
     #[pyo3(signature = (input, output_path=None, callback=None))]
@@ -29443,7 +35307,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("output".to_string(), json!(output));
         self._run_vector_tool_with_args("layer_footprint_vector", args, callback)
     }
@@ -29465,7 +35332,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "base".to_string(),
+            json!(base.file_path.to_string_lossy().to_string()),
+        );
         args.insert("width".to_string(), json!(width));
         args.insert("orientation".to_string(), json!(orientation));
         args.insert("output".to_string(), json!(output));
@@ -29489,7 +35359,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "base".to_string(),
+            json!(base.file_path.to_string_lossy().to_string()),
+        );
         args.insert("width".to_string(), json!(width));
         args.insert("orientation".to_string(), json!(orientation));
         args.insert("output".to_string(), json!(output));
@@ -29515,7 +35388,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "base".to_string(),
+            json!(base.file_path.to_string_lossy().to_string()),
+        );
         args.insert("width".to_string(), json!(width));
         args.insert("height".to_string(), json!(height));
         args.insert("x_origin".to_string(), json!(x_origin));
@@ -29543,7 +35419,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("base".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "base".to_string(),
+            json!(base.file_path.to_string_lossy().to_string()),
+        );
         args.insert("width".to_string(), json!(width));
         args.insert("height".to_string(), json!(height));
         args.insert("x_origin".to_string(), json!(x_origin));
@@ -29565,14 +35444,20 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field_name".to_string(), json!(field_name));
         args.insert("use_z".to_string(), json!(use_z));
         if let Some(v) = cell_size {
             args.insert("cell_size".to_string(), json!(v));
         }
         if let Some(base) = base_raster {
-            args.insert("base_raster".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base_raster".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(v) = max_dist {
             args.insert("max_dist".to_string(), json!(v));
@@ -29596,7 +35481,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field_name".to_string(), json!(field_name));
         args.insert("use_z".to_string(), json!(use_z));
         args.insert("clip_to_hull".to_string(), json!(clip_to_hull));
@@ -29604,7 +35492,10 @@ impl WbEnvironment {
             args.insert("cell_size".to_string(), json!(v));
         }
         if let Some(base) = base_raster {
-            args.insert("base_raster".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base_raster".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -29629,19 +35520,28 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field_name".to_string(), json!(field_name));
         args.insert("use_z".to_string(), json!(use_z));
         args.insert("weight".to_string(), json!(weight));
         args.insert("radius".to_string(), json!(radius));
         args.insert("min_points".to_string(), json!(min_points));
-        args.insert("use_quadratic_basis".to_string(), json!(use_quadratic_basis));
+        args.insert(
+            "use_quadratic_basis".to_string(),
+            json!(use_quadratic_basis),
+        );
         args.insert("use_data_hull".to_string(), json!(use_data_hull));
         if let Some(v) = cell_size {
             args.insert("cell_size".to_string(), json!(v));
         }
         if let Some(base) = base_raster {
-            args.insert("base_raster".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base_raster".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -29667,7 +35567,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field_name".to_string(), json!(field_name));
         args.insert("use_z".to_string(), json!(use_z));
         args.insert("radius".to_string(), json!(radius));
@@ -29680,7 +35583,10 @@ impl WbEnvironment {
             args.insert("cell_size".to_string(), json!(v));
         }
         if let Some(base) = base_raster {
-            args.insert("base_raster".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base_raster".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -29701,14 +35607,20 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         args.insert("field_name".to_string(), json!(field_name));
         args.insert("use_z".to_string(), json!(use_z));
         if let Some(v) = cell_size {
             args.insert("cell_size".to_string(), json!(v));
         }
         if let Some(base) = base_raster {
-            args.insert("base_raster".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base_raster".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(v) = max_triangle_edge_length {
             args.insert("max_triangle_edge_length".to_string(), json!(v));
@@ -29727,7 +35639,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -29744,7 +35659,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("buffer_size".to_string(), json!(buffer_size));
         args.insert("grid_cell_units".to_string(), json!(grid_cell_units));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -29762,7 +35680,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("what_to_assign".to_string(), json!(what_to_assign));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -29780,7 +35701,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("min_feature_height".to_string(), json!(min_feature_height));
         args.insert("min_feature_size".to_string(), json!(min_feature_size));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -29806,8 +35730,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("overlay".to_string(), json!(overlay.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "overlay".to_string(),
+            json!(overlay.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -29825,7 +35755,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("diag".to_string(), json!(diag));
         args.insert("zero_background".to_string(), json!(zero_background));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -29845,8 +35778,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("mask".to_string(), json!(mask.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "mask".to_string(),
+            json!(mask.file_path.to_string_lossy().to_string()),
+        );
         args.insert("use_nodata".to_string(), json!(use_nodata));
         args.insert("nibble_nodata".to_string(), json!(nibble_nodata));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -29865,7 +35804,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("threshold".to_string(), json!(threshold));
         args.insert("zero_background".to_string(), json!(zero_background));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -29883,8 +35825,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("source".to_string(), json!(source.file_path.to_string_lossy().to_string()));
-        args.insert("backlink".to_string(), json!(backlink.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "source".to_string(),
+            json!(source.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "backlink".to_string(),
+            json!(backlink.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -29904,8 +35852,14 @@ impl WbEnvironment {
         let resolved_backlink_output = self.resolve_output_path_for_wd(backlink_output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("source".to_string(), json!(source.file_path.to_string_lossy().to_string()));
-        args.insert("cost".to_string(), json!(cost.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "source".to_string(),
+            json!(source.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "cost".to_string(),
+            json!(cost.file_path.to_string_lossy().to_string()),
+        );
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -29933,8 +35887,10 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let cost_accum_path = extract_typed_output_path_by_key("cost_distance", &response, "cost_accum")?;
-        let backlink_path = extract_typed_output_path_by_key("cost_distance", &response, "backlink")?;
+        let cost_accum_path =
+            extract_typed_output_path_by_key("cost_distance", &response, "cost_accum")?;
+        let backlink_path =
+            extract_typed_output_path_by_key("cost_distance", &response, "backlink")?;
 
         Ok((
             Raster {
@@ -29958,8 +35914,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("destination".to_string(), json!(destination.file_path.to_string_lossy().to_string()));
-        args.insert("backlink".to_string(), json!(backlink.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "destination".to_string(),
+            json!(destination.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "backlink".to_string(),
+            json!(backlink.file_path.to_string_lossy().to_string()),
+        );
         args.insert("zero_background".to_string(), json!(zero_background));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -29984,8 +35946,14 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
-        args.insert("overlay".to_string(), json!(overlay.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "overlay".to_string(),
+            json!(overlay.file_path.to_string_lossy().to_string()),
+        );
         if let Some(v) = snap_tolerance {
             args.insert("snap_tolerance".to_string(), json!(v));
         }
@@ -30001,7 +35969,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -30016,7 +35987,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -30048,7 +36022,10 @@ impl WbEnvironment {
 
         let mut args = serde_json::Map::new();
         args.insert("input_rasters".to_string(), json!(input_paths));
-        args.insert("pos_input".to_string(), json!(pos_input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "pos_input".to_string(),
+            json!(pos_input.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -30064,8 +36041,14 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(input1.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(input2.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input1".to_string(),
+            json!(input1.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(input2.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -30084,7 +36067,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         if let Some(field) = field_name {
             args.insert("field_name".to_string(), json!(field));
         }
@@ -30093,7 +36079,10 @@ impl WbEnvironment {
             args.insert("cell_size".to_string(), json!(size));
         }
         if let Some(base) = base_raster {
-            args.insert("base_raster".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base_raster".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -30118,7 +36107,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("points".to_string(), json!(points.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points.file_path.to_string_lossy().to_string()),
+        );
         if let Some(field) = field_name {
             args.insert("field_name".to_string(), json!(field));
         }
@@ -30127,7 +36119,10 @@ impl WbEnvironment {
             args.insert("cell_size".to_string(), json!(size));
         }
         if let Some(base) = base_raster {
-            args.insert("base_raster".to_string(), json!(base.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "base_raster".to_string(),
+                json!(base.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -30437,7 +36432,10 @@ impl WbEnvironment {
 
         let mut args = serde_json::Map::new();
         args.insert("input_rasters".to_string(), json!(input_paths));
-        args.insert("comparison".to_string(), json!(comparison.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "comparison".to_string(),
+            json!(comparison.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -30469,11 +36467,19 @@ impl WbEnvironment {
 
         let mut args = serde_json::Map::new();
         args.insert("input_rasters".to_string(), json!(input_paths));
-        args.insert("comparison".to_string(), json!(comparison.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "comparison".to_string(),
+            json!(comparison.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("percent_greater_than", args, comparison.active_band, callback)
+        self._run_raster_tool_with_args(
+            "percent_greater_than",
+            args,
+            comparison.active_band,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input_rasters, comparison, output_path=None, callback=None))]
@@ -30501,7 +36507,10 @@ impl WbEnvironment {
 
         let mut args = serde_json::Map::new();
         args.insert("input_rasters".to_string(), json!(input_paths));
-        args.insert("comparison".to_string(), json!(comparison.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "comparison".to_string(),
+            json!(comparison.file_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -30876,7 +36885,12 @@ impl WbEnvironment {
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
-        self._run_raster_tool_with_args("lidar_radial_basis_function_interpolation", args, 0, callback)
+        self._run_raster_tool_with_args(
+            "lidar_radial_basis_function_interpolation",
+            args,
+            0,
+            callback,
+        )
     }
 
     #[pyo3(signature = (input=None, resolution=1.0, interpolation_parameter="elevation", returns_included="all", excluded_classes=None, min_elev=None, max_elev=None, output_path=None, callback=None))]
@@ -30934,14 +36948,30 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        if let Some(input) = input { args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string())); }
+        if let Some(input) = input {
+            args.insert(
+                "input".to_string(),
+                json!(input.file_path.to_string_lossy().to_string()),
+            );
+        }
         args.insert("resolution".to_string(), json!(resolution));
-        args.insert("interpolation_parameter".to_string(), json!(interpolation_parameter));
+        args.insert(
+            "interpolation_parameter".to_string(),
+            json!(interpolation_parameter),
+        );
         args.insert("returns_included".to_string(), json!(returns_included));
-        if let Some(classes) = excluded_classes { args.insert("excluded_classes".to_string(), json!(classes)); }
-        if let Some(min_z) = min_elev { args.insert("min_elev".to_string(), json!(min_z)); }
-        if let Some(max_z) = max_elev { args.insert("max_elev".to_string(), json!(max_z)); }
-        if let Some(out) = self.resolve_output_path_for_wd(output_path) { args.insert("output".to_string(), json!(out)); }
+        if let Some(classes) = excluded_classes {
+            args.insert("excluded_classes".to_string(), json!(classes));
+        }
+        if let Some(min_z) = min_elev {
+            args.insert("min_elev".to_string(), json!(min_z));
+        }
+        if let Some(max_z) = max_elev {
+            args.insert("max_elev".to_string(), json!(max_z));
+        }
+        if let Some(out) = self.resolve_output_path_for_wd(output_path) {
+            args.insert("output".to_string(), json!(out));
+        }
         self._run_raster_tool_with_args("lidar_block_maximum", args, 0, callback)
     }
 
@@ -30959,14 +36989,30 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        if let Some(input) = input { args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string())); }
+        if let Some(input) = input {
+            args.insert(
+                "input".to_string(),
+                json!(input.file_path.to_string_lossy().to_string()),
+            );
+        }
         args.insert("resolution".to_string(), json!(resolution));
-        args.insert("interpolation_parameter".to_string(), json!(interpolation_parameter));
+        args.insert(
+            "interpolation_parameter".to_string(),
+            json!(interpolation_parameter),
+        );
         args.insert("returns_included".to_string(), json!(returns_included));
-        if let Some(classes) = excluded_classes { args.insert("excluded_classes".to_string(), json!(classes)); }
-        if let Some(min_z) = min_elev { args.insert("min_elev".to_string(), json!(min_z)); }
-        if let Some(max_z) = max_elev { args.insert("max_elev".to_string(), json!(max_z)); }
-        if let Some(out) = self.resolve_output_path_for_wd(output_path) { args.insert("output".to_string(), json!(out)); }
+        if let Some(classes) = excluded_classes {
+            args.insert("excluded_classes".to_string(), json!(classes));
+        }
+        if let Some(min_z) = min_elev {
+            args.insert("min_elev".to_string(), json!(min_z));
+        }
+        if let Some(max_z) = max_elev {
+            args.insert("max_elev".to_string(), json!(max_z));
+        }
+        if let Some(out) = self.resolve_output_path_for_wd(output_path) {
+            args.insert("output".to_string(), json!(out));
+        }
         self._run_raster_tool_with_args("lidar_block_minimum", args, 0, callback)
     }
 
@@ -30984,14 +37030,27 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        if let Some(input) = input { args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string())); }
+        if let Some(input) = input {
+            args.insert(
+                "input".to_string(),
+                json!(input.file_path.to_string_lossy().to_string()),
+            );
+        }
         args.insert("resolution".to_string(), json!(resolution));
         args.insert("search_radius".to_string(), json!(search_radius));
         args.insert("returns_included".to_string(), json!(returns_included));
-        if let Some(classes) = excluded_classes { args.insert("excluded_classes".to_string(), json!(classes)); }
-        if let Some(min_z) = min_elev { args.insert("min_elev".to_string(), json!(min_z)); }
-        if let Some(max_z) = max_elev { args.insert("max_elev".to_string(), json!(max_z)); }
-        if let Some(out) = self.resolve_output_path_for_wd(output_path) { args.insert("output".to_string(), json!(out)); }
+        if let Some(classes) = excluded_classes {
+            args.insert("excluded_classes".to_string(), json!(classes));
+        }
+        if let Some(min_z) = min_elev {
+            args.insert("min_elev".to_string(), json!(min_z));
+        }
+        if let Some(max_z) = max_elev {
+            args.insert("max_elev".to_string(), json!(max_z));
+        }
+        if let Some(out) = self.resolve_output_path_for_wd(output_path) {
+            args.insert("output".to_string(), json!(out));
+        }
         self._run_raster_tool_with_args("lidar_point_density", args, 0, callback)
     }
 
@@ -31008,13 +37067,27 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        if let Some(input) = input { args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string())); }
+        if let Some(input) = input {
+            args.insert(
+                "input".to_string(),
+                json!(input.file_path.to_string_lossy().to_string()),
+            );
+        }
         args.insert("resolution".to_string(), json!(resolution));
         args.insert("search_radius".to_string(), json!(search_radius));
-        args.insert("max_triangle_edge_length".to_string(), json!(max_triangle_edge_length));
-        if let Some(min_z) = min_elev { args.insert("min_elev".to_string(), json!(min_z)); }
-        if let Some(max_z) = max_elev { args.insert("max_elev".to_string(), json!(max_z)); }
-        if let Some(out) = self.resolve_output_path_for_wd(output_path) { args.insert("output".to_string(), json!(out)); }
+        args.insert(
+            "max_triangle_edge_length".to_string(),
+            json!(max_triangle_edge_length),
+        );
+        if let Some(min_z) = min_elev {
+            args.insert("min_elev".to_string(), json!(min_z));
+        }
+        if let Some(max_z) = max_elev {
+            args.insert("max_elev".to_string(), json!(max_z));
+        }
+        if let Some(out) = self.resolve_output_path_for_wd(output_path) {
+            args.insert("output".to_string(), json!(out));
+        }
         self._run_raster_tool_with_args("lidar_digital_surface_model", args, 0, callback)
     }
 
@@ -31034,16 +37107,29 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        if let Some(input) = input { args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string())); }
+        if let Some(input) = input {
+            args.insert(
+                "input".to_string(),
+                json!(input.file_path.to_string_lossy().to_string()),
+            );
+        }
         args.insert("resolution".to_string(), json!(resolution));
         args.insert("search_radius".to_string(), json!(search_radius));
         args.insert("azimuth".to_string(), json!(azimuth));
         args.insert("altitude".to_string(), json!(altitude));
         args.insert("returns_included".to_string(), json!(returns_included));
-        if let Some(classes) = excluded_classes { args.insert("excluded_classes".to_string(), json!(classes)); }
-        if let Some(min_z) = min_elev { args.insert("min_elev".to_string(), json!(min_z)); }
-        if let Some(max_z) = max_elev { args.insert("max_elev".to_string(), json!(max_z)); }
-        if let Some(out) = self.resolve_output_path_for_wd(output_path) { args.insert("output".to_string(), json!(out)); }
+        if let Some(classes) = excluded_classes {
+            args.insert("excluded_classes".to_string(), json!(classes));
+        }
+        if let Some(min_z) = min_elev {
+            args.insert("min_elev".to_string(), json!(min_z));
+        }
+        if let Some(max_z) = max_elev {
+            args.insert("max_elev".to_string(), json!(max_z));
+        }
+        if let Some(out) = self.resolve_output_path_for_wd(output_path) {
+            args.insert("output".to_string(), json!(out));
+        }
         self._run_raster_tool_with_args("lidar_hillshade", args, 0, callback)
     }
 
@@ -31470,7 +37556,10 @@ impl WbEnvironment {
         args.insert("slope_threshold".to_string(), json!(slope_threshold));
         args.insert("height_threshold".to_string(), json!(height_threshold));
         args.insert("classify".to_string(), json!(classify));
-        args.insert("height_above_ground".to_string(), json!(height_above_ground));
+        args.insert(
+            "height_above_ground".to_string(),
+            json!(height_above_ground),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -31610,8 +37699,14 @@ impl WbEnvironment {
         args.insert("search_radius".to_string(), json!(search_radius));
         args.insert("grd_threshold".to_string(), json!(grd_threshold));
         args.insert("oto_threshold".to_string(), json!(oto_threshold));
-        args.insert("linearity_threshold".to_string(), json!(linearity_threshold));
-        args.insert("planarity_threshold".to_string(), json!(planarity_threshold));
+        args.insert(
+            "linearity_threshold".to_string(),
+            json!(linearity_threshold),
+        );
+        args.insert(
+            "planarity_threshold".to_string(),
+            json!(planarity_threshold),
+        );
         args.insert("num_iter".to_string(), json!(num_iter));
         args.insert("facade_threshold".to_string(), json!(facade_threshold));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -31797,7 +37892,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Lidar> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("search_radius".to_string(), json!(search_radius));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -31814,7 +37912,10 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Lidar> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("search_radius".to_string(), json!(search_radius));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
@@ -31834,11 +37935,25 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Raster> {
         let mut args = serde_json::Map::new();
-        args.insert("input1".to_string(), json!(classification_lidar.file_path.to_string_lossy().to_string()));
-        args.insert("input2".to_string(), json!(reference_lidar.file_path.to_string_lossy().to_string()));
-        args.insert("report".to_string(), json!(self.resolve_output_path_for_wd(Some(report_path)).unwrap_or_else(|| report_path.to_string())));
+        args.insert(
+            "input1".to_string(),
+            json!(classification_lidar.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(reference_lidar.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "report".to_string(),
+            json!(self
+                .resolve_output_path_for_wd(Some(report_path))
+                .unwrap_or_else(|| report_path.to_string())),
+        );
         args.insert("resolution".to_string(), json!(resolution));
-        args.insert("output_class_accuracy".to_string(), json!(output_class_accuracy));
+        args.insert(
+            "output_class_accuracy".to_string(),
+            json!(output_class_accuracy),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -31856,7 +37971,10 @@ impl WbEnvironment {
     ) -> PyResult<String> {
         let mut args = serde_json::Map::new();
         if let Some(input) = input {
-            args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+            args.insert(
+                "input".to_string(),
+                json!(input.file_path.to_string_lossy().to_string()),
+            );
         }
         if let Some(k) = num_neighbours {
             args.insert("num_neighbours".to_string(), json!(k));
@@ -31905,12 +38023,18 @@ impl WbEnvironment {
         callback: Option<Py<PyAny>>,
     ) -> PyResult<Lidar> {
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("search_radius".to_string(), json!(search_radius));
         args.insert("num_iterations".to_string(), json!(num_iterations));
         args.insert("num_samples".to_string(), json!(num_samples));
         args.insert("inlier_threshold".to_string(), json!(inlier_threshold));
-        args.insert("acceptable_model_size".to_string(), json!(acceptable_model_size));
+        args.insert(
+            "acceptable_model_size".to_string(),
+            json!(acceptable_model_size),
+        );
         args.insert("max_planar_slope".to_string(), json!(max_planar_slope));
         args.insert("classify".to_string(), json!(classify));
         args.insert("only_last_returns".to_string(), json!(only_last_returns));
@@ -31945,14 +38069,23 @@ impl WbEnvironment {
             input_paths.push(json!(lid.file_path.to_string_lossy().to_string()));
         }
         args.insert("inputs".to_string(), json!(input_paths));
-        args.insert("building_footprints".to_string(), json!(building_footprints.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "building_footprints".to_string(),
+            json!(building_footprints.file_path.to_string_lossy().to_string()),
+        );
         args.insert("search_radius".to_string(), json!(search_radius));
         args.insert("num_iterations".to_string(), json!(num_iterations));
         args.insert("num_samples".to_string(), json!(num_samples));
         args.insert("inlier_threshold".to_string(), json!(inlier_threshold));
-        args.insert("acceptable_model_size".to_string(), json!(acceptable_model_size));
+        args.insert(
+            "acceptable_model_size".to_string(),
+            json!(acceptable_model_size),
+        );
         args.insert("max_planar_slope".to_string(), json!(max_planar_slope));
-        args.insert("norm_diff_threshold".to_string(), json!(norm_diff_threshold));
+        args.insert(
+            "norm_diff_threshold".to_string(),
+            json!(norm_diff_threshold),
+        );
         args.insert("azimuth".to_string(), json!(azimuth));
         args.insert("altitude".to_string(), json!(altitude));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -31987,9 +38120,15 @@ impl WbEnvironment {
         args.insert("num_iterations".to_string(), json!(num_iterations));
         args.insert("num_samples".to_string(), json!(num_samples));
         args.insert("inlier_threshold".to_string(), json!(inlier_threshold));
-        args.insert("acceptable_model_size".to_string(), json!(acceptable_model_size));
+        args.insert(
+            "acceptable_model_size".to_string(),
+            json!(acceptable_model_size),
+        );
         args.insert("max_planar_slope".to_string(), json!(max_planar_slope));
-        args.insert("norm_diff_threshold".to_string(), json!(norm_diff_threshold));
+        args.insert(
+            "norm_diff_threshold".to_string(),
+            json!(norm_diff_threshold),
+        );
         args.insert("max_z_diff".to_string(), json!(max_z_diff));
         args.insert("classes".to_string(), json!(classes));
         args.insert("ground".to_string(), json!(ground));
@@ -32078,11 +38217,17 @@ impl WbEnvironment {
         args.insert("bandwidth_max".to_string(), json!(bandwidth_max));
         args.insert("adaptive_bandwidth".to_string(), json!(adaptive_bandwidth));
         args.insert("adaptive_neighbors".to_string(), json!(adaptive_neighbors));
-        args.insert("adaptive_sector_count".to_string(), json!(adaptive_sector_count));
+        args.insert(
+            "adaptive_sector_count".to_string(),
+            json!(adaptive_sector_count),
+        );
         args.insert("grid_acceleration".to_string(), json!(grid_acceleration));
         args.insert("grid_cell_size".to_string(), json!(grid_cell_size));
         args.insert("grid_refine_exact".to_string(), json!(grid_refine_exact));
-        args.insert("grid_refine_iterations".to_string(), json!(grid_refine_iterations));
+        args.insert(
+            "grid_refine_iterations".to_string(),
+            json!(grid_refine_iterations),
+        );
         args.insert("tile_size".to_string(), json!(tile_size));
         args.insert("tile_overlap".to_string(), json!(tile_overlap));
         args.insert("vertical_bandwidth".to_string(), json!(vertical_bandwidth));
@@ -32118,7 +38263,10 @@ impl WbEnvironment {
             json!(input.file_path.to_string_lossy().to_string()),
         );
         args.insert("search_radius".to_string(), json!(search_radius));
-        args.insert("norm_diff_threshold".to_string(), json!(norm_diff_threshold));
+        args.insert(
+            "norm_diff_threshold".to_string(),
+            json!(norm_diff_threshold),
+        );
         args.insert("max_z_diff".to_string(), json!(max_z_diff));
         args.insert("classify_points".to_string(), json!(classify_points));
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
@@ -32168,7 +38316,10 @@ impl WbEnvironment {
                 json!(input.file_path.to_string_lossy().to_string()),
             );
         }
-        args.insert("intensity_blending_amount".to_string(), json!(intensity_blending_amount));
+        args.insert(
+            "intensity_blending_amount".to_string(),
+            json!(intensity_blending_amount),
+        );
         args.insert("clr_str".to_string(), json!(clr_str));
         args.insert(
             "use_unique_clrs_for_buildings".to_string(),
@@ -32200,7 +38351,10 @@ impl WbEnvironment {
                 json!(input.file_path.to_string_lossy().to_string()),
             );
         }
-        args.insert("intensity_blending_amount".to_string(), json!(intensity_blending_amount));
+        args.insert(
+            "intensity_blending_amount".to_string(),
+            json!(intensity_blending_amount),
+        );
         args.insert("only_ret_colour".to_string(), json!(only_ret_colour));
         args.insert("first_ret_colour".to_string(), json!(first_ret_colour));
         args.insert(
@@ -32341,7 +38495,8 @@ impl WbEnvironment {
                 .map_err(map_tool_error)?
         };
 
-        let out = extract_output_string_by_key("select_tiles_by_polygon", &response, "output_directory")?;
+        let out =
+            extract_output_string_by_key("select_tiles_by_polygon", &response, "output_directory")?;
         if self.verbose {
             println!("Completed select_tiles_by_polygon tool");
         }
@@ -32701,7 +38856,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("palette".to_string(), json!(palette));
         if let Some(d) = max_dist {
             args.insert("max_dist".to_string(), json!(d));
@@ -32766,7 +38924,10 @@ impl WbEnvironment {
                     .to_string()
             });
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("date".to_string(), json!(date));
         args.insert("time_interval".to_string(), json!(time_interval));
         args.insert("location".to_string(), json!(location));
@@ -32839,11 +39000,17 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("solar_altitude".to_string(), json!(solar_altitude));
         args.insert("hillshade_weight".to_string(), json!(hillshade_weight));
         args.insert("brightness".to_string(), json!(brightness));
-        args.insert("atmospheric_effects".to_string(), json!(atmospheric_effects));
+        args.insert(
+            "atmospheric_effects".to_string(),
+            json!(atmospheric_effects),
+        );
         args.insert("palette".to_string(), json!(palette));
         args.insert("reverse_palette".to_string(), json!(reverse_palette));
         args.insert("full_360_mode".to_string(), json!(full_360_mode));
@@ -32905,7 +39072,10 @@ impl WbEnvironment {
     ) -> PyResult<Raster> {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
         let mut args = serde_json::Map::new();
-        args.insert("dem".to_string(), json!(input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "dem".to_string(),
+            json!(input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("palette".to_string(), json!(palette));
         args.insert("reverse_palette".to_string(), json!(reverse_palette));
         args.insert("azimuth".to_string(), json!(azimuth));
@@ -32916,7 +39086,10 @@ impl WbEnvironment {
                 json!(poly.file_path.to_string_lossy().to_string()),
             );
         }
-        args.insert("background_hgt_offset".to_string(), json!(background_hgt_offset));
+        args.insert(
+            "background_hgt_offset".to_string(),
+            json!(background_hgt_offset),
+        );
         args.insert(
             "background_clr".to_string(),
             json!([
@@ -32926,7 +39099,10 @@ impl WbEnvironment {
                 background_clr.3
             ]),
         );
-        args.insert("attenuation_parameter".to_string(), json!(attenuation_parameter));
+        args.insert(
+            "attenuation_parameter".to_string(),
+            json!(attenuation_parameter),
+        );
         args.insert("ambient_light".to_string(), json!(ambient_light));
         args.insert("z_factor".to_string(), json!(z_factor));
         if let Some(d) = max_dist {
@@ -32979,8 +39155,14 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("data".to_string(), json!(data_raster.file_path.to_string_lossy().to_string()));
-        args.insert("features".to_string(), json!(features_raster.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "data".to_string(),
+            json!(data_raster.file_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "features".to_string(),
+            json!(features_raster.file_path.to_string_lossy().to_string()),
+        );
         args.insert("stat".to_string(), json!(stat_type));
         args.insert("zero_background".to_string(), json!(zero_is_background));
         if let Some(ref out) = resolved_output {
@@ -33027,7 +39209,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(base_raster.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(base_raster.file_path.to_string_lossy().to_string()),
+        );
         args.insert("range".to_string(), json!(range));
         args.insert("iterations".to_string(), json!(iterations));
         if let Some(ref out) = resolved_output {
@@ -33073,7 +39258,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("input".to_string(), json!(input_raster.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input_raster.file_path.to_string_lossy().to_string()),
+        );
         args.insert("polynomial_order".to_string(), json!(polynomial_order));
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
@@ -33120,7 +39308,10 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        args.insert("vector".to_string(), json!(vector_input.file_path.to_string_lossy().to_string()));
+        args.insert(
+            "vector".to_string(),
+            json!(vector_input.file_path.to_string_lossy().to_string()),
+        );
         args.insert("cell_size".to_string(), json!(cell_size));
         args.insert("field".to_string(), json!(field_name));
         args.insert("polynomial_order".to_string(), json!(polynomial_order));
@@ -33169,7 +39360,7 @@ impl WbEnvironment {
 
         let mut args = serde_json::Map::new();
         args.insert("expression".to_string(), json!(expression));
-        
+
         let raster_paths: Vec<String> = input_rasters
             .iter()
             .map(|r| {
@@ -33178,7 +39369,7 @@ impl WbEnvironment {
             })
             .collect();
         args.insert("rasters".to_string(), json!(raster_paths));
-        
+
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -33224,7 +39415,7 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        
+
         let raster_paths: Vec<String> = input_rasters
             .iter()
             .map(|r| {
@@ -33233,12 +39424,12 @@ impl WbEnvironment {
             })
             .collect();
         args.insert("rasters".to_string(), json!(raster_paths));
-        
+
         if let Some(nc) = num_components {
             args.insert("num_components".to_string(), json!(nc));
         }
         args.insert("standardized".to_string(), json!(standardized));
-        
+
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -33286,7 +39477,7 @@ impl WbEnvironment {
         let resolved_output = self.resolve_output_path_for_wd(output_path);
 
         let mut args = serde_json::Map::new();
-        
+
         let component_paths: Vec<String> = component_rasters
             .iter()
             .map(|r| {
@@ -33296,7 +39487,7 @@ impl WbEnvironment {
             .collect();
         args.insert("components".to_string(), json!(component_paths));
         args.insert("pca_report".to_string(), json!(pca_report));
-        
+
         if let Some(ref out) = resolved_output {
             args.insert("output".to_string(), json!(out));
         }
@@ -33338,8 +39529,8 @@ mod tests {
     use pyo3::types::{PyDict, PyList};
     use serde_json::Value;
     use std::time::{SystemTime, UNIX_EPOCH};
-    use wbvector::geometry::{Geometry, GeometryType};
     use wblidar::{Crs as LidarCrs, PointRecord};
+    use wbvector::geometry::{Geometry, GeometryType};
 
     struct TempDirGuard {
         path: PathBuf,
@@ -33387,7 +39578,12 @@ mod tests {
         for row in 0..raster.rows {
             for col in 0..raster.cols {
                 raster
-                    .set(0, row as isize, col as isize, (row * raster.cols + col) as f64)
+                    .set(
+                        0,
+                        row as isize,
+                        col as isize,
+                        (row * raster.cols + col) as f64,
+                    )
                     .unwrap();
             }
         }
@@ -33402,9 +39598,15 @@ mod tests {
         let mut layer = WbLayer::new("cities")
             .with_geom_type(GeometryType::Point)
             .with_crs_epsg(4326);
-        layer.add_feature(Some(Geometry::point(-75.0, 45.0)), &[]).unwrap();
-        layer.add_feature(Some(Geometry::point(-74.0, 46.0)), &[]).unwrap();
-        layer.add_feature(Some(Geometry::point(-73.0, 47.0)), &[]).unwrap();
+        layer
+            .add_feature(Some(Geometry::point(-75.0, 45.0)), &[])
+            .unwrap();
+        layer
+            .add_feature(Some(Geometry::point(-74.0, 46.0)), &[])
+            .unwrap();
+        layer
+            .add_feature(Some(Geometry::point(-73.0, 47.0)), &[])
+            .unwrap();
         wbvector::write(&layer, path, VectorFormat::GeoPackage).unwrap();
         Vector {
             file_path: path.to_path_buf(),
@@ -33438,9 +39640,24 @@ mod tests {
     fn make_test_lidar(path: &Path) -> Lidar {
         let cloud = PointCloud {
             points: vec![
-                PointRecord { x: -75.0, y: 45.0, z: 100.0, ..PointRecord::default() },
-                PointRecord { x: -74.5, y: 45.5, z: 110.0, ..PointRecord::default() },
-                PointRecord { x: -74.0, y: 46.0, z: 120.0, ..PointRecord::default() },
+                PointRecord {
+                    x: -75.0,
+                    y: 45.0,
+                    z: 100.0,
+                    ..PointRecord::default()
+                },
+                PointRecord {
+                    x: -74.5,
+                    y: 45.5,
+                    z: 110.0,
+                    ..PointRecord::default()
+                },
+                PointRecord {
+                    x: -74.0,
+                    y: 46.0,
+                    z: 120.0,
+                    ..PointRecord::default()
+                },
             ],
             crs: Some(LidarCrs::from_epsg(4326)),
         };
@@ -33467,7 +39684,11 @@ mod tests {
             "<n1:Level-2A_User_Product><General_Info><Product_Info><PRODUCT_START_TIME>2026-04-01T00:00:00Z</PRODUCT_START_TIME></Product_Info></General_Info></n1:Level-2A_User_Product>",
         )
         .unwrap();
-        let img = root.join("GRANULE").join("T32ABC_001").join("IMG_DATA").join("R10m");
+        let img = root
+            .join("GRANULE")
+            .join("T32ABC_001")
+            .join("IMG_DATA")
+            .join("R10m");
         std::fs::create_dir_all(&img).unwrap();
         std::fs::write(img.join("T32ABC_20260401T000000_B04_10m.jp2"), b"").unwrap();
     }
@@ -33495,8 +39716,11 @@ mod tests {
 
     fn make_test_dimap_bundle(root: &Path) {
         std::fs::create_dir_all(root).unwrap();
-        std::fs::write(root.join("DIM_PHR1A_PMS_001.XML"), "<Dimap_Document>DIMAP</Dimap_Document>")
-            .unwrap();
+        std::fs::write(
+            root.join("DIM_PHR1A_PMS_001.XML"),
+            "<Dimap_Document>DIMAP</Dimap_Document>",
+        )
+        .unwrap();
         std::fs::write(root.join("IMG_B1.JP2"), b"").unwrap();
     }
 
@@ -33561,7 +39785,11 @@ mod tests {
         );
     }
 
-    fn assert_batch_progress_payloads(payloads: &[String], expected_count: usize, expected_label: &str) {
+    fn assert_batch_progress_payloads(
+        payloads: &[String],
+        expected_count: usize,
+        expected_label: &str,
+    ) {
         assert!(!payloads.is_empty());
         let values: Vec<Value> = payloads
             .iter()
@@ -33584,19 +39812,37 @@ mod tests {
             .iter()
             .filter(|v| v.get("type") == Some(&Value::String("progress".to_string())))
             .collect();
-        assert_eq!(progress_values.len(), expected_count, "payloads={payloads:?}");
+        assert_eq!(
+            progress_values.len(),
+            expected_count,
+            "payloads={payloads:?}"
+        );
 
         let progress: Vec<f64> = progress_values
             .iter()
             .filter_map(|v| v.get("percent").and_then(Value::as_f64))
             .collect();
         assert_eq!(progress.len(), expected_count, "payloads={payloads:?}");
-        assert!(progress.windows(2).all(|w| w[1] + 1e-12 >= w[0]), "payloads={payloads:?}");
-        assert!((progress.last().copied().unwrap() - 1.0).abs() < 1e-12, "payloads={payloads:?}");
+        assert!(
+            progress.windows(2).all(|w| w[1] + 1e-12 >= w[0]),
+            "payloads={payloads:?}"
+        );
+        assert!(
+            (progress.last().copied().unwrap() - 1.0).abs() < 1e-12,
+            "payloads={payloads:?}"
+        );
 
         for (i, evt) in progress_values.iter().enumerate() {
-            assert_eq!(evt.get("item").and_then(Value::as_u64), Some(i as u64), "payloads={payloads:?}");
-            assert_eq!(evt.get("count").and_then(Value::as_u64), Some(expected_count as u64), "payloads={payloads:?}");
+            assert_eq!(
+                evt.get("item").and_then(Value::as_u64),
+                Some(i as u64),
+                "payloads={payloads:?}"
+            );
+            assert_eq!(
+                evt.get("count").and_then(Value::as_u64),
+                Some(expected_count as u64),
+                "payloads={payloads:?}"
+            );
         }
     }
 
@@ -33643,7 +39889,6 @@ mod tests {
         })
         .unwrap();
     }
-
 
     #[test]
     fn vector_reproject_callback_emits_python_json_events() {
@@ -33877,15 +40122,15 @@ mod tests {
                     .extract::<String>()?,
                 "omega"
             );
-            assert!((
-                attrs
+            assert!(
+                (attrs
                     .get_item("score")?
                     .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyKeyError, _>("missing score"))?
                     .extract::<f64>()?
-                - 3.25
-            )
-                .abs()
-                < 1e-12);
+                    - 3.25)
+                    .abs()
+                    < 1e-12
+            );
 
             Ok(())
         })
@@ -33907,12 +40152,15 @@ mod tests {
         let env = WbEnvironment::new(false, "open").unwrap();
 
         let shp_out = td.path().join("roads.shp");
-        env.write_vector(&source, shp_out.to_string_lossy().as_ref(), None).unwrap();
+        env.write_vector(&source, shp_out.to_string_lossy().as_ref(), None)
+            .unwrap();
         assert!(shp_out.exists());
         assert!(shp_out.with_extension("dbf").exists());
         assert!(shp_out.with_extension("shx").exists());
 
-        let shp_vec = Vector { file_path: shp_out.clone() };
+        let shp_vec = Vector {
+            file_path: shp_out.clone(),
+        };
         let shp_copy = td.path().join("roads_copy.shp");
         shp_vec
             .deep_copy(Some(shp_copy.to_string_lossy().as_ref()))
@@ -33922,11 +40170,14 @@ mod tests {
         assert!(shp_copy.with_extension("shx").exists());
 
         let mif_out = td.path().join("roads.mif");
-        env.write_vector(&source, mif_out.to_string_lossy().as_ref(), None).unwrap();
+        env.write_vector(&source, mif_out.to_string_lossy().as_ref(), None)
+            .unwrap();
         assert!(mif_out.exists());
         assert!(mif_out.with_extension("mid").exists());
 
-        let mif_vec = Vector { file_path: mif_out.clone() };
+        let mif_vec = Vector {
+            file_path: mif_out.clone(),
+        };
         let mif_copy = td.path().join("roads_copy.mif");
         mif_vec
             .deep_copy(Some(mif_copy.to_string_lossy().as_ref()))
@@ -33945,11 +40196,10 @@ mod tests {
         let env = WbEnvironment::new(false, "open").unwrap();
 
         let tmp = env.add(&r1, &r2, None, None).unwrap();
-        assert!(
-            tmp.file_path
-                .to_string_lossy()
-                .starts_with("memory://raster/")
-        );
+        assert!(tmp
+            .file_path
+            .to_string_lossy()
+            .starts_with("memory://raster/"));
 
         let out = env
             .add(&tmp, &r1, Some(out_path.to_string_lossy().as_ref()), None)
@@ -33974,12 +40224,10 @@ mod tests {
         let env = WbEnvironment::new(false, "open").unwrap();
 
         let mul_mem = env.multiply(&r1, &r2, None, None).unwrap();
-        assert!(
-            mul_mem
-                .file_path
-                .to_string_lossy()
-                .starts_with("memory://raster/")
-        );
+        assert!(mul_mem
+            .file_path
+            .to_string_lossy()
+            .starts_with("memory://raster/"));
         let sub_out = env
             .subtract(
                 &mul_mem,
@@ -33991,7 +40239,12 @@ mod tests {
         assert!(sub_out.file_path.exists());
 
         let mul_disk = env
-            .multiply(&r1, &r2, Some(multiply_out_path.to_string_lossy().as_ref()), None)
+            .multiply(
+                &r1,
+                &r2,
+                Some(multiply_out_path.to_string_lossy().as_ref()),
+                None,
+            )
             .unwrap();
         assert!(mul_disk.file_path.exists());
 
@@ -34031,18 +40284,16 @@ mod tests {
         let env = WbEnvironment::new(false, "open").unwrap();
 
         let tmp = env.mul(&r1, &r2, None, None).unwrap();
-        assert!(
-            tmp.file_path
-                .to_string_lossy()
-                .starts_with("memory://raster/")
-        );
+        assert!(tmp
+            .file_path
+            .to_string_lossy()
+            .starts_with("memory://raster/"));
 
         let tmp2 = env.sub(&tmp, &r1, None, None).unwrap();
-        assert!(
-            tmp2.file_path
-                .to_string_lossy()
-                .starts_with("memory://raster/")
-        );
+        assert!(tmp2
+            .file_path
+            .to_string_lossy()
+            .starts_with("memory://raster/"));
 
         let out = env
             .div(&tmp2, &r2, Some(out_path.to_string_lossy().as_ref()), None)
@@ -34089,11 +40340,10 @@ mod tests {
         let tmp = env
             .bilateral_filter(&input, Some(1.0), Some(2.0), false, true, None, None)
             .unwrap();
-        assert!(
-            tmp.file_path
-                .to_string_lossy()
-                .starts_with("memory://raster/")
-        );
+        assert!(tmp
+            .file_path
+            .to_string_lossy()
+            .starts_with("memory://raster/"));
 
         let out = env
             .bilateral_filter(
@@ -34148,11 +40398,10 @@ mod tests {
         let tmp = env
             .gaussian_filter(&input, Some(1.0), false, true, None, None)
             .unwrap();
-        assert!(
-            tmp.file_path
-                .to_string_lossy()
-                .starts_with("memory://raster/")
-        );
+        assert!(tmp
+            .file_path
+            .to_string_lossy()
+            .starts_with("memory://raster/"));
 
         let out = env
             .gaussian_filter(
@@ -34240,11 +40489,10 @@ mod tests {
 
             let tmp_any = py.eval(pyo3::ffi::c_str!("a + b"), None, Some(&locals))?;
             let tmp = tmp_any.extract::<PyRef<'_, Raster>>()?;
-            assert!(
-                tmp.file_path
-                    .to_string_lossy()
-                    .starts_with("memory://raster/")
-            );
+            assert!(tmp
+                .file_path
+                .to_string_lossy()
+                .starts_with("memory://raster/"));
             drop(tmp);
 
             locals.set_item("tmp", tmp_any)?;
@@ -34283,7 +40531,10 @@ mod tests {
             py.run(pyo3::ffi::c_str!("a += b"), None, Some(&locals))?;
             let a1_any = py.eval(pyo3::ffi::c_str!("a"), None, Some(&locals))?;
             let a1 = a1_any.extract::<PyRef<'_, Raster>>()?;
-            assert!(a1.file_path.to_string_lossy().starts_with("memory://raster/"));
+            assert!(a1
+                .file_path
+                .to_string_lossy()
+                .starts_with("memory://raster/"));
             drop(a1);
 
             py.run(pyo3::ffi::c_str!("a -= b"), None, Some(&locals))?;
@@ -34394,10 +40645,14 @@ mod tests {
             .unwrap();
         assert_eq!(planetscope.family, "planetscope");
 
-        let iceye = env.read_iceye(iceye_root.to_string_lossy().as_ref()).unwrap();
+        let iceye = env
+            .read_iceye(iceye_root.to_string_lossy().as_ref())
+            .unwrap();
         assert_eq!(iceye.family, "iceye");
 
-        let dimap = env.read_dimap(dimap_root.to_string_lossy().as_ref()).unwrap();
+        let dimap = env
+            .read_dimap(dimap_root.to_string_lossy().as_ref())
+            .unwrap();
         assert_eq!(dimap.family, "dimap");
 
         let maxar = env
@@ -34427,21 +40682,27 @@ mod tests {
 
         let env = WbEnvironment::new(false, "open").unwrap();
 
-        let s2 = env.read_sentinel2(s2_root.to_string_lossy().as_ref()).unwrap();
+        let s2 = env
+            .read_sentinel2(s2_root.to_string_lossy().as_ref())
+            .unwrap();
         assert_eq!(s2.tile_id().unwrap(), None);
         assert!(s2.sun_zenith_deg().unwrap().is_none());
         let s2_json = s2.metadata_json().unwrap();
         assert!(s2_json.contains("\"family\": \"sentinel2_safe\""));
         assert!(s2_json.contains("\"product_level\""));
 
-        let ls = env.read_landsat(landsat_root.to_string_lossy().as_ref()).unwrap();
+        let ls = env
+            .read_landsat(landsat_root.to_string_lossy().as_ref())
+            .unwrap();
         assert_eq!(ls.collection_number().unwrap(), None);
         assert_eq!(ls.path_row().unwrap(), Some((1, 1)));
         let ls_json = ls.metadata_json().unwrap();
         assert!(ls_json.contains("\"family\": \"landsat\""));
         assert!(ls_json.contains("\"mission\""));
 
-        let ice = env.read_iceye(iceye_root.to_string_lossy().as_ref()).unwrap();
+        let ice = env
+            .read_iceye(iceye_root.to_string_lossy().as_ref())
+            .unwrap();
         assert_eq!(ice.product_type().unwrap(), None);
         let ice_json = ice.metadata_json().unwrap();
         assert!(ice_json.contains("\"family\": \"iceye\""));
@@ -34468,9 +40729,18 @@ impl WbEnvironment {
             resolve_true_colour_band_paths(&input_path)?
         };
         let mut args = serde_json::Map::new();
-        args.insert("red".to_string(), json!(red_path.to_string_lossy().to_string()));
-        args.insert("green".to_string(), json!(green_path.to_string_lossy().to_string()));
-        args.insert("blue".to_string(), json!(blue_path.to_string_lossy().to_string()));
+        args.insert(
+            "red".to_string(),
+            json!(red_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "green".to_string(),
+            json!(green_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "blue".to_string(),
+            json!(blue_path.to_string_lossy().to_string()),
+        );
         if let Some(out) = self.resolve_output_path_for_wd(output_path) {
             args.insert("output".to_string(), json!(out));
         }
@@ -34587,9 +40857,7 @@ impl WbEnvironment {
         self.reject_flat_tool_api(tool_id)?;
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -34609,7 +40877,9 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path(tool_id, &response)?;
-        Ok(Vector { file_path: out_path })
+        Ok(Vector {
+            file_path: out_path,
+        })
     }
 
     fn _run_lidar_tool_with_args(
@@ -34621,9 +40891,7 @@ impl WbEnvironment {
         self.reject_flat_tool_api(tool_id)?;
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -34643,7 +40911,9 @@ impl WbEnvironment {
         };
 
         let out_path = extract_typed_output_path(tool_id, &response)?;
-        Ok(Lidar { file_path: out_path })
+        Ok(Lidar {
+            file_path: out_path,
+        })
     }
 
     fn _run_raster_tool_with_args(
@@ -34656,9 +40926,7 @@ impl WbEnvironment {
         self.reject_flat_tool_api(tool_id)?;
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -34707,9 +40975,7 @@ impl WbEnvironment {
         }
 
         let args_json = serde_json::to_string(&serde_json::Value::Object(args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "invalid JSON arguments: {e}"
-            ))
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
         })?;
 
         let response = if let Some(cb) = callback {
@@ -34807,9 +41073,12 @@ impl WbEnvironment {
         if let Some(ref out) = resolved_output {
             extra_args.insert("output".to_string(), json!(out));
         }
-        let args_json = serde_json::to_string(&serde_json::Value::Object(extra_args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
-        })?;
+        let args_json =
+            serde_json::to_string(&serde_json::Value::Object(extra_args)).map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "invalid JSON arguments: {e}"
+                ))
+            })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
             let r = self
@@ -34829,7 +41098,10 @@ impl WbEnvironment {
         if self.verbose {
             println!("Completed {} tool", tool_id);
         }
-        Ok(Raster { file_path: out_path, active_band: first.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: first.active_band,
+        })
     }
 
     fn _run_windowed_terrain_tool(
@@ -34852,9 +41124,12 @@ impl WbEnvironment {
         if let Some(ref out) = resolved_output {
             extra_args.insert("output".to_string(), json!(out));
         }
-        let args_json = serde_json::to_string(&serde_json::Value::Object(extra_args)).map_err(|e| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("invalid JSON arguments: {e}"))
-        })?;
+        let args_json =
+            serde_json::to_string(&serde_json::Value::Object(extra_args)).map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "invalid JSON arguments: {e}"
+                ))
+            })?;
         let response = if let Some(cb) = callback {
             let sink = PyCallbackSink::new(cb);
             let r = self
@@ -34874,7 +41149,10 @@ impl WbEnvironment {
         if self.verbose {
             println!("Completed {} tool", tool_id);
         }
-        Ok(Raster { file_path: out_path, active_band: input.active_band })
+        Ok(Raster {
+            file_path: out_path,
+            active_band: input.active_band,
+        })
     }
 
     fn _run_unary_tool(
@@ -34922,8 +41200,13 @@ impl WbEnvironment {
                 std::fs::create_dir_all(parent).ok();
             }
             let mut r = input.load_wbraster()?;
-            let target_bands = resolve_target_bands(r.bands, input.active_band, Some(&mode), bands)?;
-            let op = if let Some(op) = local_op { op } else { resolve_unary_value_op(tool_id)? };
+            let target_bands =
+                resolve_target_bands(r.bands, input.active_band, Some(&mode), bands)?;
+            let op = if let Some(op) = local_op {
+                op
+            } else {
+                resolve_unary_value_op(tool_id)?
+            };
             emit_callback_event(
                 &callback,
                 json!({"type":"message","message":format!("Applying {tool_id} to selected bands"),"band_count":r.bands}),
@@ -34933,13 +41216,19 @@ impl WbEnvironment {
                 let nodata = r.nodata;
                 let nodata_is_nan = nodata.is_nan();
                 vals.par_iter_mut().for_each(|v| {
-                    let is_nodata = if nodata_is_nan { v.is_nan() } else { *v == nodata };
+                    let is_nodata = if nodata_is_nan {
+                        v.is_nan()
+                    } else {
+                        *v == nodata
+                    };
                     if !is_nodata {
                         *v = op(*v);
                     }
                 });
                 r.set_band_slice(*b as isize, &vals).map_err(|e| {
-                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!("{tool_id} failed: {e}"))
+                    PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                        "{tool_id} failed: {e}"
+                    ))
                 })?;
                 let pct = (i + 1) as f64 / target_bands.len() as f64;
                 emit_callback_event(

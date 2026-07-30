@@ -2,41 +2,38 @@ use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use serde_json::{json, Map, Value};
+use std::collections::{BTreeMap, BTreeSet};
 #[cfg(feature = "pro")]
 use std::env;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::collections::{BTreeMap, BTreeSet};
 use wbcore::{
-    generate_wrapper_stub, manifest_with_param_schema_json, BindingTarget, ExecuteRequest, LicenseTier, OwnedToolRuntime,
-    OwnedToolRuntimeWithCapabilities, RuntimeOptions,
-    ProgressSink, ToolArgs, ToolError, ToolManifest, ToolRuntimeBuilder, ToolRuntimeRegistry,
-};
-use wblicense_core::{
-    verify_signed_entitlement_json, EntitlementCapabilities, LicenseError, VerificationKeyStore,
+    generate_wrapper_stub, manifest_with_param_schema_json, BindingTarget, ExecuteRequest,
+    LicenseTier, OwnedToolRuntime, OwnedToolRuntimeWithCapabilities, ProgressSink, RuntimeOptions,
+    ToolArgs, ToolError, ToolManifest, ToolRuntimeBuilder, ToolRuntimeRegistry,
 };
 #[cfg(feature = "pro")]
 use wblicense_core::write_license_state_json;
-use wbtools_oss::{register_default_tools as register_default_oss_tools, ToolRegistry as OssRegistry};
+use wblicense_core::{
+    verify_signed_entitlement_json, EntitlementCapabilities, LicenseError, VerificationKeyStore,
+};
 use wbtools_oss::tools::{tool_param_descriptions, tool_param_required, tool_param_schemas};
+use wbtools_oss::{
+    register_default_tools as register_default_oss_tools, ToolRegistry as OssRegistry,
+};
 #[cfg(feature = "pro")]
-use wbtools_pro::{register_default_tools as register_default_pro_tools, ToolRegistry as ProRegistry};
+use wbtools_pro::{
+    register_default_tools as register_default_pro_tools, ToolRegistry as ProRegistry,
+};
 
 mod wb_environment;
 pub use wb_environment::{
-    Bundle,
-    Lidar,
-    LidarMetadata,
-    PinnedRasterView,
-    Raster,
-    RasterConfigs,
-    Vector,
-    VectorMetadata,
-    WbEnvironment,
-    WbProjectionNamespace,
-    WbTopologyNamespace,
+    Bundle, Lidar, LidarMetadata, PinnedRasterView, Raster, RasterConfigs, Vector, VectorMetadata,
+    WbEnvironment, WbProjectionNamespace, WbTopologyNamespace,
 };
-pub use wb_environment::{WbCategoryToolCallable, WbDomainNamespace, WbToolCategory, WbToolSubcategory};
+pub use wb_environment::{
+    WbCategoryToolCallable, WbDomainNamespace, WbToolCategory, WbToolSubcategory,
+};
 
 struct CompositeRegistry {
     oss: OssRegistry,
@@ -69,7 +66,12 @@ impl ToolRuntimeRegistry for CompositeRegistry {
         out
     }
 
-    fn run_tool(&self, id: &str, args: &ToolArgs, ctx: &wbcore::ToolContext) -> Result<wbcore::ToolRunResult, ToolError> {
+    fn run_tool(
+        &self,
+        id: &str,
+        args: &ToolArgs,
+        ctx: &wbcore::ToolContext,
+    ) -> Result<wbcore::ToolRunResult, ToolError> {
         match self.oss.run(id, args, ctx) {
             Ok(v) => Ok(v),
             Err(ToolError::NotFound(_)) => {
@@ -98,10 +100,10 @@ fn validate_include_pro(include_pro: bool) -> Result<(), ToolError> {
 }
 
 fn manifest_has_tag(manifest: &ToolManifest, tags: &[&str]) -> bool {
-    manifest
-        .tags
-        .iter()
-        .any(|tag| tags.iter().any(|candidate| tag.eq_ignore_ascii_case(candidate)))
+    manifest.tags.iter().any(|tag| {
+        tags.iter()
+            .any(|candidate| tag.eq_ignore_ascii_case(candidate))
+    })
 }
 
 fn manifest_display_default_rank(manifest: &ToolManifest) -> Option<i64> {
@@ -128,11 +130,19 @@ fn manifest_display_default_rank(manifest: &ToolManifest) -> Option<i64> {
 fn manifest_display_defaults(manifest: &ToolManifest) -> (bool, bool, Option<i64>) {
     let default_hidden = manifest_has_tag(
         manifest,
-        &["default_hidden", "ui_default_hidden", "ui:hidden_by_default"],
+        &[
+            "default_hidden",
+            "ui_default_hidden",
+            "ui:hidden_by_default",
+        ],
     );
     let default_favorite = manifest_has_tag(
         manifest,
-        &["default_favorite", "ui_default_favorite", "ui:favorite_by_default"],
+        &[
+            "default_favorite",
+            "ui_default_favorite",
+            "ui:favorite_by_default",
+        ],
     );
     let display_rank = manifest_display_default_rank(manifest);
     (!default_hidden, default_favorite, display_rank)
@@ -238,8 +248,7 @@ fn sensor_bundle_colour_helper_manifests() -> Vec<ToolManifest> {
 }
 
 fn append_sensor_bundle_colour_helper_manifests(manifests: &mut Vec<ToolManifest>) {
-    let existing_ids: BTreeSet<String> =
-        manifests.iter().map(|m| m.id.clone()).collect();
+    let existing_ids: BTreeSet<String> = manifests.iter().map(|m| m.id.clone()).collect();
     for helper in sensor_bundle_colour_helper_manifests() {
         if !existing_ids.contains(&helper.id) {
             manifests.push(helper);
@@ -251,11 +260,7 @@ fn legacy_param_order_override(tool_id: &str) -> Option<&'static [&'static str]>
     match tool_id {
         // Mirror long-standing Whitebox ordering where output path appears
         // immediately after primary input for accumulation tools.
-        "d8_pointer" => Some(&[
-            "dem",
-            "output",
-            "esri_pntr",
-        ]),
+        "d8_pointer" => Some(&["dem", "output", "esri_pntr"]),
         "d8_flow_accum" => Some(&[
             "input",
             "output",
@@ -265,10 +270,7 @@ fn legacy_param_order_override(tool_id: &str) -> Option<&'static [&'static str]>
             "input_is_pointer",
             "esri_pntr",
         ]),
-        "dinf_pointer" => Some(&[
-            "dem",
-            "output",
-        ]),
+        "dinf_pointer" => Some(&["dem", "output"]),
         "dinf_flow_accum" => Some(&[
             "input",
             "output",
@@ -278,10 +280,7 @@ fn legacy_param_order_override(tool_id: &str) -> Option<&'static [&'static str]>
             "clip",
             "input_is_pointer",
         ]),
-        "fd8_pointer" => Some(&[
-            "dem",
-            "output",
-        ]),
+        "fd8_pointer" => Some(&["dem", "output"]),
         "fd8_flow_accum" => Some(&[
             "dem",
             "output",
@@ -292,11 +291,7 @@ fn legacy_param_order_override(tool_id: &str) -> Option<&'static [&'static str]>
             "log_transform",
             "clip",
         ]),
-        "rho8_pointer" => Some(&[
-            "dem",
-            "output",
-            "esri_pntr",
-        ]),
+        "rho8_pointer" => Some(&["dem", "output", "esri_pntr"]),
         "rho8_flow_accum" => Some(&[
             "input",
             "output",
@@ -492,10 +487,7 @@ fn enrich_manifest_params(
         enriched.params = ordered_names
             .into_iter()
             .map(|name| wbcore::ToolParamDescriptor {
-                description: param_descriptions
-                    .get(&name)
-                    .cloned()
-                    .unwrap_or_default(),
+                description: param_descriptions.get(&name).cloned().unwrap_or_default(),
                 required: param_required.get(&name).copied().unwrap_or(false),
                 name,
             })
@@ -515,7 +507,6 @@ fn enrich_manifest_params(
 
     enriched
 }
-
 
 pub struct PythonToolRuntime {
     runtime: RuntimeMode,
@@ -833,15 +824,20 @@ impl PythonToolRuntime {
             &param_schemas,
             &param_descriptions,
             &param_required,
-            catalog_param_metadata.order.get(&manifest.id).map(Vec::as_slice),
+            catalog_param_metadata
+                .order
+                .get(&manifest.id)
+                .map(Vec::as_slice),
         );
         let mut entry = manifest_with_param_schema_json(&enriched_manifest, &param_schemas);
         let effective = self.effective_tier();
         let (display_default_visible, display_default_favorite, display_default_rank) =
             manifest_display_defaults(manifest);
         let (availability_state, locked_reason, available) = if !self.include_pro
-            && matches!(manifest.license_tier, LicenseTier::Pro | LicenseTier::Enterprise)
-        {
+            && matches!(
+                manifest.license_tier,
+                LicenseTier::Pro | LicenseTier::Enterprise
+            ) {
             ("locked", Some("pro_not_included"), false)
         } else if manifest.license_tier > effective {
             ("locked", Some("tier_insufficient"), false)
@@ -941,7 +937,10 @@ impl PythonToolRuntime {
         if let Value::Object(obj) = &mut out {
             if let RuntimeMode::Entitled(runtime) = &self.runtime {
                 let caps = &runtime.runtime().capabilities;
-                obj.insert("entitlement_expires_at_unix".to_string(), json!(caps.expires_at_unix));
+                obj.insert(
+                    "entitlement_expires_at_unix".to_string(),
+                    json!(caps.expires_at_unix),
+                );
                 obj.insert("entitlement_now_unix".to_string(), json!(caps.now_unix));
                 obj.insert(
                     "entitlement_seconds_remaining".to_string(),
@@ -973,7 +972,11 @@ impl PythonToolRuntime {
         Ok(Value::Object(response.outputs.into_iter().collect()))
     }
 
-    pub fn run_tool_json_with_progress(&self, tool_id: &str, args_json: &str) -> Result<Value, ToolError> {
+    pub fn run_tool_json_with_progress(
+        &self,
+        tool_id: &str,
+        args_json: &str,
+    ) -> Result<Value, ToolError> {
         let args = parse_args_json(args_json)?;
 
         let response = match &self.runtime {
@@ -1059,9 +1062,13 @@ fn entitlement_capabilities_from_json(
     key_store
         .insert_base64url_public_key(public_key_kid, public_key_b64url)
         .map_err(map_license_error)?;
-    let verified = verify_signed_entitlement_json(signed_entitlement_json, &key_store, current_unix())
-        .map_err(map_license_error)?;
-    Ok(EntitlementCapabilities::from_verified(&verified, current_unix()))
+    let verified =
+        verify_signed_entitlement_json(signed_entitlement_json, &key_store, current_unix())
+            .map_err(map_license_error)?;
+    Ok(EntitlementCapabilities::from_verified(
+        &verified,
+        current_unix(),
+    ))
 }
 
 #[cfg(feature = "pro")]
@@ -1071,12 +1078,8 @@ fn entitlement_capabilities_from_floating_provider(
     machine_id: Option<&str>,
     customer_id: Option<&str>,
 ) -> Result<EntitlementCapabilities, ToolError> {
-    let (signed_entitlement_json, kid, public_key_b64url, _, _) = floating_activation_bundle(
-        floating_license_id,
-        provider_url,
-        machine_id,
-        customer_id,
-    )?;
+    let (signed_entitlement_json, kid, public_key_b64url, _, _) =
+        floating_activation_bundle(floating_license_id, provider_url, machine_id, customer_id)?;
     entitlement_capabilities_from_json(&signed_entitlement_json, &kid, &public_key_b64url)
 }
 
@@ -1178,8 +1181,9 @@ fn fetch_public_key_for_entitlement(
         .get("kid")
         .and_then(|v| v.as_str())
         .ok_or_else(|| ToolError::LicenseDenied("activation response missing 'kid'".to_string()))?;
-    let signed_entitlement_json = serde_json::to_string(activation_json)
-        .map_err(|e| ToolError::LicenseDenied(format!("failed to serialize entitlement envelope: {e}")))?;
+    let signed_entitlement_json = serde_json::to_string(activation_json).map_err(|e| {
+        ToolError::LicenseDenied(format!("failed to serialize entitlement envelope: {e}"))
+    })?;
 
     let keys_url = format!("{}/api/v2/public-keys", base.trim_end_matches('/'));
     let keys_resp = ureq::get(&keys_url)
@@ -1239,7 +1243,10 @@ fn key_activation_bundle(
         .map(|s| s.to_string())
         .or_else(|| env::var("WBW_CUSTOMER_ID").ok());
 
-    let activation_url = format!("{}/api/v2/entitlements/activate", base.trim_end_matches('/'));
+    let activation_url = format!(
+        "{}/api/v2/entitlements/activate",
+        base.trim_end_matches('/')
+    );
     let mut body = json!({
         "key": key,
         "machine_id": machine,
@@ -1258,14 +1265,23 @@ fn key_activation_bundle(
     let (signed_entitlement_json, kid, public_key_b64url) =
         fetch_public_key_for_entitlement(&activation_json, &base)?;
 
-    Ok((signed_entitlement_json, kid, public_key_b64url, base, customer))
+    Ok((
+        signed_entitlement_json,
+        kid,
+        public_key_b64url,
+        base,
+        customer,
+    ))
 }
 
 /// Best-effort server-side deactivation notification.  Silently ignores any
 /// network or server errors — local deactivation must always succeed regardless.
 #[cfg(feature = "pro")]
 fn notify_server_deactivation(key: &str, provider_url: &str) {
-    let url = format!("{}/api/v2/entitlements/deactivate", provider_url.trim_end_matches('/'));
+    let url = format!(
+        "{}/api/v2/entitlements/deactivate",
+        provider_url.trim_end_matches('/')
+    );
     let _ = ureq::post(&url).send_json(json!({ "key": key }));
 }
 
@@ -1340,7 +1356,8 @@ fn runtime_from_local_license_state(
         Err(_) => return PythonToolRuntime::new_with_options(false, LicenseTier::Open),
     };
 
-    let signed_entitlement_json = read_license_state_string_field(&state, "signed_entitlement_json")?;
+    let signed_entitlement_json =
+        read_license_state_string_field(&state, "signed_entitlement_json")?;
     let public_key_kid = read_license_state_string_field(&state, "public_key_kid")?;
     let public_key_b64url = read_license_state_string_field(&state, "public_key_b64url")?;
 
@@ -1357,8 +1374,9 @@ fn runtime_from_local_license_state(
 }
 
 fn read_entitlement_file(path: &str) -> Result<String, ToolError> {
-    std::fs::read_to_string(path)
-        .map_err(|e| ToolError::InvalidRequest(format!("failed to read entitlement file '{path}': {e}")))
+    std::fs::read_to_string(path).map_err(|e| {
+        ToolError::InvalidRequest(format!("failed to read entitlement file '{path}': {e}"))
+    })
 }
 
 #[derive(Default)]
@@ -1535,9 +1553,9 @@ fn parse_args_py_any(args: &Bound<'_, PyAny>) -> PyResult<ToolArgs> {
         return parse_args_json(&args_json).map_err(map_tool_error);
     }
 
-    let dict = args.cast::<PyDict>().map_err(|_| {
-        PyValueError::new_err("arguments must be a JSON string or a Python dict")
-    })?;
+    let dict = args
+        .cast::<PyDict>()
+        .map_err(|_| PyValueError::new_err("arguments must be a JSON string or a Python dict"))?;
 
     let mut out = ToolArgs::new();
     for (k, v) in dict.iter() {
@@ -1571,9 +1589,9 @@ fn map_tool_error(err: ToolError) -> PyErr {
 }
 
 fn extract_tool_ids(value: &Value) -> PyResult<Vec<String>> {
-    let arr = value.as_array().ok_or_else(|| {
-        PyRuntimeError::new_err("tools payload was not a list")
-    })?;
+    let arr = value
+        .as_array()
+        .ok_or_else(|| PyRuntimeError::new_err("tools payload was not a list"))?;
 
     let mut out = Vec::with_capacity(arr.len());
     for item in arr {
@@ -1592,21 +1610,20 @@ fn json_scalar_to_py(py: Python<'_>, value: &Value) -> PyResult<Py<PyAny>> {
     Ok(obj.unbind())
 }
 
-fn decode_typed_object(py: Python<'_>, map: &serde_json::Map<String, Value>) -> PyResult<Option<Py<PyAny>>> {
+fn decode_typed_object(
+    py: Python<'_>,
+    map: &serde_json::Map<String, Value>,
+) -> PyResult<Option<Py<PyAny>>> {
     let Some(kind) = map.get("__wbw_type__").and_then(Value::as_str) else {
         return Ok(None);
     };
 
     match kind {
         "raster" => {
-            let path = map
-                .get("path")
-                .and_then(Value::as_str)
-                .ok_or_else(|| PyValueError::new_err("typed output 'raster' requires string field 'path'"))?;
-            let active_band = map
-                .get("active_band")
-                .and_then(Value::as_u64)
-                .unwrap_or(0) as usize;
+            let path = map.get("path").and_then(Value::as_str).ok_or_else(|| {
+                PyValueError::new_err("typed output 'raster' requires string field 'path'")
+            })?;
+            let active_band = map.get("active_band").and_then(Value::as_u64).unwrap_or(0) as usize;
             let raster = Py::new(
                 py,
                 Raster {
@@ -1617,10 +1634,9 @@ fn decode_typed_object(py: Python<'_>, map: &serde_json::Map<String, Value>) -> 
             Ok(Some(raster.into_any()))
         }
         "vector" => {
-            let path = map
-                .get("path")
-                .and_then(Value::as_str)
-                .ok_or_else(|| PyValueError::new_err("typed output 'vector' requires string field 'path'"))?;
+            let path = map.get("path").and_then(Value::as_str).ok_or_else(|| {
+                PyValueError::new_err("typed output 'vector' requires string field 'path'")
+            })?;
             let vector = Py::new(
                 py,
                 Vector {
@@ -1630,10 +1646,9 @@ fn decode_typed_object(py: Python<'_>, map: &serde_json::Map<String, Value>) -> 
             Ok(Some(vector.into_any()))
         }
         "lidar" => {
-            let path = map
-                .get("path")
-                .and_then(Value::as_str)
-                .ok_or_else(|| PyValueError::new_err("typed output 'lidar' requires string field 'path'"))?;
+            let path = map.get("path").and_then(Value::as_str).ok_or_else(|| {
+                PyValueError::new_err("typed output 'lidar' requires string field 'path'")
+            })?;
             let lidar = Py::new(
                 py,
                 Lidar {
@@ -1643,10 +1658,9 @@ fn decode_typed_object(py: Python<'_>, map: &serde_json::Map<String, Value>) -> 
             Ok(Some(lidar.into_any()))
         }
         "tuple" => {
-            let items = map
-                .get("items")
-                .and_then(Value::as_array)
-                .ok_or_else(|| PyValueError::new_err("typed output 'tuple' requires array field 'items'"))?;
+            let items = map.get("items").and_then(Value::as_array).ok_or_else(|| {
+                PyValueError::new_err("typed output 'tuple' requires array field 'items'")
+            })?;
 
             let py_items: PyResult<Vec<Py<PyAny>>> = items
                 .iter()
@@ -1820,7 +1834,9 @@ impl RuntimeSession {
     /// version rather than from static files bundled with the plugin itself.
     fn get_tool_help_html(&self, py: Python<'_>, tool_id: &str) -> PyResult<String> {
         // Locate the package's help/ directory via importlib.resources / __file__.
-        let help_html: String = py.import("whitebox_workflows").ok()
+        let help_html: String = py
+            .import("whitebox_workflows")
+            .ok()
             .and_then(|pkg| pkg.getattr("__file__").ok())
             .and_then(|f| f.extract::<String>().ok())
             .and_then(|init_path| {
@@ -1847,7 +1863,12 @@ impl RuntimeSession {
             .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))
     }
 
-    fn run_tool(&self, py: Python<'_>, tool_id: &str, args: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    fn run_tool(
+        &self,
+        py: Python<'_>,
+        tool_id: &str,
+        args: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
         let args_map = parse_args_py_any(args)?;
         let args_json = serde_json::to_string(&args_map)
             .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))?;
@@ -1867,7 +1888,12 @@ impl RuntimeSession {
             .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))
     }
 
-    fn run_tool_json_stream(&self, tool_id: &str, args_json: &str, callback: Py<PyAny>) -> PyResult<String> {
+    fn run_tool_json_stream(
+        &self,
+        tool_id: &str,
+        args_json: &str,
+        callback: Py<PyAny>,
+    ) -> PyResult<String> {
         let sink = PyCallbackSink::new(callback);
         let out = self
             .runtime
@@ -1935,12 +1961,17 @@ fn get_tool_metadata_json(tool_id: &str) -> PyResult<String> {
 /// regardless of how the package is installed (wheel, editable, conda, etc.).
 #[pyfunction]
 fn get_tool_help_html(py: Python<'_>, tool_id: &str) -> PyResult<String> {
-    let html = py.import("whitebox_workflows").ok()
+    let html = py
+        .import("whitebox_workflows")
+        .ok()
         .and_then(|pkg| pkg.getattr("__file__").ok())
         .and_then(|f| f.extract::<String>().ok())
         .and_then(|init_path| {
             let init = std::path::Path::new(&init_path);
-            let html_file = init.parent()?.join("help").join(format!("{}.html", tool_id));
+            let html_file = init
+                .parent()?
+                .join("help")
+                .join(format!("{}.html", tool_id));
             std::fs::read_to_string(html_file).ok()
         })
         .unwrap_or_default();
@@ -1974,7 +2005,9 @@ fn get_runtime_capabilities_json() -> PyResult<String> {
 /// DescriptionsProvider or any other frontend that needs UI-quality labels.
 #[pyfunction]
 fn get_all_descriptions_json(py: Python<'_>) -> PyResult<String> {
-    let result = py.import("whitebox_workflows").ok()
+    let result = py
+        .import("whitebox_workflows")
+        .ok()
         .and_then(|pkg| pkg.getattr("__file__").ok())
         .and_then(|f| f.extract::<String>().ok())
         .and_then(|init_path| {
@@ -1985,7 +2018,8 @@ fn get_all_descriptions_json(py: Python<'_>) -> PyResult<String> {
             }
             // Load and merge all JSON files — auto_generated baseline first,
             // curated overrides second (alphabetical for determinism).
-            let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(&desc_dir).ok()?
+            let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(&desc_dir)
+                .ok()?
                 .filter_map(|e| e.ok().map(|e| e.path()))
                 .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("json"))
                 .collect();
@@ -1993,8 +2027,16 @@ fn get_all_descriptions_json(py: Python<'_>) -> PyResult<String> {
                 let a_base = a.file_name().unwrap_or_default().to_string_lossy();
                 let b_base = b.file_name().unwrap_or_default().to_string_lossy();
                 // auto_generated_tier1.json loads first (baseline), others override
-                let a_order = if a_base.starts_with("auto_generated") { 0u8 } else { 1u8 };
-                let b_order = if b_base.starts_with("auto_generated") { 0u8 } else { 1u8 };
+                let a_order = if a_base.starts_with("auto_generated") {
+                    0u8
+                } else {
+                    1u8
+                };
+                let b_order = if b_base.starts_with("auto_generated") {
+                    0u8
+                } else {
+                    1u8
+                };
                 a_order.cmp(&b_order).then(a_base.cmp(&b_base))
             });
             let mut merged = serde_json::Map::new();
@@ -2021,7 +2063,9 @@ fn get_all_descriptions_json(py: Python<'_>) -> PyResult<String> {
 /// tools: [...]}` objects, identical to `tool_taxonomy.resolved.json`.
 #[pyfunction]
 fn get_tool_taxonomy_json(py: Python<'_>) -> PyResult<String> {
-    let result = py.import("whitebox_workflows").ok()
+    let result = py
+        .import("whitebox_workflows")
+        .ok()
         .and_then(|pkg| pkg.getattr("__file__").ok())
         .and_then(|f| f.extract::<String>().ok())
         .and_then(|init_path| {
@@ -2043,8 +2087,7 @@ fn list_tools() -> PyResult<Vec<String>> {
 #[pyo3(signature = (include_pro=false, tier="open"))]
 fn list_tools_json_with_options(include_pro: bool, tier: &str) -> PyResult<String> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
     serde_json::to_string(&rt.list_tools_json())
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))
 }
@@ -2052,27 +2095,32 @@ fn list_tools_json_with_options(include_pro: bool, tier: &str) -> PyResult<Strin
 #[pyfunction]
 fn list_tool_catalog_json_with_options(include_pro: bool, tier: &str) -> PyResult<String> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
     serde_json::to_string(&rt.list_tool_catalog_json())
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))
 }
 
 #[pyfunction]
-fn get_tool_metadata_json_with_options(tool_id: &str, include_pro: bool, tier: &str) -> PyResult<String> {
+fn get_tool_metadata_json_with_options(
+    tool_id: &str,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
     let out = rt.get_tool_metadata_json(tool_id).map_err(map_tool_error)?;
     serde_json::to_string(&out)
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))
 }
 
 #[pyfunction]
-fn get_tool_info_json_with_options(tool_id: &str, include_pro: bool, tier: &str) -> PyResult<String> {
+fn get_tool_info_json_with_options(
+    tool_id: &str,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
     let out = rt.get_tool_info_json(tool_id).map_err(map_tool_error)?;
     serde_json::to_string(&out)
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))
@@ -2081,8 +2129,7 @@ fn get_tool_info_json_with_options(tool_id: &str, include_pro: bool, tier: &str)
 #[pyfunction]
 fn get_runtime_capabilities_json_with_options(include_pro: bool, tier: &str) -> PyResult<String> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
     serde_json::to_string(&rt.get_runtime_capabilities_json())
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))
 }
@@ -2091,8 +2138,7 @@ fn get_runtime_capabilities_json_with_options(include_pro: bool, tier: &str) -> 
 #[pyo3(signature = (include_pro=false, tier="open"))]
 fn list_tools_with_options(include_pro: bool, tier: &str) -> PyResult<Vec<String>> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
     extract_tool_ids(&rt.list_tools_json())
 }
 
@@ -2127,7 +2173,8 @@ fn list_tools_json_with_entitlement_file_options(
     include_pro: bool,
     fallback_tier: &str,
 ) -> PyResult<String> {
-    let signed_entitlement_json = read_entitlement_file(entitlement_file).map_err(map_tool_error)?;
+    let signed_entitlement_json =
+        read_entitlement_file(entitlement_file).map_err(map_tool_error)?;
     list_tools_json_with_entitlement_options(
         &signed_entitlement_json,
         public_key_kid,
@@ -2140,7 +2187,9 @@ fn list_tools_json_with_entitlement_file_options(
 #[pyfunction]
 fn run_tool_json(tool_id: &str, args_json: &str) -> PyResult<String> {
     let rt = PythonToolRuntime::new();
-    let out = rt.run_tool_json(tool_id, args_json).map_err(map_tool_error)?;
+    let out = rt
+        .run_tool_json(tool_id, args_json)
+        .map_err(map_tool_error)?;
     serde_json::to_string(&out)
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))
 }
@@ -2151,7 +2200,9 @@ fn run_tool(py: Python<'_>, tool_id: &str, args: &Bound<'_, PyAny>) -> PyResult<
     let args_json = serde_json::to_string(&args_map)
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))?;
     let rt = PythonToolRuntime::new();
-    let out = rt.run_tool_json(tool_id, &args_json).map_err(map_tool_error)?;
+    let out = rt
+        .run_tool_json(tool_id, &args_json)
+        .map_err(map_tool_error)?;
     json_value_to_python_object(py, &out)
 }
 
@@ -2205,11 +2256,17 @@ fn run_tool_stream(
 
 #[pyfunction]
 #[pyo3(signature = (tool_id, args_json, include_pro=false, tier="open"))]
-fn run_tool_json_with_options(tool_id: &str, args_json: &str, include_pro: bool, tier: &str) -> PyResult<String> {
+fn run_tool_json_with_options(
+    tool_id: &str,
+    args_json: &str,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
+    let out = rt
+        .run_tool_json(tool_id, args_json)
         .map_err(map_tool_error)?;
-    let out = rt.run_tool_json(tool_id, args_json).map_err(map_tool_error)?;
     serde_json::to_string(&out)
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))
 }
@@ -2234,7 +2291,9 @@ fn run_tool_json_with_entitlement_options(
         public_key_b64url,
     )
     .map_err(map_tool_error)?;
-    let out = rt.run_tool_json(tool_id, args_json).map_err(map_tool_error)?;
+    let out = rt
+        .run_tool_json(tool_id, args_json)
+        .map_err(map_tool_error)?;
     serde_json::to_string(&out)
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))
 }
@@ -2250,7 +2309,8 @@ fn run_tool_json_with_entitlement_file_options(
     include_pro: bool,
     fallback_tier: &str,
 ) -> PyResult<String> {
-    let signed_entitlement_json = read_entitlement_file(entitlement_file).map_err(map_tool_error)?;
+    let signed_entitlement_json =
+        read_entitlement_file(entitlement_file).map_err(map_tool_error)?;
     run_tool_json_with_entitlement_options(
         tool_id,
         args_json,
@@ -2275,9 +2335,10 @@ fn run_tool_with_options(
     let args_json = serde_json::to_string(&args_map)
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))?;
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
+    let out = rt
+        .run_tool_json(tool_id, &args_json)
         .map_err(map_tool_error)?;
-    let out = rt.run_tool_json(tool_id, &args_json).map_err(map_tool_error)?;
     json_value_to_python_object(py, &out)
 }
 
@@ -2290,8 +2351,7 @@ fn run_tool_json_with_progress_options(
     tier: &str,
 ) -> PyResult<String> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
     let out = rt
         .run_tool_json_with_progress(tool_id, args_json)
         .map_err(map_tool_error)?;
@@ -2309,8 +2369,7 @@ fn run_tool_json_stream_options(
     tier: &str,
 ) -> PyResult<String> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
     let sink = PyCallbackSink::new(callback);
     let out = rt
         .run_tool_json_with_progress_sink(tool_id, args_json, &sink)
@@ -2336,8 +2395,7 @@ fn run_tool_stream_options(
     let args_json = serde_json::to_string(&args_map)
         .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))?;
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
     let sink = PyCallbackSink::new(callback);
     let out = rt
         .run_tool_json_with_progress_sink(tool_id, &args_json, &sink)
@@ -2362,10 +2420,10 @@ fn _run_tool_convenient(
     tier: &str,
 ) -> PyResult<String> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
 
-    let out_path = wb_environment::resolve_unary_output_path(&input.file_path, tool_id, output, None);
+    let out_path =
+        wb_environment::resolve_unary_output_path(&input.file_path, tool_id, output, None);
 
     if let Some(parent) = out_path.parent() {
         std::fs::create_dir_all(parent).ok();
@@ -2375,7 +2433,7 @@ fn _run_tool_convenient(
         "input": input.file_path.to_string_lossy().to_string(),
         "output": out_path.to_string_lossy().to_string()
     }))
-        .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))?;
+    .map_err(|e| PyRuntimeError::new_err(format!("serialization error: {e}")))?;
 
     let out = if let Some(cb) = callback {
         let sink = PyCallbackSink::new(cb);
@@ -2398,61 +2456,121 @@ fn _run_tool_convenient(
 // Convenience wrapper functions for unary raster math tools
 #[pyfunction]
 #[pyo3(signature = (input, output=None, callback=None, include_pro=false, tier="open"))]
-fn abs(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, include_pro: bool, tier: &str) -> PyResult<String> {
+fn abs(
+    input: &Raster,
+    output: Option<&str>,
+    callback: Option<Py<PyAny>>,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     _run_tool_convenient("abs", input, output, callback, include_pro, tier)
 }
 
 #[pyfunction]
 #[pyo3(signature = (input, output=None, callback=None, include_pro=false, tier="open"))]
-fn ceil(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, include_pro: bool, tier: &str) -> PyResult<String> {
+fn ceil(
+    input: &Raster,
+    output: Option<&str>,
+    callback: Option<Py<PyAny>>,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     _run_tool_convenient("ceil", input, output, callback, include_pro, tier)
 }
 
 #[pyfunction]
 #[pyo3(signature = (input, output=None, callback=None, include_pro=false, tier="open"))]
-fn floor(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, include_pro: bool, tier: &str) -> PyResult<String> {
+fn floor(
+    input: &Raster,
+    output: Option<&str>,
+    callback: Option<Py<PyAny>>,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     _run_tool_convenient("floor", input, output, callback, include_pro, tier)
 }
 
 #[pyfunction]
 #[pyo3(signature = (input, output=None, callback=None, include_pro=false, tier="open"))]
-fn round(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, include_pro: bool, tier: &str) -> PyResult<String> {
+fn round(
+    input: &Raster,
+    output: Option<&str>,
+    callback: Option<Py<PyAny>>,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     _run_tool_convenient("round", input, output, callback, include_pro, tier)
 }
 
 #[pyfunction]
 #[pyo3(signature = (input, output=None, callback=None, include_pro=false, tier="open"))]
-fn sqrt(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, include_pro: bool, tier: &str) -> PyResult<String> {
+fn sqrt(
+    input: &Raster,
+    output: Option<&str>,
+    callback: Option<Py<PyAny>>,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     _run_tool_convenient("sqrt", input, output, callback, include_pro, tier)
 }
 
 #[pyfunction]
 #[pyo3(signature = (input, output=None, callback=None, include_pro=false, tier="open"))]
-fn square(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, include_pro: bool, tier: &str) -> PyResult<String> {
+fn square(
+    input: &Raster,
+    output: Option<&str>,
+    callback: Option<Py<PyAny>>,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     _run_tool_convenient("square", input, output, callback, include_pro, tier)
 }
 
 #[pyfunction]
 #[pyo3(signature = (input, output=None, callback=None, include_pro=false, tier="open"))]
-fn ln(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, include_pro: bool, tier: &str) -> PyResult<String> {
+fn ln(
+    input: &Raster,
+    output: Option<&str>,
+    callback: Option<Py<PyAny>>,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     _run_tool_convenient("ln", input, output, callback, include_pro, tier)
 }
 
 #[pyfunction]
 #[pyo3(signature = (input, output=None, callback=None, include_pro=false, tier="open"))]
-fn log10(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, include_pro: bool, tier: &str) -> PyResult<String> {
+fn log10(
+    input: &Raster,
+    output: Option<&str>,
+    callback: Option<Py<PyAny>>,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     _run_tool_convenient("log10", input, output, callback, include_pro, tier)
 }
 
 #[pyfunction]
 #[pyo3(signature = (input, output=None, callback=None, include_pro=false, tier="open"))]
-fn sin(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, include_pro: bool, tier: &str) -> PyResult<String> {
+fn sin(
+    input: &Raster,
+    output: Option<&str>,
+    callback: Option<Py<PyAny>>,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     _run_tool_convenient("sin", input, output, callback, include_pro, tier)
 }
 
 #[pyfunction]
 #[pyo3(signature = (input, output=None, callback=None, include_pro=false, tier="open"))]
-fn cos(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, include_pro: bool, tier: &str) -> PyResult<String> {
+fn cos(
+    input: &Raster,
+    output: Option<&str>,
+    callback: Option<Py<PyAny>>,
+    include_pro: bool,
+    tier: &str,
+) -> PyResult<String> {
     _run_tool_convenient("cos", input, output, callback, include_pro, tier)
 }
 
@@ -2460,8 +2578,7 @@ fn cos(input: &Raster, output: Option<&str>, callback: Option<Py<PyAny>>, includ
 #[pyo3(signature = (include_pro=false, tier="open", target="python"))]
 fn generate_wrapper_stubs_json(include_pro: bool, tier: &str, target: &str) -> PyResult<String> {
     let parsed_tier = parse_tier(tier).map_err(map_tool_error)?;
-    let rt = runtime_from_local_license_state(include_pro, parsed_tier)
-        .map_err(map_tool_error)?;
+    let rt = runtime_from_local_license_state(include_pro, parsed_tier).map_err(map_tool_error)?;
     let target = match target.to_ascii_lowercase().as_str() {
         "python" => BindingTarget::Python,
         "r" => BindingTarget::R,
@@ -2475,8 +2592,10 @@ fn generate_wrapper_stubs_json(include_pro: bool, tier: &str, target: &str) -> P
     let mut stubs = serde_json::Map::new();
     for manifest in rt.visible_manifests() {
         let mut stub = generate_wrapper_stub(&manifest, target);
-        if matches!(manifest.license_tier, LicenseTier::Pro | LicenseTier::Enterprise)
-            && matches!(target, BindingTarget::Python)
+        if matches!(
+            manifest.license_tier,
+            LicenseTier::Pro | LicenseTier::Enterprise
+        ) && matches!(target, BindingTarget::Python)
         {
             // Make tier visible in generated stubs so IDE hover/autocomplete surfaces it.
             stub = format!("# [PRO] {}\n{}", manifest.id, stub);
@@ -2588,9 +2707,8 @@ fn activate_license(
             fs::create_dir_all(&whitebox_dir).map_err(|e| {
                 PyValueError::new_err(format!("Failed to create ~/.whitebox: {}", e))
             })?;
-            fs::write(&machine_id_file, &new_uuid).map_err(|e| {
-                PyValueError::new_err(format!("Failed to write machine_id: {}", e))
-            })?;
+            fs::write(&machine_id_file, &new_uuid)
+                .map_err(|e| PyValueError::new_err(format!("Failed to write machine_id: {}", e)))?;
             new_uuid
         };
         mid
@@ -2603,8 +2721,13 @@ fn activate_license(
         public_key_b64url,
         resolved_provider_url,
         resolved_customer_id,
-    ) = key_activation_bundle(key, provider_url, Some(resolved_machine_id.as_str()), customer_id)
-        .map_err(map_tool_error)?;
+    ) = key_activation_bundle(
+        key,
+        provider_url,
+        Some(resolved_machine_id.as_str()),
+        customer_id,
+    )
+    .map_err(map_tool_error)?;
 
     PythonToolRuntime::new_with_entitlement_json(
         include_pro,
@@ -2632,9 +2755,8 @@ fn activate_license(
         "signed_entitlement_json": signed_entitlement_json,
     });
 
-    let state_path = write_license_state_json(&state).map_err(|err: LicenseError| {
-        map_tool_error(ToolError::LicenseDenied(err.to_string()))
-    })?;
+    let state_path = write_license_state_json(&state)
+        .map_err(|err: LicenseError| map_tool_error(ToolError::LicenseDenied(err.to_string())))?;
     Ok(format!(
         "License activated and saved to {}",
         state_path.display()
@@ -2680,8 +2802,16 @@ fn deactivate_license(from_transfer: bool) -> PyResult<String> {
     #[cfg(feature = "pro")]
     {
         if let Ok(state) = read_license_state_json() {
-            let key = state.get("floating_license_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let url = state.get("provider_url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let key = state
+                .get("floating_license_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let url = state
+                .get("provider_url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             if !key.is_empty() && !url.is_empty() {
                 notify_server_deactivation(&key, &url);
             }
@@ -2703,7 +2833,8 @@ fn deactivate_license(from_transfer: bool) -> PyResult<String> {
 #[cfg(feature = "pro")]
 fn transfer_license() -> PyResult<String> {
     let state = read_license_state_json().map_err(map_tool_error)?;
-    let key = read_license_state_string_field(&state, "floating_license_id").map_err(map_tool_error)?;
+    let key =
+        read_license_state_string_field(&state, "floating_license_id").map_err(map_tool_error)?;
     let provider_url = state
         .get("provider_url")
         .and_then(|v| v.as_str())
@@ -2760,12 +2891,13 @@ fn license_info() -> PyResult<String> {
         }
     };
 
-    let signed_entitlement_json = read_license_state_string_field(&state, "signed_entitlement_json")
-        .map_err(map_tool_error)?;
-    let public_key_kid = read_license_state_string_field(&state, "public_key_kid")
-        .map_err(map_tool_error)?;
-    let public_key_b64url = read_license_state_string_field(&state, "public_key_b64url")
-        .map_err(map_tool_error)?;
+    let signed_entitlement_json =
+        read_license_state_string_field(&state, "signed_entitlement_json")
+            .map_err(map_tool_error)?;
+    let public_key_kid =
+        read_license_state_string_field(&state, "public_key_kid").map_err(map_tool_error)?;
+    let public_key_b64url =
+        read_license_state_string_field(&state, "public_key_b64url").map_err(map_tool_error)?;
 
     let validity = entitlement_capabilities_from_json(
         &signed_entitlement_json,
@@ -2824,12 +2956,13 @@ fn license_time_remaining() -> PyResult<String> {
         }
     };
 
-    let signed_entitlement_json = read_license_state_string_field(&state, "signed_entitlement_json")
-        .map_err(map_tool_error)?;
-    let public_key_kid = read_license_state_string_field(&state, "public_key_kid")
-        .map_err(map_tool_error)?;
-    let public_key_b64url = read_license_state_string_field(&state, "public_key_b64url")
-        .map_err(map_tool_error)?;
+    let signed_entitlement_json =
+        read_license_state_string_field(&state, "signed_entitlement_json")
+            .map_err(map_tool_error)?;
+    let public_key_kid =
+        read_license_state_string_field(&state, "public_key_kid").map_err(map_tool_error)?;
+    let public_key_b64url =
+        read_license_state_string_field(&state, "public_key_b64url").map_err(map_tool_error)?;
 
     let payload = entitlement_capabilities_from_json(
         &signed_entitlement_json,
@@ -2894,10 +3027,19 @@ fn whitebox_workflows(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> 
     m.add_function(wrap_pyfunction!(list_tool_catalog_json_with_options, m)?)?;
     m.add_function(wrap_pyfunction!(get_tool_metadata_json_with_options, m)?)?;
     m.add_function(wrap_pyfunction!(get_tool_info_json_with_options, m)?)?;
-    m.add_function(wrap_pyfunction!(get_runtime_capabilities_json_with_options, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        get_runtime_capabilities_json_with_options,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(list_tools_with_options, m)?)?;
-    m.add_function(wrap_pyfunction!(list_tools_json_with_entitlement_options, m)?)?;
-    m.add_function(wrap_pyfunction!(list_tools_json_with_entitlement_file_options, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        list_tools_json_with_entitlement_options,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        list_tools_json_with_entitlement_file_options,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(run_tool_json, m)?)?;
     m.add_function(wrap_pyfunction!(run_tool, m)?)?;
     m.add_function(wrap_pyfunction!(run_tool_json_with_progress, m)?)?;
@@ -2905,7 +3047,10 @@ fn whitebox_workflows(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> 
     m.add_function(wrap_pyfunction!(run_tool_stream, m)?)?;
     m.add_function(wrap_pyfunction!(run_tool_json_with_options, m)?)?;
     m.add_function(wrap_pyfunction!(run_tool_json_with_entitlement_options, m)?)?;
-    m.add_function(wrap_pyfunction!(run_tool_json_with_entitlement_file_options, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        run_tool_json_with_entitlement_file_options,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(run_tool_with_options, m)?)?;
     m.add_function(wrap_pyfunction!(run_tool_json_with_progress_options, m)?)?;
     m.add_function(wrap_pyfunction!(run_tool_json_stream_options, m)?)?;
@@ -2917,7 +3062,7 @@ fn whitebox_workflows(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> 
     m.add_function(wrap_pyfunction!(transfer_license, m)?)?;
     m.add_function(wrap_pyfunction!(license_info, m)?)?;
     m.add_function(wrap_pyfunction!(license_time_remaining, m)?)?;
-    
+
     // Convenience functions for unary raster math tools
     m.add_function(wrap_pyfunction!(abs, m)?)?;
     m.add_function(wrap_pyfunction!(ceil, m)?)?;
@@ -2935,10 +3080,10 @@ fn whitebox_workflows(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pyo3::types::{PyDict, PyTuple};
     use std::path::PathBuf;
     #[cfg(feature = "pro")]
     use std::sync::OnceLock;
-    use pyo3::types::{PyDict, PyTuple};
     use wbcore::ProgressEvent;
     use wbraster::{DataType, Raster as WbRaster, RasterConfig, RasterFormat};
 
@@ -3070,12 +3215,13 @@ mod tests {
             input.to_string_lossy(),
             output.to_string_lossy()
         );
-        let out = rt
-            .run_tool_json("abs", &args)
-            .expect("tool should run");
+        let out = rt.run_tool_json("abs", &args).expect("tool should run");
 
         assert_eq!(out.get("cells_processed"), Some(&json!(2)));
-        assert_eq!(out.get("output"), Some(&json!(output.to_string_lossy().to_string())));
+        assert_eq!(
+            out.get("output"),
+            Some(&json!(output.to_string_lossy().to_string()))
+        );
         let _ = std::fs::remove_file(input);
         let _ = std::fs::remove_file(output);
     }
@@ -3105,8 +3251,14 @@ mod tests {
             .run_tool_json("square", &args2)
             .expect("second run should succeed");
 
-        assert_eq!(first.get("output"), Some(&json!(out1.to_string_lossy().to_string())));
-        assert_eq!(second.get("output"), Some(&json!(out2.to_string_lossy().to_string())));
+        assert_eq!(
+            first.get("output"),
+            Some(&json!(out1.to_string_lossy().to_string()))
+        );
+        assert_eq!(
+            second.get("output"),
+            Some(&json!(out2.to_string_lossy().to_string()))
+        );
         let _ = std::fs::remove_file(in1);
         let _ = std::fs::remove_file(out1);
         let _ = std::fs::remove_file(in2);
@@ -3116,7 +3268,8 @@ mod tests {
     #[test]
     fn run_tool_json_with_progress_returns_progress_events() {
         let rt = PythonToolRuntime::new();
-        let (input, output) = temp_raster_io_paths("run_tool_json_with_progress_returns_progress_events");
+        let (input, output) =
+            temp_raster_io_paths("run_tool_json_with_progress_returns_progress_events");
         write_small_input_raster(&input);
         let args = format!(
             "{{\"input\":\"{}\",\"output\":\"{}\"}}",
@@ -3140,7 +3293,8 @@ mod tests {
     fn run_tool_json_with_progress_sink_emits_live_events() {
         let rt = PythonToolRuntime::new();
         let sink = TestCollectSink::default();
-        let (input, output) = temp_raster_io_paths("run_tool_json_with_progress_sink_emits_live_events");
+        let (input, output) =
+            temp_raster_io_paths("run_tool_json_with_progress_sink_emits_live_events");
         write_small_input_raster(&input);
         let args = format!(
             "{{\"input\":\"{}\",\"output\":\"{}\"}}",
@@ -3187,7 +3341,10 @@ mod tests {
             .expect("tool metadata should exist");
 
         assert_eq!(manifest.get("id"), Some(&json!("abs")));
-        assert_eq!(manifest.get("availability_state"), Some(&json!("available")));
+        assert_eq!(
+            manifest.get("availability_state"),
+            Some(&json!("available"))
+        );
         assert_eq!(manifest.get("locked"), Some(&json!(false)));
     }
 
@@ -3252,7 +3409,10 @@ mod tests {
             .expect("tool metadata should exist");
 
         assert_eq!(manifest.get("display_default_visible"), Some(&json!(true)));
-        assert_eq!(manifest.get("display_default_favorite"), Some(&json!(false)));
+        assert_eq!(
+            manifest.get("display_default_favorite"),
+            Some(&json!(false))
+        );
         assert_eq!(manifest.get("display_default_rank"), Some(&Value::Null));
         assert_eq!(manifest.get("render_hints"), Some(&json!({})));
     }
@@ -3296,7 +3456,10 @@ mod tests {
 
         assert_eq!(raster_power.get("available"), Some(&json!(false)));
         assert_eq!(raster_power.get("locked"), Some(&json!(true)));
-        assert_eq!(raster_power.get("locked_reason"), Some(&json!("tier_insufficient")));
+        assert_eq!(
+            raster_power.get("locked_reason"),
+            Some(&json!("tier_insufficient"))
+        );
     }
 
     #[test]
@@ -3325,7 +3488,10 @@ mod tests {
         let _ = std::fs::remove_file(&state_path);
 
         let _guard = EnvGuard::set(&[
-            ("WBW_LICENSE_PROVIDER_URL", Some("http://127.0.0.1:9".to_string())),
+            (
+                "WBW_LICENSE_PROVIDER_URL",
+                Some("http://127.0.0.1:9".to_string()),
+            ),
             ("WBW_LICENSE_POLICY", Some("fail_open".to_string())),
             (
                 "WBW_LICENSE_STATE_PATH",
@@ -3357,7 +3523,10 @@ mod tests {
         let _ = std::fs::remove_file(&state_path);
 
         let _guard = EnvGuard::set(&[
-            ("WBW_LICENSE_PROVIDER_URL", Some("http://127.0.0.1:9".to_string())),
+            (
+                "WBW_LICENSE_PROVIDER_URL",
+                Some("http://127.0.0.1:9".to_string()),
+            ),
             ("WBW_LICENSE_POLICY", Some("fail_closed".to_string())),
             (
                 "WBW_LICENSE_STATE_PATH",
@@ -3510,7 +3679,11 @@ mod tests {
             let present = arr
                 .iter()
                 .any(|v| v.get("id").and_then(Value::as_str) == Some(id));
-            assert!(!present, "pro-only curvature tool '{}' should be hidden", id);
+            assert!(
+                !present,
+                "pro-only curvature tool '{}' should be hidden",
+                id
+            );
         }
     }
 
@@ -3573,8 +3746,14 @@ mod tests {
                 .cast::<PyTuple>()
                 .expect("tuple_outputs should be tuple");
             assert_eq!(tuple.len(), 2);
-            assert!(tuple.get_item(0).expect("tuple item").is_instance_of::<Raster>());
-            assert!(tuple.get_item(1).expect("tuple item").is_instance_of::<Vector>());
+            assert!(tuple
+                .get_item(0)
+                .expect("tuple item")
+                .is_instance_of::<Raster>());
+            assert!(tuple
+                .get_item(1)
+                .expect("tuple item")
+                .is_instance_of::<Vector>());
         });
     }
 
@@ -3589,10 +3768,10 @@ mod tests {
 
     #[test]
     fn typed_run_tool_add_returns_raster_instance() {
+        use pyo3::types::PyDict;
         use std::fs;
         use std::path::PathBuf;
         use std::time::{SystemTime, UNIX_EPOCH};
-        use pyo3::types::PyDict;
         use wbraster::{DataType, Raster as WbRaster, RasterConfig, RasterFormat};
 
         struct TempDirGuard {
@@ -3684,12 +3863,10 @@ mod tests {
                 .bind(py)
                 .extract()
                 .expect("first output should extract as Raster");
-            assert!(
-                first_raster
-                    .file_path
-                    .to_string_lossy()
-                    .starts_with("memory://raster/")
-            );
+            assert!(first_raster
+                .file_path
+                .to_string_lossy()
+                .starts_with("memory://raster/"));
             drop(first_raster);
 
             let second_args = PyDict::new(py);

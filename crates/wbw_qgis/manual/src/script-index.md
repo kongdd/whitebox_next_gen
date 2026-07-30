@@ -32,6 +32,7 @@ for the task.
 | Snap pour points to channel raster | [Spatial Hydrology — Step 5](spatial-hydrology.md) | `whitebox_workflows:snap_pour_points` |
 | Delineate watershed / catchment | [Spatial Hydrology — Step 6](spatial-hydrology.md) | `whitebox_workflows:watershed` |
 | Compute Topographic Wetness Index | [Spatial Hydrology — TWI](spatial-hydrology.md) | `whitebox_workflows:wetness_index` |
+| Compute SAGA-style wetness index directly from a DEM | [Hydrologic Indices](hydrology-hydrologic-indices.md) | `whitebox_workflows:saga_wetness_index` |
 
 ---
 

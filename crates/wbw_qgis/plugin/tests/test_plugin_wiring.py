@@ -8,7 +8,7 @@ _PLUGIN_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _PLUGIN_ROOT not in sys.path:
     sys.path.insert(0, _PLUGIN_ROOT)
 
-from whitebox_workflows_qgis import plugin  # noqa: E402
+from whitebox_workflows_qgis import plugin, provider  # noqa: E402
 
 
 class _FakeIface:
@@ -158,6 +158,11 @@ class PluginPanelWiringTests(unittest.TestCase):
         self.assertEqual(instance._favorite_tool_ids, ["existing"])
         self.assertEqual(save_calls, [])
         self.assertTrue(instance._favorite_defaults_applied)
+
+    def test_pro_tier_tool_uses_pro_icon(self):
+        p = provider.WhiteboxProcessingProvider(include_pro=True, tier="open")
+        icon = p.icon_for_tool({"license_tier": "pro"})
+        self.assertIsNotNone(icon)
 
     def test_load_panel_ui_state_coerces_string_values(self):
         iface = _FakeIface()

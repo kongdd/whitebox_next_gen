@@ -1,16 +1,16 @@
-use serde_json::{json, Value};
 use parquet::basic::Compression as ParquetCompression;
+use serde_json::{json, Value};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 #[cfg(feature = "pro")]
 use std::env;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 use wbcore::{
-    generate_wrapper_stub, manifest_with_param_schema_json, BindingTarget, ExecuteRequest, LicenseTier, OwnedToolRuntime,
-    OwnedToolRuntimeWithCapabilities, RuntimeOptions,
-    ProgressSink, ToolArgs, ToolError, ToolManifest, ToolRuntimeBuilder, ToolRuntimeRegistry,
+    generate_wrapper_stub, manifest_with_param_schema_json, BindingTarget, ExecuteRequest,
+    LicenseTier, OwnedToolRuntime, OwnedToolRuntimeWithCapabilities, ProgressSink, RuntimeOptions,
+    ToolArgs, ToolError, ToolManifest, ToolRuntimeBuilder, ToolRuntimeRegistry,
 };
 use wblicense_core::{
     verify_signed_entitlement_json, EntitlementCapabilities, LicenseError, VerificationKeyStore,
@@ -18,99 +18,47 @@ use wblicense_core::{
 use wblidar::e57::E57Reader;
 use wblidar::las::LasReader;
 use wblidar::memory_store::{
-    clear_lidars,
-    get_lidar_arc_by_path,
-    lidar_is_memory_path,
-    lidar_count,
-    make_lidar_memory_path,
-    put_lidar,
-    remove_lidar_by_path,
-    replace_lidar_by_path,
+    clear_lidars, get_lidar_arc_by_path, lidar_count, lidar_is_memory_path, make_lidar_memory_path,
+    put_lidar, remove_lidar_by_path, replace_lidar_by_path,
 };
 use wblidar::ply::PlyReader;
 use wblidar::{
-    read_point_count,
-    CopcWriteOptions,
-    LazWriteOptions,
-    LidarFormat,
-    LidarWriteOptions,
-    PointColumnChunkRewriter,
-    PointField,
-    PointCloud,
-    PointReader,
+    read_point_count, CopcWriteOptions, LazWriteOptions, LidarFormat, LidarWriteOptions,
+    PointCloud, PointColumnChunkRewriter, PointField, PointReader,
 };
 use wbprojection::{
-    epsg_area_of_use,
-    epsg_from_srs_reference,
-    from_proj_string,
-    identify_epsg_from_crs,
-    identify_epsg_from_wkt,
-    to_ogc_wkt,
-    CrsBoundingBox,
-    Crs,
+    epsg_area_of_use, epsg_from_srs_reference, from_proj_string, identify_epsg_from_crs,
+    identify_epsg_from_wkt, to_ogc_wkt, Crs, CrsBoundingBox,
+};
+use wbraster::memory_store::{
+    clear_rasters, get_raster_arc_by_path, get_raster_by_id, make_raster_memory_path, put_raster,
+    raster_count, raster_is_memory_path, raster_path_to_id, raster_store_bytes,
+    remove_raster_by_path, replace_raster_by_id,
 };
 use wbraster::{open_sensor_bundle_path, OpenedSensorBundle, SafeBundle, SensorBundle};
-use wbtools_oss::tools::{tool_param_descriptions, tool_param_required, tool_param_schemas};
-use wbraster::memory_store::{
-    clear_rasters,
-    get_raster_arc_by_path,
-    get_raster_by_id,
-    make_raster_memory_path,
-    put_raster,
-    raster_count,
-    raster_is_memory_path,
-    raster_path_to_id,
-    raster_store_bytes,
-    remove_raster_by_path,
-    replace_raster_by_id,
-};
 use wbraster::{
-    GeoTiffCompression,
-    GeoTiffLayout,
-    GeoTiffWriteOptions,
-    Jpeg2000Compression,
-    Jpeg2000WriteOptions,
-    Raster,
-    RasterFormat,
+    GeoTiffCompression, GeoTiffLayout, GeoTiffWriteOptions, Jpeg2000Compression,
+    Jpeg2000WriteOptions, Raster, RasterFormat,
+};
+use wbtools_oss::tools::{tool_param_descriptions, tool_param_required, tool_param_schemas};
+use wbtools_oss::{
+    register_default_tools as register_default_oss_tools, ToolRegistry as OssRegistry,
+};
+#[cfg(feature = "pro")]
+use wbtools_pro::{
+    register_default_tools as register_default_pro_tools, ToolRegistry as ProRegistry,
 };
 use wbtopology::{
-    buffer_linestring,
-    buffer_point,
-    buffer_polygon,
-    covered_by,
-    covers,
-    contains,
-    crosses,
-    disjoint,
-    from_wkt,
-    geometry_distance,
-    intersects,
-    is_valid_polygon,
-    make_valid_polygon,
-    overlaps,
-    relate,
-    to_wkt,
-    touches,
-    within,
-    BufferOptions,
-    Coord,
-    Geometry,
-};
-use wbvector::VectorFormat;
-use wbvector::memory_store::{
-    clear_vectors,
-    get_vector_arc_by_path,
-    make_vector_memory_path,
-    put_vector,
-    remove_vector_by_path,
-    replace_vector_by_path,
-    vector_count,
-    vector_is_memory_path,
+    buffer_linestring, buffer_point, buffer_polygon, contains, covered_by, covers, crosses,
+    disjoint, from_wkt, geometry_distance, intersects, is_valid_polygon, make_valid_polygon,
+    overlaps, relate, to_wkt, touches, within, BufferOptions, Coord, Geometry,
 };
 use wbvector::feature::FieldType;
-use wbtools_oss::{register_default_tools as register_default_oss_tools, ToolRegistry as OssRegistry};
-#[cfg(feature = "pro")]
-use wbtools_pro::{register_default_tools as register_default_pro_tools, ToolRegistry as ProRegistry};
+use wbvector::memory_store::{
+    clear_vectors, get_vector_arc_by_path, make_vector_memory_path, put_vector,
+    remove_vector_by_path, replace_vector_by_path, vector_count, vector_is_memory_path,
+};
+use wbvector::VectorFormat;
 
 fn to_invalid_request<E: std::fmt::Display>(err: E) -> ToolError {
     ToolError::InvalidRequest(err.to_string())
@@ -122,7 +70,8 @@ struct CachedDiskRaster {
     dirty: bool,
 }
 
-static DISK_RASTER_CACHE: OnceLock<Mutex<HashMap<String, Arc<Mutex<CachedDiskRaster>>>>> = OnceLock::new();
+static DISK_RASTER_CACHE: OnceLock<Mutex<HashMap<String, Arc<Mutex<CachedDiskRaster>>>>> =
+    OnceLock::new();
 
 fn disk_raster_cache() -> &'static Mutex<HashMap<String, Arc<Mutex<CachedDiskRaster>>>> {
     DISK_RASTER_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
@@ -245,11 +194,13 @@ fn parse_usize_option(
     let Some(v) = obj.get(key) else {
         return Ok(None);
     };
-    let n = v.as_u64().ok_or_else(|| {
-        ToolError::InvalidRequest(format!("{label} must be a positive integer"))
-    })?;
+    let n = v
+        .as_u64()
+        .ok_or_else(|| ToolError::InvalidRequest(format!("{label} must be a positive integer")))?;
     if n == 0 {
-        return Err(ToolError::InvalidRequest(format!("{label} must be greater than 0")));
+        return Err(ToolError::InvalidRequest(format!(
+            "{label} must be greater than 0"
+        )));
     }
     Ok(Some(n as usize))
 }
@@ -354,12 +305,21 @@ fn parse_vector_write_controls(options: &Value) -> Result<VectorWriteControls, T
         })?;
         geoparquet.has_fields = !gpq_obj.is_empty();
 
-        geoparquet.max_rows_per_group =
-            parse_usize_option(gpq_obj, "max_rows_per_group", "options.geoparquet.max_rows_per_group")?;
-        geoparquet.data_page_size_limit =
-            parse_usize_option(gpq_obj, "data_page_size_limit", "options.geoparquet.data_page_size_limit")?;
-        geoparquet.write_batch_size =
-            parse_usize_option(gpq_obj, "write_batch_size", "options.geoparquet.write_batch_size")?;
+        geoparquet.max_rows_per_group = parse_usize_option(
+            gpq_obj,
+            "max_rows_per_group",
+            "options.geoparquet.max_rows_per_group",
+        )?;
+        geoparquet.data_page_size_limit = parse_usize_option(
+            gpq_obj,
+            "data_page_size_limit",
+            "options.geoparquet.data_page_size_limit",
+        )?;
+        geoparquet.write_batch_size = parse_usize_option(
+            gpq_obj,
+            "write_batch_size",
+            "options.geoparquet.write_batch_size",
+        )?;
         geoparquet.data_page_row_count_limit = parse_usize_option(
             gpq_obj,
             "data_page_row_count_limit",
@@ -394,8 +354,7 @@ fn read_vector_with_controls(
     if controls.has_osmpbf_controls() && src_format != VectorFormat::OsmPbf {
         if controls.strict_format_options {
             return Err(ToolError::InvalidRequest(
-                "OSM PBF-specific read options were provided for a non-OSM source path"
-                    .to_string(),
+                "OSM PBF-specific read options were provided for a non-OSM source path".to_string(),
             ));
         }
         return wbvector::read(src_path).map_err(to_invalid_request);
@@ -554,14 +513,11 @@ impl RasterWriteControls {
     }
 
     fn geotiff_options(&self) -> Option<GeoTiffWriteOptions> {
-        let compression = self
-            .geotiff
-            .compression
-            .or_else(|| match self.compress {
-                Some(true) => Some(GeoTiffCompression::Deflate),
-                Some(false) => Some(GeoTiffCompression::None),
-                None => None,
-            });
+        let compression = self.geotiff.compression.or_else(|| match self.compress {
+            Some(true) => Some(GeoTiffCompression::Deflate),
+            Some(false) => Some(GeoTiffCompression::None),
+            None => None,
+        });
         let bigtiff = self.geotiff.bigtiff;
         let layout = self.geotiff.layout;
 
@@ -619,7 +575,10 @@ fn parse_geotiff_compression(name: &str) -> Option<GeoTiffCompression> {
     }
 }
 
-fn parse_geotiff_layout(layout_name: &str, geotiff_obj: &serde_json::Map<String, Value>) -> Result<GeoTiffLayout, ToolError> {
+fn parse_geotiff_layout(
+    layout_name: &str,
+    geotiff_obj: &serde_json::Map<String, Value>,
+) -> Result<GeoTiffLayout, ToolError> {
     let get_u32 = |keys: &[&str]| -> Option<u32> {
         for key in keys {
             if let Some(v) = geotiff_obj.get(*key).and_then(Value::as_u64) {
@@ -640,7 +599,10 @@ fn parse_geotiff_layout(layout_name: &str, geotiff_obj: &serde_json::Map<String,
         "tiled" => {
             let tile_width = get_u32(&["tile_width", "tile_size"]).unwrap_or(512);
             let tile_height = get_u32(&["tile_height", "tile_size"]).unwrap_or(tile_width);
-            Ok(GeoTiffLayout::Tiled { tile_width, tile_height })
+            Ok(GeoTiffLayout::Tiled {
+                tile_width,
+                tile_height,
+            })
         }
         "cog" => {
             let tile_size = get_u32(&["tile_size", "cog_tile_size"]).unwrap_or(512);
@@ -691,7 +653,9 @@ fn parse_raster_write_controls(options: &Value) -> Result<RasterWriteControls, T
 
         if let Some(v) = gt_obj.get("compression") {
             let name = v.as_str().ok_or_else(|| {
-                ToolError::InvalidRequest("options.geotiff.compression must be a string".to_string())
+                ToolError::InvalidRequest(
+                    "options.geotiff.compression must be a string".to_string(),
+                )
             })?;
             geotiff.compression = Some(parse_geotiff_compression(name).ok_or_else(|| {
                 ToolError::InvalidRequest(format!(
@@ -739,11 +703,12 @@ fn parse_raster_write_controls(options: &Value) -> Result<RasterWriteControls, T
                     "options.jpeg2000.compression must be a string".to_string(),
                 )
             })?;
-            jpeg2000.compression = Some(parse_jpeg2000_compression(name, quality_db).ok_or_else(|| {
-                ToolError::InvalidRequest(format!(
+            jpeg2000.compression =
+                Some(parse_jpeg2000_compression(name, quality_db).ok_or_else(|| {
+                    ToolError::InvalidRequest(format!(
                     "unsupported jpeg2000.compression '{name}'. Expected one of: lossless, lossy"
                 ))
-            })?);
+                })?);
         }
 
         if let Some(v) = jp2_obj.get("decomp_levels") {
@@ -769,11 +734,17 @@ fn parse_raster_write_controls(options: &Value) -> Result<RasterWriteControls, T
     })
 }
 
-fn write_raster_with_controls(raster: &Raster, dst: &Path, output_format: RasterFormat, controls: &RasterWriteControls) -> Result<(), ToolError> {
+fn write_raster_with_controls(
+    raster: &Raster,
+    dst: &Path,
+    output_format: RasterFormat,
+    controls: &RasterWriteControls,
+) -> Result<(), ToolError> {
     if output_format != RasterFormat::GeoTiff && controls.has_geotiff_controls() {
         if controls.strict_format_options {
             return Err(ToolError::InvalidRequest(
-                "GeoTIFF-specific write options were provided for a non-GeoTIFF output path".to_string(),
+                "GeoTIFF-specific write options were provided for a non-GeoTIFF output path"
+                    .to_string(),
             ));
         }
         return raster.write(dst, output_format).map_err(to_invalid_request);
@@ -843,7 +814,9 @@ impl LidarWriteControls {
     }
 }
 
-fn parse_node_point_ordering(name: &str) -> Result<wblidar::copc::CopcNodePointOrdering, ToolError> {
+fn parse_node_point_ordering(
+    name: &str,
+) -> Result<wblidar::copc::CopcNodePointOrdering, ToolError> {
     use wblidar::copc::CopcNodePointOrdering;
     match name.trim().to_ascii_lowercase().as_str() {
         "auto" => Ok(CopcNodePointOrdering::Auto),
@@ -873,7 +846,9 @@ fn parse_lidar_write_controls(options: &Value) -> Result<LidarWriteControls, Too
 
         if let Some(v) = laz_obj.get("chunk_size") {
             let chunk_size = v.as_u64().ok_or_else(|| {
-                ToolError::InvalidRequest("options.laz.chunk_size must be a positive integer".to_string())
+                ToolError::InvalidRequest(
+                    "options.laz.chunk_size must be a positive integer".to_string(),
+                )
             })?;
             if chunk_size == 0 {
                 return Err(ToolError::InvalidRequest(
@@ -885,7 +860,9 @@ fn parse_lidar_write_controls(options: &Value) -> Result<LidarWriteControls, Too
 
         if let Some(v) = laz_obj.get("compression_level") {
             let compression_level = v.as_u64().ok_or_else(|| {
-                ToolError::InvalidRequest("options.laz.compression_level must be a positive integer".to_string())
+                ToolError::InvalidRequest(
+                    "options.laz.compression_level must be a positive integer".to_string(),
+                )
             })?;
             if compression_level > 9 {
                 return Err(ToolError::InvalidRequest(
@@ -904,7 +881,9 @@ fn parse_lidar_write_controls(options: &Value) -> Result<LidarWriteControls, Too
 
         if let Some(v) = copc_obj.get("max_points_per_node") {
             let max_points_per_node = v.as_u64().ok_or_else(|| {
-                ToolError::InvalidRequest("options.copc.max_points_per_node must be a positive integer".to_string())
+                ToolError::InvalidRequest(
+                    "options.copc.max_points_per_node must be a positive integer".to_string(),
+                )
             })?;
             if max_points_per_node == 0 {
                 return Err(ToolError::InvalidRequest(
@@ -916,7 +895,9 @@ fn parse_lidar_write_controls(options: &Value) -> Result<LidarWriteControls, Too
 
         if let Some(v) = copc_obj.get("max_depth") {
             let max_depth = v.as_u64().ok_or_else(|| {
-                ToolError::InvalidRequest("options.copc.max_depth must be a positive integer".to_string())
+                ToolError::InvalidRequest(
+                    "options.copc.max_depth must be a positive integer".to_string(),
+                )
             })?;
             if max_depth == 0 {
                 return Err(ToolError::InvalidRequest(
@@ -928,7 +909,9 @@ fn parse_lidar_write_controls(options: &Value) -> Result<LidarWriteControls, Too
 
         if let Some(v) = copc_obj.get("node_point_ordering") {
             let ordering_name = v.as_str().ok_or_else(|| {
-                ToolError::InvalidRequest("options.copc.node_point_ordering must be a string".to_string())
+                ToolError::InvalidRequest(
+                    "options.copc.node_point_ordering must be a string".to_string(),
+                )
             })?;
             copc.node_point_ordering = Some(parse_node_point_ordering(ordering_name)?);
         }
@@ -1104,7 +1087,9 @@ pub fn sensor_bundle_resolve_raster_path(
         (SensorBundle::Safe(SafeBundle::Sentinel2(pkg)), "aux") => pkg.aux_path(key),
         (SensorBundle::Landsat(pkg), "aux") => pkg.aux_path(key),
 
-        (SensorBundle::Safe(SafeBundle::Sentinel1(pkg)), "measurement") => pkg.measurement_path(key),
+        (SensorBundle::Safe(SafeBundle::Sentinel1(pkg)), "measurement") => {
+            pkg.measurement_path(key)
+        }
         (SensorBundle::Radarsat2(pkg), "measurement") => pkg.measurement_path(key),
         (SensorBundle::Rcm(pkg), "measurement") => pkg.measurement_path(key),
 
@@ -1122,9 +1107,7 @@ pub fn sensor_bundle_resolve_raster_path(
     let p = path.ok_or_else(|| {
         ToolError::InvalidRequest(format!(
             "{} key '{}' not found in bundle '{}'",
-            key_type,
-            key,
-            bundle_root
+            key_type, key, bundle_root
         ))
     })?;
 
@@ -1244,7 +1227,10 @@ pub fn raster_get_value(path: &str, row: i32, col: i32, band: i32) -> Result<f64
     if raster_is_memory_path(path) {
         let raster = get_raster_arc_by_path(path)
             .ok_or_else(|| ToolError::InvalidRequest(format!("memory raster not found: {path}")))?;
-        if row as usize >= raster.rows || col as usize >= raster.cols || band as usize >= raster.bands {
+        if row as usize >= raster.rows
+            || col as usize >= raster.cols
+            || band as usize >= raster.bands
+        {
             return Err(ToolError::InvalidRequest(format!(
                 "cell index out of bounds: row={}, col={}, band={} for raster dims rows={}, cols={}, bands={}",
                 row, col, band, raster.rows, raster.cols, raster.bands
@@ -1273,7 +1259,13 @@ pub fn raster_get_value(path: &str, row: i32, col: i32, band: i32) -> Result<f64
 
 /// Set a single raster cell value using zero-based indices.
 /// Silently ignores out-of-bounds writes, matching legacy API behavior.
-pub fn raster_set_value(path: &str, row: i32, col: i32, band: i32, value: f64) -> Result<(), ToolError> {
+pub fn raster_set_value(
+    path: &str,
+    row: i32,
+    col: i32,
+    band: i32,
+    value: f64,
+) -> Result<(), ToolError> {
     if row < 0 || col < 0 || band < 0 {
         return Ok(()); // Silently ignore negative indices
     }
@@ -1284,10 +1276,15 @@ pub fn raster_set_value(path: &str, row: i32, col: i32, band: i32, value: f64) -
         };
 
         let Some(mut raster) = get_raster_by_id(id) else {
-            return Err(ToolError::InvalidRequest(format!("memory raster not found: {path}")));
+            return Err(ToolError::InvalidRequest(format!(
+                "memory raster not found: {path}"
+            )));
         };
 
-        if row as usize >= raster.rows || col as usize >= raster.cols || band as usize >= raster.bands {
+        if row as usize >= raster.rows
+            || col as usize >= raster.cols
+            || band as usize >= raster.bands
+        {
             return Ok(()); // Silently ignore out-of-bounds writes
         }
 
@@ -1324,21 +1321,26 @@ pub fn raster_set_value(path: &str, row: i32, col: i32, band: i32, value: f64) -
 ///         fields (array of {name, field_type}).
 pub fn vector_metadata_json(path: &str) -> Result<String, ToolError> {
     let layer = load_vector_path_with_controls(path, &VectorReadControls::default())?;
-    let fields: Vec<Value> = layer.schema.fields().iter().map(|f| {
-        json!({
-            "name": f.name,
-            "field_type": match f.field_type {
-                FieldType::Integer  => "integer",
-                FieldType::Float    => "float",
-                FieldType::Text     => "text",
-                FieldType::Date     => "date",
-                FieldType::DateTime => "datetime",
-                FieldType::Boolean  => "boolean",
-                FieldType::Blob     => "blob",
-                FieldType::Json     => "json",
-            }
+    let fields: Vec<Value> = layer
+        .schema
+        .fields()
+        .iter()
+        .map(|f| {
+            json!({
+                "name": f.name,
+                "field_type": match f.field_type {
+                    FieldType::Integer  => "integer",
+                    FieldType::Float    => "float",
+                    FieldType::Text     => "text",
+                    FieldType::Date     => "date",
+                    FieldType::DateTime => "datetime",
+                    FieldType::Boolean  => "boolean",
+                    FieldType::Blob     => "blob",
+                    FieldType::Json     => "json",
+                }
+            })
         })
-    }).collect();
+        .collect();
     let meta = json!({
         "path": path,
         "geometry_type": layer.geom_type.map(|g| g.as_str()),
@@ -1379,15 +1381,18 @@ pub fn projection_from_proj_string(proj_str: &str) -> Result<String, ToolError> 
 /// if the EPSG has a known bounding box, otherwise the string `"null"`.
 pub fn projection_area_of_use(epsg: u32) -> Result<String, ToolError> {
     match epsg_area_of_use(epsg) {
-        Some(CrsBoundingBox { lon_min, lat_min, lon_max, lat_max }) => {
-            serde_json::to_string(&serde_json::json!({
-                "lon_min": lon_min,
-                "lat_min": lat_min,
-                "lon_max": lon_max,
-                "lat_max": lat_max,
-            }))
-            .map_err(|e| ToolError::Execution(e.to_string()))
-        }
+        Some(CrsBoundingBox {
+            lon_min,
+            lat_min,
+            lon_max,
+            lat_max,
+        }) => serde_json::to_string(&serde_json::json!({
+            "lon_min": lon_min,
+            "lat_min": lat_min,
+            "lon_max": lon_max,
+            "lat_max": lat_max,
+        }))
+        .map_err(|e| ToolError::Execution(e.to_string())),
         None => Ok("null".to_string()),
     }
 }
@@ -1428,7 +1433,9 @@ pub fn projection_reproject_points_json(
     let points_value: Value = serde_json::from_str(points_json)
         .map_err(|e| ToolError::InvalidRequest(format!("invalid points JSON: {e}")))?;
     let points = points_value.as_array().ok_or_else(|| {
-        ToolError::InvalidRequest("points_json must be an array of objects with x and y".to_string())
+        ToolError::InvalidRequest(
+            "points_json must be an array of objects with x and y".to_string(),
+        )
     })?;
 
     let src = Crs::from_epsg(src_epsg).map_err(to_invalid_request)?;
@@ -1442,23 +1449,20 @@ pub fn projection_reproject_points_json(
                 "points_json[{idx}] must be an object with numeric x and y"
             ))
         })?;
-        let x = obj
-            .get("x")
-            .and_then(Value::as_f64)
-            .ok_or_else(|| ToolError::InvalidRequest(format!("points_json[{idx}].x must be a number")))?;
-        let y = obj
-            .get("y")
-            .and_then(Value::as_f64)
-            .ok_or_else(|| ToolError::InvalidRequest(format!("points_json[{idx}].y must be a number")))?;
+        let x = obj.get("x").and_then(Value::as_f64).ok_or_else(|| {
+            ToolError::InvalidRequest(format!("points_json[{idx}].x must be a number"))
+        })?;
+        let y = obj.get("y").and_then(Value::as_f64).ok_or_else(|| {
+            ToolError::InvalidRequest(format!("points_json[{idx}].y must be a number"))
+        })?;
         coords.push((x, y));
     }
 
     let results = src.transform_to_many_par(&coords, &dst);
     let mut out = Vec::with_capacity(results.len());
     for (idx, res) in results.into_iter().enumerate() {
-        let (tx, ty) = res.map_err(|e| ToolError::Execution(
-            format!("transform failed for point {idx}: {e}")
-        ))?;
+        let (tx, ty) = res
+            .map_err(|e| ToolError::Execution(format!("transform failed for point {idx}: {e}")))?;
         out.push(json!({"x": tx, "y": ty}));
     }
 
@@ -1553,7 +1557,10 @@ pub fn topology_distance_wkt(a_wkt: &str, b_wkt: &str) -> Result<f64, ToolError>
     Ok(geometry_distance(&a, &b))
 }
 
-fn topology_read_feature_geometry_as_wkt(path: &str, feature_index: usize) -> Result<String, ToolError> {
+fn topology_read_feature_geometry_as_wkt(
+    path: &str,
+    feature_index: usize,
+) -> Result<String, ToolError> {
     let layer = load_vector_path_with_controls(path, &VectorReadControls::default())?;
     let feature = layer.features.get(feature_index).ok_or_else(|| {
         ToolError::InvalidRequest(format!(
@@ -1680,7 +1687,11 @@ pub fn vector_copy_to_path(src: &str, dst: &str) -> Result<(), ToolError> {
 ///   - `write_batch_size`: integer
 ///   - `data_page_row_count_limit`: integer
 ///   - `compression`: none|snappy|gzip|lz4|zstd|brotli
-pub fn vector_copy_with_options_json(src: &str, dst: &str, options_json: &str) -> Result<String, ToolError> {
+pub fn vector_copy_with_options_json(
+    src: &str,
+    dst: &str,
+    options_json: &str,
+) -> Result<String, ToolError> {
     let options_value: Value = serde_json::from_str(options_json)
         .map_err(|e| ToolError::InvalidRequest(format!("invalid options JSON: {e}")))?;
     let read_controls = parse_vector_read_controls(&options_value)?;
@@ -1772,7 +1783,11 @@ pub fn lidar_copy_to_path(src: &str, dst: &str) -> Result<String, ToolError> {
 /// - `laz`: {`chunk_size`: positive integer, `compression_level`: 0-9}
 /// - `copc`: {`max_points_per_node`: positive integer, `max_depth`: positive integer, `node_point_ordering`: auto|morton|hilbert}
 ///
-pub fn lidar_write_with_options_json(src: &str, dst: &str, options_json: &str) -> Result<String, ToolError> {
+pub fn lidar_write_with_options_json(
+    src: &str,
+    dst: &str,
+    options_json: &str,
+) -> Result<String, ToolError> {
     let options_value: Value = serde_json::from_str(options_json)
         .map_err(|e| ToolError::InvalidRequest(format!("invalid options JSON: {e}")))?;
     let controls = parse_lidar_write_controls(&options_value)?;
@@ -1828,7 +1843,11 @@ pub fn lidar_write_with_options_json(src: &str, dst: &str, options_json: &str) -
 ///     `quality_db`: number (used when compression=lossy),
 ///     `decomp_levels`: integer 0-255
 ///   }
-pub fn raster_write_with_options_json(src: &str, dst: &str, options_json: &str) -> Result<(), ToolError> {
+pub fn raster_write_with_options_json(
+    src: &str,
+    dst: &str,
+    options_json: &str,
+) -> Result<(), ToolError> {
     let options_value: Value = serde_json::from_str(options_json)
         .map_err(|e| ToolError::InvalidRequest(format!("invalid options JSON: {e}")))?;
     let controls = parse_raster_write_controls(&options_value)?;
@@ -1840,8 +1859,7 @@ pub fn raster_write_with_options_json(src: &str, dst: &str, options_json: &str) 
         }
     }
 
-    let output_format = RasterFormat::for_output_path(dst)
-        .map_err(to_invalid_request)?;
+    let output_format = RasterFormat::for_output_path(dst).map_err(to_invalid_request)?;
 
     if raster_is_memory_path(src) {
         let raster = get_raster_arc_by_path(src)
@@ -1935,7 +1953,8 @@ pub fn lidar_metadata_json(path: &str) -> Result<String, ToolError> {
                 wblidar::crs::epsg_from_srs_reference(text)
                     .or_else(|| wblidar::crs::epsg_from_wkt(text))
             });
-            let field_names: Vec<String> = meta.fields.iter().map(|field| field.name.clone()).collect();
+            let field_names: Vec<String> =
+                meta.fields.iter().map(|field| field.name.clone()).collect();
 
             json!({
                 "path": lidar_path,
@@ -2202,7 +2221,12 @@ impl ToolRuntimeRegistry for CompositeRegistry {
         out
     }
 
-    fn run_tool(&self, id: &str, args: &ToolArgs, ctx: &wbcore::ToolContext) -> Result<wbcore::ToolRunResult, ToolError> {
+    fn run_tool(
+        &self,
+        id: &str,
+        args: &ToolArgs,
+        ctx: &wbcore::ToolContext,
+    ) -> Result<wbcore::ToolRunResult, ToolError> {
         match self.oss.run(id, args, ctx) {
             Ok(v) => Ok(v),
             Err(ToolError::NotFound(_)) => {
@@ -2232,11 +2256,7 @@ fn validate_include_pro(include_pro: bool) -> Result<(), ToolError> {
 
 fn legacy_param_order_override(tool_id: &str) -> Option<&'static [&'static str]> {
     match tool_id {
-        "d8_pointer" => Some(&[
-            "dem",
-            "output",
-            "esri_pntr",
-        ]),
+        "d8_pointer" => Some(&["dem", "output", "esri_pntr"]),
         "d8_flow_accum" => Some(&[
             "input",
             "output",
@@ -2246,10 +2266,7 @@ fn legacy_param_order_override(tool_id: &str) -> Option<&'static [&'static str]>
             "input_is_pointer",
             "esri_pntr",
         ]),
-        "dinf_pointer" => Some(&[
-            "dem",
-            "output",
-        ]),
+        "dinf_pointer" => Some(&["dem", "output"]),
         "dinf_flow_accum" => Some(&[
             "input",
             "output",
@@ -2259,10 +2276,7 @@ fn legacy_param_order_override(tool_id: &str) -> Option<&'static [&'static str]>
             "clip",
             "input_is_pointer",
         ]),
-        "fd8_pointer" => Some(&[
-            "dem",
-            "output",
-        ]),
+        "fd8_pointer" => Some(&["dem", "output"]),
         "fd8_flow_accum" => Some(&[
             "dem",
             "output",
@@ -2273,11 +2287,7 @@ fn legacy_param_order_override(tool_id: &str) -> Option<&'static [&'static str]>
             "log_transform",
             "clip",
         ]),
-        "rho8_pointer" => Some(&[
-            "dem",
-            "output",
-            "esri_pntr",
-        ]),
+        "rho8_pointer" => Some(&["dem", "output", "esri_pntr"]),
         "rho8_flow_accum" => Some(&[
             "input",
             "output",
@@ -2473,10 +2483,7 @@ fn enrich_manifest_params(
         enriched.params = ordered_names
             .into_iter()
             .map(|name| wbcore::ToolParamDescriptor {
-                description: param_descriptions
-                    .get(&name)
-                    .cloned()
-                    .unwrap_or_default(),
+                description: param_descriptions.get(&name).cloned().unwrap_or_default(),
                 required: param_required.get(&name).copied().unwrap_or(false),
                 name,
             })
@@ -2529,9 +2536,7 @@ impl RToolRuntime {
 
         Ok(Self {
             runtime: RuntimeMode::Tier(
-                ToolRuntimeBuilder::new(registry)
-                    .max_tier(max_tier)
-                    .build(),
+                ToolRuntimeBuilder::new(registry).max_tier(max_tier).build(),
             ),
         })
     }
@@ -2546,9 +2551,12 @@ impl RToolRuntime {
 
         Ok(Self {
             runtime: RuntimeMode::Tier(
-                ToolRuntimeBuilder::new(CompositeRegistry { oss, pro: Some(pro) })
-                    .max_tier(max_tier)
-                    .build(),
+                ToolRuntimeBuilder::new(CompositeRegistry {
+                    oss,
+                    pro: Some(pro),
+                })
+                .max_tier(max_tier)
+                .build(),
             ),
         })
     }
@@ -2745,7 +2753,10 @@ impl RToolRuntime {
             &param_required,
             catalog_param_metadata.order.get(tool_id).map(Vec::as_slice),
         );
-        Ok(manifest_with_param_schema_json(&enriched_manifest, &param_schemas))
+        Ok(manifest_with_param_schema_json(
+            &enriched_manifest,
+            &param_schemas,
+        ))
     }
 
     pub fn get_tool_info_json(&self, tool_id: &str) -> Result<Value, ToolError> {
@@ -2762,7 +2773,11 @@ impl RToolRuntime {
         Ok(Value::Object(response.outputs.into_iter().collect()))
     }
 
-    pub fn run_tool_json_with_progress(&self, tool_id: &str, args_json: &str) -> Result<Value, ToolError> {
+    pub fn run_tool_json_with_progress(
+        &self,
+        tool_id: &str,
+        args_json: &str,
+    ) -> Result<Value, ToolError> {
         let args = parse_args_json(args_json)?;
 
         let response = self.execute(ExecuteRequest {
@@ -2834,9 +2849,13 @@ fn entitlement_capabilities_from_json(
     key_store
         .insert_base64url_public_key(public_key_kid, public_key_b64url)
         .map_err(map_license_error)?;
-    let verified = verify_signed_entitlement_json(signed_entitlement_json, &key_store, current_unix())
-        .map_err(map_license_error)?;
-    Ok(EntitlementCapabilities::from_verified(&verified, current_unix()))
+    let verified =
+        verify_signed_entitlement_json(signed_entitlement_json, &key_store, current_unix())
+            .map_err(map_license_error)?;
+    Ok(EntitlementCapabilities::from_verified(
+        &verified,
+        current_unix(),
+    ))
 }
 
 #[cfg(feature = "pro")]
@@ -2846,12 +2865,8 @@ fn entitlement_capabilities_from_floating_provider(
     machine_id: Option<&str>,
     customer_id: Option<&str>,
 ) -> Result<EntitlementCapabilities, ToolError> {
-    let (signed_entitlement_json, kid, public_key_b64url, _, _) = floating_activation_bundle(
-        floating_license_id,
-        provider_url,
-        machine_id,
-        customer_id,
-    )?;
+    let (signed_entitlement_json, kid, public_key_b64url, _, _) =
+        floating_activation_bundle(floating_license_id, provider_url, machine_id, customer_id)?;
     entitlement_capabilities_from_json(&signed_entitlement_json, &kid, &public_key_b64url)
 }
 
@@ -2952,8 +2967,9 @@ fn fetch_public_key_for_entitlement(
         .get("kid")
         .and_then(|v| v.as_str())
         .ok_or_else(|| ToolError::LicenseDenied("activation response missing 'kid'".to_string()))?;
-    let signed_entitlement_json = serde_json::to_string(activation_json)
-        .map_err(|e| ToolError::LicenseDenied(format!("failed to serialize entitlement envelope: {e}")))?;
+    let signed_entitlement_json = serde_json::to_string(activation_json).map_err(|e| {
+        ToolError::LicenseDenied(format!("failed to serialize entitlement envelope: {e}"))
+    })?;
 
     let keys_url = format!("{}/api/v2/public-keys", base.trim_end_matches('/'));
     let keys_resp = ureq::get(&keys_url)
@@ -3010,7 +3026,10 @@ fn key_activation_bundle(
         .map(|s| s.to_string())
         .or_else(|| env::var("WBW_CUSTOMER_ID").ok());
 
-    let activation_url = format!("{}/api/v2/entitlements/activate", base.trim_end_matches('/'));
+    let activation_url = format!(
+        "{}/api/v2/entitlements/activate",
+        base.trim_end_matches('/')
+    );
     let mut body = json!({
         "key": key,
         "machine_id": machine,
@@ -3029,12 +3048,21 @@ fn key_activation_bundle(
     let (signed_entitlement_json, kid, public_key_b64url) =
         fetch_public_key_for_entitlement(&activation_json, &base)?;
 
-    Ok((signed_entitlement_json, kid, public_key_b64url, base, customer))
+    Ok((
+        signed_entitlement_json,
+        kid,
+        public_key_b64url,
+        base,
+        customer,
+    ))
 }
 
 #[cfg(feature = "pro")]
 fn notify_server_deactivation(key: &str, provider_url: &str) {
-    let url = format!("{}/api/v2/entitlements/deactivate", provider_url.trim_end_matches('/'));
+    let url = format!(
+        "{}/api/v2/entitlements/deactivate",
+        provider_url.trim_end_matches('/')
+    );
     let _ = ureq::post(&url).send_json(json!({ "key": key }));
 }
 
@@ -3109,7 +3137,8 @@ fn runtime_from_local_license_state(
         Err(_) => return RToolRuntime::new_with_options(false, LicenseTier::Open),
     };
 
-    let signed_entitlement_json = read_license_state_string_field(&state, "signed_entitlement_json")?;
+    let signed_entitlement_json =
+        read_license_state_string_field(&state, "signed_entitlement_json")?;
     let public_key_kid = read_license_state_string_field(&state, "public_key_kid")?;
     let public_key_b64url = read_license_state_string_field(&state, "public_key_b64url")?;
 
@@ -3126,8 +3155,9 @@ fn runtime_from_local_license_state(
 }
 
 fn read_entitlement_file(path: &str) -> Result<String, ToolError> {
-    std::fs::read_to_string(path)
-        .map_err(|e| ToolError::InvalidRequest(format!("failed to read entitlement file '{path}': {e}")))
+    std::fs::read_to_string(path).map_err(|e| {
+        ToolError::InvalidRequest(format!("failed to read entitlement file '{path}': {e}"))
+    })
 }
 
 fn parse_args_json(args_json: &str) -> Result<ToolArgs, ToolError> {
@@ -3271,12 +3301,14 @@ pub fn list_tools_json_with_floating_license_id_options(
 
 pub fn run_tool_json(tool_id: &str, args_json: &str) -> Result<String, ToolError> {
     let out = RToolRuntime::new().run_tool_json(tool_id, args_json)?;
-    serde_json::to_string(&out).map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
+    serde_json::to_string(&out)
+        .map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
 }
 
 pub fn run_tool_json_with_progress(tool_id: &str, args_json: &str) -> Result<String, ToolError> {
     let out = RToolRuntime::new().run_tool_json_with_progress(tool_id, args_json)?;
-    serde_json::to_string(&out).map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
+    serde_json::to_string(&out)
+        .map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
 }
 
 pub fn run_tool_json_with_options(
@@ -3286,8 +3318,10 @@ pub fn run_tool_json_with_options(
     tier: &str,
 ) -> Result<String, ToolError> {
     let parsed_tier = parse_tier(tier)?;
-    let out = runtime_from_local_license_state(include_pro, parsed_tier)?.run_tool_json(tool_id, args_json)?;
-    serde_json::to_string(&out).map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
+    let out = runtime_from_local_license_state(include_pro, parsed_tier)?
+        .run_tool_json(tool_id, args_json)?;
+    serde_json::to_string(&out)
+        .map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
 }
 
 pub fn run_tool_json_with_entitlement_options(
@@ -3308,7 +3342,8 @@ pub fn run_tool_json_with_entitlement_options(
         public_key_b64url,
     )?
     .run_tool_json(tool_id, args_json)?;
-    serde_json::to_string(&out).map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
+    serde_json::to_string(&out)
+        .map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
 }
 
 pub fn run_tool_json_with_progress_entitlement_options(
@@ -3329,7 +3364,8 @@ pub fn run_tool_json_with_progress_entitlement_options(
         public_key_b64url,
     )?
     .run_tool_json_with_progress(tool_id, args_json)?;
-    serde_json::to_string(&out).map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
+    serde_json::to_string(&out)
+        .map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
 }
 
 pub fn run_tool_json_with_entitlement_file_options(
@@ -3395,7 +3431,8 @@ pub fn run_tool_json_with_floating_license_id_options(
         customer_id,
     )?
     .run_tool_json(tool_id, args_json)?;
-    serde_json::to_string(&out).map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
+    serde_json::to_string(&out)
+        .map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
 }
 
 #[cfg(feature = "pro")]
@@ -3419,7 +3456,8 @@ pub fn run_tool_json_with_progress_floating_license_id_options(
         customer_id,
     )?
     .run_tool_json_with_progress(tool_id, args_json)?;
-    serde_json::to_string(&out).map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
+    serde_json::to_string(&out)
+        .map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
 }
 
 #[cfg(not(feature = "pro"))]
@@ -3459,7 +3497,8 @@ pub fn run_tool_json_with_progress_options(
     let parsed_tier = parse_tier(tier)?;
     let out = runtime_from_local_license_state(include_pro, parsed_tier)?
         .run_tool_json_with_progress(tool_id, args_json)?;
-    serde_json::to_string(&out).map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
+    serde_json::to_string(&out)
+        .map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
 }
 
 pub fn generate_wrapper_stubs_json_with_options(
@@ -3481,7 +3520,10 @@ pub fn generate_wrapper_stubs_json_with_options(
 
     let mut stubs = serde_json::Map::new();
     for manifest in rt.list_visible_manifests() {
-        stubs.insert(manifest.id.clone(), Value::String(generate_wrapper_stub(&manifest, target)));
+        stubs.insert(
+            manifest.id.clone(),
+            Value::String(generate_wrapper_stub(&manifest, target)),
+        );
     }
     serde_json::to_string(&Value::Object(stubs))
         .map_err(|e| ToolError::Execution(format!("serialization error: {e}")))
@@ -3500,7 +3542,9 @@ pub fn generate_r_wrapper_module_with_options(
     let mut out = String::new();
     out.push_str("# Auto-generated wbw_r wrappers\n");
     out.push_str("# Regenerate via generate_r_wrapper_module_with_options(include_pro, tier).\n\n");
-    out.push_str("wbw_make_session <- function(floating_license_id = NULL, include_pro = NULL, tier = \"");
+    out.push_str(
+        "wbw_make_session <- function(floating_license_id = NULL, include_pro = NULL, tier = \"",
+    );
     out.push_str(tier);
     out.push_str("\", provider_url = NULL, machine_id = NULL, customer_id = NULL) {\n");
     out.push_str("  resolved_include_pro <- if (is.null(include_pro)) !is.null(floating_license_id) else include_pro\n");
@@ -3680,8 +3724,16 @@ pub fn deactivate_license(from_transfer: bool) -> Result<String, ToolError> {
     #[cfg(feature = "pro")]
     {
         if let Ok(state) = read_license_state_json() {
-            let key = state.get("floating_license_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let url = state.get("provider_url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let key = state
+                .get("floating_license_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let url = state
+                .get("provider_url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             if !key.is_empty() && !url.is_empty() {
                 notify_server_deactivation(&key, &url);
             }
@@ -3749,7 +3801,8 @@ pub fn license_info() -> Result<String, ToolError> {
         }
     };
 
-    let signed_entitlement_json = read_license_state_string_field(&state, "signed_entitlement_json")?;
+    let signed_entitlement_json =
+        read_license_state_string_field(&state, "signed_entitlement_json")?;
     let public_key_kid = read_license_state_string_field(&state, "public_key_kid")?;
     let public_key_b64url = read_license_state_string_field(&state, "public_key_b64url")?;
 
@@ -3810,7 +3863,8 @@ pub fn license_time_remaining() -> Result<String, ToolError> {
         }
     };
 
-    let signed_entitlement_json = read_license_state_string_field(&state, "signed_entitlement_json")?;
+    let signed_entitlement_json =
+        read_license_state_string_field(&state, "signed_entitlement_json")?;
     let public_key_kid = read_license_state_string_field(&state, "public_key_kid")?;
     let public_key_b64url = read_license_state_string_field(&state, "public_key_b64url")?;
 
@@ -3937,8 +3991,7 @@ mod native_exports {
         include_pro: bool,
         tier: &str,
     ) -> extendr_api::Result<String> {
-        super::get_tool_info_json_with_options(tool_id, include_pro, tier)
-            .map_err(map_extendr_err)
+        super::get_tool_info_json_with_options(tool_id, include_pro, tier).map_err(map_extendr_err)
     }
 
     #[extendr]
@@ -4175,7 +4228,10 @@ mod native_exports {
     }
 
     #[extendr]
-    fn generate_r_wrapper_module_with_options(include_pro: bool, tier: &str) -> extendr_api::Result<String> {
+    fn generate_r_wrapper_module_with_options(
+        include_pro: bool,
+        tier: &str,
+    ) -> extendr_api::Result<String> {
         super::generate_r_wrapper_module_with_options(include_pro, tier).map_err(map_extendr_err)
     }
 
@@ -4237,7 +4293,11 @@ mod native_exports {
     }
 
     #[extendr]
-    fn vector_copy_with_options_json(src: &str, dst: &str, options_json: &str) -> extendr_api::Result<String> {
+    fn vector_copy_with_options_json(
+        src: &str,
+        dst: &str,
+        options_json: &str,
+    ) -> extendr_api::Result<String> {
         super::vector_copy_with_options_json(src, dst, options_json).map_err(map_extendr_err)
     }
 
@@ -4328,12 +4388,20 @@ mod native_exports {
     }
 
     #[extendr]
-    fn lidar_write_with_options_json(src: &str, dst: &str, options_json: &str) -> extendr_api::Result<String> {
+    fn lidar_write_with_options_json(
+        src: &str,
+        dst: &str,
+        options_json: &str,
+    ) -> extendr_api::Result<String> {
         super::lidar_write_with_options_json(src, dst, options_json).map_err(map_extendr_err)
     }
 
     #[extendr]
-    fn raster_write_with_options_json(src: &str, dst: &str, options_json: &str) -> extendr_api::Result<()> {
+    fn raster_write_with_options_json(
+        src: &str,
+        dst: &str,
+        options_json: &str,
+    ) -> extendr_api::Result<()> {
         super::raster_write_with_options_json(src, dst, options_json).map_err(map_extendr_err)
     }
 
@@ -4353,7 +4421,13 @@ mod native_exports {
     }
 
     #[extendr]
-    fn raster_set_value(path: &str, row: i32, col: i32, band: i32, value: f64) -> extendr_api::Result<()> {
+    fn raster_set_value(
+        path: &str,
+        row: i32,
+        col: i32,
+        band: i32,
+        value: f64,
+    ) -> extendr_api::Result<()> {
         super::raster_set_value(path, row, col, band, value).map_err(map_extendr_err)
     }
 
@@ -4643,9 +4717,9 @@ mod native_exports {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
     #[cfg(feature = "pro")]
     use std::sync::OnceLock;
-    use std::sync::Mutex;
     use wbcore::ProgressEvent;
 
     #[derive(Default)]
@@ -4789,7 +4863,10 @@ mod tests {
         let rt = RToolRuntime::new_test_pro_with_max_tier(LicenseTier::Pro)
             .expect("test pro runtime construction should succeed");
         let tools = rt.list_tools_json();
-        assert!(!tools.as_array().expect("tool list should be an array").is_empty());
+        assert!(!tools
+            .as_array()
+            .expect("tool list should be an array")
+            .is_empty());
     }
 
     #[test]
@@ -4809,7 +4886,10 @@ mod tests {
         let rt = RToolRuntime::new_test_pro_with_max_tier(LicenseTier::Pro)
             .expect("test pro runtime construction should succeed");
         let tools = rt.list_tools_json();
-        assert!(!tools.as_array().expect("tool list should be an array").is_empty());
+        assert!(!tools
+            .as_array()
+            .expect("tool list should be an array")
+            .is_empty());
     }
 
     #[test]
@@ -4818,7 +4898,10 @@ mod tests {
         let rt = RToolRuntime::new_test_pro_with_max_tier(LicenseTier::Pro)
             .expect("test pro runtime construction should succeed");
         let tools = rt.list_tools_json();
-        assert!(!tools.as_array().expect("tool list should be an array").is_empty());
+        assert!(!tools
+            .as_array()
+            .expect("tool list should be an array")
+            .is_empty());
     }
 
     #[test]
@@ -4827,7 +4910,10 @@ mod tests {
         let rt = RToolRuntime::new_test_pro_with_max_tier(LicenseTier::Pro)
             .expect("test pro runtime construction should succeed");
         let tools = rt.list_tools_json();
-        assert!(!tools.as_array().expect("tool list should be an array").is_empty());
+        assert!(!tools
+            .as_array()
+            .expect("tool list should be an array")
+            .is_empty());
     }
 
     #[test]
@@ -4838,7 +4924,10 @@ mod tests {
         let _ = std::fs::remove_file(&state_path);
 
         let _guard = EnvGuard::set(&[
-            ("WBW_LICENSE_PROVIDER_URL", Some("http://127.0.0.1:9".to_string())),
+            (
+                "WBW_LICENSE_PROVIDER_URL",
+                Some("http://127.0.0.1:9".to_string()),
+            ),
             ("WBW_LICENSE_POLICY", Some("fail_open".to_string())),
             (
                 "WBW_LICENSE_STATE_PATH",

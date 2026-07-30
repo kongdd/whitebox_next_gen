@@ -1,0 +1,933 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Spatial Statistics and Geostatistics - Whitebox Workflows for Python User Manual</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('light')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded "><a href="overview.html"><strong aria-hidden="true">1.</strong> Overview</a></li><li class="chapter-item expanded "><a href="installation-and-setup.html"><strong aria-hidden="true">2.</strong> Installation and Setup</a></li><li class="chapter-item expanded "><a href="build-and-preview.html"><strong aria-hidden="true">3.</strong> Build and Preview</a></li><li class="chapter-item expanded "><a href="quick-start.html"><strong aria-hidden="true">4.</strong> Quick Start</a></li><li class="chapter-item expanded "><a href="environment-and-discovery.html"><strong aria-hidden="true">5.</strong> Environment and Discovery</a></li><li class="chapter-item expanded "><a href="tool-execution-and-progress.html"><strong aria-hidden="true">6.</strong> Tool Execution and Progress</a></li><li class="chapter-item expanded "><a href="working-with-rasters.html"><strong aria-hidden="true">7.</strong> Working with Rasters</a></li><li class="chapter-item expanded "><a href="working-with-vectors.html"><strong aria-hidden="true">8.</strong> Working with Vectors</a></li><li class="chapter-item expanded "><a href="working-with-lidar.html"><strong aria-hidden="true">9.</strong> Working with Lidar</a></li><li class="chapter-item expanded "><a href="working-with-sensor-bundles.html"><strong aria-hidden="true">10.</strong> Working with Sensor Bundles</a></li><li class="chapter-item expanded "><a href="output-controls.html"><strong aria-hidden="true">11.</strong> Output Controls</a></li><li class="chapter-item expanded "><a href="supported-data-formats.html"><strong aria-hidden="true">12.</strong> Supported Data Formats</a></li><li class="chapter-item expanded "><a href="reprojection-and-crs.html"><strong aria-hidden="true">13.</strong> Reprojection and CRS</a></li><li class="chapter-item expanded "><a href="topology-utilities.html"><strong aria-hidden="true">14.</strong> Topology Utilities</a></li><li class="chapter-item expanded "><a href="interoperability.html"><strong aria-hidden="true">15.</strong> Interoperability</a></li><li class="chapter-item expanded "><a href="licensing.html"><strong aria-hidden="true">16.</strong> Licensing</a></li><li class="chapter-item expanded "><a href="api-reference-strategy.html"><strong aria-hidden="true">17.</strong> API Reference Strategy</a></li><li class="chapter-item expanded "><a href="terrain-analysis.html"><strong aria-hidden="true">18.</strong> Terrain Analysis and Geomorphometry</a></li><li class="chapter-item expanded "><a href="spatial-hydrology.html"><strong aria-hidden="true">19.</strong> Spatial Hydrology</a></li><li class="chapter-item expanded "><a href="lidar-processing.html"><strong aria-hidden="true">20.</strong> LiDAR Processing</a></li><li class="chapter-item expanded "><a href="remote-sensing.html"><strong aria-hidden="true">21.</strong> Remote Sensing Analysis</a></li><li class="chapter-item expanded "><a href="raster-analysis.html"><strong aria-hidden="true">22.</strong> Raster Analysis</a></li><li class="chapter-item expanded "><a href="vector-analysis.html"><strong aria-hidden="true">23.</strong> Vector Analysis</a></li><li class="chapter-item expanded "><a href="online-data-downloads.html"><strong aria-hidden="true">24.</strong> Online Data Downloads</a></li><li class="chapter-item expanded "><a href="network-analysis.html"><strong aria-hidden="true">25.</strong> Network Analysis</a></li><li class="chapter-item expanded "><a href="spatial-statistics.html" class="active"><strong aria-hidden="true">26.</strong> Spatial Statistics and Geostatistics</a></li><li class="chapter-item expanded "><a href="linear-referencing.html"><strong aria-hidden="true">27.</strong> Linear Referencing</a></li><li class="chapter-item expanded "><a href="api-reference.html"><strong aria-hidden="true">28.</strong> API Reference</a></li><li class="chapter-item expanded "><a href="api-non-tool-wbenvironment.html"><strong aria-hidden="true">29.</strong> Non-Tool WbEnvironment API</a></li><li class="chapter-item expanded "><a href="api-tools-reference.html"><strong aria-hidden="true">30.</strong> Tool API Reference (All Tools)</a></li><li class="chapter-item expanded "><a href="api-tool-call-paths.html"><strong aria-hidden="true">31.</strong> Tool Call Paths (Python)</a></li><li class="chapter-item expanded "><a href="script-index.html"><strong aria-hidden="true">32.</strong> Script Index</a></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Whitebox Workflows for Python User Manual</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="spatial-statistics-and-geostatistics"><a class="header" href="#spatial-statistics-and-geostatistics">Spatial Statistics and Geostatistics</a></h1>
+<p>Spatial statistics and geostatistics form the quantitative foundation for understanding geographic patterns, relationships, and uncertainty. This chapter covers methods for detecting spatial autocorrelation, analyzing point patterns, modeling spatial relationships through regression, and predicting values at unsampled locations using kriging. These tools answer critical GIS questions: <em>Are phenomena clustered or dispersed? Is there spatial dependence in my data? How can I interpolate values with quantified uncertainty?</em></p>
+<hr />
+<h2 id="core-concepts"><a class="header" href="#core-concepts">Core Concepts</a></h2>
+<p>Before working with spatial statistics, understand these foundational terms:</p>
+<ul>
+<li><strong>Spatial autocorrelation</strong>: The degree to which observations at nearby locations resemble each other. Positive autocorrelation means nearby values are similar; negative means they differ; zero means spatial independence. Most real-world geographic data exhibit positive autocorrelation.</li>
+<li><strong>Moran's I</strong>: Global measure of spatial autocorrelation ranging from -1 (perfect negative) to +1 (perfect positive). Statistical tests determine whether observed I differs significantly from zero (random spatial arrangement).</li>
+<li><strong>LISA (Local Indicators of Spatial Association)</strong>: Local versions of Moran's I and Getis-Ord Gi* that identify hot spots (high-high clusters), cold spots (low-low), and spatial outliers (high-low, low-high).</li>
+<li><strong>Hot spot</strong>: Statistically significant cluster of high values. Cold spot: cluster of low values. Spatial outlier: anomalously high or low value surrounded by opposite values.</li>
+<li><strong>Point pattern</strong>: Distribution of point events across a study area. Patterns can be clustered (aggregated), dispersed (regular/uniform), or random. Distinguishing between them requires statistical tests.</li>
+<li><strong>Ripley's K function</strong>: Cumulative measure of clustering intensity across distance scales. Deviations from expected random values indicate clustering or dispersion.</li>
+<li><strong>Spatial regression</strong>: Statistical models that incorporate spatial dependence. SAR (Spatial AutoRegressive) models include lagged dependent variables; SEM (Spatial Error Model) models incorporate spatial correlation in residuals; GWR (Geographically Weighted Regression) estimates parameters locally, allowing relationships to vary across space.</li>
+<li><strong>Variogram</strong>: Describes how variance in a spatial field increases with distance. Essential for kriging parameter estimation; plot shape reveals range (distance beyond which values become independent) and nugget (variance at zero distance, often due to measurement error).</li>
+<li><strong>Kriging</strong>: Spatial interpolation method that minimizes prediction variance. Ordinary kriging estimates both value and prediction uncertainty at unsampled locations. Universal kriging includes drift (polynomial trend).</li>
+<li><strong>Prediction variance / uncertainty</strong>: Kriging variance reflects model confidence in predictions. High variance at sparse-data locations; low variance near data points. Always examine variance maps alongside predictions.</li>
+</ul>
+<hr />
+<h2 id="autocorrelation-analysis-detecting-spatial-structure"><a class="header" href="#autocorrelation-analysis-detecting-spatial-structure">Autocorrelation Analysis: Detecting Spatial Structure</a></h2>
+<h3 id="global-morans-i-is-my-data-spatially-autocorrelated"><a class="header" href="#global-morans-i-is-my-data-spatially-autocorrelated">Global Moran's I: Is My Data Spatially Autocorrelated?</a></h3>
+<p>Global Moran's I tests whether observations are randomly distributed or exhibit spatial structure. A significant positive I indicates clustering; negative indicates alternating patterns.</p>
+<pre><code class="language-python">import whitebox_workflows as wbw
+
+wbe = wbw.WbEnvironment()
+wbe.working_directory = '/data/spatial_stats'
+
+# Read point features with a measurement attribute (e.g., precipitation, elevation, disease rate)
+points = wbe.read_vector('weather_stations.gpkg')
+
+# Calculate global Moran's I using the 'temperature' attribute
+# Uses a queen contiguity weight matrix (8-neighbour)
+result = wbe.gis.spatial_statistics.global_morans_i(
+    input='weather_stations.gpkg',
+    field='temperature'
+)
+</code></pre>
+<p>The output file contains:</p>
+<ul>
+<li><strong>Moran's I</strong>: The autocorrelation index</li>
+<li><strong>Expected value</strong>: I under random permutation hypothesis (typically near zero)</li>
+<li><strong>Variance</strong>: Variance of I under randomization</li>
+<li><strong>p-value</strong>: Probability that observed I arose by chance</li>
+<li><strong>Interpretation</strong>: p &lt; 0.05 indicates significant spatial structure</li>
+</ul>
+<p><strong>Practical guidance:</strong></p>
+<ul>
+<li>If p &lt; 0.05 and I &gt; 0, data are significantly clustered. Validate with LISA to locate hot/cold spots.</li>
+<li>If p &gt; 0.05, spatial structure is not statistically significant; patterns may be random. Still use LISA to visually explore.</li>
+<li>Moran's I is sensitive to boundary effects; ensure your study area includes all meaningful neighbors.</li>
+</ul>
+<hr />
+<h3 id="local-morans-i-lisa-where-are-the-clusters"><a class="header" href="#local-morans-i-lisa-where-are-the-clusters">Local Moran's I (LISA): Where Are the Clusters?</a></h3>
+<p>Local Moran's I decomposes global autocorrelation into contributions from each location, revealing hot spots, cold spots, and spatial outliers. Results are typically visualized as a categorical map.</p>
+<pre><code class="language-python"># Vector version: produces output shapefile with cluster classifications
+result = wbe.gis.spatial_statistics.local_morans_i_lisa(
+    input='weather_stations.gpkg',
+    field='temperature',
+    output='lisa_clusters.gpkg'
+)
+
+# Raster version: accepts gridded data (e.g., DEM or classification raster)
+# Produces raster with cluster codes
+result = wbe.gis.spatial_statistics.local_morans_i_lisa_raster(
+    input='temperature_grid.tif',
+    output='lisa_raster.tif'
+)
+</code></pre>
+<p><strong>LISA classification:</strong></p>
+<ul>
+<li><strong>Cluster-High (Hot Spot)</strong>: High values surrounded by high values (HH)</li>
+<li><strong>Cluster-Low (Cold Spot)</strong>: Low values surrounded by low values (LL)</li>
+<li><strong>Outlier-High</strong>: High value surrounded by low values (HL)</li>
+<li><strong>Outlier-Low</strong>: Low value surrounded by high values (LH)</li>
+<li><strong>No significant cluster</strong>: Location does not have statistically significant local autocorrelation (p ≥ 0.05)</li>
+</ul>
+<p><strong>Workflow: Identifying Disease Clusters</strong></p>
+<pre><code class="language-python">import whitebox_workflows as wbw
+
+wbe = wbw.WbEnvironment()
+wbe.working_directory = '/data/disease_surveillance'
+
+# Read confirmed cases by health district
+cases = wbe.read_vector('disease_cases.gpkg')
+
+# Run LISA on case count field
+wbe.gis.spatial_statistics.local_morans_i_lisa(
+    input='disease_cases.gpkg',
+    field='case_count',
+    output='disease_hotspots.gpkg'
+)
+
+# Load results and filter to significant clusters
+hotspots = wbe.read_vector('disease_hotspots.gpkg')
+
+# Identify HH (high-case clusters) for intervention planning
+# Feature classification field typically contains: 'Cluster-High', 'Cluster-Low', etc.
+</code></pre>
+<hr />
+<h3 id="getis-ord-gi-hot-spot-analysis-with-distance-decay"><a class="header" href="#getis-ord-gi-hot-spot-analysis-with-distance-decay">Getis-Ord Gi*: Hot Spot Analysis with Distance Decay</a></h3>
+<p>Getis-Ord Gi* is a z-score-based hot spot detector. Unlike LISA, Gi* includes the focal location itself and is directly interpretable as a z-score (standard deviations from the mean under null hypothesis of spatial randomness).</p>
+<pre><code class="language-python"># Vector version
+result = wbe.gis.spatial_statistics.getis_ord_gi_star(
+    input='crime_incidents.gpkg',
+    field='incident_count'
+)
+
+# Raster version
+result = wbe.gis.spatial_statistics.getis_ord_gi_star_raster(
+    input='pollution_concentration.tif',
+    output='hotspots_raster.tif'
+)
+</code></pre>
+<p><strong>Interpretation:</strong></p>
+<ul>
+<li><em><em>Gi</em> &gt; 1.96</em>*: Hot spot (high values, statistically significant at 95% confidence)</li>
+<li><em><em>Gi</em> &lt; -1.96</em>*: Cold spot (low values, significant)</li>
+<li><em><em>-1.96 ≤ Gi</em> ≤ 1.96</em>*: No significant clustering</li>
+</ul>
+<p><strong>Advantage over LISA:</strong> Gi* produces continuous z-scores ideal for mapping risk or intensity gradients. LISA produces discrete categories.</p>
+<hr />
+<h2 id="point-pattern-analysis-clustering-vs-dispersion"><a class="header" href="#point-pattern-analysis-clustering-vs-dispersion">Point Pattern Analysis: Clustering vs. Dispersion</a></h2>
+<h3 id="nearest-neighbour-index-overall-clustering-test"><a class="header" href="#nearest-neighbour-index-overall-clustering-test">Nearest Neighbour Index: Overall Clustering Test</a></h3>
+<p>The Nearest Neighbour Index (NNI) compares mean nearest-neighbour distances in observed data to expected distances under complete spatial randomness (CSR).</p>
+<p>$$\text{NNI} = \frac{\text{Observed Mean Distance}}{\text{Expected Mean Distance}}$$</p>
+<ul>
+<li><strong>NNI ≈ 1</strong>: Pattern consistent with CSR (random)</li>
+<li><strong>NNI &lt; 1</strong>: Clustering (points closer than random expectation)</li>
+<li><strong>NNI &gt; 1</strong>: Dispersion (points farther apart than random)</li>
+</ul>
+<pre><code class="language-python"># Calculate nearest neighbour index for point pattern
+result = wbe.gis.spatial_statistics.nearest_neighbour_index(
+    input='earthquake_epicenters.gpkg'
+)
+
+# Output includes:
+# - NNI value
+# - z-score and p-value for statistical significance
+# - Observed and expected mean distances
+</code></pre>
+<p><strong>Workflow: Analyzing Wildfire Clustering</strong></p>
+<pre><code class="language-python">wbe.working_directory = '/data/wildfire'
+
+# Load fire event points
+fires = wbe.read_vector('wildfire_points.gpkg')
+
+# Test if fires cluster or disperse
+nni_result = wbe.gis.spatial_statistics.nearest_neighbour_index(
+    input='wildfire_points.gpkg'
+)
+
+# If NNI significantly &lt; 1, fires cluster → investigate common conditions (drought, fuel, ignition)
+# If NNI near 1, fires appear random → likely independent ignition sources
+</code></pre>
+<hr />
+<h3 id="ripleys-k-function-clustering-across-multiple-scales"><a class="header" href="#ripleys-k-function-clustering-across-multiple-scales">Ripley's K Function: Clustering Across Multiple Scales</a></h3>
+<p>While NNI gives a single summary statistic, Ripley's K examines clustering intensity across a range of distance scales. This reveals whether clustering is local (fine-scale) or regional (broad-scale).</p>
+<pre><code class="language-python"># Compute Ripley's K at multiple distance thresholds
+result = wbe.gis.spatial_statistics.ripleys_k(
+    input='plant_locations.gpkg'
+)
+
+# Output: K(d) values at regularly spaced distance intervals
+# Also includes L(d) = sqrt(K(d)/π) - d, which linearizes the plot for easier interpretation
+</code></pre>
+<p><strong>Interpretation of K(d):</strong></p>
+<ul>
+<li><strong>K(d) &gt; πd²</strong>: Clustering at distance d (more points within radius d than random expectation)</li>
+<li><strong>K(d) ≈ πd²</strong>: Random pattern</li>
+<li><strong>K(d) &lt; πd²</strong>: Dispersion at distance d</li>
+</ul>
+<p><strong>Advanced: Envelope Test</strong></p>
+<p>Determine confidence bands around expected K under CSR by Monte Carlo simulation:</p>
+<pre><code class="language-python"># Generate confidence envelope through permutation testing
+result = wbe.gis.spatial_statistics.envelope_test(
+    input='seedling_locations.gpkg'
+)
+
+# Compares observed K(d) to envelope of null K(d) from random simulations
+# Reveals at which scales clustering is statistically significant
+</code></pre>
+<hr />
+<h3 id="quadrat-count-test-grid-based-pattern-analysis"><a class="header" href="#quadrat-count-test-grid-based-pattern-analysis">Quadrat Count Test: Grid-Based Pattern Analysis</a></h3>
+<p>Divide study area into grid cells (quadrats), count points in each cell, and test whether counts follow a Poisson distribution (expected under CSR).</p>
+<pre><code class="language-python"># Specify quadrat size (e.g., 1000 m × 1000 m)
+result = wbe.gis.spatial_statistics.quadrat_count_test(
+    input='tree_locations.gpkg',
+    cell_size=1000
+)
+
+# Output includes:
+# - Chi-squared statistic
+# - Degrees of freedom and p-value
+# - Variance-to-mean ratio (dispersion index)
+#   If &gt; 1: clustering; if ≈ 1: random; if &lt; 1: dispersion
+</code></pre>
+<p><strong>When to use:</strong> Grid-based methods work well for ecological point surveys and disease surveillance data that align naturally with administrative or survey grids.</p>
+<hr />
+<h2 id="spatial-regression-modeling-spatial-dependence"><a class="header" href="#spatial-regression-modeling-spatial-dependence">Spatial Regression: Modeling Spatial Dependence</a></h2>
+<h3 id="spatial-lag-autoregression-sar"><a class="header" href="#spatial-lag-autoregression-sar">Spatial Lag Autoregression (SAR)</a></h3>
+<p>SAR includes a spatially lagged dependent variable, capturing spatial spillover effects:</p>
+<p>$$y = \rho W y + X \beta + \epsilon$$</p>
+<p>where $\rho$ is the spatial lag coefficient, $W$ is the spatial weight matrix, and spillover effects propagate through the network.</p>
+<pre><code class="language-python"># Spatial Lag Regression on vector features
+result = wbe.gis.spatial_statistics.spatial_lag_regression(
+    input='property_values.gpkg',
+    dependent_variable='price',
+    independent_variables=['sqft', 'age', 'bedrooms']
+)
+
+# Output: Regression coefficients, spatial lag coefficient, diagnostics
+
+# Raster version: for gridded continuous fields
+result = wbe.gis.spatial_statistics.spatial_lag_regression_raster(
+    input='soil_ph_map.tif',
+    dependent_field='ph',
+    independent_field=['elevation', 'slope']
+)
+</code></pre>
+<p><strong>Interpretation:</strong></p>
+<ul>
+<li><strong>ρ (rho) coefficient</strong>: Strength of spatial spillover. Significant ρ indicates neighboring values influence focal location.</li>
+<li><strong>β coefficients</strong>: Partial effects of independent variables, controlling for spatial dependence.</li>
+<li><strong>Moran's I of residuals</strong>: Should be near zero; if significant, model missed spatial structure.</li>
+</ul>
+<p><strong>Workflow: House Price Spillover Effects</strong></p>
+<pre><code class="language-python">import whitebox_workflows as wbw
+
+wbe = wbw.WbEnvironment()
+wbe.working_directory = '/data/real_estate'
+
+# Read properties with structural attributes and prices
+properties = wbe.read_vector('properties_with_prices.gpkg')
+
+# Model prices accounting for spatial spillover (neighborhood effects)
+result = wbe.gis.spatial_statistics.spatial_lag_regression(
+    input='properties_with_prices.gpkg',
+    dependent_variable='sale_price',
+    independent_variables=['living_area', 'lot_size', 'year_built']
+)
+
+# Significant positive ρ suggests gentrification or neighborhood effects:
+# High-value properties increase surrounding property values
+</code></pre>
+<hr />
+<h3 id="spatial-error-model-sem"><a class="header" href="#spatial-error-model-sem">Spatial Error Model (SEM)</a></h3>
+<p>SEM assumes spatial correlation in residuals rather than in the dependent variable:</p>
+<p>$$y = X \beta + u, \quad u = \lambda W u + \epsilon$$</p>
+<p>Use SEM when spatial dependence arises from omitted variables or measurement error rather than true spillover.</p>
+<pre><code class="language-python">result = wbe.gis.spatial_statistics.spatial_error_regression(
+    input='crop_yield.gpkg',
+    dependent_variable='yield_kg_ha',
+    independent_variables=['nitrogen_applied', 'rainfall', 'temperature']
+)
+
+# Output: Coefficients, lambda (spatial error lag), diagnostics
+</code></pre>
+<p><strong>When to use SAR vs. SEM:</strong></p>
+<ul>
+<li><strong>SAR</strong>: Theory suggests spillover effects (price contagion, disease transmission, traffic congestion)</li>
+<li><strong>SEM</strong>: Spatial pattern suggests omitted variables or measurement issues (unobserved soil heterogeneity, unregistered weather stations)</li>
+</ul>
+<hr />
+<h3 id="geographically-weighted-regression-gwr"><a class="header" href="#geographically-weighted-regression-gwr">Geographically Weighted Regression (GWR)</a></h3>
+<p>GWR estimates regression parameters locally, allowing relationships to vary spatially. Useful for non-stationary processes where driver-response relationships differ across regions.</p>
+<pre><code class="language-python"># Vector version
+result = wbe.gis.spatial_statistics.geographically_weighted_regression(
+    input='school_performance.gpkg',
+    dependent_variable='graduation_rate',
+    independent_variables=['student_poverty_rate', 'teacher_experience'],
+    kernel_type='adaptive'  # adaptive or fixed bandwidth
+)
+
+# Raster version
+result = wbe.gis.spatial_statistics.geographically_weighted_regression_raster(
+    input='crop_response.tif',
+    dependent_field='yield',
+    independent_fields=['rainfall', 'temperature']
+)
+</code></pre>
+<p><strong>Output:</strong> For each location, GWR produces:</p>
+<ul>
+<li>Local regression coefficients (how relationships vary by location)</li>
+<li>Local R² values (model fit quality varies spatially)</li>
+<li>Standard errors (parameter uncertainty)</li>
+</ul>
+<p><strong>Workflow: Regional Climate-Vegetation Relationships</strong></p>
+<pre><code class="language-python">import whitebox_workflows as wbw
+
+wbe = wbw.WbEnvironment()
+wbe.working_directory = '/data/climate_vegetation'
+
+# Vegetation greenness (NDVI) and climate predictors across continents
+observations = wbe.read_vector('ndvi_climate_observations.gpkg')
+
+# Standard regression assumes uniform temperature-vegetation relationship globally
+# GWR reveals that relationship strength varies by latitude/longitude
+
+result = wbe.gis.spatial_statistics.geographically_weighted_regression(
+    input='ndvi_climate_observations.gpkg',
+    dependent_variable='ndvi',
+    independent_variables=['temperature', 'precipitation']
+)
+
+# Inspect local coefficients: tropical vs. temperate regions show different sensitivities
+</code></pre>
+<hr />
+<h2 id="geostatistics-and-kriging-spatial-interpolation-with-uncertainty"><a class="header" href="#geostatistics-and-kriging-spatial-interpolation-with-uncertainty">Geostatistics and Kriging: Spatial Interpolation with Uncertainty</a></h2>
+<h3 id="variogram-estimation-quantifying-spatial-correlation"><a class="header" href="#variogram-estimation-quantifying-spatial-correlation">Variogram Estimation: Quantifying Spatial Correlation</a></h3>
+<p>The variogram describes how data variance increases with distance. Essential for all kriging methods.</p>
+<pre><code class="language-python"># Compute empirical variogram from point measurements
+result = wbe.gis.spatial_statistics.estimate_variogram(
+    input='water_quality_samples.gpkg',
+    field='dissolved_oxygen',
+    lag_size=500,  # distance interval (m)
+    num_lags=15    # number of distance bins
+)
+
+# Output: Variogram values at each lag distance
+# Plot the variogram to assess range (distance of spatial correlation) and nugget
+</code></pre>
+<p><strong>Variogram interpretation:</strong></p>
+<ul>
+<li><strong>Nugget</strong>: Variance at distance 0 (due to measurement error or microscale variation)</li>
+<li><strong>Sill</strong>: Maximum variance (asymptotic level as distance increases)</li>
+<li><strong>Range</strong>: Distance beyond which values are uncorrelated</li>
+</ul>
+<p><strong>Common variogram models:</strong></p>
+<ul>
+<li><strong>Spherical</strong>: Reaches sill asymptotically; realistic for many spatial fields</li>
+<li><strong>Exponential</strong>: Slower approach to sill; more gradual correlation decay</li>
+<li><strong>Gaussian</strong>: Smooth parabolic shape near origin; assumes high smoothness</li>
+</ul>
+<hr />
+<h3 id="fitting-variogram-models"><a class="header" href="#fitting-variogram-models">Fitting Variogram Models</a></h3>
+<p>Estimate model parameters (nugget, sill, range) from empirical variogram:</p>
+<pre><code class="language-python"># Fit spherical variogram model
+result = wbe.gis.spatial_statistics.fit_variogram(
+    input='water_quality_samples.gpkg',
+    field='dissolved_oxygen',
+    model='spherical',
+    initial_lag=500,
+    num_lags=15
+)
+
+# Output: Fitted model parameters
+# - Nugget (c0): measurement error variance
+# - Partial sill (c): spatial structure variance
+# - Range (a): distance of spatial correlation
+</code></pre>
+<hr />
+<h3 id="ordinary-kriging-grid-prediction-with-uncertainty"><a class="header" href="#ordinary-kriging-grid-prediction-with-uncertainty">Ordinary Kriging: Grid Prediction with Uncertainty</a></h3>
+<p>Ordinary kriging produces optimal linear predictions at unmeasured locations plus associated prediction variance.</p>
+<pre><code class="language-python"># Predict air temperature on a 500 m grid
+result = wbe.gis.spatial_statistics.ordinary_kriging(
+    input='weather_stations.gpkg',
+    field='temperature',
+    cell_size=500,
+    base_raster='dem.tif'  # optional: inherit extent/CRS from template
+)
+
+# Output: prediction raster and variance raster
+</code></pre>
+<p><strong>Workflow: Air Temperature Interpolation for Climate Modeling</strong></p>
+<pre><code class="language-python">import whitebox_workflows as wbw
+
+wbe = wbw.WbEnvironment()
+wbe.working_directory = '/data/climate'
+
+# Weather station observations
+stations = wbe.read_vector('weather_network.gpkg')
+
+# Estimate variogram structure
+wbe.gis.spatial_statistics.estimate_variogram(
+    input='weather_network.gpkg',
+    field='temperature',
+    lag_size=1000,
+    num_lags=20
+)
+
+# Fit spherical model
+wbe.gis.spatial_statistics.fit_variogram(
+    input='weather_network.gpkg',
+    field='temperature',
+    model='spherical'
+)
+
+# Krige predictions on national 1 km grid
+wbe.gis.spatial_statistics.ordinary_kriging(
+    input='weather_network.gpkg',
+    field='temperature',
+    cell_size=1000
+)
+
+# Inspect variance map: low variance near stations, high in remote areas
+# Use prediction variance for climate model uncertainty quantification
+</code></pre>
+<hr />
+<h3 id="local-ordinary-kriging-moving-window-interpolation"><a class="header" href="#local-ordinary-kriging-moving-window-interpolation">Local Ordinary Kriging: Moving-Window Interpolation</a></h3>
+<p>For very large datasets, compute kriging parameters using only nearby data (moving window) to improve computational efficiency and capture non-stationary spatial structure.</p>
+<pre><code class="language-python"># Krige using local 100 nearest neighbours within 20 km search radius
+result = wbe.gis.spatial_statistics.local_kriging(
+    input='soil_samples.gpkg',
+    field='heavy_metal_concentration',
+    cell_size=100,
+    search_radius=20000,
+    num_points=100
+)
+
+# Output: Prediction and variance grids
+# Non-stationary: kriging parameters adapt locally, capturing regional variation
+</code></pre>
+<hr />
+<h3 id="simple-kriging-known-global-mean"><a class="header" href="#simple-kriging-known-global-mean">Simple Kriging: Known Global Mean</a></h3>
+<p>If the global mean is known (e.g., from prior surveys or theory), simple kriging can reduce prediction variance:</p>
+<pre><code class="language-python">result = wbe.gis.spatial_statistics.simple_kriging(
+    input='ecosystem_productivity.gpkg',
+    field='gpp_moles_co2_m2_s',
+    mean=8.5  # known from large-scale eddy covariance network
+)
+</code></pre>
+<p><strong>When to use:</strong> Most applicable when global mean is statistically reliable from extensive prior data. Ordinary kriging is safer when uncertain.</p>
+<hr />
+<h3 id="universal-kriging-drift-modeling"><a class="header" href="#universal-kriging-drift-modeling">Universal Kriging: Drift Modeling</a></h3>
+<p>Universal kriging estimates and removes polynomial trend (drift) before kriging residuals. Useful for data with strong directional trends.</p>
+<pre><code class="language-python"># Model elevation with quadratic drift (captures topographic slope and curvature)
+result = wbe.gis.spatial_statistics.universal_kriging(
+    input='rainfall_stations.gpkg',
+    field='annual_rainfall',
+    drift_order=1  # 0=mean, 1=linear trend, 2=quadratic
+)
+
+# Output: Trend surface + residual kriging
+# Total prediction = trend + kriged residuals
+</code></pre>
+<p><strong>Workflow: Rainfall Interpolation with Elevation Trend</strong></p>
+<pre><code class="language-python">import whitebox_workflows as wbw
+
+wbe = wbw.WbEnvironment()
+wbe.working_directory = '/data/hydrology'
+
+# Rainfall observations at weather stations with elevation
+stations = wbe.read_vector('rainfall_stations.gpkg')
+
+# Rainfall typically increases with elevation. Universal kriging decomposes this:
+# - Linear drift captures elevation effect
+# - Residual kriging captures local deviations
+
+result = wbe.gis.spatial_statistics.universal_kriging(
+    input='rainfall_stations.gpkg',
+    field='mean_annual_precip',
+    drift_order=1,
+    cell_size=1000
+)
+
+# Output prediction and variance rasters account for elevation trend
+</code></pre>
+<hr />
+<h3 id="space-time-kriging-dynamic-interpolation"><a class="header" href="#space-time-kriging-dynamic-interpolation">Space-Time Kriging: Dynamic Interpolation</a></h3>
+<p>For spatio-temporal data (e.g., satellite time series, weather time series), model correlation across both space and time:</p>
+<pre><code class="language-python"># Interpolate SST (sea surface temperature) across ocean gridpoints and time steps
+result = wbe.gis.spatial_statistics.space_time_kriging(
+    input='sst_observations.gpkg',
+    space_field='geometry',       # location column
+    time_field='date',            # time column
+    value_field='temperature',
+    cell_size=10000,              # spatial grid resolution (m)
+    temporal_resolution=86400     # temporal resolution (seconds, e.g., 1 day)
+)
+</code></pre>
+<hr />
+<h2 id="diagnostic-and-validation-tools"><a class="header" href="#diagnostic-and-validation-tools">Diagnostic and Validation Tools</a></h2>
+<h3 id="kriging-cross-validation"><a class="header" href="#kriging-cross-validation">Kriging Cross-Validation</a></h3>
+<p>Leave-one-out cross-validation assesses kriging model reliability by removing each data point, predicting it from remaining data, and comparing prediction to true value.</p>
+<pre><code class="language-python"># Evaluate ordinary kriging model
+result = wbe.gis.spatial_statistics.kriging_cross_validation(
+    input='soil_ph_samples.gpkg',
+    field='ph',
+    model='ordinary'
+)
+
+# Output:
+# - Residuals (true - predicted)
+# - Standardized residuals (residual / kriging_std_error)
+# - RMSE, MAE, correlation coefficient
+</code></pre>
+<p><strong>Interpretation:</strong></p>
+<ul>
+<li><strong>Standardized residuals near ±1</strong>: Model confidence (variance) is well-calibrated</li>
+<li><strong>Standardized residuals &gt;&gt; 1</strong>: Model underestimates variance (too confident)</li>
+<li><strong>Standardized residuals &lt;&lt; 1</strong>: Model overestimates variance (overly cautious)</li>
+<li><strong>RMSE vs. observation std dev</strong>: RMSE should be notably smaller than raw data spread, indicating predictive skill</li>
+</ul>
+<hr />
+<h3 id="inhomogeneous-poisson-process-intensity-estimation"><a class="header" href="#inhomogeneous-poisson-process-intensity-estimation">Inhomogeneous Poisson Process: Intensity Estimation</a></h3>
+<p>Estimate point intensity (density) as a function of covariates, useful for understanding how environmental factors influence point occurrence.</p>
+<pre><code class="language-python"># Model tree location intensity as function of elevation and slope
+result = wbe.gis.spatial_statistics.inhomogeneous_intensity(
+    input='tree_observations.gpkg',
+    covariate_rasters=['elevation.tif', 'slope.tif'],
+    output='tree_intensity.tif'
+)
+
+# Output: Local intensity (expected tree density per unit area)
+</code></pre>
+<hr />
+<h3 id="advanced-point-process-residuals"><a class="header" href="#advanced-point-process-residuals">Advanced: Point Process Residuals</a></h3>
+<p>After fitting a spatial model, examine residuals to diagnose model adequacy:</p>
+<pre><code class="language-python"># Extract model residuals for inspection
+result = wbe.gis.spatial_statistics.point_process_residuals(
+    input='species_occurrence.gpkg',
+    baseline_intensity='habitat_suitability.tif'
+)
+
+# Compare residuals to expected pattern under null model
+# Clustering of residuals indicates unmodeled spatial structure
+</code></pre>
+<hr />
+<h3 id="hotspot-vs-process-comparison"><a class="header" href="#hotspot-vs-process-comparison">Hotspot vs. Process Comparison</a></h3>
+<p>Distinguish between observed hot spots (data clustering) and clustered underlying process intensity:</p>
+<pre><code class="language-python">result = wbe.gis.spatial_statistics.hotspot_vs_process(
+    input='disease_cases.gpkg',
+    intensity_raster='population_density.tif'
+)
+
+# Reveals whether clustering is due to data aggregation (sampling bias)
+# or true underlying process heterogeneity
+</code></pre>
+<hr />
+<h2 id="real-world-integrated-workflows"><a class="header" href="#real-world-integrated-workflows">Real-World Integrated Workflows</a></h2>
+<h3 id="workflow-1-epidemiological-cluster-detection"><a class="header" href="#workflow-1-epidemiological-cluster-detection">Workflow 1: Epidemiological Cluster Detection</a></h3>
+<p><strong>Objective:</strong> Identify statistically significant disease clusters for outbreak investigation.</p>
+<pre><code class="language-python">import whitebox_workflows as wbw
+
+wbe = wbw.WbEnvironment()
+wbe.working_directory = '/data/epidemiology'
+wbe.verbose = True
+
+# Load case-level data
+cases = wbe.read_vector('covid_cases.gpkg')
+
+# Step 1: Global test — is clustering significant overall?
+global_result = wbe.gis.spatial_statistics.global_morans_i(
+    input='covid_cases.gpkg',
+    field='case_count'
+)
+# If p &lt; 0.05, proceed to local analysis
+
+# Step 2: Identify clusters
+lisa_result = wbe.gis.spatial_statistics.local_morans_i_lisa(
+    input='covid_cases.gpkg',
+    field='case_count',
+    output='covid_clusters.gpkg'
+)
+
+# Step 3: Load results and filter for high-case clusters
+clusters = wbe.read_vector('covid_clusters.gpkg')
+
+# Export cluster layer for mapping and epidemiologic investigation
+wbe.write_vector(clusters, 'significant_hotspots.gpkg')
+</code></pre>
+<p><strong>Outputs for decision-making:</strong></p>
+<ul>
+<li>Hot spot map highlighting regions requiring intervention</li>
+<li>Cluster statistics (how many cases in top 10% clusters?)</li>
+<li>Temporal trends in cluster location (clusters migrating or static?)</li>
+</ul>
+<hr />
+<h3 id="workflow-2-soil-variability-mapping-with-kriging"><a class="header" href="#workflow-2-soil-variability-mapping-with-kriging">Workflow 2: Soil Variability Mapping with Kriging</a></h3>
+<p><strong>Objective:</strong> Create interpolated soil fertility map with prediction uncertainty.</p>
+<pre><code class="language-python">import whitebox_workflows as wbw
+
+wbe = wbw.WbEnvironment()
+wbe.working_directory = '/data/soil_survey'
+
+# Soil sample locations and measurements
+samples = wbe.read_vector('soil_samples.gpkg')
+
+# Step 1: Estimate variogram structure
+wbe.gis.spatial_statistics.estimate_variogram(
+    input='soil_samples.gpkg',
+    field='available_phosphorus_ppm',
+    lag_size=500,
+    num_lags=20
+)
+
+# Step 2: Fit variogram model (typically spherical for soil properties)
+wbe.gis.spatial_statistics.fit_variogram(
+    input='soil_samples.gpkg',
+    field='available_phosphorus_ppm',
+    model='spherical'
+)
+
+# Step 3: Krige predictions on 100 m management-unit grid
+wbe.gis.spatial_statistics.ordinary_kriging(
+    input='soil_samples.gpkg',
+    field='available_phosphorus_ppm',
+    cell_size=100,
+    base_raster='field_boundary.tif'  # Match field extent
+)
+
+# Step 4: Cross-validate to assess reliability
+wbe.gis.spatial_statistics.kriging_cross_validation(
+    input='soil_samples.gpkg',
+    field='available_phosphorus_ppm',
+    model='ordinary'
+)
+
+# Output: prediction and variance rasters for precision agriculture decisions
+</code></pre>
+<p><strong>Decision support:</strong> High-variance zones require more intensive sampling. Use variance map to prioritize investment in dense grids near field boundaries.</p>
+<hr />
+<h3 id="workflow-3-urban-heat-island-analysis-with-gwr"><a class="header" href="#workflow-3-urban-heat-island-analysis-with-gwr">Workflow 3: Urban Heat Island Analysis with GWR</a></h3>
+<p><strong>Objective:</strong> Understand how urban form (building density, tree canopy) drives temperature variation.</p>
+<pre><code class="language-python">import whitebox_workflows as wbw
+
+wbe = wbw.WbEnvironment()
+wbe.working_directory = '/data/urban_climate'
+
+# Temperature observations and urban predictors (building density, green space)
+observations = wbe.read_vector('temperature_obs_with_predictors.gpkg')
+
+# Step 1: Check for spatial autocorrelation
+wbe.gis.spatial_statistics.global_morans_i(
+    input='temperature_obs_with_predictors.gpkg',
+    field='air_temp_c'
+)
+
+# Step 2: GWR to assess spatial non-stationarity
+result = wbe.gis.spatial_statistics.geographically_weighted_regression(
+    input='temperature_obs_with_predictors.gpkg',
+    dependent_variable='air_temp_c',
+    independent_variables=['building_density', 'tree_canopy_pct'],
+    kernel_type='adaptive'
+)
+
+# Output: Maps of local coefficients revealing how building density effect
+# varies from downtown (strong) to suburban (weak)
+
+# Step 3: Visualize local relationships
+# Map building_density coefficient to show UHI driver strength by location
+</code></pre>
+<hr />
+<h3 id="workflow-4-climate-change-detection-with-space-time-kriging"><a class="header" href="#workflow-4-climate-change-detection-with-space-time-kriging">Workflow 4: Climate Change Detection with Space-Time Kriging</a></h3>
+<p><strong>Objective:</strong> Interpolate temperature time series to detect regional warming trends.</p>
+<pre><code class="language-python">import whitebox_workflows as wbw
+
+wbe = wbw.WbEnvironment()
+wbe.working_directory = '/data/climate_change'
+
+# Monthly temperature time series from weather stations (30 years)
+temperature_timeseries = wbe.read_vector('temp_monthly_1990_2020.gpkg')
+# Attributes: date (monthly), geometry, temperature_c
+
+# Space-time kriging to produce gridded time series
+result = wbe.gis.spatial_statistics.space_time_kriging(
+    input='temp_monthly_1990_2020.gpkg',
+    space_field='geometry',
+    time_field='date',
+    value_field='temperature_c',
+    cell_size=50000,              # 50 km grid
+    temporal_resolution=2592000   # 30 days in seconds
+)
+
+# Output: Monthly temperature grids for entire study region
+# Use for trend analysis, seasonal decomposition, or climate impact assessment
+</code></pre>
+<hr />
+<h2 id="best-practices-and-troubleshooting"><a class="header" href="#best-practices-and-troubleshooting">Best Practices and Troubleshooting</a></h2>
+<h3 id="weight-matrix-construction"><a class="header" href="#weight-matrix-construction">Weight Matrix Construction</a></h3>
+<ul>
+<li><strong>Queen contiguity</strong>: 8 neighbors (includes diagonals). Most common; captures local effects.</li>
+<li><strong>Rook contiguity</strong>: 4 neighbors (cardinal directions). Use when diagonal connection is unrealistic.</li>
+<li><strong>Distance-based</strong>: All points within fixed radius. Appropriate for continuous fields.</li>
+</ul>
+<h3 id="choosing-between-methods"><a class="header" href="#choosing-between-methods">Choosing Between Methods</a></h3>
+<ul>
+<li><strong>Global Moran's I → Local LISA</strong>: First test if clustering is significant, then locate it</li>
+<li><strong>NNI → Ripley's K → Quadrat test</strong>: NNI summarizes; K reveals scale-dependence; Quadrat tests specific grid</li>
+<li><strong>SAR vs. SEM vs. GWR</strong>: SAR for spillover, SEM for omitted variables, GWR for non-stationarity</li>
+<li><strong>Ordinary vs. Universal Kriging</strong>: Ordinary if no trend; Universal if strong directional trend</li>
+</ul>
+<h3 id="variogram-troubleshooting"><a class="header" href="#variogram-troubleshooting">Variogram Troubleshooting</a></h3>
+<ul>
+<li><strong>Noisy variogram?</strong> Increase lag size or number of points</li>
+<li><strong>Variogram doesn't level off?</strong> May indicate trend; use universal kriging</li>
+<li><strong>Nugget too large?</strong> High measurement error; consider measurement improvement or simpler model</li>
+</ul>
+<h3 id="kriging-predictions-outside-data-range"><a class="header" href="#kriging-predictions-outside-data-range">Kriging Predictions Outside Data Range</a></h3>
+<ul>
+<li>Kriging predictions are bounded by observed data values</li>
+<li>If predictions look "too smooth," increase kriging neighborhood or reduce nugget relative to sill</li>
+<li>Always inspect variance map; high variance zones should be viewed skeptically</li>
+</ul>
+<hr />
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>Spatial statistics and geostatistics provide rigorous methods for detecting patterns, modeling relationships, and making predictions with quantified uncertainty. Key takeaways:</p>
+<ol>
+<li><strong>Start with autocorrelation tests</strong> (Global Moran's I) to determine if data exhibit spatial structure</li>
+<li><strong>Locate clusters</strong> with LISA or Getis-Ord Gi* for targeted investigation</li>
+<li><strong>Model spatial relationships</strong> with SAR, SEM, or GWR depending on your hypothesis</li>
+<li><strong>Interpolate with kriging</strong> when you need both predictions and uncertainty; always validate with cross-validation</li>
+<li><strong>Respect the uncertainty</strong>: Maps of kriging variance are as important as prediction maps</li>
+</ol>
+<p>Integration with other Whitebox tools (network analysis for distance metrics, raster operations for covariate preparation) enables sophisticated multi-stage workflows combining spatial statistics with domain knowledge.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="network-analysis.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="linear-referencing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="network-analysis.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="linear-referencing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

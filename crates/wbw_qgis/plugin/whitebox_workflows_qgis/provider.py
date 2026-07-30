@@ -37,15 +37,25 @@ class WhiteboxProcessingProvider(QgsProcessingProvider):
         return "Whitebox Workflows"
 
     def icon(self):
+        return self._icon_for_path("WbW")
+
+    def _icon_for_path(self, icon_name: str):
         base_dir = os.path.dirname(__file__)
         candidates = (
-            os.path.join(base_dir, "icons", "WbW.png"),
-            os.path.join(base_dir, "icons", "WbW.svg"),
+            os.path.join(base_dir, "icons", f"{icon_name}.png"),
+            os.path.join(base_dir, "icons", f"{icon_name}.svg"),
         )
         for path in candidates:
             if os.path.exists(path):
                 return QIcon(path)
         return QIcon()
+
+    def icon_for_tool(self, manifest: dict | None = None):
+        manifest = manifest or {}
+        tier = str(manifest.get("license_tier", "")).strip().lower()
+        if tier in {"pro", "enterprise"}:
+            return self._icon_for_path("WbW_pro")
+        return self.icon()
 
     def load(self):
         try:

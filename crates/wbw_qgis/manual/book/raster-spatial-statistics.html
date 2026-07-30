@@ -173,55 +173,431 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="spatial-statistics"><a class="header" href="#spatial-statistics">Spatial Statistics</a></h1>
+                        <h1 id="raster-spatial-statistics"><a class="header" href="#raster-spatial-statistics">Raster Spatial Statistics</a></h1>
+<p>Raster-based spatial statistics methods in the Whitebox QGIS plugin analyze gridded data to detect patterns, model spatial relationships, and produce interpolated predictions with uncertainty quantification. This section covers kriging methods for spatial interpolation, local regression approaches, and hot spot detection for raster grids.</p>
 <hr />
-<h2 id="local-morans-i-lisa-raster"><a class="header" href="#local-morans-i-lisa-raster">Local Morans I Lisa Raster</a></h2>
-<p><strong>Function name:</strong> <code>local_morans_i_lisa_raster</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<h2 id="core-concepts"><a class="header" href="#core-concepts">Core Concepts</a></h2>
+<ul>
+<li><strong>Kriging</strong>: Spatial interpolation method that minimizes prediction variance. Produces both predicted values and prediction variance (uncertainty) maps. Ordinary kriging estimates with unknown mean; universal kriging includes polynomial drift.</li>
+<li><strong>Prediction variance</strong>: Kriging variance reflects model confidence. High variance at sparse-data locations; low variance near calibration points. Always examine variance maps alongside predictions.</li>
+<li><strong>Local Ordinary Kriging</strong>: Moving-window kriging for large datasets. Improves efficiency and captures non-stationary spatial structure by estimating parameters locally using nearby data.</li>
+<li><strong>Simple Kriging</strong>: Kriging with known global mean, reducing prediction variance when prior information is reliable.</li>
+<li><strong>Universal Kriging</strong>: Kriging with polynomial drift (trend), appropriate when data exhibit strong directional gradients.</li>
+<li><strong>Spatial lag regression</strong>: Linear model including spatially lagged dependent variable, capturing spillover effects between grid cells.</li>
+<li><strong>Spatial error regression</strong>: Linear model with spatial correlation in residuals, appropriate when spatial dependence arises from omitted variables.</li>
+<li><strong>GWR (Geographically Weighted Regression)</strong>: Local regression estimation allowing parameters to vary spatially. Produces maps of local slopes and intercepts.</li>
+<li><strong>Local Moran's I</strong>: Local spatial autocorrelation statistic identifying hot spots, cold spots, and spatial outliers in gridded data.</li>
+<li><strong>Getis-Ord Gi</strong>*: Z-score-based hot spot detector for continuous raster data. Directly interpretable as standard deviations from mean under null hypothesis.</li>
+<li><strong>Inhomogeneous Intensity</strong>: Estimate point density (or raster intensity) as function of environmental covariates, useful for species distribution modeling and risk mapping.</li>
+</ul>
 <hr />
-<h2 id="getis-ord-gi-star-raster"><a class="header" href="#getis-ord-gi-star-raster">Getis Ord Gi Star Raster</a></h2>
-<p><strong>Function name:</strong> <code>getis_ord_gi_star_raster</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="ordinary-kriging"><a class="header" href="#ordinary-kriging">Ordinary Kriging</a></h2>
+<h2 id="kriging-methods-for-raster-grids"><a class="header" href="#kriging-methods-for-raster-grids">Kriging Methods for Raster Grids</a></h2>
+<h3 id="ordinary-kriging-interpolation"><a class="header" href="#ordinary-kriging-interpolation">Ordinary Kriging Interpolation</a></h3>
+<p>Ordinary kriging produces optimal linear predictions on a regular grid with prediction uncertainty. Requires point-sampled data (vector input converted to raster output).</p>
 <p><strong>Function name:</strong> <code>ordinary_kriging</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Load point feature layer with measurement attribute</li>
+<li>Navigate to <strong>Vector → Spatial Statistics → Ordinary Kriging Interpolation</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point feature file</li>
+<li>Value field: Attribute to interpolate (e.g., temperature, soil pH)</li>
+<li>Cell size: Output grid resolution (meters)</li>
+<li>Base raster (optional): Template to inherit extent/CRS</li>
+</ul>
+</li>
+<li>Output: Raster grids for prediction and variance</li>
+</ol>
+<p><strong>Workflow: Temperature Interpolation for Climate Modeling</strong></p>
+<ol>
+<li>Load <code>weather_stations.gpkg</code> with <code>temperature</code> field</li>
+<li>Run Ordinary Kriging:
+<ul>
+<li>Input: weather_stations.gpkg</li>
+<li>Field: temperature</li>
+<li>Cell size: 1000 m</li>
+<li>Base raster: dem.tif (optional, inherits extent)</li>
+</ul>
+</li>
+<li>Output layers:
+<ul>
+<li><code>ordinary_kriging_interpolation.tif</code> - predicted temperature grid</li>
+<li><code>ordinary_kriging_variance.tif</code> - prediction uncertainty grid</li>
+</ul>
+</li>
+<li>Inspect variance map: low variance near stations, high in remote areas</li>
+<li>Use variance for model uncertainty quantification in downstream analyses</li>
+</ol>
+<p><strong>Interpretation:</strong></p>
+<ul>
+<li>Predictions are weighted averages of nearby observations</li>
+<li>Variance reflects model confidence, not data variability</li>
+<li>Variance increases with distance from data points</li>
+</ul>
 <hr />
-<h2 id="local-kriging"><a class="header" href="#local-kriging">Local Kriging</a></h2>
+<h3 id="local-kriging"><a class="header" href="#local-kriging">Local Kriging</a></h3>
+<p>Moving-window kriging using only nearby data. More computationally efficient than global kriging for large datasets. Captures non-stationary spatial structure.</p>
 <p><strong>Function name:</strong> <code>local_kriging</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Raster → Spatial Statistics → Local Kriging</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point feature file with measurement attribute</li>
+<li>Value field: Attribute to interpolate</li>
+<li>Cell size: Output grid resolution</li>
+<li>Search radius: Maximum distance to include neighboring points</li>
+<li>Number of points: Maximum neighbors to use in local window (e.g., 100)</li>
+</ul>
+</li>
+</ol>
+<p><strong>Workflow: Soil Contamination Mapping with Large Dataset</strong></p>
+<ol>
+<li>Load <code>soil_samples.gpkg</code> with <code>heavy_metal_ppm</code> field (10,000+ points)</li>
+<li>Run Local Kriging:
+<ul>
+<li>Search radius: 20 km</li>
+<li>Number of points: 100</li>
+<li>Cell size: 100 m</li>
+</ul>
+</li>
+<li>Output: Prediction and variance rasters</li>
+<li>Use variance to prioritize remediation in high-uncertainty zones</li>
+<li>Local kriging reveals regional variations in spatial structure</li>
+</ol>
 <hr />
-<h2 id="simple-kriging"><a class="header" href="#simple-kriging">Simple Kriging</a></h2>
+<h3 id="simple-kriging"><a class="header" href="#simple-kriging">Simple Kriging</a></h3>
+<p>Kriging with known global mean, reducing prediction variance when prior information is reliable.</p>
 <p><strong>Function name:</strong> <code>simple_kriging</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Raster → Spatial Statistics → Simple Kriging</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point measurements</li>
+<li>Value field: Attribute</li>
+<li>Known mean: Specify global mean (e.g., 8.5 for ecosystem productivity)</li>
+<li>Cell size: Output resolution</li>
+</ul>
+</li>
+</ol>
+<p><strong>When to Use:</strong></p>
+<ul>
+<li>Global mean estimated from large external dataset</li>
+<li>Statistically reliable prior knowledge</li>
+<li>Reduces prediction variance compared to ordinary kriging</li>
+</ul>
 <hr />
-<h2 id="universal-kriging"><a class="header" href="#universal-kriging">Universal Kriging</a></h2>
+<h3 id="universal-kriging-with-drift"><a class="header" href="#universal-kriging-with-drift">Universal Kriging with Drift</a></h3>
+<p>Kriging with polynomial trend removal. Useful for data with strong directional gradients (elevation, rainfall).</p>
 <p><strong>Function name:</strong> <code>universal_kriging</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Raster → Spatial Statistics → Universal Kriging</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point measurements</li>
+<li>Value field: Attribute</li>
+<li>Drift order:
+<ul>
+<li>0 = constant mean (ordinary kriging)</li>
+<li>1 = linear trend (captures slope)</li>
+<li>2 = quadratic trend (captures curvature)</li>
+</ul>
+</li>
+<li>Cell size: Output resolution</li>
+</ul>
+</li>
+</ol>
+<p><strong>Workflow: Precipitation Interpolation with Elevation Trend</strong></p>
+<ol>
+<li>Load <code>rainfall_stations.gpkg</code> with <code>annual_precip_mm</code> field</li>
+<li>Many regions show rainfall increase with elevation</li>
+<li>Run Universal Kriging (drift_order=1):
+<ul>
+<li>Estimates linear elevation trend</li>
+<li>Removes trend and krigas residuals</li>
+<li>Total prediction = trend surface + residual kriging</li>
+</ul>
+</li>
+<li>Output: Prediction and variance rasters</li>
+<li>Result captures both regional gradient and local deviations</li>
+</ol>
+<p><strong>Advantages:</strong></p>
+<ul>
+<li>Removes systematic trend, improving residual kriging fit</li>
+<li>More accurate than ordinary kriging for trending data</li>
+<li>Variance map reflects uncertainty after trend removal</li>
+</ul>
 <hr />
-<h2 id="spacetime-kriging"><a class="header" href="#spacetime-kriging">Spacetime Kriging</a></h2>
+<h3 id="space-time-kriging"><a class="header" href="#space-time-kriging">Space-Time Kriging</a></h3>
+<p>Interpolate data with both spatial and temporal dimensions (satellite time series, weather monitoring).</p>
 <p><strong>Function name:</strong> <code>spacetime_kriging</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Raster → Spatial Statistics → Space-Time Kriging</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point measurements with date/time attribute</li>
+<li>Space field: Geometry column (coordinates)</li>
+<li>Time field: Date/time attribute</li>
+<li>Value field: Measurement</li>
+<li>Cell size: Spatial grid resolution (meters)</li>
+<li>Temporal resolution: Time step (seconds; e.g., 86400 for daily)</li>
+</ul>
+</li>
+</ol>
+<p><strong>Example: Sea Surface Temperature (SST) Time Series</strong></p>
+<p>Output: Monthly temperature grids spanning study area and full time range, enabling:</p>
+<ul>
+<li>Climate anomaly detection</li>
+<li>Seasonal pattern analysis</li>
+<li>Trend assessment</li>
+<li>Nowcasting/forecasting validation</li>
+</ul>
 <hr />
-<h2 id="ordinary-cokriging"><a class="header" href="#ordinary-cokriging">Ordinary Cokriging</a></h2>
-<p><strong>Function name:</strong> <code>ordinary_cokriging</code></p>
-<p><em>No help documentation available for this tool.</em></p>
-<hr />
-<h2 id="spatial-lag-regression-raster"><a class="header" href="#spatial-lag-regression-raster">Spatial Lag Regression Raster</a></h2>
+<h2 id="spatial-regression-for-rasters"><a class="header" href="#spatial-regression-for-rasters">Spatial Regression for Rasters</a></h2>
+<h3 id="spatial-lag-regression-sar"><a class="header" href="#spatial-lag-regression-sar">Spatial Lag Regression (SAR)</a></h3>
+<p>Regression including spatially lagged dependent variable, capturing spillover effects between neighboring grid cells.</p>
 <p><strong>Function name:</strong> <code>spatial_lag_regression_raster</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Raster → Spatial Statistics → Spatial Lag Regression (SAR) - Raster Output</strong></li>
+<li>Specify:
+<ul>
+<li>Input raster: Dependent variable grid</li>
+<li>Independent rasters: Predictor grids (list multiple)</li>
+<li>Output: Regression coefficient raster</li>
+</ul>
+</li>
+</ol>
+<p><strong>Workflow: House Price Spillover Effects</strong></p>
+<ol>
+<li>Prepare rasters:
+<ul>
+<li><code>price_grid.tif</code> - median property price per 1 km cell</li>
+<li><code>sqft_grid.tif</code> - mean living area</li>
+<li><code>age_grid.tif</code> - mean property age</li>
+</ul>
+</li>
+<li>Run SAR:
+<ul>
+<li>Dependent: price_grid.tif</li>
+<li>Independent: sqft_grid.tif, age_grid.tif</li>
+</ul>
+</li>
+<li>Output includes:
+<ul>
+<li>Spatial lag coefficient: Strength of neighborhood price effects</li>
+<li>β coefficients: Partial effects of independent variables</li>
+</ul>
+</li>
+<li>Significant positive spatial lag indicates neighborhood spillover</li>
+</ol>
 <hr />
-<h2 id="spatial-error-regression-raster"><a class="header" href="#spatial-error-regression-raster">Spatial Error Regression Raster</a></h2>
+<h3 id="spatial-error-regression-sem"><a class="header" href="#spatial-error-regression-sem">Spatial Error Regression (SEM)</a></h3>
+<p>Regression with spatial correlation in residuals (rather than dependent variable).</p>
 <p><strong>Function name:</strong> <code>spatial_error_regression_raster</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Raster → Spatial Statistics → Spatial Error Regression (SEM) - Raster Output</strong></li>
+<li>Specify:
+<ul>
+<li>Input/independent rasters: Same as SAR</li>
+</ul>
+</li>
+<li>Interpret λ (lambda): Strength of spatial error correlation</li>
+</ol>
+<p><strong>When to Use:</strong></p>
+<ul>
+<li>Spatial dependence arises from omitted variables or measurement error</li>
+<li>Hypothesis: Unobserved heterogeneity drives spatial pattern</li>
+</ul>
 <hr />
-<h2 id="geographically-weighted-regression-raster"><a class="header" href="#geographically-weighted-regression-raster">Geographically Weighted Regression Raster</a></h2>
+<h3 id="geographically-weighted-regression-gwr"><a class="header" href="#geographically-weighted-regression-gwr">Geographically Weighted Regression (GWR)</a></h3>
+<p>Local regression allowing relationships to vary spatially. Produces maps of local slopes/intercepts.</p>
 <p><strong>Function name:</strong> <code>geographically_weighted_regression_raster</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Raster → Spatial Statistics → Geographically Weighted Regression - Raster Output</strong></li>
+<li>Specify:
+<ul>
+<li>Dependent raster: Outcome variable</li>
+<li>Independent rasters: Predictors</li>
+<li>Kernel: adaptive (local bandwidth) or fixed (distance-based)</li>
+</ul>
+</li>
+<li>Output: Maps of local coefficients and local R² values</li>
+</ol>
+<p><strong>Workflow: Climate-Vegetation Relationships Across Continents</strong></p>
+<ol>
+<li>Prepare data:
+<ul>
+<li><code>ndvi.tif</code> - vegetation greenness</li>
+<li><code>temperature.tif</code> - mean temperature</li>
+<li><code>precipitation.tif</code> - mean annual precipitation</li>
+</ul>
+</li>
+<li>Run GWR:
+<ul>
+<li>Dependent: ndvi.tif</li>
+<li>Independent: temperature.tif, precipitation.tif</li>
+</ul>
+</li>
+<li>Output:
+<ul>
+<li><code>gwr_temperature_coeff.tif</code> - local temperature sensitivity</li>
+<li><code>gwr_precipitation_coeff.tif</code> - local precipitation sensitivity</li>
+<li><code>gwr_r2.tif</code> - local model fit</li>
+</ul>
+</li>
+<li>Interpretation:
+<ul>
+<li>Tropical zones: High temperature sensitivity, moderate precipitation</li>
+<li>Temperate: Lower temperature sensitivity, high precipitation sensitivity</li>
+<li>Arid: Very high precipitation sensitivity</li>
+</ul>
+</li>
+</ol>
 <hr />
-<h2 id="inhomogeneous-intensity-raster"><a class="header" href="#inhomogeneous-intensity-raster">Inhomogeneous Intensity Raster</a></h2>
+<h2 id="hot-spot-detection-for-rasters"><a class="header" href="#hot-spot-detection-for-rasters">Hot Spot Detection for Rasters</a></h2>
+<h3 id="local-morans-i-lisa---raster-output"><a class="header" href="#local-morans-i-lisa---raster-output">Local Moran's I (LISA) - Raster Output</a></h3>
+<p>Local Moran's I identifies hot spots (high-high clusters), cold spots (low-low), and spatial outliers in gridded data.</p>
+<p><strong>Function name:</strong> <code>local_morans_i_lisa_raster</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Raster → Spatial Statistics → Local Moran's I (LISA) - Raster Output</strong></li>
+<li>Specify:
+<ul>
+<li>Input raster: Grid to analyze</li>
+<li>Output: Raster with cluster classifications</li>
+</ul>
+</li>
+<li>Output raster values:
+<ul>
+<li>Cluster-High (HH): High values surrounded by high values</li>
+<li>Cluster-Low (LL): Low values surrounded by low values</li>
+<li>Outlier-High (HL): High surrounded by low</li>
+<li>Outlier-Low (LH): Low surrounded by high</li>
+<li>No significant cluster: Not statistically significant</li>
+</ul>
+</li>
+</ol>
+<p><strong>Workflow: Poverty Concentration in Urban Areas</strong></p>
+<ol>
+<li>Load <code>poverty_rate_grid.tif</code></li>
+<li>Run LISA:
+<ul>
+<li>Input: poverty_rate_grid.tif</li>
+<li>Output: lisa_clusters.tif</li>
+</ul>
+</li>
+<li>Map results:
+<ul>
+<li>Red: High poverty clusters (target intervention)</li>
+<li>Blue: Low poverty clusters (affluent areas)</li>
+<li>Gray: No significant clusters</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h3 id="getis-ord-gi---raster-output"><a class="header" href="#getis-ord-gi---raster-output">Getis-Ord Gi* - Raster Output</a></h3>
+<p>Z-score-based hot spot detector for continuous raster data. Directly interpretable as standard deviations from mean under null hypothesis.</p>
+<p><strong>Function name:</strong> <code>getis_ord_gi_star_raster</code></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <em><em>Raster → Spatial Statistics → Getis-Ord Gi</em> - Raster Output</em>*</li>
+<li>Specify:
+<ul>
+<li>Input raster: Continuous variable</li>
+<li>Output: Raster with Gi* z-scores</li>
+</ul>
+</li>
+<li>Interpret output:
+<ul>
+<li>Z &gt; 1.96: Statistically significant hot spot (p &lt; 0.05)</li>
+<li>Z &lt; -1.96: Statistically significant cold spot</li>
+<li>-1.96 ≤ Z ≤ 1.96: No significant clustering</li>
+</ul>
+</li>
+</ol>
+<p><strong>Workflow: Air Quality Hot Spot Identification</strong></p>
+<ol>
+<li>Load <code>pm2.5_annual_mean.tif</code></li>
+<li>Run Getis-Ord Gi*:
+<ul>
+<li>Input: pm2.5_annual_mean.tif</li>
+<li>Output: gi_star.tif</li>
+</ul>
+</li>
+<li>Classify output:
+<ul>
+<li>Z &gt; 2.576 (p &lt; 0.01): Very high-confidence hotspot</li>
+<li>1.96 &lt; Z ≤ 2.576 (p &lt; 0.05): Hotspot</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="intensity-estimation-from-point-data"><a class="header" href="#intensity-estimation-from-point-data">Intensity Estimation from Point Data</a></h2>
+<h3 id="inhomogeneous-intensity-raster-output"><a class="header" href="#inhomogeneous-intensity-raster-output">Inhomogeneous Intensity (Raster Output)</a></h3>
+<p>Estimate point density as a function of environmental covariates. Useful for species distribution modeling and risk mapping.</p>
 <p><strong>Function name:</strong> <code>inhomogeneous_intensity_raster</code></p>
-<p><em>No help documentation available for this tool.</em></p>
+<p><strong>In QGIS Plugin:</strong></p>
+<ol>
+<li>Navigate to <strong>Raster → Spatial Statistics → Inhomogeneous Intensity - Raster Output</strong></li>
+<li>Specify:
+<ul>
+<li>Input layer: Point feature layer</li>
+<li>Covariate rasters: Environmental predictors</li>
+<li>Output: Intensity grid</li>
+</ul>
+</li>
+</ol>
+<p><strong>Workflow: Tree Distribution Analysis</strong></p>
+<ol>
+<li>Load <code>tree_observations.gpkg</code></li>
+<li>Prepare covariates:
+<ul>
+<li><code>elevation.tif</code></li>
+<li><code>slope.tif</code></li>
+<li><code>forest_type.tif</code></li>
+</ul>
+</li>
+<li>Run Inhomogeneous Intensity:
+<ul>
+<li>Input: tree_observations.gpkg</li>
+<li>Covariates: elevation.tif, slope.tif, forest_type.tif</li>
+<li>Output: tree_intensity.tif</li>
+</ul>
+</li>
+<li>Interpretation:
+<ul>
+<li>High intensity zones: Suitable habitat</li>
+<li>Low intensity zones: Marginal habitat</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="best-practices-for-raster-spatial-statistics"><a class="header" href="#best-practices-for-raster-spatial-statistics">Best Practices for Raster Spatial Statistics</a></h2>
+<h3 id="choosing-kriging-method"><a class="header" href="#choosing-kriging-method">Choosing Kriging Method</a></h3>
+<div class="table-wrapper"><table><thead><tr><th>Scenario</th><th>Method</th><th>Rationale</th></tr></thead><tbody>
+<tr><td>No trend in data</td><td>Ordinary Kriging</td><td>Standard approach; works well for stationary fields</td></tr>
+<tr><td>Strong directional gradient</td><td>Universal Kriging</td><td>Removes systematic trend, improves residual fit</td></tr>
+<tr><td>Large dataset (&gt;5,000 points)</td><td>Local Kriging</td><td>Efficient, captures non-stationarity</td></tr>
+<tr><td>Known global mean</td><td>Simple Kriging</td><td>Reduces variance when prior is reliable</td></tr>
+<tr><td>Time series data</td><td>Space-Time Kriging</td><td>Models temporal evolution in space</td></tr>
+</tbody></table>
+</div>
+<h3 id="variance-map-interpretation"><a class="header" href="#variance-map-interpretation">Variance Map Interpretation</a></h3>
+<ul>
+<li><strong>High variance zones</strong> (red): Sparse data, low model confidence. Invest in additional sampling.</li>
+<li><strong>Low variance zones</strong> (green): Dense calibration data, high model confidence.</li>
+<li>Always report variance alongside predictions for uncertainty communication.</li>
+</ul>
+<hr />
+<h2 id="summary"><a class="header" href="#summary">Summary</a></h2>
+<p>Raster spatial statistics methods enable interpolation with uncertainty quantification, detection of spatial hot spots, and modeling of non-stationary relationships. Integration with vector spatial statistics, terrain analysis, and remote sensing tools enables comprehensive spatial analysis workflows.</p>
 
                     </main>
 

@@ -222,8 +222,10 @@ print("Watershed delineation complete.")
 
 ## Advanced: Topographic Wetness Index
 
-TWI requires the specific catchment area (flow accumulation in area units per
-unit contour width) rather than the raw cell count.
+A standard topographic wetness index (TWI) requires the specific catchment area
+(flow accumulation in area units per unit contour width) rather than the raw
+cell count. The typical workflow is to compute specific contributing area and
+slope, then apply the `wetness_index` tool.
 
 ```python
 # SCA-based flow accumulation
@@ -246,6 +248,21 @@ processing.run('whitebox_workflows:wetness_index', {
     'sca': '/data/sca.tif',
     'slope': '/data/slope_rad.tif',
     'output': '/data/twi.tif',
+})
+```
+
+If you want a SAGA-style variant that works directly from a depressionless DEM,
+use `saga_wetness_index` instead. It internally derives slope and specific
+catchment area and allows a small suction offset and minimum-slope threshold to
+be tuned for your workflow.
+
+```python
+processing.run('whitebox_workflows:saga_wetness_index', {
+    'dem': '/data/dem_conditioned.tif',
+    'suction': 1.0,
+    'slope_min': 0.1,
+    'z_factor': 1.0,
+    'output': '/data/saga_twi.tif',
 })
 ```
 

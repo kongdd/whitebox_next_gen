@@ -6,6 +6,23 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+### Added
+- Range syntax support for `excluded_classes` parameter in LiDAR interpolation/gridding tools (implemented in `wbtools_oss`). Users can now write `excluded_classes="0,1,3-18"` instead of spelling out individual classes. The Python wrapper exposes this functionality through all affected tools: `lidar_tin_gridding`, `lidar_nearest_neighbour_gridding`, `lidar_idw_interpolation`, `lidar_radial_basis_function_interpolation`, `lidar_sibson_interpolation`, `lidar_block_maximum`, `lidar_block_minimum`, `lidar_point_density`, `filter_lidar_classes`, and others (~20 tools total).
+
+### Changed
+- Removed explicit `features = ["parallel"]` from `wbprojection`, `wblidar`, and `wbtopology`
+  dependencies. All three crates now include `parallel` in their `default` feature set, so
+  parallel support is guaranteed automatically without caller-side declarations.
+
+### Fixed
+- **Lidar.crs_epsg() fallback to file CRS:** The `Lidar.crs_epsg()` and `Lidar.crs_wkt()` methods
+  now read CRS directly from the LAS file (if present) when no sidecar .prj file exists. Previously,
+  these methods only checked for a sidecar file and returned `None` if it wasn't found, even if the
+  LAS file itself contained CRS metadata in its header (e.g., GeoKeyDirectory for LAS 1.2-1.3 or
+  OGC WKT in VLRs for LAS 1.4). Now they correctly fall back to reading CRS from the LAS file
+  itself, ensuring that output rasters from tools like `lidar_tin_gridding` inherit the source
+  LiDAR CRS even without an explicit .prj file.
+
 ## [2.0.7] - 2026-06-30
 
 ### Added

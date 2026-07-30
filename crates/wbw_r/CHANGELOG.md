@@ -6,6 +6,11 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+### Changed
+- Removed explicit `features = ["parallel"]` from `wbprojection`, `wblidar`, and `wbtopology`
+  dependencies. All three crates now include `parallel` in their `default` feature set, so
+  parallel support is guaranteed automatically without caller-side declarations.
+
 ### Added
 - Field parameter schemas are now exposed through R bindings via `list_tools_json(...)` and `get_tool_metadata_json(...)` helper functions. R users and downstream consumers (Shiny apps, R scripts) can introspect field parameters and their parent layer references for dynamic validation and metadata enrichment.
 - Schema JSON includes `kind: "field"` and `parent: <layer_name>` for all 40+ tools with field parameter support (interpolation, spatial stats, vector ops, linear referencing, network analysis, classification).

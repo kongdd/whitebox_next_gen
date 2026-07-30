@@ -3,6 +3,7 @@ name = "wbw_r"
 version = "2.0.6"
 edition = "2021"
 authors = ["John Lindsay, Whitebox Geospatial Inc."]
+license = "MIT OR Apache-2.0"
 publish = false
 
 [lib]
@@ -17,7 +18,7 @@ wbcore = { path = "../wbcore" }
 wblicense_core = { path = "../wblicense_core" }
 wbraster = { path = "../wbraster" }
 wbvector = { path = "../wbvector", features = ["geoparquet", "kmz", "osmpbf"] }
-wbprojection = { path = "../wbprojection", features = ["parallel"] }
+wbprojection = { path = "../wbprojection" }
 wbtopology = { path = "../wbtopology" }
 wbtools_oss = { path = "../wbtools_oss" }
 wblidar = { path = "../wblidar" }

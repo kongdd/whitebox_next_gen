@@ -25,6 +25,7 @@
 - [Vector Analysis](./vector-analysis.md)
 - [Online Data Downloads](./online-data-downloads.md)
 - [Network Analysis](./network-analysis.md)
+- [Spatial Statistics and Geostatistics](./spatial-statistics.md)
 - [Linear Referencing](./linear-referencing.md)
 - [API Reference](./api-reference.md)
 - [Non-Tool WbEnvironment API](./api-non-tool-wbenvironment.md)
