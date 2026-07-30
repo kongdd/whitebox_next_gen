@@ -6,6 +6,8 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-07-30
+
 ### Fixed
 - **Shapefile writer: streaming I/O and file-size guard.** The previous writer
   assembled the entire `.shp` and `.shx` content as in-memory `Vec<u8>` before
