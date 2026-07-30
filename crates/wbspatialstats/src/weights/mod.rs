@@ -130,7 +130,11 @@ pub fn normal_cdf(x: f64) -> f64 {
                 + t * (1.781_477_937 + t * (-1.821_255_978 + t * 1.330_274_429))));
     let pdf = (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt();
     let cdf = 1.0 - pdf * poly;
-    if x >= 0.0 { cdf } else { 1.0 - cdf }
+    if x >= 0.0 {
+        cdf
+    } else {
+        1.0 - cdf
+    }
 }
 
 /// Two-tailed normal p-value for a z-score
@@ -176,17 +180,35 @@ mod tests {
 
     #[test]
     fn test_spatial_weights_mode_parsing() {
-        assert_eq!(SpatialWeightsMode::from_str("queen"), Some(SpatialWeightsMode::Queen));
-        assert_eq!(SpatialWeightsMode::from_str("ROOK"), Some(SpatialWeightsMode::Rook));
-        assert_eq!(SpatialWeightsMode::from_str("k_nearest"), Some(SpatialWeightsMode::KNearest));
-        assert_eq!(SpatialWeightsMode::from_str("distance_band"), Some(SpatialWeightsMode::DistanceBand));
+        assert_eq!(
+            SpatialWeightsMode::from_str("queen"),
+            Some(SpatialWeightsMode::Queen)
+        );
+        assert_eq!(
+            SpatialWeightsMode::from_str("ROOK"),
+            Some(SpatialWeightsMode::Rook)
+        );
+        assert_eq!(
+            SpatialWeightsMode::from_str("k_nearest"),
+            Some(SpatialWeightsMode::KNearest)
+        );
+        assert_eq!(
+            SpatialWeightsMode::from_str("distance_band"),
+            Some(SpatialWeightsMode::DistanceBand)
+        );
         assert_eq!(SpatialWeightsMode::from_str("invalid"), None);
     }
 
     #[test]
     fn test_island_policy_parsing() {
-        assert_eq!(IslandPolicy::from_str("drop_with_warning"), Some(IslandPolicy::DropWithWarning));
-        assert_eq!(IslandPolicy::from_str("KEEP_ZERO_WEIGHT"), Some(IslandPolicy::KeepZeroWeight));
+        assert_eq!(
+            IslandPolicy::from_str("drop_with_warning"),
+            Some(IslandPolicy::DropWithWarning)
+        );
+        assert_eq!(
+            IslandPolicy::from_str("KEEP_ZERO_WEIGHT"),
+            Some(IslandPolicy::KeepZeroWeight)
+        );
         assert_eq!(IslandPolicy::from_str("error"), Some(IslandPolicy::Error));
         assert_eq!(IslandPolicy::from_str("invalid"), None);
     }
@@ -207,22 +229,14 @@ mod tests {
     #[test]
     fn test_connected_components_simple() {
         // Single component: 0-1-2
-        let neighbors = vec![
-            vec![(1, 1.0)],
-            vec![(0, 1.0), (2, 1.0)],
-            vec![(1, 1.0)],
-        ];
+        let neighbors = vec![vec![(1, 1.0)], vec![(0, 1.0), (2, 1.0)], vec![(1, 1.0)]];
         assert_eq!(connected_components(&neighbors), 1);
     }
 
     #[test]
     fn test_connected_components_multiple() {
         // Two components: (0-1) and (2)
-        let neighbors = vec![
-            vec![(1, 1.0)],
-            vec![(0, 1.0)],
-            vec![],
-        ];
+        let neighbors = vec![vec![(1, 1.0)], vec![(0, 1.0)], vec![]];
         assert_eq!(connected_components(&neighbors), 2);
     }
 }

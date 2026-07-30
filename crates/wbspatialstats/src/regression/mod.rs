@@ -6,18 +6,18 @@
 use nalgebra::DMatrix;
 use std::fmt;
 
-pub mod matrix_solvers;
-pub mod spatial_lag;
-pub mod spatial_error;
-pub mod gwr;
 pub mod diagnostics;
+pub mod gwr;
+pub mod matrix_solvers;
+pub mod spatial_error;
+pub mod spatial_lag;
 
 #[cfg(test)]
 pub mod test_data;
 
-pub use spatial_lag::SpatialLagRegression;
-pub use spatial_error::SpatialErrorRegression;
 pub use gwr::GeographicallyWeightedRegression;
+pub use spatial_error::SpatialErrorRegression;
+pub use spatial_lag::SpatialLagRegression;
 
 /// Common result type for regression operations
 pub type RegressionResult<T> = Result<T, String>;
@@ -56,8 +56,11 @@ impl EffectDecomposition {
         total_se: Vec<f64>,
     ) -> RegressionResult<Self> {
         let n = direct.len();
-        if indirect.len() != n || total.len() != n || direct_se.len() != n
-            || indirect_se.len() != n || total_se.len() != n
+        if indirect.len() != n
+            || total.len() != n
+            || direct_se.len() != n
+            || indirect_se.len() != n
+            || total_se.len() != n
         {
             return Err("Effect decomposition vectors must have equal length".to_string());
         }

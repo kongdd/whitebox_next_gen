@@ -129,7 +129,10 @@ pub struct QuadratAnalysisResult {
 ///
 /// # Returns
 /// Global Moran's I statistic and inference results
-pub fn morans_i(values: &[f64], weights: &SpatialWeightsGraph) -> Result<GlobalAutocorrelationResult, String> {
+pub fn morans_i(
+    values: &[f64],
+    weights: &SpatialWeightsGraph,
+) -> Result<GlobalAutocorrelationResult, String> {
     if values.len() != weights.n_features() {
         return Err("Values and weights must have same number of features".to_string());
     }
@@ -145,7 +148,7 @@ pub fn morans_i(values: &[f64], weights: &SpatialWeightsGraph) -> Result<GlobalA
     // Numerator: sum of cross-products of neighboring deviations
     let mut numerator = 0.0;
     let mut neighbor_count = 0usize;
-    
+
     for (i, neighbors) in weights.neighbors.iter().enumerate() {
         for (j, weight) in neighbors {
             numerator += weight * deviations[i] * deviations[*j];
@@ -202,7 +205,11 @@ pub fn morans_i(values: &[f64], weights: &SpatialWeightsGraph) -> Result<GlobalA
 ///
 /// # Returns
 /// Per-feature LISA statistics with cluster types ("HH", "LL", "HL", "LH", "insignificant")
-pub fn local_morans_i_lisa(values: &[f64], weights: &SpatialWeightsGraph, alpha: f64) -> Result<LocalAssociationResult, String> {
+pub fn local_morans_i_lisa(
+    values: &[f64],
+    weights: &SpatialWeightsGraph,
+    alpha: f64,
+) -> Result<LocalAssociationResult, String> {
     if values.len() != weights.n_features() {
         return Err("Values and weights must have same number of features".to_string());
     }
@@ -215,7 +222,7 @@ pub fn local_morans_i_lisa(values: &[f64], weights: &SpatialWeightsGraph, alpha:
     let mean = values.iter().sum::<f64>() / n;
     let centered: Vec<f64> = values.iter().map(|v| v - mean).collect();
     let s2: f64 = centered.iter().map(|z| z * z).sum::<f64>() / n;
-    
+
     if s2 <= 0.0 {
         return Err("Data variance is zero; LISA is undefined".to_string());
     }
@@ -246,15 +253,15 @@ pub fn local_morans_i_lisa(values: &[f64], weights: &SpatialWeightsGraph, alpha:
             }
 
             if wi == 0.0 {
-                return (
-                    0.0, 0.0, 0.0, 0.0, 0.0, "insignificant".to_string(),
-                );
+                return (0.0, 0.0, 0.0, 0.0, 0.0, "insignificant".to_string());
             }
 
             let i_stat = z[i] * lag_z;
             let expected = -wi / (n - 1.0);
-            let var_raw = ((n - b2) / (n - 1.0)) * wi2 + ((2.0 * b2 - n) / ((n - 1.0) * (n - 2.0))) * (wi * wi - wi2) - expected * expected;
-            
+            let var_raw = ((n - b2) / (n - 1.0)) * wi2
+                + ((2.0 * b2 - n) / ((n - 1.0) * (n - 2.0))) * (wi * wi - wi2)
+                - expected * expected;
+
             if var_raw.is_finite() && var_raw > 1.0e-12 {
                 let zscore = (i_stat - expected) / var_raw.sqrt();
                 let p = crate::weights::two_tailed_normal_p(zscore);
@@ -306,7 +313,10 @@ pub fn local_morans_i_lisa(values: &[f64], weights: &SpatialWeightsGraph, alpha:
 ///
 /// # Returns
 /// Global G statistic with inference
-pub fn getis_ord_g(values: &[f64], weights: &SpatialWeightsGraph) -> Result<GetisOrdResult, String> {
+pub fn getis_ord_g(
+    values: &[f64],
+    weights: &SpatialWeightsGraph,
+) -> Result<GetisOrdResult, String> {
     if values.len() != weights.n_features() {
         return Err("Values and weights must have same number of features".to_string());
     }
@@ -321,7 +331,8 @@ pub fn getis_ord_g(values: &[f64], weights: &SpatialWeightsGraph) -> Result<Geti
 
     for (i, neighbors) in weights.neighbors.iter().enumerate() {
         for (j, weight) in neighbors {
-            if i != *j {  // Getis-Ord G excludes self
+            if i != *j {
+                // Getis-Ord G excludes self
                 numerator += weight * values[i] * values[*j];
                 sum_weights += weight;
             }
@@ -341,12 +352,23 @@ pub fn getis_ord_g(values: &[f64], weights: &SpatialWeightsGraph) -> Result<Geti
     let b2 = values.iter().map(|v| v.powi(4)).sum::<f64>();
     let _s2 = sum_sq / n - (sum_val / n).powi(2);
 
-    let var_numerator = (n * (n - 3.0) * sum_weights.powi(2) + sum_weights.powi(2) - 2.0 * (n - 1.0) * sum_weights) * sum_sq - (n - 1.0) * b2 * sum_weights.powi(2);
+    let var_numerator = (n * (n - 3.0) * sum_weights.powi(2) + sum_weights.powi(2)
+        - 2.0 * (n - 1.0) * sum_weights)
+        * sum_sq
+        - (n - 1.0) * b2 * sum_weights.powi(2);
     let var_denominator = (n * (n - 1.0) * (sum_val / n).powi(4)).powi(2);
 
-    let variance = if var_denominator > 0.0 { var_numerator / var_denominator } else { 0.0 };
+    let variance = if var_denominator > 0.0 {
+        var_numerator / var_denominator
+    } else {
+        0.0
+    };
 
-    let z_score = if variance > 0.0 { (g - expected_g) / variance.sqrt() } else { 0.0 };
+    let z_score = if variance > 0.0 {
+        (g - expected_g) / variance.sqrt()
+    } else {
+        0.0
+    };
     let p_value = crate::weights::two_tailed_normal_p(z_score);
 
     Ok(GetisOrdResult {
@@ -366,7 +388,11 @@ pub fn getis_ord_g(values: &[f64], weights: &SpatialWeightsGraph) -> Result<Geti
 ///
 /// # Returns
 /// Per-feature G* statistics with cluster types ("HotSpot", "ColdSpot", "insignificant")
-pub fn getis_ord_g_star(values: &[f64], weights: &SpatialWeightsGraph, alpha: f64) -> Result<LocalGetisOrdResult, String> {
+pub fn getis_ord_g_star(
+    values: &[f64],
+    weights: &SpatialWeightsGraph,
+    alpha: f64,
+) -> Result<LocalGetisOrdResult, String> {
     if values.len() != weights.n_features() {
         return Err("Values and weights must have same number of features".to_string());
     }
@@ -395,30 +421,44 @@ pub fn getis_ord_g_star(values: &[f64], weights: &SpatialWeightsGraph, alpha: f6
             }
 
             if wi == 0.0 {
-                return (
-                    0.0, 0.0, 0.0, 0.0, 1.0, "insignificant".to_string(),
-                );
+                return (0.0, 0.0, 0.0, 0.0, 1.0, "insignificant".to_string());
             }
 
             let g_local = sum_wy / sum_val;
             let expected = wi / (n - 1.0);
 
-            let var_numerator = (n - 1.0) * (sum_sq * wi2 - (wi * wi)) - 2.0 * (n - 2.0) * wi.powi(2) * sum_val;
+            let var_numerator =
+                (n - 1.0) * (sum_sq * wi2 - (wi * wi)) - 2.0 * (n - 2.0) * wi.powi(2) * sum_val;
             let var_denominator = (n - 1.0).powi(2) * sum_val.powi(2);
-            let variance = if var_denominator > 0.0 { var_numerator / var_denominator } else { 0.0 };
+            let variance = if var_denominator > 0.0 {
+                var_numerator / var_denominator
+            } else {
+                0.0
+            };
             let variance = variance.max(0.0);
 
             if variance > 0.0 {
                 let zscore = (g_local - expected) / variance.sqrt();
                 let p = crate::weights::two_tailed_normal_p(zscore);
                 let cluster = if p <= alpha {
-                    if zscore > 0.0 { "HotSpot".to_string() } else { "ColdSpot".to_string() }
+                    if zscore > 0.0 {
+                        "HotSpot".to_string()
+                    } else {
+                        "ColdSpot".to_string()
+                    }
                 } else {
                     "insignificant".to_string()
                 };
                 (g_local, expected, variance, zscore, p, cluster)
             } else {
-                (g_local, expected, 0.0, 0.0, 1.0, "insignificant".to_string())
+                (
+                    g_local,
+                    expected,
+                    0.0,
+                    0.0,
+                    1.0,
+                    "insignificant".to_string(),
+                )
             }
         })
         .collect();
@@ -457,7 +497,9 @@ pub fn getis_ord_g_star(values: &[f64], weights: &SpatialWeightsGraph, alpha: f6
 ///
 /// # Returns
 /// NNI statistic with interpretation ("Clustered", "Random", "Dispersed")
-pub fn nearest_neighbor_index(coordinates: &[(f64, f64)]) -> Result<NearestNeighborIndexResult, String> {
+pub fn nearest_neighbor_index(
+    coordinates: &[(f64, f64)],
+) -> Result<NearestNeighborIndexResult, String> {
     if coordinates.len() < 2 {
         return Err("At least 2 points required for NNI".to_string());
     }
@@ -484,10 +526,26 @@ pub fn nearest_neighbor_index(coordinates: &[(f64, f64)]) -> Result<NearestNeigh
     let observed = sum_nn_dist / n as f64;
 
     // Compute study area bounds
-    let min_x = coordinates.iter().map(|(x, _)| x).copied().fold(f64::INFINITY, f64::min);
-    let max_x = coordinates.iter().map(|(x, _)| x).copied().fold(f64::NEG_INFINITY, f64::max);
-    let min_y = coordinates.iter().map(|(_, y)| y).copied().fold(f64::INFINITY, f64::min);
-    let max_y = coordinates.iter().map(|(_, y)| y).copied().fold(f64::NEG_INFINITY, f64::max);
+    let min_x = coordinates
+        .iter()
+        .map(|(x, _)| x)
+        .copied()
+        .fold(f64::INFINITY, f64::min);
+    let max_x = coordinates
+        .iter()
+        .map(|(x, _)| x)
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = coordinates
+        .iter()
+        .map(|(_, y)| y)
+        .copied()
+        .fold(f64::INFINITY, f64::min);
+    let max_y = coordinates
+        .iter()
+        .map(|(_, y)| y)
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
 
     let area = (max_x - min_x) * (max_y - min_y);
     if area <= 0.0 {
@@ -534,7 +592,11 @@ pub fn nearest_neighbor_index(coordinates: &[(f64, f64)]) -> Result<NearestNeigh
 ///
 /// # Returns
 /// Chi-square test statistic with variance-to-mean ratio
-pub fn quadrat_analysis(coordinates: &[(f64, f64)], rows: usize, cols: usize) -> Result<QuadratAnalysisResult, String> {
+pub fn quadrat_analysis(
+    coordinates: &[(f64, f64)],
+    rows: usize,
+    cols: usize,
+) -> Result<QuadratAnalysisResult, String> {
     if coordinates.is_empty() {
         return Err("At least one point required".to_string());
     }
@@ -544,10 +606,26 @@ pub fn quadrat_analysis(coordinates: &[(f64, f64)], rows: usize, cols: usize) ->
     }
 
     let n_points = coordinates.len();
-    let min_x = coordinates.iter().map(|(x, _)| x).copied().fold(f64::INFINITY, f64::min);
-    let max_x = coordinates.iter().map(|(x, _)| x).copied().fold(f64::NEG_INFINITY, f64::max);
-    let min_y = coordinates.iter().map(|(_, y)| y).copied().fold(f64::INFINITY, f64::min);
-    let max_y = coordinates.iter().map(|(_, y)| y).copied().fold(f64::NEG_INFINITY, f64::max);
+    let min_x = coordinates
+        .iter()
+        .map(|(x, _)| x)
+        .copied()
+        .fold(f64::INFINITY, f64::min);
+    let max_x = coordinates
+        .iter()
+        .map(|(x, _)| x)
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = coordinates
+        .iter()
+        .map(|(_, y)| y)
+        .copied()
+        .fold(f64::INFINITY, f64::min);
+    let max_y = coordinates
+        .iter()
+        .map(|(_, y)| y)
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
 
     let dx = (max_x - min_x) / cols as f64;
     let dy = (max_y - min_y) / rows as f64;
@@ -612,11 +690,7 @@ mod tests {
 
     fn simple_weights() -> SpatialWeightsGraph {
         SpatialWeightsGraph {
-            neighbors: vec![
-                vec![(1, 1.0)],
-                vec![(0, 1.0), (2, 1.0)],
-                vec![(1, 1.0)],
-            ],
+            neighbors: vec![vec![(1, 1.0)], vec![(0, 1.0), (2, 1.0)], vec![(1, 1.0)]],
             diagnostics: crate::weights::SpatialWeightsDiagnostics {
                 n_features: 3,
                 n_islands: 0,
@@ -680,7 +754,7 @@ mod tests {
     #[test]
     fn test_lisa_zero_variance() {
         let weights = simple_weights();
-        let values = vec![5.0, 5.0, 5.0];  // constant
+        let values = vec![5.0, 5.0, 5.0]; // constant
         let result = local_morans_i_lisa(&values, &weights, 0.05);
         assert!(result.is_err());
     }

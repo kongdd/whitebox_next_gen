@@ -20,8 +20,14 @@ pub fn ols_solve(x: &DMatrix<f64>, y: &[f64]) -> Result<DVector<f64>, String> {
 
     // Use SVD for numerical stability (better than X'X inversion)
     let svd = SVD::new(x.clone(), true, true);
-    let u = svd.u.as_ref().ok_or("SVD decomposition failed (U matrix)")?;
-    let v_t = svd.v_t.as_ref().ok_or("SVD decomposition failed (V^T matrix)")?;
+    let u = svd
+        .u
+        .as_ref()
+        .ok_or("SVD decomposition failed (U matrix)")?;
+    let v_t = svd
+        .v_t
+        .as_ref()
+        .ok_or("SVD decomposition failed (V^T matrix)")?;
     let s = &svd.singular_values;
 
     // Compute U'y
@@ -103,10 +109,7 @@ pub fn compute_residuals(y: &[f64], fitted: &[f64]) -> Result<Vec<f64>, String> 
 
 /// Compute coefficient standard errors from residuals
 /// SE = sqrt(diag((X'X)^-1) * σ²)
-pub fn compute_coefficient_ses(
-    x: &DMatrix<f64>,
-    residuals: &[f64],
-) -> Result<Vec<f64>, String> {
+pub fn compute_coefficient_ses(x: &DMatrix<f64>, residuals: &[f64]) -> Result<Vec<f64>, String> {
     let n = residuals.len();
     let k = x.ncols();
 
@@ -201,9 +204,10 @@ pub fn compute_model_stats(
     };
 
     // Log-likelihood (assuming normal errors)
-    let log_likelihood = -0.5 * ((n as f64 * (1.0 + (2.0 * std::f64::consts::PI).ln()))
-        + (n as f64 * sigma_sq.ln())
-        + rss);
+    let log_likelihood = -0.5
+        * ((n as f64 * (1.0 + (2.0 * std::f64::consts::PI).ln()))
+            + (n as f64 * sigma_sq.ln())
+            + rss);
 
     // AIC
     let aic = 2.0 * n_params as f64 - 2.0 * log_likelihood;
@@ -219,9 +223,7 @@ mod tests {
     fn test_ols_simple() {
         // Simple regression: y = 2 + 3*x + ε
         let x_vals = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-        let x = DMatrix::from_fn(5, 2, |i, j| {
-            if j == 0 { 1.0 } else { x_vals[i] }
-        });
+        let x = DMatrix::from_fn(5, 2, |i, j| if j == 0 { 1.0 } else { x_vals[i] });
 
         let y = vec![5.0, 8.0, 11.0, 14.0, 17.0]; // Perfect fit: y = 2 + 3*x
 
@@ -232,9 +234,7 @@ mod tests {
 
     #[test]
     fn test_fitted_residuals() {
-        let x = DMatrix::from_fn(3, 2, |i, j| {
-            if j == 0 { 1.0 } else { (i + 1) as f64 }
-        });
+        let x = DMatrix::from_fn(3, 2, |i, j| if j == 0 { 1.0 } else { (i + 1) as f64 });
 
         let beta = DVector::from_row_slice(&[2.0, 3.0]);
         let y = vec![5.0, 8.0, 11.0];

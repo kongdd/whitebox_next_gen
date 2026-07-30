@@ -161,7 +161,8 @@ pub fn kriging_prediction_interval_posterior(
     let total_variance = kriging_variance + residual_std * residual_std;
 
     // Use Gaussian interval with total variance
-    let mut interval = kriging_prediction_interval_gaussian(prediction, total_variance, confidence)?;
+    let mut interval =
+        kriging_prediction_interval_gaussian(prediction, total_variance, confidence)?;
     interval.method = "posterior".to_string();
 
     Ok(interval)
@@ -238,7 +239,6 @@ pub fn assess_interval_calibration(
         is_calibrated,
     })
 }
-
 
 /// Compute bootstrap prediction interval using residual resampling
 ///
@@ -560,16 +560,14 @@ mod tests {
     #[test]
     fn test_calibration_length_mismatch() {
         let predictions = vec![100.0, 150.0];
-        let intervals = vec![
-            PredictionInterval {
-                lower: 95.0,
-                point_estimate: 100.0,
-                upper: 105.0,
-                confidence: 0.95,
-                method: "gaussian".to_string(),
-                margin_of_error: 5.0,
-            },
-        ];
+        let intervals = vec![PredictionInterval {
+            lower: 95.0,
+            point_estimate: 100.0,
+            upper: 105.0,
+            confidence: 0.95,
+            method: "gaussian".to_string(),
+            margin_of_error: 5.0,
+        }];
         let observations = vec![100.0, 150.0];
 
         let result = assess_interval_calibration(&predictions, &intervals, &observations);
@@ -580,7 +578,8 @@ mod tests {
     fn test_bootstrap_interval_basic() {
         let prediction = 100.0;
         let residuals = vec![-5.0, -3.0, -1.0, 0.0, 1.0, 3.0, 5.0, 2.0, -2.0, 4.0];
-        let result = kriging_prediction_interval_bootstrap(prediction, &residuals, 0.90, 999, Some(42));
+        let result =
+            kriging_prediction_interval_bootstrap(prediction, &residuals, 0.90, 999, Some(42));
 
         assert!(result.is_ok());
         let interval = result.unwrap();
@@ -598,7 +597,8 @@ mod tests {
     fn test_bootstrap_interval_95_ci() {
         let prediction = 50.0;
         let residuals = vec![-10.0, -5.0, 0.0, 5.0, 10.0];
-        let result = kriging_prediction_interval_bootstrap(prediction, &residuals, 0.95, 999, Some(123));
+        let result =
+            kriging_prediction_interval_bootstrap(prediction, &residuals, 0.95, 999, Some(123));
 
         assert!(result.is_ok());
         let interval = result.unwrap();
@@ -612,8 +612,10 @@ mod tests {
         let prediction = 100.0;
         let residuals = vec![-3.0, -1.0, 0.0, 1.0, 3.0];
 
-        let result1 = kriging_prediction_interval_bootstrap(prediction, &residuals, 0.90, 999, Some(42));
-        let result2 = kriging_prediction_interval_bootstrap(prediction, &residuals, 0.90, 999, Some(42));
+        let result1 =
+            kriging_prediction_interval_bootstrap(prediction, &residuals, 0.90, 999, Some(42));
+        let result2 =
+            kriging_prediction_interval_bootstrap(prediction, &residuals, 0.90, 999, Some(42));
 
         assert!(result1.is_ok() && result2.is_ok());
         let int1 = result1.unwrap();
@@ -628,7 +630,8 @@ mod tests {
         let prediction = 100.0;
         let residuals = vec![-5.0, 0.0, 5.0];
 
-        let result = kriging_prediction_interval_bootstrap(prediction, &residuals, 0.4, 999, Some(42));
+        let result =
+            kriging_prediction_interval_bootstrap(prediction, &residuals, 0.4, 999, Some(42));
         assert!(result.is_err());
     }
 
@@ -637,7 +640,8 @@ mod tests {
         let prediction = 100.0;
         let residuals: Vec<f64> = vec![];
 
-        let result = kriging_prediction_interval_bootstrap(prediction, &residuals, 0.90, 999, Some(42));
+        let result =
+            kriging_prediction_interval_bootstrap(prediction, &residuals, 0.90, 999, Some(42));
         assert!(result.is_err());
     }
 
@@ -646,7 +650,8 @@ mod tests {
         let prediction = 100.0;
         let residuals = vec![-5.0, 0.0, 5.0];
 
-        let result = kriging_prediction_interval_bootstrap(prediction, &residuals, 0.90, 50, Some(42));
+        let result =
+            kriging_prediction_interval_bootstrap(prediction, &residuals, 0.90, 50, Some(42));
         assert!(result.is_err());
     }
 }

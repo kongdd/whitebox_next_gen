@@ -14,19 +14,27 @@
 //! - `density_estimation`: Kernel density estimation for inhomogeneous process modeling (Phase D)
 //! - `point_process`: Ripley's K/L, envelope testing, and point-pattern analysis (Phase D)
 
-pub mod variogram;
-pub mod kriging;
-pub mod cv;
-pub mod weights;
 pub mod autocorrelation;
-pub mod regression;
+pub mod cv;
 pub mod density_estimation;
+pub mod kriging;
 pub mod point_process;
+pub mod regression;
+pub mod variogram;
+pub mod weights;
 
 // Re-export key types for convenience
-pub use kriging::{OrdinaryKriging, LocalOrdinaryKriging, SimpleKriging, UniversalKriging, SpaceTimeKriging, KrigingResult};
-pub use variogram::{VariogramModel, VariogramModelFamily, VariogramFitter, RobustVariogramFitter, RobustLossFunction};
-pub use weights::{SpatialWeightsGraph, SpatialWeightsMode, IslandPolicy, SpatialWeightsDiagnostics};
+pub use kriging::{
+    KrigingResult, LocalOrdinaryKriging, OrdinaryKriging, SimpleKriging, SpaceTimeKriging,
+    UniversalKriging,
+};
+pub use variogram::{
+    RobustLossFunction, RobustVariogramFitter, VariogramFitter, VariogramModel,
+    VariogramModelFamily,
+};
+pub use weights::{
+    IslandPolicy, SpatialWeightsDiagnostics, SpatialWeightsGraph, SpatialWeightsMode,
+};
 
 use thiserror::Error;
 
@@ -66,9 +74,7 @@ mod tests {
 
     #[test]
     fn test_error_propagation() {
-        let err: GeostatResult<()> = Err(GeostatError::InvalidVariogram(
-            "test".to_string(),
-        ));
+        let err: GeostatResult<()> = Err(GeostatError::InvalidVariogram("test".to_string()));
         assert!(err.is_err());
     }
 }

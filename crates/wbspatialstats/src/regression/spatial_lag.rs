@@ -7,8 +7,8 @@
 // Parallelized with rayon for spatial lag computation and parameter updates
 
 use super::{
-    RegressionResult, SpatialLagResult, RegressionResultBase, EffectDecomposition,
-    ConvergenceDiagnostics, matrix_solvers, diagnostics,
+    diagnostics, matrix_solvers, ConvergenceDiagnostics, EffectDecomposition, RegressionResult,
+    RegressionResultBase, SpatialLagResult,
 };
 use crate::weights::SpatialWeightsGraph;
 use nalgebra::{DMatrix, DVector};
@@ -75,15 +75,8 @@ impl SpatialLagRegression {
         let rho_se = estimate_spatial_parameter_se(&residuals_final, &wy, rho_final, weights)?;
 
         // Step 7: Effect decomposition
-        let effects = compute_effect_decomposition(
-            &beta_fgls,
-            rho_final,
-            &ses,
-            rho_se,
-            weights,
-            n,
-            k,
-        )?;
+        let effects =
+            compute_effect_decomposition(&beta_fgls, rho_final, &ses, rho_se, weights, n, k)?;
 
         // Step 8: Model statistics
         let (r_squared, r_squared_adj, _sigma_sq, log_likelihood, aic) =
@@ -129,7 +122,8 @@ impl SpatialLagRegression {
             fitted: fitted_final,
             residuals: residuals_final.clone(),
             rss: residuals_final.iter().map(|e| e * e).sum(),
-            tss: y.iter()
+            tss: y
+                .iter()
                 .map(|yi| (yi - y.iter().sum::<f64>() / n as f64).powi(2))
                 .sum(),
             r_squared,
@@ -147,7 +141,11 @@ impl SpatialLagRegression {
             base,
             rho: rho_final,
             rho_se,
-            rho_t: if rho_se > 0.0 { rho_final / rho_se } else { 0.0 },
+            rho_t: if rho_se > 0.0 {
+                rho_final / rho_se
+            } else {
+                0.0
+            },
             rho_pvalue: if rho_se > 0.0 {
                 crate::weights::two_tailed_normal_p(rho_final / rho_se)
             } else {
@@ -172,7 +170,10 @@ fn compute_spatial_lag(y: &[f64], weights: &SpatialWeightsGraph) -> Vec<f64> {
 }
 
 /// Compute spatial lag of X matrix: WX - parallelized over rows
-fn compute_spatial_lag_matrix(x: &DMatrix<f64>, weights: &SpatialWeightsGraph) -> RegressionResult<DMatrix<f64>> {
+fn compute_spatial_lag_matrix(
+    x: &DMatrix<f64>,
+    weights: &SpatialWeightsGraph,
+) -> RegressionResult<DMatrix<f64>> {
     let n = x.nrows();
     let k = x.ncols();
 
@@ -226,11 +227,7 @@ fn estimate_spatial_parameter_iv(
 
     let proj_wy = matrix_solvers::ols_solve(&aug_x, &wy)?;
     let fitted_wy: Vec<f64> = (0..n)
-        .map(|i| {
-            (0..aug_x.ncols())
-                .map(|j| aug_x[(i, j)] * proj_wy[j])
-                .sum()
-        })
+        .map(|i| (0..aug_x.ncols()).map(|j| aug_x[(i, j)] * proj_wy[j]).sum())
         .collect();
 
     // Regress residuals on fitted Wy
@@ -260,11 +257,11 @@ fn fgls_iterate(
 
     for iter in 0..max_iter {
         // Transform to remove spatial autocorrelation: (I - ρW)y = (I - ρW)X β + ε
-        let y_transformed: Vec<f64> =
-            y.iter()
-                .enumerate()
-                .map(|(i, yi)| yi - rho * wy[i])
-                .collect();
+        let y_transformed: Vec<f64> = y
+            .iter()
+            .enumerate()
+            .map(|(i, yi)| yi - rho * wy[i])
+            .collect();
 
         let mut x_transformed = x.clone();
         for i in 0..n {
@@ -350,33 +347,46 @@ fn compute_effect_decomposition(
         .map(|j| {
             let b = beta_slice[j];
             let se_b = ses_slice[j];
-            
+
             let direct = b;
             let indirect = b * rho / n_f;
             let total = direct + indirect;
-            
+
             let d_se = se_b;
             let i_se = (se_b.powi(2) * rho.powi(2) + beta_slice[0] * se_rho).sqrt() / n_f;
             let t_se = (d_se.powi(2) + i_se.powi(2)).sqrt();
-            
+
             (direct, indirect, total, d_se, i_se, t_se)
         })
         .collect();
 
     // Unpack results
-    let (direct, indirect, total, d_se, i_se, t_se): (Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>, Vec<_>) =
-        results.into_iter().fold(
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()),
-            |(mut d, mut i, mut t, mut ds, mut is, mut ts), (xd, xi, xt, xds, xis, xts)| {
-                d.push(xd);
-                i.push(xi);
-                t.push(xt);
-                ds.push(xds);
-                is.push(xis);
-                ts.push(xts);
-                (d, i, t, ds, is, ts)
-            }
-        );
+    let (direct, indirect, total, d_se, i_se, t_se): (
+        Vec<_>,
+        Vec<_>,
+        Vec<_>,
+        Vec<_>,
+        Vec<_>,
+        Vec<_>,
+    ) = results.into_iter().fold(
+        (
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        ),
+        |(mut d, mut i, mut t, mut ds, mut is, mut ts), (xd, xi, xt, xds, xis, xts)| {
+            d.push(xd);
+            i.push(xi);
+            t.push(xt);
+            ds.push(xds);
+            is.push(xis);
+            ts.push(xts);
+            (d, i, t, ds, is, ts)
+        },
+    );
 
     EffectDecomposition::new(direct, indirect, total, d_se, i_se, t_se)
 }
@@ -419,7 +429,7 @@ mod tests {
 
         // Build weights
         let neighbors_raw = ColumbusData::weights_queen();
-        
+
         // Count neighbors for diagnostics
         let neighbor_counts: Vec<usize> = neighbors_raw.iter().map(|n| n.len()).collect();
         let n_islands = neighbor_counts.iter().filter(|&&c| c == 0).count();

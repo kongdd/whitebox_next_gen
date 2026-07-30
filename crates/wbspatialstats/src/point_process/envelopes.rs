@@ -4,9 +4,9 @@
 //! Tests whether observed K/L functions are consistent with complete spatial randomness (CSR).
 
 use crate::GeostatError;
-use serde::{Deserialize, Serialize};
 use rand::Rng;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 /// Envelope test result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,14 +38,14 @@ pub struct CriticalBandEnvelope;
 
 impl CriticalBandEnvelope {
     /// Generate critical band envelope for observed K function
-    /// 
+    ///
     /// # Arguments
     /// * `observed_k` - Observed K values at distance points
     /// * `distances` - Distance bins
     /// * `study_bounds` - Study area bounds (min_x, min_y, max_x, max_y)
     /// * `n_simulations` - Number of Monte Carlo simulations
     /// * `alpha` - Significance level (e.g., 0.05)
-    /// 
+    ///
     /// # Returns
     /// Envelope result with lower/upper bounds and significance flags
     pub fn generate(
@@ -63,8 +63,11 @@ impl CriticalBandEnvelope {
             ));
         }
 
-        let n_points = ((intensity * (study_bounds.2 - study_bounds.0) * (study_bounds.3 - study_bounds.1)) as usize).max(3);
-        
+        let n_points = ((intensity
+            * (study_bounds.2 - study_bounds.0)
+            * (study_bounds.3 - study_bounds.1)) as usize)
+            .max(3);
+
         // Run Monte Carlo simulations in parallel
         let sim_results: Vec<Vec<f64>> = (0..n_simulations)
             .into_par_iter()
@@ -173,9 +176,16 @@ mod tests {
         let bounds = (0.0, 0.0, 1.0, 1.0);
         let intensity = 100.0;
 
-        let result =
-            CriticalBandEnvelope::generate(&observed_k, &observed_l, &distances, bounds, 50, 0.05, intensity)
-                .unwrap();
+        let result = CriticalBandEnvelope::generate(
+            &observed_k,
+            &observed_l,
+            &distances,
+            bounds,
+            50,
+            0.05,
+            intensity,
+        )
+        .unwrap();
 
         assert_eq!(result.distances.len(), 4);
         assert_eq!(result.k_lower.len(), 4);

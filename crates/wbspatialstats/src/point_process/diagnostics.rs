@@ -100,11 +100,8 @@ impl PointProcessResiduals {
     /// Check for spatial clustering in residuals
     /// Returns mean absolute residual and spatial dispersion coefficient
     pub fn residual_clustering_score(&self) -> (f64, f64) {
-        let mean_abs_residual = self
-            .residuals
-            .iter()
-            .map(|r| r.abs())
-            .sum::<f64>() / self.residuals.len() as f64;
+        let mean_abs_residual =
+            self.residuals.iter().map(|r| r.abs()).sum::<f64>() / self.residuals.len() as f64;
 
         // Compute pairwise distances and residual covariance
         let n = self.locations.len();
@@ -155,15 +152,13 @@ impl PointProcessResiduals {
 
         // Check 3: Large mean absolute residual indicates poor fit
         if mar > 0.5 {
-            diagnostics.push_str(&format!(
-                "WARNING: Large residuals (MAR = {:.4})\n",
-                mar
-            ));
+            diagnostics.push_str(&format!("WARNING: Large residuals (MAR = {:.4})\n", mar));
             is_adequate = false;
         }
 
         if diagnostics.is_empty() {
-            diagnostics.push_str("Model adequacy: PASS (residuals appear random and centered at 0)\n");
+            diagnostics
+                .push_str("Model adequacy: PASS (residuals appear random and centered at 0)\n");
         }
 
         (is_adequate, diagnostics)
@@ -180,12 +175,8 @@ mod tests {
         let observed = vec![10.0, 15.0, 20.0];
         let predicted = vec![9.0, 16.0, 19.0];
 
-        let result = PointProcessResiduals::compute(
-            locations,
-            observed,
-            predicted,
-            ResidualType::Raw,
-        );
+        let result =
+            PointProcessResiduals::compute(locations, observed, predicted, ResidualType::Raw);
 
         assert!(result.is_ok());
         let residuals = result.unwrap();
@@ -221,34 +212,21 @@ mod tests {
         let observed = vec![10.0];
         let predicted = vec![9.0, 16.0];
 
-        let result = PointProcessResiduals::compute(
-            locations,
-            observed,
-            predicted,
-            ResidualType::Raw,
-        );
+        let result =
+            PointProcessResiduals::compute(locations, observed, predicted, ResidualType::Raw);
 
         assert!(result.is_err());
     }
 
     #[test]
     fn test_residual_clustering_score() {
-        let locations = vec![
-            (0.0, 0.0),
-            (0.1, 0.1),
-            (1.0, 1.0),
-            (1.1, 1.1),
-        ];
+        let locations = vec![(0.0, 0.0), (0.1, 0.1), (1.0, 1.0), (1.1, 1.1)];
         let observed = vec![10.0, 12.0, 15.0, 14.0];
         let predicted = vec![10.0, 10.0, 15.0, 15.0];
 
-        let residuals = PointProcessResiduals::compute(
-            locations,
-            observed,
-            predicted,
-            ResidualType::Raw,
-        )
-        .unwrap();
+        let residuals =
+            PointProcessResiduals::compute(locations, observed, predicted, ResidualType::Raw)
+                .unwrap();
 
         let (mar, _spatial_cov) = residuals.residual_clustering_score();
         assert!(mar > 0.0);
@@ -260,13 +238,9 @@ mod tests {
         let observed = vec![10.0, 15.0, 20.0];
         let predicted = vec![10.1, 15.1, 19.9]; // Good fit
 
-        let residuals = PointProcessResiduals::compute(
-            locations,
-            observed,
-            predicted,
-            ResidualType::Raw,
-        )
-        .unwrap();
+        let residuals =
+            PointProcessResiduals::compute(locations, observed, predicted, ResidualType::Raw)
+                .unwrap();
 
         let (is_adequate, _diagnostics) = residuals.adequacy_check();
         assert!(is_adequate);

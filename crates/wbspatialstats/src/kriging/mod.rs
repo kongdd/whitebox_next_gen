@@ -3,29 +3,29 @@
 #![allow(non_snake_case)] // Mathematical notation (A, b, U, Vt) is standard in numerical code
 
 use crate::{GeostatError, GeostatResult};
-use serde::{Deserialize, Serialize};
 use nalgebra::{DMatrix, DVector};
+use serde::{Deserialize, Serialize};
 use std::f64;
 
 use crate::variogram::VariogramModel;
 
 // Sub-modules
+pub mod cokriging;
 pub mod local;
+pub mod prediction_intervals;
 pub mod simple;
 pub mod st_kriging;
 pub mod universal;
-pub mod prediction_intervals;
-pub mod cokriging;
 
+pub use cokriging::{CoKrigingPrediction, OrdinaryCoKriging};
 pub use local::LocalOrdinaryKriging;
+pub use prediction_intervals::{
+    assess_interval_calibration, kriging_prediction_interval_gaussian,
+    kriging_prediction_interval_posterior, IntervalCalibration, PredictionInterval,
+};
 pub use simple::SimpleKriging;
 pub use st_kriging::SpaceTimeKriging;
-pub use prediction_intervals::{
-    PredictionInterval, kriging_prediction_interval_gaussian,
-    kriging_prediction_interval_posterior, IntervalCalibration, assess_interval_calibration
-};
 pub use universal::UniversalKriging;
-pub use cokriging::{OrdinaryCoKriging, CoKrigingPrediction};
 
 /// Ordinary Kriging prediction result
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +57,10 @@ impl KrigingResult {
 }
 
 /// Ordinary Kriging engine
+///
+/// The (n+1)×(n+1) kriging system matrix A is built and LU-factored once in `new()`.
+/// Each call to `predict()` then only constructs the (n+1) RHS vector b and performs
+/// a triangular solve — O(n²) per prediction instead of O(n³).
 #[derive(Debug)]
 pub struct OrdinaryKriging {
     /// Training point coordinates
@@ -65,10 +69,16 @@ pub struct OrdinaryKriging {
     pub training_values: Vec<f64>,
     /// Fitted variogram model
     pub variogram: VariogramModel,
+    /// Pre-factored kriging system matrix (LU decomposition of (n+1)×(n+1) A)
+    a_lu: nalgebra::LU<f64, nalgebra::Dyn, nalgebra::Dyn>,
+    /// Number of training points (cached for convenience)
+    n: usize,
 }
 
 impl OrdinaryKriging {
-    /// Create new kriging engine from training data and variogram
+    /// Create new kriging engine from training data and variogram.
+    /// Builds and LU-factors the kriging system matrix once here so that
+    /// `predict()` only needs to solve — not factor — for each prediction point.
     pub fn new(
         training_coords: Vec<(f64, f64)>,
         training_values: Vec<f64>,
@@ -86,58 +96,51 @@ impl OrdinaryKriging {
             ));
         }
 
+        let n = training_coords.len();
+
+        // Build kriging system matrix A (n+1) × (n+1) once.
+        // Upper-left n×n: pairwise semivariances between training points.
+        // Last row/col: Lagrange constraint (sum of weights = 1).
+        let mut A = DMatrix::<f64>::zeros(n + 1, n + 1);
+        for i in 0..n {
+            for j in 0..n {
+                let dist = Self::distance(training_coords[i], training_coords[j]);
+                A[(i, j)] = variogram.evaluate(dist);
+            }
+            A[(i, n)] = 1.0;
+            A[(n, i)] = 1.0;
+        }
+        // A[(n, n)] is already 0.0
+
+        // LU-factor A once. predict() will only do triangular solves (O(n²)) per point.
+        let a_lu = A.lu();
+
         Ok(OrdinaryKriging {
             training_coords,
             training_values,
             variogram,
+            a_lu,
+            n,
         })
     }
 
-    /// Predict at single target location
+    /// Predict at single target location.
+    /// Only builds the (n+1) RHS vector b and solves — the system matrix is pre-factored.
     pub fn predict(&self, target: (f64, f64)) -> GeostatResult<KrigingResult> {
-        let n = self.training_coords.len();
+        let n = self.n;
 
-        // Build kriging system matrix A (n+1) x (n+1)
-        // Upper-left: semivariances between training points
-        // Last row/col: constraint for Ordinary Kriging (sum of weights = 1)
-        let mut A = DMatrix::<f64>::zeros(n + 1, n + 1);
-
-        // Fill semivariance matrix
-        for i in 0..n {
-            for j in 0..n {
-                let dist = Self::distance(self.training_coords[i], self.training_coords[j]);
-                let gamma = self.variogram.evaluate(dist);
-                A[(i, j)] = gamma;
-            }
-        }
-
-        // Add Lagrange constraint: last row and column are 1 (except bottom-right corner = 0)
-        for i in 0..n {
-            A[(i, n)] = 1.0;
-            A[(n, i)] = 1.0;
-        }
-        A[(n, n)] = 0.0;
-
-        // Build right-hand side vector b (n+1)
+        // Build only the RHS vector b (n+1): semivariances from training points to target.
         let mut b = DVector::<f64>::zeros(n + 1);
-
-        // Compute semivariances from training points to target
         for i in 0..n {
             let dist = Self::distance(self.training_coords[i], target);
-            let gamma = self.variogram.evaluate(dist);
-            b[i] = gamma;
+            b[i] = self.variogram.evaluate(dist);
         }
-        b[n] = 1.0; // Lagrange constraint: sum of weights = 1
+        b[n] = 1.0; // Lagrange constraint
 
-        // Try to solve the system
-        // Attempt 1: Regularized Cholesky
-        let solution = match self.solve_regularized_cholesky(&A, &b) {
-            Ok(x) => x,
-            Err(_) => {
-                // Fallback to SVD if Cholesky fails
-                self.solve_svd(&A, &b)?
-            }
-        };
+        // Solve using pre-factored LU — O(n²) per prediction.
+        let solution = self.a_lu.solve(&b).ok_or_else(|| {
+            GeostatError::KrigingSolveFailed("LU solve failed for ordinary kriging".to_string())
+        })?;
 
         // Extract kriging weights (first n elements)
         let weights: Vec<f64> = solution.iter().take(n).copied().collect();
@@ -169,10 +172,7 @@ impl OrdinaryKriging {
     pub fn predict_batch(&self, targets: &[(f64, f64)]) -> GeostatResult<Vec<KrigingResult>> {
         use rayon::prelude::*;
 
-        targets
-            .par_iter()
-            .map(|&t| self.predict(t))
-            .collect()
+        targets.par_iter().map(|&t| self.predict(t)).collect()
     }
 
     /// Euclidean distance between two 2D points
@@ -180,91 +180,6 @@ impl OrdinaryKriging {
         let dx = p2.0 - p1.0;
         let dy = p2.1 - p1.1;
         (dx * dx + dy * dy).sqrt()
-    }
-
-    /// Solve kriging system using regularized Cholesky decomposition
-    /// 
-    /// Adds regularization to diagonal for numerical stability
-    fn solve_regularized_cholesky(&self, A: &DMatrix<f64>, b: &DVector<f64>) -> GeostatResult<DVector<f64>> {
-        let n = A.nrows();
-
-        // Estimate regularization: 1e-10 * max diagonal value
-        let max_diag = (0..n)
-            .map(|i| A[(i, i)].abs())
-            .fold(0.0, f64::max);
-
-        let reg = 1e-10 * max_diag.max(1.0);
-
-        // Create regularized matrix
-        let mut A_reg = A.clone();
-        for i in 0..n {
-            A_reg[(i, i)] += reg;
-        }
-
-        // Compute Cholesky decomposition
-        match A_reg.cholesky() {
-            Some(chol) => {
-                let x = chol.solve(b);
-                Ok(x)
-            }
-            None => Err(GeostatError::KrigingSolveFailed(
-                "Cholesky decomposition failed".to_string(),
-            )),
-        }
-    }
-
-    /// Solve kriging system using SVD (fallback for ill-conditioned systems)
-    /// 
-    /// Uses pseudo-inverse via SVD for robustness
-    fn solve_svd(&self, A: &DMatrix<f64>, b: &DVector<f64>) -> GeostatResult<DVector<f64>> {
-        use nalgebra::SVD;
-
-        // Compute SVD
-        let svd = SVD::new(A.clone(), true, true);
-
-        // Get singular values (this is a field, not a method)
-        let sigma = &svd.singular_values;
-        let max_sigma = sigma[0];
-        let threshold = 1e-10 * max_sigma;
-
-        // Count non-negligible singular values
-        let rank = sigma.iter().filter(|s| **s > threshold).count();
-
-        if rank == 0 {
-            return Err(GeostatError::NumericalInstability(
-                "Matrix is numerically singular (all singular values below threshold)".to_string(),
-            ));
-        }
-
-        // Get U and V^T from SVD
-        let U = svd.u.as_ref().ok_or_else(|| GeostatError::NumericalInstability(
-            "SVD U matrix not computed".to_string(),
-        ))?;
-
-        let Vt = svd.v_t.as_ref().ok_or_else(|| GeostatError::NumericalInstability(
-            "SVD V^T matrix not computed".to_string(),
-        ))?;
-
-        // Build pseudo-inverse: V * Sigma^+ * U^T
-        // Solve by: x = V * Sigma^+ * U^T * b
-        // Which is: x = V * (Sigma^+ * (U^T * b))
-
-        // Compute U^T * b
-        let utb = U.transpose() * b;
-
-        // Apply regularized inverse of singular values
-        let mut sigma_inv_utb = DVector::<f64>::zeros(A.ncols());
-        for i in 0..utb.len().min(sigma.len()) {
-            if sigma[i] > threshold {
-                sigma_inv_utb[i] = utb[i] / sigma[i];
-            }
-        }
-
-        // Compute V * (Sigma^+ * U^T * b)
-        // Since we have V^T, we need to transpose it
-        let x = Vt.transpose() * sigma_inv_utb;
-
-        Ok(x)
     }
 }
 
@@ -353,12 +268,7 @@ mod tests {
             condition_number: 8.0,
         };
 
-        let coords = vec![
-            (0.0, 0.0),
-            (100.0, 0.0),
-            (50.0, 50.0),
-            (0.0, 100.0),
-        ];
+        let coords = vec![(0.0, 0.0), (100.0, 0.0), (50.0, 50.0), (0.0, 100.0)];
         let values = vec![1.0, 2.0, 1.5, 0.5];
 
         let ok = OrdinaryKriging::new(coords, values, vario).unwrap();
@@ -381,12 +291,7 @@ mod tests {
             condition_number: 6.0,
         };
 
-        let coords = vec![
-            (0.0, 0.0),
-            (100.0, 0.0),
-            (50.0, 50.0),
-            (50.0, -50.0),
-        ];
+        let coords = vec![(0.0, 0.0), (100.0, 0.0), (50.0, 50.0), (50.0, -50.0)];
         let values = vec![1.0, 2.0, 1.5, 1.8];
 
         let ok = OrdinaryKriging::new(coords, values, vario).unwrap();

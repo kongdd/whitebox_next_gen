@@ -1,10 +1,10 @@
 //! Cross-validation diagnostics for kriging
 
-use crate::GeostatResult;
-use crate::GeostatError;
-use serde::{Deserialize, Serialize};
 use crate::kriging::OrdinaryKriging;
 use crate::variogram::VariogramModel;
+use crate::GeostatError;
+use crate::GeostatResult;
+use serde::{Deserialize, Serialize};
 
 /// Cross-validation metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,7 +37,7 @@ impl CVMetrics {
     }
 
     /// Check if model is well-calibrated
-    /// 
+    ///
     /// Returns true if:
     /// - Mean standardized error close to 0 (|ME_std| < 0.1)
     /// - RMSSE close to 1 (0.8 < RMSSE < 1.2)
@@ -357,7 +357,7 @@ mod tests {
         // For a well-behaved linear field, RMSE should be reasonable
         assert!(metrics.rmse >= 0.0); // RMSE must be non-negative
         assert!(metrics.rmse.is_finite()); // Must not be NaN/Inf
-        // Correlation may vary depending on model fit; just check validity
+                                           // Correlation may vary depending on model fit; just check validity
         if metrics.sample_size >= 2 {
             assert!(metrics.correlation >= -1.0 || metrics.correlation.is_nan());
             assert!(metrics.correlation <= 1.0 || metrics.correlation.is_nan());
@@ -391,8 +391,8 @@ mod tests {
         let metrics = result.unwrap();
         // For constant field, predictions should be close to 5.0
         assert!(metrics.mean_error.abs() < 2.0); // Should predict close to 5.0
-        // For constant field, correlation is undefined (zero variance in y)
-        // So we just check that computation doesn't crash
+                                                 // For constant field, correlation is undefined (zero variance in y)
+                                                 // So we just check that computation doesn't crash
         assert!(metrics.sample_size > 0);
     }
 
@@ -472,12 +472,7 @@ mod tests {
 
     #[test]
     fn test_loocv_reproducibility() {
-        let coords = vec![
-            (0.0, 0.0),
-            (100.0, 0.0),
-            (50.0, 50.0),
-            (0.0, 100.0),
-        ];
+        let coords = vec![(0.0, 0.0), (100.0, 0.0), (50.0, 50.0), (0.0, 100.0)];
         let values = vec![1.0, 2.5, 2.0, 1.5];
 
         let vario = VariogramModel {
@@ -502,4 +497,3 @@ mod tests {
         assert!((metrics1.mean_error - metrics2.mean_error).abs() < 1e-10);
     }
 }
-

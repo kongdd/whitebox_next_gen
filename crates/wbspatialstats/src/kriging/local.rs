@@ -1,9 +1,9 @@
 //! Local Kriging: Ordinary Kriging with k-nearest neighbors for scalability
 
-use crate::{GeostatError, GeostatResult};
-use crate::variogram::VariogramModel;
-use super::OrdinaryKriging;
 use super::KrigingResult;
+use super::OrdinaryKriging;
+use crate::variogram::VariogramModel;
+use crate::{GeostatError, GeostatResult};
 use rayon::prelude::*;
 
 /// Local Ordinary Kriging: uses k-nearest neighbors for large datasets
@@ -67,9 +67,10 @@ impl LocalOrdinaryKriging {
         }
 
         if k > n {
-            return Err(GeostatError::InvalidParameters(
-                format!("k ({}) cannot exceed number of training points ({})", k, n),
-            ));
+            return Err(GeostatError::InvalidParameters(format!(
+                "k ({}) cannot exceed number of training points ({})",
+                k, n
+            )));
         }
 
         if k < 3 {
@@ -108,7 +109,8 @@ impl LocalOrdinaryKriging {
             .collect();
 
         // Create local kriging engine with neighbors
-        let local_ok = OrdinaryKriging::new(neighbor_coords, neighbor_values, self.variogram.clone())?;
+        let local_ok =
+            OrdinaryKriging::new(neighbor_coords, neighbor_values, self.variogram.clone())?;
 
         // Predict using local kriging
         local_ok.predict(target)
@@ -122,10 +124,7 @@ impl LocalOrdinaryKriging {
     /// # Returns
     /// Vector of kriging results (same order as targets)
     pub fn predict_batch(&self, targets: &[(f64, f64)]) -> GeostatResult<Vec<KrigingResult>> {
-        targets
-            .par_iter()
-            .map(|&t| self.predict(t))
-            .collect()
+        targets.par_iter().map(|&t| self.predict(t)).collect()
     }
 
     /// Get the k value used for this local kriging engine
@@ -144,7 +143,7 @@ impl LocalOrdinaryKriging {
     }
 
     /// Find k nearest neighbors using brute-force search
-    /// 
+    ///
     /// Returns indices of k nearest neighbors sorted by distance
     fn find_nearest_neighbors(&self, target: (f64, f64)) -> Vec<usize> {
         let mut distances: Vec<(usize, f64)> = self
@@ -161,11 +160,7 @@ impl LocalOrdinaryKriging {
         distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
         // Return indices of k nearest neighbors
-        distances
-            .iter()
-            .take(self.k)
-            .map(|(i, _)| *i)
-            .collect()
+        distances.iter().take(self.k).map(|(i, _)| *i).collect()
     }
 
     /// Euclidean distance between two 2D points
@@ -317,12 +312,16 @@ mod tests {
         // Global kriging
         let global_ok = OrdinaryKriging::new(coords.clone(), values.clone(), vario.clone())
             .expect("failed to create global kriging");
-        let global_pred = global_ok.predict((5.0, 5.0)).expect("global prediction failed");
+        let global_pred = global_ok
+            .predict((5.0, 5.0))
+            .expect("global prediction failed");
 
         // Local kriging with k = n
         let local_ok = LocalOrdinaryKriging::new(coords, values, vario, 10)
             .expect("failed to create local kriging");
-        let local_pred = local_ok.predict((5.0, 5.0)).expect("local prediction failed");
+        let local_pred = local_ok
+            .predict((5.0, 5.0))
+            .expect("local prediction failed");
 
         // Predictions should be identical (same training points used)
         assert!((global_pred.prediction - local_pred.prediction).abs() < 1e-6);

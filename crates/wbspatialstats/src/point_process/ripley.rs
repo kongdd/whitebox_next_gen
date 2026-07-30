@@ -4,8 +4,8 @@
 //! in spatial point patterns.
 
 use crate::GeostatError;
-use serde::{Deserialize, Serialize};
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 
 /// Result from Ripley's K function computation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,10 +42,26 @@ impl KFunction {
             ));
         }
 
-        let min_x = points.iter().map(|(x, _)| x).copied().fold(f64::INFINITY, f64::min);
-        let max_x = points.iter().map(|(x, _)| x).copied().fold(f64::NEG_INFINITY, f64::max);
-        let min_y = points.iter().map(|(_, y)| y).copied().fold(f64::INFINITY, f64::min);
-        let max_y = points.iter().map(|(_, y)| y).copied().fold(f64::NEG_INFINITY, f64::max);
+        let min_x = points
+            .iter()
+            .map(|(x, _)| x)
+            .copied()
+            .fold(f64::INFINITY, f64::min);
+        let max_x = points
+            .iter()
+            .map(|(x, _)| x)
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
+        let min_y = points
+            .iter()
+            .map(|(_, y)| y)
+            .copied()
+            .fold(f64::INFINITY, f64::min);
+        let max_y = points
+            .iter()
+            .map(|(_, y)| y)
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
 
         Ok(KFunction {
             points,
@@ -54,15 +70,17 @@ impl KFunction {
     }
 
     /// Compute K(t) and L(t) for specified distances
-    /// 
+    ///
     /// # Arguments
     /// * `distances` - Distance values at which to compute K
-    /// 
+    ///
     /// # Returns
     /// K function result with K(t) and L(t) values
     pub fn compute(&self, distances: &[f64]) -> Result<KFunctionResult, GeostatError> {
         if distances.is_empty() {
-            return Err(GeostatError::InvalidParameters("no distances specified".to_string()));
+            return Err(GeostatError::InvalidParameters(
+                "no distances specified".to_string(),
+            ));
         }
 
         let n = self.points.len() as f64;
@@ -170,12 +188,7 @@ mod tests {
 
     #[test]
     fn test_k_function_computation() {
-        let points = vec![
-            (0.0, 0.0),
-            (1.0, 0.0),
-            (0.0, 1.0),
-            (1.0, 1.0),
-        ];
+        let points = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)];
 
         let kf = KFunction::new(points).unwrap();
         let distances = vec![0.5, 1.0, 1.5];

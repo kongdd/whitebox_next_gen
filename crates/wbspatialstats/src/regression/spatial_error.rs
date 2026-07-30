@@ -5,8 +5,8 @@
 // Parallelized with rayon for transformation and parameter update operations
 
 use super::{
-    RegressionResult, SpatialErrorResult, RegressionResultBase, ConvergenceDiagnostics,
-    matrix_solvers, diagnostics,
+    diagnostics, matrix_solvers, ConvergenceDiagnostics, RegressionResult, RegressionResultBase,
+    SpatialErrorResult,
 };
 use crate::weights::SpatialWeightsGraph;
 use nalgebra::{DMatrix, DVector};
@@ -109,7 +109,8 @@ impl SpatialErrorRegression {
             fitted: fitted_final,
             residuals: residuals_final.clone(),
             rss: residuals_final.iter().map(|e| e * e).sum(),
-            tss: y.iter()
+            tss: y
+                .iter()
                 .map(|yi| (yi - y.iter().sum::<f64>() / n as f64).powi(2))
                 .sum(),
             r_squared,
@@ -127,7 +128,11 @@ impl SpatialErrorRegression {
             base,
             lambda: lambda_final,
             lambda_se,
-            lambda_t: if lambda_se > 0.0 { lambda_final / lambda_se } else { 0.0 },
+            lambda_t: if lambda_se > 0.0 {
+                lambda_final / lambda_se
+            } else {
+                0.0
+            },
             lambda_pvalue: if lambda_se > 0.0 {
                 crate::weights::two_tailed_normal_p(lambda_final / lambda_se)
             } else {
@@ -194,10 +199,10 @@ fn fgls_iterate(
     let damping = 0.5; // Damping factor to prevent oscillation
 
     for iter in 0..max_iter {
-        // Apply Cochrane-Orcutt-style transformation (parallelized): 
+        // Apply Cochrane-Orcutt-style transformation (parallelized):
         // y_t[i] = y[i] - λ * Σ_j w[i,j] * y[j]
         // x_t[i,k] = x[i,k] - λ * Σ_j w[i,j] * x[j,k]
-        
+
         let y_transformed: Vec<f64> = (0..n)
             .into_par_iter()
             .map(|i| {
@@ -269,9 +274,12 @@ fn fgls_iterate(
 }
 
 /// Update λ from residuals (parallelized)
-fn estimate_lambda_update(residuals: &[f64], weights: &SpatialWeightsGraph) -> RegressionResult<f64> {
+fn estimate_lambda_update(
+    residuals: &[f64],
+    weights: &SpatialWeightsGraph,
+) -> RegressionResult<f64> {
     let _n = residuals.len() as f64;
-    
+
     let (numerator, denominator) = (0..residuals.len())
         .into_par_iter()
         .map(|i| {
@@ -284,10 +292,7 @@ fn estimate_lambda_update(residuals: &[f64], weights: &SpatialWeightsGraph) -> R
             }
             (num, denom)
         })
-        .reduce(
-            || (0.0, 0.0),
-            |(n1, d1), (n2, d2)| (n1 + n2, d1 + d2)
-        );
+        .reduce(|| (0.0, 0.0), |(n1, d1), (n2, d2)| (n1 + n2, d1 + d2));
 
     if denominator.abs() > 1e-14 {
         Ok(numerator / denominator)
@@ -307,12 +312,7 @@ fn estimate_lambda_se(
 
     let info_matrix: f64 = (0..residuals.len())
         .into_par_iter()
-        .map(|i| {
-            weights.neighbors[i]
-                .iter()
-                .map(|(_, w)| w * w)
-                .sum::<f64>()
-        })
+        .map(|i| weights.neighbors[i].iter().map(|(_, w)| w * w).sum::<f64>())
         .sum();
 
     if info_matrix > 1e-14 {

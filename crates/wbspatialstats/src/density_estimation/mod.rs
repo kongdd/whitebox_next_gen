@@ -1,5 +1,5 @@
 //! Kernel density estimation (KDE) for point patterns
-//! 
+//!
 //! This module provides Gaussian kernel density estimation without external dependencies.
 //! Used as a foundational component for inhomogeneous point-process analysis.
 
@@ -19,7 +19,9 @@ impl KernelDensityEstimator {
     /// Create a new KDE with explicit bandwidth
     pub fn new(points: Vec<(f64, f64)>, bandwidth: f64) -> Result<Self, GeostatError> {
         if points.is_empty() {
-            return Err(GeostatError::InsufficientData("at least one point required for KDE".to_string()));
+            return Err(GeostatError::InsufficientData(
+                "at least one point required for KDE".to_string(),
+            ));
         }
         if !bandwidth.is_finite() || bandwidth <= 0.0 {
             return Err(GeostatError::InvalidParameters(
@@ -39,7 +41,7 @@ impl KernelDensityEstimator {
     }
 
     /// Estimate bandwidth using cross-validation (slower, more accurate)
-    /// 
+    ///
     /// Minimizes Leave-One-Out CV error: LSCV = integral(f_h^2) - 2*mean(f_h^(-i)(x_i))
     pub fn cv_bandwidth(points: &[(f64, f64)]) -> Result<f64, GeostatError> {
         if points.len() < 4 {
@@ -48,9 +50,7 @@ impl KernelDensityEstimator {
 
         // Search over bandwidth range
         let scott = Self::scott_bandwidth(points);
-        let bandwidths: Vec<f64> = (0..15)
-            .map(|i| scott * 0.5_f64.powi(i - 7))
-            .collect();
+        let bandwidths: Vec<f64> = (0..15).map(|i| scott * 0.5_f64.powi(i - 7)).collect();
 
         let mut best_bw = scott;
         let mut best_cv = f64::INFINITY;
@@ -153,10 +153,7 @@ impl KernelDensityEstimator {
         let densities = self.estimate_batch(&grid_points);
 
         // Reshape into 2D grid
-        let grid: Vec<Vec<f64>> = densities
-            .chunks(nx)
-            .map(|chunk| chunk.to_vec())
-            .collect();
+        let grid: Vec<Vec<f64>> = densities.chunks(nx).map(|chunk| chunk.to_vec()).collect();
 
         (
             vec![min_x + (0..nx).map(|i| i as f64 * dx).sum::<f64>() / nx as f64; ny],

@@ -1,3 +1,5 @@
+use super::KrigingResult;
+use crate::variogram::VariogramModel;
 /// Simple Kriging: Kriging with a known, constant mean.
 ///
 /// Unlike Ordinary Kriging, Simple Kriging requires the user to specify
@@ -29,20 +31,23 @@
 /// let result = sk.predict((0.5, 0.5))?;
 /// println!("Prediction: {}, Variance: {}", result.prediction, result.variance);
 /// ```
-
 use crate::{GeostatError, GeostatResult};
-use crate::variogram::VariogramModel;
-use super::KrigingResult;
 use nalgebra as na;
 use rayon::prelude::*;
 
 /// Simple Kriging with a known, constant mean.
-#[derive(Clone, Debug)]
+///
+/// The (n+1)×(n+1) kriging system matrix is built and LU-factored once in `new()`.
+/// Each `predict()` call only constructs the RHS vector and performs a triangular solve.
+#[derive(Debug)]
 pub struct SimpleKriging {
     training_coords: Vec<(f64, f64)>,
     training_values: Vec<f64>,
     variogram: VariogramModel,
     known_mean: f64,
+    /// Pre-factored kriging system matrix
+    a_lu: na::LU<f64, na::Dyn, na::Dyn>,
+    n: usize,
 }
 
 impl SimpleKriging {
@@ -83,11 +88,28 @@ impl SimpleKriging {
             ));
         }
 
+        let n = training_coords.len();
+
+        // Build the (n+1)×(n+1) kriging system matrix once and LU-factor it.
+        let mut A = na::DMatrix::zeros(n + 1, n + 1);
+        for i in 0..n {
+            for j in 0..n {
+                let dist = Self::distance(training_coords[i], training_coords[j]);
+                A[(i, j)] = variogram.evaluate(dist);
+            }
+            A[(i, n)] = 1.0;
+            A[(n, i)] = 1.0;
+        }
+        // A[(n, n)] is already 0.0
+        let a_lu = A.lu();
+
         Ok(SimpleKriging {
             training_coords,
             training_values,
             variogram,
             known_mean,
+            a_lu,
+            n,
         })
     }
 
@@ -109,46 +131,20 @@ impl SimpleKriging {
     /// ```
     pub fn predict(&self, target_x: f64, target_y: f64) -> GeostatResult<KrigingResult> {
         let target = (target_x, target_y);
+        let n = self.n;
 
-        // Build the variogram matrix (n x n)
-        let n = self.training_coords.len();
-        let mut gamma = na::DMatrix::zeros(n + 1, n + 1);
-
-        for i in 0..n {
-            for j in 0..n {
-                let dist = Self::distance(self.training_coords[i], self.training_coords[j]);
-                gamma[(i, j)] = self.variogram.evaluate(dist);
-            }
-            // Last column/row: constraint row/column for unknown mean
-            gamma[(i, n)] = 1.0;
-            gamma[(n, i)] = 1.0;
-        }
-
-        // The (n, n) element is 0 for the constraint
-        gamma[(n, n)] = 0.0;
-
-        // Build the RHS vector (n x 1)
+        // Build only the RHS vector — the system matrix is pre-factored.
         let mut rhs = na::DVector::zeros(n + 1);
         for i in 0..n {
             let dist = Self::distance(self.training_coords[i], target);
             rhs[i] = self.variogram.evaluate(dist);
         }
-        // Last element: constraint (sum of weights = 1)
-        rhs[n] = 1.0;
+        rhs[n] = 1.0; // Lagrange constraint: sum of weights = 1
 
-        // Solve the system
-        let weights = match gamma.clone().lu().solve(&rhs) {
-            Some(w) => w,
-            None => {
-                // Try SVD fallback if LU fails
-                let svd = gamma.svd(true, true);
-                svd.solve(&rhs, 1e-10).map_err(|_| {
-                    GeostatError::KrigingSolveFailed(
-                        "Failed to solve kriging system".to_string(),
-                    )
-                })?
-            }
-        };
+        // Solve using pre-factored LU — O(n²) per prediction.
+        let weights = self.a_lu.solve(&rhs).ok_or_else(|| {
+            GeostatError::KrigingSolveFailed("Failed to solve simple kriging system".to_string())
+        })?;
 
         // Extract kriging weights (first n elements)
         let kriging_weights: Vec<f64> = weights.iter().take(n).copied().collect();
@@ -373,7 +369,8 @@ mod tests {
         };
 
         // Create two SK instances with different known means
-        let sk1 = SimpleKriging::new(coords.clone(), values.clone(), variogram.clone(), 110.0).unwrap();
+        let sk1 =
+            SimpleKriging::new(coords.clone(), values.clone(), variogram.clone(), 110.0).unwrap();
         let sk2 = SimpleKriging::new(coords, values, variogram, 100.0).unwrap();
 
         let result1 = sk1.predict(0.5, 0.5).unwrap();

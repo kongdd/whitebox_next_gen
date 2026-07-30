@@ -1,8 +1,8 @@
 // Diagnostics and pre-flight checks for spatial regression
 
+use super::{PreFlightDiagnostics, ResidualSummary};
 use crate::weights::SpatialWeightsGraph;
 use nalgebra::{DMatrix, SVD};
-use super::{PreFlightDiagnostics, ResidualSummary};
 
 /// Perform comprehensive pre-flight diagnostic checks before fitting
 pub fn preflight_check(
@@ -103,9 +103,8 @@ pub fn preflight_check(
         }
     }
 
-    let can_proceed = design_warnings.is_empty()
-        && response_warnings.is_empty()
-        && weights_warnings.is_empty();
+    let can_proceed =
+        design_warnings.is_empty() && response_warnings.is_empty() && weights_warnings.is_empty();
 
     Ok(PreFlightDiagnostics {
         design_matrix_condition_number: condition_number,
@@ -189,10 +188,7 @@ pub fn compute_residual_summary(
 }
 
 /// Compute Moran's I for residuals (simplified, no island handling)
-fn compute_morans_i(
-    residuals: &[f64],
-    weights: &SpatialWeightsGraph,
-) -> Result<f64, String> {
+fn compute_morans_i(residuals: &[f64], weights: &SpatialWeightsGraph) -> Result<f64, String> {
     let n = residuals.len() as f64;
     let mean = residuals.iter().sum::<f64>() / n;
     let centered: Vec<f64> = residuals.iter().map(|r| r - mean).collect();

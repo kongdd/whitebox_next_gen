@@ -30,13 +30,12 @@
 ///
 /// - Wackernagel, H. (2003). *Multivariate Geostatistics*, 3rd ed.
 /// - Isaaks, E.H. & Srivastava, R.M. (1989). *An Introduction to Applied Geostatistics*
-
 use super::OrdinaryKriging;
 use crate::variogram::VariogramModel;
 use crate::{GeostatError, GeostatResult};
 use nalgebra as na;
-use std::sync::Arc;
 use rayon::prelude::*;
+use std::sync::Arc;
 
 /// Result from universal kriging prediction
 #[derive(Debug, Clone)]
@@ -124,7 +123,8 @@ impl UniversalKriging {
         let _n = training_coords.len();
 
         // Fit polynomial trend
-        let trend_coefficients = Self::fit_polynomial(&training_coords, &training_values, trend_degree)?;
+        let trend_coefficients =
+            Self::fit_polynomial(&training_coords, &training_values, trend_degree)?;
 
         // Compute residuals
         let residuals = Self::compute_residuals(
@@ -229,12 +229,14 @@ impl UniversalKriging {
     ) -> GeostatResult<Vec<f64>> {
         let n = coords.len();
         let num_coeffs = match degree {
-            0 => 1,           // β₀
-            1 => 3,           // β₀, β₁, β₂
-            2 => 6,           // β₀, β₁, β₂, β₁₁, β₂₂, β₁₂
-            _ => return Err(GeostatError::InvalidParameters(
-                "Degree must be 0, 1, or 2".to_string()
-            )),
+            0 => 1, // β₀
+            1 => 3, // β₀, β₁, β₂
+            2 => 6, // β₀, β₁, β₂, β₁₁, β₂₂, β₁₂
+            _ => {
+                return Err(GeostatError::InvalidParameters(
+                    "Degree must be 0, 1, or 2".to_string(),
+                ))
+            }
         };
 
         // Build design matrix X
@@ -266,9 +268,11 @@ impl UniversalKriging {
                 // Fallback to SVD
                 let svd = xt_x.svd(true, true);
                 svd.solve(&xt_y, 1e-10)
-                    .map_err(|_| GeostatError::KrigingSolveFailed(
-                        "Singular matrix in trend fitting".to_string()
-                    ))?
+                    .map_err(|_| {
+                        GeostatError::KrigingSolveFailed(
+                            "Singular matrix in trend fitting".to_string(),
+                        )
+                    })?
                     .as_slice()
                     .to_vec()
             }
@@ -416,12 +420,7 @@ mod tests {
     fn test_universal_kriging_trend_removal() {
         // Linear trend: z = 1.0 + 0.5*x + 0.3*y
         let coords = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)];
-        let values = vec![
-            1.0,
-            1.0 + 0.5,
-            1.0 + 0.3,
-            1.0 + 0.5 + 0.3,
-        ];
+        let values = vec![1.0, 1.0 + 0.5, 1.0 + 0.3, 1.0 + 0.5 + 0.3];
         let vario = VariogramModel {
             family: crate::variogram::VariogramModelFamily::Spherical,
             nugget: 0.0,
@@ -493,12 +492,7 @@ mod tests {
     fn test_universal_kriging_two_degree() {
         // Quadratic trend: z = 1.0 + 0.1*x² + 0.2*y²
         let coords = vec![(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)];
-        let values = vec![
-            1.0,
-            1.0 + 0.1,
-            1.0 + 0.2,
-            1.0 + 0.1 + 0.2,
-        ];
+        let values = vec![1.0, 1.0 + 0.1, 1.0 + 0.2, 1.0 + 0.1 + 0.2];
         let vario = VariogramModel {
             family: crate::variogram::VariogramModelFamily::Spherical,
             nugget: 0.0,

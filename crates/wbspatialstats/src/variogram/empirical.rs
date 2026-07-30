@@ -20,7 +20,12 @@ pub struct EmpiricalVariogram {
 }
 
 impl EmpiricalVariogram {
-    pub fn new(lags: Vec<LagBin>, max_lag: f64, total_pairs: usize, colocated_pairs: usize) -> Self {
+    pub fn new(
+        lags: Vec<LagBin>,
+        max_lag: f64,
+        total_pairs: usize,
+        colocated_pairs: usize,
+    ) -> Self {
         EmpiricalVariogram {
             lags,
             max_lag,
@@ -157,7 +162,12 @@ impl EmpiricalVariogramBuilder {
         // Count colocated pairs
         let colocated = Self::count_colocated(&valid);
 
-        Ok(EmpiricalVariogram::new(lags, max_lag, total_pairs, colocated))
+        Ok(EmpiricalVariogram::new(
+            lags,
+            max_lag,
+            total_pairs,
+            colocated,
+        ))
     }
 
     /// Compute lag histogram from valid points (parallel)

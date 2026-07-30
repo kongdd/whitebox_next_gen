@@ -37,10 +37,7 @@ pub struct InhomogeneousKProcess {
 
 impl InhomogeneousKProcess {
     /// Create inhomogeneous K-process using KDE for intensity estimation
-    pub fn new(
-        points: Vec<(f64, f64)>,
-        bandwidth: Option<f64>,
-    ) -> Result<Self, GeostatError> {
+    pub fn new(points: Vec<(f64, f64)>, bandwidth: Option<f64>) -> Result<Self, GeostatError> {
         if points.len() < 5 {
             return Err(GeostatError::InsufficientData(
                 "at least 5 points required for inhomogeneous analysis".to_string(),
@@ -57,12 +54,31 @@ impl InhomogeneousKProcess {
         let kde = KernelDensityEstimator::new(points.clone(), bw)?;
 
         // Estimate intensity at each point
-        let intensities: Vec<f64> = points.iter().map(|(x, y)| kde.estimate_at(*x, *y)).collect();
+        let intensities: Vec<f64> = points
+            .iter()
+            .map(|(x, y)| kde.estimate_at(*x, *y))
+            .collect();
 
-        let min_x = points.iter().map(|(x, _)| x).copied().fold(f64::INFINITY, f64::min);
-        let max_x = points.iter().map(|(x, _)| x).copied().fold(f64::NEG_INFINITY, f64::max);
-        let min_y = points.iter().map(|(_, y)| y).copied().fold(f64::INFINITY, f64::min);
-        let max_y = points.iter().map(|(_, y)| y).copied().fold(f64::NEG_INFINITY, f64::max);
+        let min_x = points
+            .iter()
+            .map(|(x, _)| x)
+            .copied()
+            .fold(f64::INFINITY, f64::min);
+        let max_x = points
+            .iter()
+            .map(|(x, _)| x)
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
+        let min_y = points
+            .iter()
+            .map(|(_, y)| y)
+            .copied()
+            .fold(f64::INFINITY, f64::min);
+        let max_y = points
+            .iter()
+            .map(|(_, y)| y)
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
 
         Ok(InhomogeneousKProcess {
             points,
@@ -72,11 +88,13 @@ impl InhomogeneousKProcess {
     }
 
     /// Compute inhomogeneous K function
-    /// 
+    ///
     /// Uses weighted pairwise distances where weights are inversely proportional to intensity
     pub fn compute_k_inhom(&self, distances: &[f64]) -> Result<InhomogeneousResult, GeostatError> {
         if distances.is_empty() {
-            return Err(GeostatError::InvalidParameters("no distances specified".to_string()));
+            return Err(GeostatError::InvalidParameters(
+                "no distances specified".to_string(),
+            ));
         }
 
         let n = self.points.len() as f64;
@@ -92,10 +110,11 @@ impl InhomogeneousKProcess {
                             let dx = self.points[i].0 - self.points[j].0;
                             let dy = self.points[i].1 - self.points[j].1;
                             let dist = (dx * dx + dy * dy).sqrt();
-                            
+
                             if dist <= t {
                                 // Weight inversely proportional to intensity
-                                let weight = 1.0 / (self.intensities[i] * self.intensities[j]).max(1e-10);
+                                let weight =
+                                    1.0 / (self.intensities[i] * self.intensities[j]).max(1e-10);
                                 sum += weight;
                             }
                         }
@@ -128,7 +147,9 @@ impl InhomogeneousKProcess {
     /// Get intensity at a specific point location
     pub fn intensity_at_point(&self, idx: usize) -> Result<f64, GeostatError> {
         if idx >= self.points.len() {
-            return Err(GeostatError::InvalidParameters("point index out of range".to_string()));
+            return Err(GeostatError::InvalidParameters(
+                "point index out of range".to_string(),
+            ));
         }
         Ok(self.intensities[idx])
     }
@@ -145,13 +166,7 @@ mod tests {
 
     #[test]
     fn test_inhomogeneous_k_process_creation() {
-        let points = vec![
-            (0.0, 0.0),
-            (0.1, 0.1),
-            (0.2, 0.2),
-            (0.5, 0.5),
-            (0.9, 0.9),
-        ];
+        let points = vec![(0.0, 0.0), (0.1, 0.1), (0.2, 0.2), (0.5, 0.5), (0.9, 0.9)];
 
         let result = InhomogeneousKProcess::new(points, None);
         assert!(result.is_ok());
@@ -167,13 +182,7 @@ mod tests {
 
     #[test]
     fn test_inhomogeneous_k_computation() {
-        let points = vec![
-            (0.0, 0.0),
-            (0.1, 0.1),
-            (0.2, 0.2),
-            (0.5, 0.5),
-            (0.9, 0.9),
-        ];
+        let points = vec![(0.0, 0.0), (0.1, 0.1), (0.2, 0.2), (0.5, 0.5), (0.9, 0.9)];
 
         let process = InhomogeneousKProcess::new(points, None).unwrap();
         let distances = vec![0.2, 0.4, 0.6];

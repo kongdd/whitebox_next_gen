@@ -101,12 +101,8 @@ impl CrossVariogramModel {
                     1.5 * h_normalized - 0.5 * h_normalized.powi(3)
                 }
             }
-            VariogramModelFamily::Exponential => {
-                1.0 - (-3.0 * h_normalized).exp()
-            }
-            VariogramModelFamily::Gaussian => {
-                1.0 - (-3.0 * h_normalized * h_normalized).exp()
-            }
+            VariogramModelFamily::Exponential => 1.0 - (-3.0 * h_normalized).exp(),
+            VariogramModelFamily::Gaussian => 1.0 - (-3.0 * h_normalized * h_normalized).exp(),
         };
 
         self.nugget + (self.sill - self.nugget) * model_value
@@ -283,7 +279,7 @@ pub fn fit_cross_variogram_model(
         sill,
         range: range.max(cross_vgram.bin_size), // Ensure range >= bin size
         family,
-        wrss: 0.0, // TODO: compute weighted residual sum of squares
+        wrss: 0.0,             // TODO: compute weighted residual sum of squares
         condition_number: 1.0, // TODO: compute from fit system
         primary_var: primary_var.to_string(),
         auxiliary_var: auxiliary_var.to_string(),

@@ -1,10 +1,11 @@
 //! Variogram model fitting (Spherical, Exponential, Gaussian)
 
 use crate::{GeostatError, GeostatResult};
+use nalgebra::{Matrix3, Vector3};
 use serde::{Deserialize, Serialize};
 
+use super::robust::{RobustLossFunction, RobustVariogramFitter};
 use super::LagBin;
-use super::robust::{RobustVariogramFitter, RobustLossFunction};
 
 /// Supported variogram model families
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -89,40 +90,56 @@ impl VariogramModel {
 pub struct VariogramFitter;
 
 impl VariogramFitter {
-    /// Fit variogram model to empirical lags using weighted least-squares
+    /// Fit variogram model to empirical lags using weighted least-squares.
     ///
-    /// Minimizes: Σ w_i * (model(h_i) - empirical(h_i))^2
-    /// where w_i = pair_count_i
-    pub fn fit(
-        lags: &[LagBin],
-        family: VariogramModelFamily,
-    ) -> GeostatResult<VariogramModel> {
+    /// Uses a Marquardt-Levenberg (iterative Gauss-Newton) algorithm with
+    /// analytic Jacobians, matching gstat's default fit.method=7 weighting
+    /// scheme: `wᵢ = nₕ(i) / hᵢ`.
+    ///
+    /// Initialization follows gstat's `vgm_fill_na()`:
+    /// - nugget  = mean of first 3 empirical semivariances
+    /// - sill    = mean of last 5 empirical semivariances
+    /// - range   = max_lag_distance / 3
+    pub fn fit(lags: &[LagBin], family: VariogramModelFamily) -> GeostatResult<VariogramModel> {
         if lags.len() < 3 {
             return Err(GeostatError::InsufficientData(
                 "at least 3 lag bins required for fitting".to_string(),
             ));
         }
 
-        // Initial parameter guess
-        let max_gamma = lags.iter().map(|b| b.semivariance).fold(f64::NEG_INFINITY, f64::max);
-        let range_guess = lags[lags.len() / 2].distance;
+        let n = lags.len();
 
-        let (nugget, partial_sill, range) = Self::optimize_parameters(
-            lags,
-            family,
-            0.0,           // nugget init
-            max_gamma,     // partial_sill init
-            range_guess,   // range init
-        )?;
+        // Initialization following gstat's vgm_fill_na():
+        // nugget  = mean of first 3 empirical semivariances
+        // sill    = mean of last 5 empirical semivariances
+        // range   = max_lag / 3
+        let first3 =
+            lags[..3.min(n)].iter().map(|l| l.semivariance).sum::<f64>() / (3.min(n) as f64);
+        let last5 = lags[n.saturating_sub(5)..]
+            .iter()
+            .map(|l| l.semivariance)
+            .sum::<f64>()
+            / (5.min(n) as f64);
+        let max_dist = lags
+            .iter()
+            .map(|l| l.distance)
+            .fold(f64::NEG_INFINITY, f64::max);
 
-        // Compute fit quality
-        let (wrss, condition_number) = Self::compute_fit_metrics(lags, family, nugget, partial_sill, range);
+        let nugget_init = first3.max(0.0);
+        let psill_init = (last5 - nugget_init).max(1.0);
+        let range_init = max_dist / 3.0;
+
+        let (nugget, partial_sill, range) =
+            Self::optimize_parameters(lags, family, nugget_init, psill_init, range_init)?;
+
+        let (wrss, condition_number) =
+            Self::compute_fit_metrics(lags, family, nugget, partial_sill, range);
 
         Ok(VariogramModel {
             family,
-            nugget: nugget.max(0.0), // Ensure non-negative nugget
-            partial_sill: partial_sill.max(0.0), // Ensure non-negative partial sill
-            range: range.max(0.1), // Ensure positive range
+            nugget: nugget.max(0.0),
+            partial_sill: partial_sill.max(0.0),
+            range: range.max(0.1),
             wrss,
             condition_number,
         })
@@ -132,10 +149,7 @@ impl VariogramFitter {
     ///
     /// Minimizes: Σ w_i * |model(h_i) - empirical(h_i)|
     /// where w_i = sqrt(pair_count_i)
-    pub fn fit_l1(
-        lags: &[LagBin],
-        family: VariogramModelFamily,
-    ) -> GeostatResult<VariogramModel> {
+    pub fn fit_l1(lags: &[LagBin], family: VariogramModelFamily) -> GeostatResult<VariogramModel> {
         RobustVariogramFitter::fit(lags, family, RobustLossFunction::L1)
     }
 
@@ -154,7 +168,14 @@ impl VariogramFitter {
         RobustVariogramFitter::fit(lags, family, RobustLossFunction::Huber(delta))
     }
 
-    /// Optimize model parameters (simplified Gauss-Newton iteration)
+    /// Marquardt-Levenberg (iterative Gauss-Newton) optimizer for variogram parameters.
+    ///
+    /// Matches gstat's `wls_fit()` / `fit_GaussNewton()` algorithm:
+    /// - Analytic Jacobian w.r.t. nugget, partial_sill, range
+    /// - Weight scheme: `nₕ(i) / hᵢ`  (gstat fit.method = 7)
+    /// - 20% step-size bound per iteration (Marquardt damping)
+    /// - If any parameter is 0 at start, bump to avoid degenerate Jacobian
+    /// - Convergence: relative change in SSErr < 1e-5 (gstat DEF_fit_limit)
     fn optimize_parameters(
         lags: &[LagBin],
         family: VariogramModelFamily,
@@ -162,63 +183,134 @@ impl VariogramFitter {
         partial_sill_init: f64,
         range_init: f64,
     ) -> GeostatResult<(f64, f64, f64)> {
-        let nugget = nugget_init;
-        let partial_sill = partial_sill_init;
-        let mut range = range_init;
+        const MAX_ITER: usize = 200;
+        const CONV_TOL: f64 = 1e-5;
+        const MAX_STEP_FRAC: f64 = 0.20;
 
-        const MAX_ITERATIONS: usize = 50;
-        const TOL: f64 = 1e-6;
+        // Bump any zero sill to 1.0 to avoid degenerate Jacobian (gstat src/fit.c:44-46)
+        let mut c0 = if nugget_init == 0.0 { 1.0 } else { nugget_init };
+        let mut c1 = if partial_sill_init == 0.0 {
+            1.0
+        } else {
+            partial_sill_init
+        };
+        let mut a = range_init.max(0.1);
 
-        for _iter in 0..MAX_ITERATIONS {
-            // Compute weighted least-squares residuals
-            let mut residuals = Vec::new();
-            let mut weights = Vec::new();
+        let mut prev_sse = f64::INFINITY;
+
+        for _ in 0..MAX_ITER {
+            let mut jtj = Matrix3::<f64>::zeros();
+            let mut jtr = Vector3::<f64>::zeros();
+            let mut sse = 0.0;
 
             for lag in lags {
-                let gamma_model = Self::evaluate_model(lag.distance, family, nugget, partial_sill, range);
-                let residual = gamma_model - lag.semivariance;
-                let weight = (lag.pair_count as f64).sqrt(); // sqrt for weighted LS
+                let h = lag.distance;
+                if h == 0.0 {
+                    continue;
+                }
 
-                residuals.push(residual);
-                weights.push(weight);
+                // Weight: nₕ / h  (gstat fit.method=7, WLS_NHH)
+                let w = lag.pair_count as f64 / h;
+
+                let gamma_model = Self::evaluate_model(h, family, c0, c1, a);
+                let residual = lag.semivariance - gamma_model;
+                sse += w * residual * residual;
+
+                // Jacobian columns: d(gamma)/d(c0), d(gamma)/d(c1), d(gamma)/d(a)
+                let j_c0 = 1.0; // nugget contributes +1 to all h > 0
+                let (j_c1, j_a) = Self::model_derivatives(h, family, c1, a);
+                let j = Vector3::new(j_c0, j_c1, j_a);
+
+                jtj += w * j * j.transpose();
+                jtr += w * residual * j;
             }
 
-            // Check convergence
-            let wrss: f64 = residuals.iter().zip(&weights).map(|(r, w)| r * r * w * w).sum();
-            if wrss < TOL {
+            // Convergence: relative change in SSErr (gstat criterion)
+            let rel_step = (prev_sse - sse) / sse.max(f64::EPSILON);
+            if rel_step.abs() < CONV_TOL && prev_sse.is_finite() {
                 break;
             }
+            prev_sse = sse;
 
-            // Simple line search on range (most sensitive parameter)
-            let mut best_wrss = wrss;
-            let mut best_range = range;
+            // Solve J'WJ Δβ = J'Wr via QR
+            let delta = match jtj.qr().solve(&jtr) {
+                Some(d) => d,
+                None => break, // singular system; keep current params
+            };
 
-            for delta_range in &[-range * 0.1, -range * 0.05, range * 0.05, range * 0.1] {
-                let test_range = (range + delta_range).max(0.1);
-                let test_wrss: f64 = lags
-                    .iter()
-                    .map(|lag| {
-                        let gamma_model =
-                            Self::evaluate_model(lag.distance, family, nugget, partial_sill, test_range);
-                        let residual = gamma_model - lag.semivariance;
-                        residual * residual * (lag.pair_count as f64)
-                    })
-                    .sum();
+            // Marquardt step-size bound: clamp to 20% of current parameter norm
+            let param_norm = (c0 * c0 + c1 * c1 + a * a).sqrt().max(f64::EPSILON);
+            let step_norm = delta.norm();
+            let scale = if step_norm > MAX_STEP_FRAC * param_norm {
+                MAX_STEP_FRAC * param_norm / step_norm
+            } else {
+                1.0
+            };
 
-                if test_wrss < best_wrss {
-                    best_wrss = test_wrss;
-                    best_range = test_range;
-                }
-            }
-
-            range = best_range;
+            // Update with positivity constraints
+            c0 = (c0 + scale * delta[0]).max(0.0);
+            c1 = (c1 + scale * delta[1]).max(0.0);
+            a = (a + scale * delta[2]).max(0.1);
         }
 
-        Ok((nugget, partial_sill, range))
+        Ok((c0, c1, a))
+    }
+
+    /// Analytic partial derivatives of γ(h) w.r.t. partial_sill (c₁) and range (a).
+    ///
+    /// Returns (∂γ/∂c₁, ∂γ/∂a). The nugget derivative ∂γ/∂c₀ = 1 everywhere.
+    pub(super) fn model_derivatives(
+        h: f64,
+        family: VariogramModelFamily,
+        partial_sill: f64,
+        range: f64,
+    ) -> (f64, f64) {
+        if h == 0.0 {
+            return (0.0, 0.0);
+        }
+        match family {
+            VariogramModelFamily::Spherical => {
+                if h >= range {
+                    // γ = c₀ + c₁ (constant beyond range, no range derivative)
+                    (1.0, 0.0)
+                } else {
+                    let ratio = h / range;
+                    // γ = c₀ + c₁*(1.5*(h/a) - 0.5*(h/a)³)
+                    let j_c1 = 1.5 * ratio - 0.5 * ratio.powi(3);
+                    // ∂γ/∂a = c₁ * (-1.5*h/a² + 1.5*h³/a⁴)
+                    //       = c₁ * 1.5 * (h/a²) * ((h/a)² - 1)
+                    let j_a = partial_sill * 1.5 * (h / range.powi(2)) * (ratio.powi(2) - 1.0);
+                    (j_c1, j_a)
+                }
+            }
+            VariogramModelFamily::Exponential => {
+                // γ = c₀ + c₁*(1 - exp(-3h/a))
+                let exp_val = (-3.0 * h / range).exp();
+                let j_c1 = 1.0 - exp_val;
+                // ∂γ/∂a = c₁ * (3h/a²) * (-exp(-3h/a))
+                let j_a = -partial_sill * (3.0 * h / range.powi(2)) * exp_val;
+                (j_c1, j_a)
+            }
+            VariogramModelFamily::Gaussian => {
+                // γ = c₀ + c₁*(1 - exp(-3*(h/a)²))
+                let ratio_sq = (h / range).powi(2);
+                let exp_val = (-3.0 * ratio_sq).exp();
+                let j_c1 = 1.0 - exp_val;
+                // ∂γ/∂a = c₁ * (6h²/a³) * (-exp(-3*(h/a)²))
+                let j_a = -partial_sill * (6.0 * h.powi(2) / range.powi(3)) * exp_val;
+                (j_c1, j_a)
+            }
+        }
     }
 
     /// Evaluate model at distance h
-    fn evaluate_model(h: f64, family: VariogramModelFamily, nugget: f64, partial_sill: f64, range: f64) -> f64 {
+    pub(super) fn evaluate_model(
+        h: f64,
+        family: VariogramModelFamily,
+        nugget: f64,
+        partial_sill: f64,
+        range: f64,
+    ) -> f64 {
         if h == 0.0 {
             return nugget;
         }
@@ -232,15 +324,33 @@ impl VariogramFitter {
                     partial_sill * (1.5 * ratio - 0.5 * ratio.powi(3))
                 }
             }
-            VariogramModelFamily::Exponential => {
-                partial_sill * (1.0 - (-3.0 * h / range).exp())
-            }
+            VariogramModelFamily::Exponential => partial_sill * (1.0 - (-3.0 * h / range).exp()),
             VariogramModelFamily::Gaussian => {
                 partial_sill * (1.0 - (-3.0 * (h / range).powi(2)).exp())
             }
         };
 
         nugget + gamma_part
+    }
+
+    /// Compute weighted residual sum of squares using nₕ/h weights (gstat fit.method=7)
+    fn compute_wrss(
+        lags: &[LagBin],
+        family: VariogramModelFamily,
+        nugget: f64,
+        partial_sill: f64,
+        range: f64,
+    ) -> f64 {
+        lags.iter()
+            .filter(|lag| lag.distance > 0.0)
+            .map(|lag| {
+                let w = lag.pair_count as f64 / lag.distance;
+                let gamma_model =
+                    Self::evaluate_model(lag.distance, family, nugget, partial_sill, range);
+                let residual = gamma_model - lag.semivariance;
+                residual * residual * w
+            })
+            .sum()
     }
 
     /// Compute weighted residual sum of squares and condition number estimate
@@ -251,12 +361,7 @@ impl VariogramFitter {
         partial_sill: f64,
         range: f64,
     ) -> (f64, f64) {
-        let mut wrss = 0.0;
-        for lag in lags {
-            let gamma_model = Self::evaluate_model(lag.distance, family, nugget, partial_sill, range);
-            let residual = gamma_model - lag.semivariance;
-            wrss += residual * residual * (lag.pair_count as f64);
-        }
+        let wrss = Self::compute_wrss(lags, family, nugget, partial_sill, range);
 
         // Rough condition number estimate (range/nugget+partial_sill)
         let total_sill = nugget + partial_sill;
@@ -336,9 +441,21 @@ mod tests {
     #[test]
     fn test_variogram_fit_simple() {
         let lags = vec![
-            LagBin { distance: 50.0, semivariance: 0.3, pair_count: 50 },
-            LagBin { distance: 100.0, semivariance: 0.6, pair_count: 45 },
-            LagBin { distance: 150.0, semivariance: 0.85, pair_count: 40 },
+            LagBin {
+                distance: 50.0,
+                semivariance: 0.3,
+                pair_count: 50,
+            },
+            LagBin {
+                distance: 100.0,
+                semivariance: 0.6,
+                pair_count: 45,
+            },
+            LagBin {
+                distance: 150.0,
+                semivariance: 0.85,
+                pair_count: 40,
+            },
         ];
 
         let model = VariogramFitter::fit(&lags, VariogramModelFamily::Spherical);

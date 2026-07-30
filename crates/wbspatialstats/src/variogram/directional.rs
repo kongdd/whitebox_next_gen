@@ -240,7 +240,8 @@ pub fn compute_directional_variogram(
     let mut sorted_semivars = semivariances.clone();
     sorted_semivars.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let top_25_idx = (sorted_semivars.len() * 3 / 4).max(0);
-    let sill = sorted_semivars[top_25_idx..].iter().sum::<f64>() / sorted_semivars[top_25_idx..].len().max(1) as f64;
+    let sill = sorted_semivars[top_25_idx..].iter().sum::<f64>()
+        / sorted_semivars[top_25_idx..].len().max(1) as f64;
 
     let nugget = Some(semivariances[0]);
 
@@ -303,7 +304,11 @@ pub fn fit_anisotropy(
 
     let major_azimuth = ranges[0].0;
     let major_range = ranges[0].1;
-    let minor_range = ranges.last().map(|(_, r)| r).copied().unwrap_or(major_range * 0.7);
+    let minor_range = ranges
+        .last()
+        .map(|(_, r)| r)
+        .copied()
+        .unwrap_or(major_range * 0.7);
 
     let ratio = (minor_range / major_range).max(0.01).min(1.0);
 
@@ -400,7 +405,10 @@ mod tests {
         assert!(d_45.is_finite() && d_45 > 0.0);
 
         // North should be larger than East (because minor range < major range)
-        assert!(d_north > d_east, "Perpendicular distance should be greater due to anisotropy ratio");
+        assert!(
+            d_north > d_east,
+            "Perpendicular distance should be greater due to anisotropy ratio"
+        );
     }
 
     #[test]

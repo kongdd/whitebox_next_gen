@@ -3,7 +3,7 @@
 // Implements local regression with AICc-based bandwidth selection
 // Parallelized with rayon for both local fitting and CV bandwidth search
 
-use super::{RegressionResult, GWRResult, PreFlightDiagnostics, matrix_solvers};
+use super::{matrix_solvers, GWRResult, PreFlightDiagnostics, RegressionResult};
 use nalgebra::{DMatrix, DVector};
 use rayon::prelude::*;
 
@@ -56,7 +56,8 @@ impl GeographicallyWeightedRegression {
 
         // Model statistics
         let rss: f64 = residuals.iter().map(|e| e * e).sum();
-        let tss: f64 = y.iter()
+        let tss: f64 = y
+            .iter()
             .map(|yi| (yi - y.iter().sum::<f64>() / n as f64).powi(2))
             .sum();
         let r_squared = if tss > 0.0 { 1.0 - (rss / tss) } else { 0.0 };
@@ -77,7 +78,11 @@ impl GeographicallyWeightedRegression {
         let preflight = PreFlightDiagnostics {
             design_matrix_condition_number: 0.0,
             design_matrix_rank: k,
-            response_variance: (y.iter().map(|yi| (yi - y.iter().sum::<f64>() / n as f64).powi(2)).sum::<f64>() / n as f64),
+            response_variance: (y
+                .iter()
+                .map(|yi| (yi - y.iter().sum::<f64>() / n as f64).powi(2))
+                .sum::<f64>()
+                / n as f64),
             design_warnings: Vec::new(),
             response_warnings: Vec::new(),
             weights_warnings: Vec::new(),
@@ -163,7 +168,8 @@ fn select_bandwidth_aicc(
     let results: Vec<_> = bw_candidates
         .par_iter()
         .map(|&bw| {
-            let (_, aicc) = compute_cv_aicc(y, x, distances, bw, n, k).unwrap_or((0.0, f64::INFINITY));
+            let (_, aicc) =
+                compute_cv_aicc(y, x, distances, bw, n, k).unwrap_or((0.0, f64::INFINITY));
             (bw, aicc)
         })
         .collect();
@@ -217,7 +223,7 @@ fn compute_cv_aicc(
     }
 
     let sigma_sq = rss / n as f64;
-    let aicc = 2.0 * k as f64 - 2.0 * (-0.5 * rss / sigma_sq) 
+    let aicc = 2.0 * k as f64 - 2.0 * (-0.5 * rss / sigma_sq)
         + (2.0 * k as f64 * (k as f64 + 1.0)) / (n as f64 - k as f64 - 1.0);
 
     Ok((rss, aicc))
@@ -259,7 +265,10 @@ fn compute_local_regressions(
 
             let ses = vec![0.0; k]; // Simplified: would need weighted SE calculation
             let ts: Vec<f64> = beta.as_slice().iter().map(|b| b * 1.96).collect(); // Approximate
-            let ps: Vec<f64> = ts.iter().map(|t| crate::weights::two_tailed_normal_p(*t)).collect();
+            let ps: Vec<f64> = ts
+                .iter()
+                .map(|t| crate::weights::two_tailed_normal_p(*t))
+                .collect();
 
             (beta.as_slice().to_vec(), ses, ts, ps)
         })

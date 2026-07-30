@@ -1,25 +1,25 @@
 //! Point-process analysis: Ripley's K/L functions, envelope testing, and diagnostics
-//! 
+//!
 //! This module provides tools for analyzing spatial point patterns including:
 //! - K and L functions for pattern characterization
 //! - Critical-band envelope testing via Monte Carlo simulation
 //! - Inhomogeneous process modeling with intensity correction
 //! - Residual diagnostics for goodness-of-fit
-//! 
+//!
 //! References:
 //! - Ripley, B.D. (1976). "The second-order analysis of stationary point processes"
 //! - Baddeley, A., Rubak, E., Turner, R. (2015). "Spatial Point Patterns: Methodology and Applications"
 //! - Møller, J., Waagepetersen, R.P. (2003). "Statistical Inference and Simulation for Spatial Point Processes"
 
-pub mod ripley;
+pub mod diagnostics;
 pub mod envelopes;
 pub mod inhomogeneous;
-pub mod diagnostics;
+pub mod ripley;
 
-pub use ripley::{KFunction, KFunctionResult};
-pub use envelopes::{EnvelopeResult, CriticalBandEnvelope};
-pub use inhomogeneous::{InhomogeneousKProcess, InhomogeneousResult};
 pub use diagnostics::{PointProcessResiduals, ResidualType};
+pub use envelopes::{CriticalBandEnvelope, EnvelopeResult};
+pub use inhomogeneous::{InhomogeneousKProcess, InhomogeneousResult};
+pub use ripley::{KFunction, KFunctionResult};
 
 use crate::GeostatError;
 use serde::{Deserialize, Serialize};

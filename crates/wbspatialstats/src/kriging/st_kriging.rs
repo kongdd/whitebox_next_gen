@@ -8,9 +8,9 @@
 //! This separability assumption is computationally tractable and works well
 //! for many environmental processes.
 
-use crate::{GeostatError, GeostatResult};
 use crate::kriging::KrigingResult;
 use crate::variogram::VariogramModel;
+use crate::{GeostatError, GeostatResult};
 use nalgebra as na;
 use rayon::prelude::*;
 
@@ -96,7 +96,8 @@ impl SpaceTimeKriging {
                     self.training_coords_spatial[i],
                     self.training_coords_spatial[j],
                 );
-                let dist_temporal = (self.training_coords_temporal[i] - self.training_coords_temporal[j]).abs();
+                let dist_temporal =
+                    (self.training_coords_temporal[i] - self.training_coords_temporal[j]).abs();
 
                 // Separable: γ(h_s, h_t) = γ_s(h_s) * γ_t(h_t)
                 let gamma_s = self.variogram_spatial.evaluate(dist_spatial);
@@ -244,7 +245,13 @@ mod tests {
 
         let vario = create_test_variogram();
 
-        let sk = SpaceTimeKriging::new(coords_spatial, coords_temporal, values, vario.clone(), vario);
+        let sk = SpaceTimeKriging::new(
+            coords_spatial,
+            coords_temporal,
+            values,
+            vario.clone(),
+            vario,
+        );
         assert!(sk.is_ok());
         assert_eq!(sk.unwrap().n_training(), 4);
     }
@@ -257,7 +264,13 @@ mod tests {
 
         let vario = create_test_variogram();
 
-        let result = SpaceTimeKriging::new(coords_spatial, coords_temporal, values, vario.clone(), vario);
+        let result = SpaceTimeKriging::new(
+            coords_spatial,
+            coords_temporal,
+            values,
+            vario.clone(),
+            vario,
+        );
         assert!(result.is_err());
     }
 
@@ -269,7 +282,13 @@ mod tests {
 
         let vario = create_test_variogram();
 
-        let result = SpaceTimeKriging::new(coords_spatial, coords_temporal, values, vario.clone(), vario);
+        let result = SpaceTimeKriging::new(
+            coords_spatial,
+            coords_temporal,
+            values,
+            vario.clone(),
+            vario,
+        );
         assert!(result.is_err());
     }
 
@@ -280,7 +299,14 @@ mod tests {
         let values = vec![10.0, 12.0, 11.0, 13.0];
 
         let vario = create_test_variogram();
-        let sk = SpaceTimeKriging::new(coords_spatial.clone(), coords_temporal.clone(), values, vario.clone(), vario).unwrap();
+        let sk = SpaceTimeKriging::new(
+            coords_spatial.clone(),
+            coords_temporal.clone(),
+            values,
+            vario.clone(),
+            vario,
+        )
+        .unwrap();
 
         // Predict at new spatio-temporal point
         let result = sk.predict(0.5, 0.5, 0.0);
@@ -299,7 +325,14 @@ mod tests {
         let values = vec![10.0, 12.0, 11.0, 13.0];
 
         let vario = create_test_variogram();
-        let sk = SpaceTimeKriging::new(coords_spatial, coords_temporal, values, vario.clone(), vario).unwrap();
+        let sk = SpaceTimeKriging::new(
+            coords_spatial,
+            coords_temporal,
+            values,
+            vario.clone(),
+            vario,
+        )
+        .unwrap();
 
         let pred_spatial = vec![(0.5, 0.5), (0.7, 0.3)];
         let pred_temporal = vec![1.0, 2.0];
@@ -332,7 +365,14 @@ mod tests {
             condition_number: 8.0,
         };
 
-        let sk = SpaceTimeKriging::new(coords_spatial, coords_temporal, values, vario_spatial, vario_temporal).unwrap();
+        let sk = SpaceTimeKriging::new(
+            coords_spatial,
+            coords_temporal,
+            values,
+            vario_spatial,
+            vario_temporal,
+        )
+        .unwrap();
 
         // Predict at same spatial location, different times
         let pred_t0 = sk.predict(0.5, 0.5, 0.0).unwrap();
@@ -367,7 +407,14 @@ mod tests {
             condition_number: 5.0,
         };
 
-        let _sk = SpaceTimeKriging::new(coords_spatial, coords_temporal, values, vario_s.clone(), vario_t.clone()).unwrap();
+        let _sk = SpaceTimeKriging::new(
+            coords_spatial,
+            coords_temporal,
+            values,
+            vario_s.clone(),
+            vario_t.clone(),
+        )
+        .unwrap();
 
         // Manual check of separable property
         let gamma_s_10_0 = vario_s.evaluate(10.0);
@@ -386,7 +433,14 @@ mod tests {
         let values = vec![10.0, 12.0, 11.0, 13.0];
 
         let vario = create_test_variogram();
-        let sk = SpaceTimeKriging::new(coords_spatial, coords_temporal, values, vario.clone(), vario).unwrap();
+        let sk = SpaceTimeKriging::new(
+            coords_spatial,
+            coords_temporal,
+            values,
+            vario.clone(),
+            vario,
+        )
+        .unwrap();
 
         let pred_spatial = vec![(0.5, 0.5), (0.7, 0.3)];
         let pred_temporal = vec![1.0]; // Wrong length

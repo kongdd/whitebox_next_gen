@@ -5,7 +5,7 @@
 //
 // Phase 2 Week 8+ Implementation (2026-06-04)
 
-use crate::variogram::{VariogramModel, CrossVariogramModel};
+use crate::variogram::{CrossVariogramModel, VariogramModel};
 use nalgebra::{DMatrix, DVector};
 
 /// Result of a single cokriging prediction
@@ -89,8 +89,7 @@ impl OrdinaryCoKriging {
 
         if cross_variograms.len() != auxiliary_variograms.len() {
             return Err(
-                "Number of cross-variograms must equal number of auxiliary variables"
-                    .to_string(),
+                "Number of cross-variograms must equal number of auxiliary variables".to_string(),
             );
         }
 

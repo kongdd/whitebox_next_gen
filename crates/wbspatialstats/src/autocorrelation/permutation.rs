@@ -145,7 +145,10 @@ pub fn morans_i_permutation(
         / (n_simulations as f64 - 1.0);
 
     // Count permutations >= observed (one-tailed, right-tail)
-    let count_ge = permutation_distribution.iter().filter(|&&x| x >= observed_i).count() as f64;
+    let count_ge = permutation_distribution
+        .iter()
+        .filter(|&&x| x >= observed_i)
+        .count() as f64;
     let p_one_tailed = (count_ge + 1.0) / (n_simulations as f64 + 1.0);
 
     // Count permutations |x| >= |observed| (two-tailed)
@@ -377,12 +380,7 @@ pub fn getis_ord_gi_star_permutation(
             sum_wx_overall += w * values[*j];
         }
     }
-    let _sum_wx_sq: f64 = weights
-        .neighbors
-        .iter()
-        .flatten()
-        .map(|(_, w)| w * w)
-        .sum();
+    let _sum_wx_sq: f64 = weights.neighbors.iter().flatten().map(|(_, w)| w * w).sum();
 
     let observed_g_star = if sum_w > 0.0 {
         sum_wx_overall / sum_x
@@ -578,7 +576,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]  // Run with: cargo test --release -- --ignored --nocapture permutation_performance_meuse
+    #[ignore] // Run with: cargo test --release -- --ignored --nocapture permutation_performance_meuse
     fn permutation_performance_meuse() {
         use std::time::Instant;
 
@@ -593,8 +591,12 @@ mod tests {
         let mut neighbors = vec![Vec::new(); n];
         for i in 0..n {
             let mut row = vec![];
-            if i > 0 { row.push((i - 1, 1.0)); }
-            if i < n - 1 { row.push((i + 1, 1.0)); }
+            if i > 0 {
+                row.push((i - 1, 1.0));
+            }
+            if i < n - 1 {
+                row.push((i + 1, 1.0));
+            }
             neighbors[i] = row;
         }
 
@@ -617,12 +619,8 @@ mod tests {
 
         // Benchmark 1000 permutations
         let start = Instant::now();
-        let result = morans_i_permutation(
-            &values,
-            &weights,
-            1000,
-            Some(42)
-        ).expect("Permutation test failed");
+        let result = morans_i_permutation(&values, &weights, 1000, Some(42))
+            .expect("Permutation test failed");
         let elapsed = start.elapsed();
 
         println!("\n📊 Permutation Testing Performance Benchmark");
@@ -630,9 +628,11 @@ mod tests {
         println!("Dataset: Simulated Meuse (155 points)");
         println!("Permutations: 1,000");
         println!("Time: {:.2} seconds", elapsed.as_secs_f64());
-        println!("Result: Moran's I = {:.4}, p-value = {:.4}", 
-            result.observed_statistic, result.p_value_two_tailed);
-        
+        println!(
+            "Result: Moran's I = {:.4}, p-value = {:.4}",
+            result.observed_statistic, result.p_value_two_tailed
+        );
+
         if elapsed.as_secs_f64() < 5.0 {
             println!("✓ PASS: Performance target met (< 5 seconds)");
         } else {
