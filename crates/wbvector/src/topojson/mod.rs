@@ -377,9 +377,15 @@ fn layer_from_topology(root: &Jv, layer_name: &str) -> Result<Layer> {
         arcs.push(decode_arc(arc, transform.as_ref())?);
     }
 
-    let objects = root
-        .get("objects")
-        .and_then(|v| v.as_arr().or_else(|| if matches!(v, Jv::Obj(_)) { Some(&[][..]) } else { None }));
+    let objects = root.get("objects").and_then(|v| {
+        v.as_arr().or_else(|| {
+            if matches!(v, Jv::Obj(_)) {
+                Some(&[][..])
+            } else {
+                None
+            }
+        })
+    });
 
     let objects_obj = root
         .get("objects")
@@ -392,7 +398,11 @@ fn layer_from_topology(root: &Jv, layer_name: &str) -> Result<Layer> {
                 extract_entries(obj, &arcs, &mut entries)?;
             }
         }
-        _ => return Err(GeoError::TopoJsonTopology("objects must be an object".into())),
+        _ => {
+            return Err(GeoError::TopoJsonTopology(
+                "objects must be an object".into(),
+            ))
+        }
     }
     let _ = objects;
 
@@ -543,9 +553,9 @@ fn decode_arc(v: &Jv, transform: Option<&Transform>) -> Result<Vec<Coord>> {
     let mut acc_y = 0.0;
 
     for p in pts {
-        let xy = p
-            .as_arr()
-            .ok_or_else(|| GeoError::TopoJsonTopology("arc point must be coordinate array".into()))?;
+        let xy = p.as_arr().ok_or_else(|| {
+            GeoError::TopoJsonTopology("arc point must be coordinate array".into())
+        })?;
         if xy.len() < 2 {
             return Err(GeoError::TopoJsonTopology(
                 "arc coordinate must have x and y".into(),
@@ -680,9 +690,9 @@ fn parse_topo_geometry(v: &Jv, arcs: &[Vec<Coord>]) -> Result<Geometry> {
                 .ok_or_else(|| GeoError::TopoJsonMissing("MultiLineString.arcs".into()))?;
             let mut out = Vec::with_capacity(lines.len());
             for l in lines {
-                let refs = l
-                    .as_arr()
-                    .ok_or_else(|| GeoError::TopoJsonTopology("MultiLineString arc list invalid".into()))?;
+                let refs = l.as_arr().ok_or_else(|| {
+                    GeoError::TopoJsonTopology("MultiLineString arc list invalid".into())
+                })?;
                 out.push(stitch_arc_refs(refs, arcs)?);
             }
             Ok(Geometry::MultiLineString(out))
@@ -694,9 +704,9 @@ fn parse_topo_geometry(v: &Jv, arcs: &[Vec<Coord>]) -> Result<Geometry> {
                 .ok_or_else(|| GeoError::TopoJsonMissing("Polygon.arcs".into()))?;
             let mut parsed = Vec::with_capacity(rings.len());
             for r in rings {
-                let refs = r
-                    .as_arr()
-                    .ok_or_else(|| GeoError::TopoJsonTopology("Polygon ring arc list invalid".into()))?;
+                let refs = r.as_arr().ok_or_else(|| {
+                    GeoError::TopoJsonTopology("Polygon ring arc list invalid".into())
+                })?;
                 parsed.push(strip_closed(stitch_arc_refs(refs, arcs)?));
             }
             let exterior = parsed.first().cloned().unwrap_or_default();
@@ -714,14 +724,14 @@ fn parse_topo_geometry(v: &Jv, arcs: &[Vec<Coord>]) -> Result<Geometry> {
                 .ok_or_else(|| GeoError::TopoJsonMissing("MultiPolygon.arcs".into()))?;
             let mut out = Vec::with_capacity(polys.len());
             for p in polys {
-                let rings = p
-                    .as_arr()
-                    .ok_or_else(|| GeoError::TopoJsonTopology("MultiPolygon polygon ring list invalid".into()))?;
+                let rings = p.as_arr().ok_or_else(|| {
+                    GeoError::TopoJsonTopology("MultiPolygon polygon ring list invalid".into())
+                })?;
                 let mut parsed = Vec::with_capacity(rings.len());
                 for r in rings {
-                    let refs = r
-                        .as_arr()
-                        .ok_or_else(|| GeoError::TopoJsonTopology("MultiPolygon ring arc list invalid".into()))?;
+                    let refs = r.as_arr().ok_or_else(|| {
+                        GeoError::TopoJsonTopology("MultiPolygon ring arc list invalid".into())
+                    })?;
                     parsed.push(strip_closed(stitch_arc_refs(refs, arcs)?));
                 }
                 let ext = parsed.first().cloned().unwrap_or_default();
@@ -861,8 +871,7 @@ impl TopologyWriter {
             match quantize_arcs(&self.arcs, q) {
                 Some((arcs, transform, bbox)) => {
                     let arcs_jv = Jv::Arr(
-                        arcs
-                            .iter()
+                        arcs.iter()
                             .map(|arc| {
                                 Jv::Arr(
                                     arc.iter()
@@ -877,7 +886,10 @@ impl TopologyWriter {
                     let transform_jv = Some(Jv::Obj(vec![
                         (
                             "scale".into(),
-                            Jv::Arr(vec![Jv::Num(transform.scale[0]), Jv::Num(transform.scale[1])]),
+                            Jv::Arr(vec![
+                                Jv::Num(transform.scale[0]),
+                                Jv::Num(transform.scale[1]),
+                            ]),
                         ),
                         (
                             "translate".into(),
@@ -971,7 +983,10 @@ impl TopologyWriter {
         match g {
             Geometry::Point(c) => Jv::Obj(vec![
                 ("type".into(), Jv::Str("Point".into())),
-                ("coordinates".into(), Jv::Arr(vec![Jv::Num(c.x), Jv::Num(c.y)])),
+                (
+                    "coordinates".into(),
+                    Jv::Arr(vec![Jv::Num(c.x), Jv::Num(c.y)]),
+                ),
             ]),
             Geometry::MultiPoint(cs) => Jv::Obj(vec![
                 ("type".into(), Jv::Str("MultiPoint".into())),
@@ -1003,7 +1018,10 @@ impl TopologyWriter {
                     ),
                 ),
             ]),
-            Geometry::Polygon { exterior, interiors } => {
+            Geometry::Polygon {
+                exterior,
+                interiors,
+            } => {
                 let mut rings = Vec::<Jv>::new();
                 rings.push(Jv::Arr(vec![Jv::Num(self.register_ring(exterior) as f64)]));
                 for h in interiors {
@@ -1069,7 +1087,10 @@ impl TopologyWriter {
 }
 
 fn arc_key(coords: &[Coord]) -> Vec<(u64, u64)> {
-    coords.iter().map(|c| (c.x.to_bits(), c.y.to_bits())).collect()
+    coords
+        .iter()
+        .map(|c| (c.x.to_bits(), c.y.to_bits()))
+        .collect()
 }
 
 fn compute_bbox(arcs: &[Vec<Coord>]) -> Option<[f64; 4]> {
@@ -1096,7 +1117,10 @@ fn compute_bbox(arcs: &[Vec<Coord>]) -> Option<[f64; 4]> {
     }
 }
 
-fn quantize_arcs(arcs: &[Vec<Coord>], grid_size: u32) -> Option<(Vec<Vec<(i64, i64)>>, Transform, [f64; 4])> {
+fn quantize_arcs(
+    arcs: &[Vec<Coord>],
+    grid_size: u32,
+) -> Option<(Vec<Vec<(i64, i64)>>, Transform, [f64; 4])> {
     if grid_size < 2 {
         return None;
     }
@@ -1463,7 +1487,9 @@ mod tests {
 
         let text = to_string_with_options(
             &layer,
-            TopoJsonWriteOptions::default().with_quantize(256).with_bbox(true),
+            TopoJsonWriteOptions::default()
+                .with_quantize(256)
+                .with_bbox(true),
         )
         .unwrap();
 
@@ -1486,11 +1512,9 @@ mod tests {
             attributes: vec![],
         });
 
-        let text = to_string_with_options(
-            &layer,
-            TopoJsonWriteOptions::default().with_quantize(1024),
-        )
-        .unwrap();
+        let text =
+            to_string_with_options(&layer, TopoJsonWriteOptions::default().with_quantize(1024))
+                .unwrap();
         let out = parse_str(&text).unwrap();
 
         let Some(Geometry::LineString(coords)) = &out[0].geometry else {

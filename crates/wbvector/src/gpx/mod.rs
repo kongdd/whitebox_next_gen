@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::error::{GeoError, Result};
-use crate::feature::{FieldDef, FieldType, FieldValue, Feature, Layer};
+use crate::feature::{Feature, FieldDef, FieldType, FieldValue, Layer};
 use crate::geometry::{Coord, Geometry, GeometryType};
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -58,28 +58,48 @@ pub fn to_string(layer: &Layer) -> Result<String> {
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
-        let write_as_track = matches!(feat.geometry, Some(Geometry::MultiLineString(_))) || kind.eq_ignore_ascii_case("trk");
-        let write_as_waypoint = matches!(feat.geometry, Some(Geometry::Point(_))) && kind.eq_ignore_ascii_case("wpt");
+        let write_as_track = matches!(feat.geometry, Some(Geometry::MultiLineString(_)))
+            || kind.eq_ignore_ascii_case("trk");
+        let write_as_waypoint =
+            matches!(feat.geometry, Some(Geometry::Point(_))) && kind.eq_ignore_ascii_case("wpt");
 
         match feat.geometry.as_ref() {
             Some(Geometry::Point(c)) => {
                 if write_as_waypoint {
                     out.push_str(&format!("  <wpt lat=\"{}\" lon=\"{}\">\n", c.y, c.x));
-                    write_common_gpx_fields(&mut out, feat, layer, name_idx, desc_idx, time_idx, type_idx, 4);
-                    write_extension_fields(&mut out, feat, layer, &[name_idx, desc_idx, time_idx, type_idx, kind_idx], 4);
+                    write_common_gpx_fields(
+                        &mut out, feat, layer, name_idx, desc_idx, time_idx, type_idx, 4,
+                    );
+                    write_extension_fields(
+                        &mut out,
+                        feat,
+                        layer,
+                        &[name_idx, desc_idx, time_idx, type_idx, kind_idx],
+                        4,
+                    );
                     out.push_str("  </wpt>\n");
                 } else {
                     out.push_str("  <rte>\n");
-                    write_common_gpx_fields(&mut out, feat, layer, name_idx, desc_idx, time_idx, type_idx, 4);
+                    write_common_gpx_fields(
+                        &mut out, feat, layer, name_idx, desc_idx, time_idx, type_idx, 4,
+                    );
                     out.push_str(&format!("    <rtept lat=\"{}\" lon=\"{}\"/>\n", c.y, c.x));
-                    write_extension_fields(&mut out, feat, layer, &[name_idx, desc_idx, time_idx, type_idx, kind_idx], 4);
+                    write_extension_fields(
+                        &mut out,
+                        feat,
+                        layer,
+                        &[name_idx, desc_idx, time_idx, type_idx, kind_idx],
+                        4,
+                    );
                     out.push_str("  </rte>\n");
                 }
             }
             Some(Geometry::LineString(cs)) => {
                 if write_as_track {
                     out.push_str("  <trk>\n");
-                    write_common_gpx_fields(&mut out, feat, layer, name_idx, desc_idx, time_idx, type_idx, 4);
+                    write_common_gpx_fields(
+                        &mut out, feat, layer, name_idx, desc_idx, time_idx, type_idx, 4,
+                    );
                     out.push_str("    <trkseg>\n");
                     for c in cs {
                         out.push_str(&format!("      <trkpt lat=\"{}\" lon=\"{}\">", c.y, c.x));
@@ -91,11 +111,19 @@ pub fn to_string(layer: &Layer) -> Result<String> {
                         out.push_str("</trkpt>\n");
                     }
                     out.push_str("    </trkseg>\n");
-                    write_extension_fields(&mut out, feat, layer, &[name_idx, desc_idx, time_idx, type_idx, kind_idx], 4);
+                    write_extension_fields(
+                        &mut out,
+                        feat,
+                        layer,
+                        &[name_idx, desc_idx, time_idx, type_idx, kind_idx],
+                        4,
+                    );
                     out.push_str("  </trk>\n");
                 } else {
                     out.push_str("  <rte>\n");
-                    write_common_gpx_fields(&mut out, feat, layer, name_idx, desc_idx, time_idx, type_idx, 4);
+                    write_common_gpx_fields(
+                        &mut out, feat, layer, name_idx, desc_idx, time_idx, type_idx, 4,
+                    );
                     for c in cs {
                         out.push_str(&format!("    <rtept lat=\"{}\" lon=\"{}\">", c.y, c.x));
                         if let Some(z) = c.z {
@@ -105,13 +133,21 @@ pub fn to_string(layer: &Layer) -> Result<String> {
                         }
                         out.push_str("</rtept>\n");
                     }
-                    write_extension_fields(&mut out, feat, layer, &[name_idx, desc_idx, time_idx, type_idx, kind_idx], 4);
+                    write_extension_fields(
+                        &mut out,
+                        feat,
+                        layer,
+                        &[name_idx, desc_idx, time_idx, type_idx, kind_idx],
+                        4,
+                    );
                     out.push_str("  </rte>\n");
                 }
             }
             Some(Geometry::MultiLineString(lines)) => {
                 out.push_str("  <trk>\n");
-                write_common_gpx_fields(&mut out, feat, layer, name_idx, desc_idx, time_idx, type_idx, 4);
+                write_common_gpx_fields(
+                    &mut out, feat, layer, name_idx, desc_idx, time_idx, type_idx, 4,
+                );
                 for line in lines {
                     out.push_str("    <trkseg>\n");
                     for c in line {
@@ -125,7 +161,13 @@ pub fn to_string(layer: &Layer) -> Result<String> {
                     }
                     out.push_str("    </trkseg>\n");
                 }
-                write_extension_fields(&mut out, feat, layer, &[name_idx, desc_idx, time_idx, type_idx, kind_idx], 4);
+                write_extension_fields(
+                    &mut out,
+                    feat,
+                    layer,
+                    &[name_idx, desc_idx, time_idx, type_idx, kind_idx],
+                    4,
+                );
                 out.push_str("  </trk>\n");
             }
             None => {}
@@ -272,7 +314,11 @@ impl XmlNode {
     fn attr(&self, key: &str) -> Option<&str> {
         self.attrs
             .get(key)
-            .or_else(|| self.attrs.iter().find_map(|(k, v)| (local_name(k) == key).then_some(v)))
+            .or_else(|| {
+                self.attrs
+                    .iter()
+                    .find_map(|(k, v)| (local_name(k) == key).then_some(v))
+            })
             .map(|s| s.as_str())
     }
 
@@ -302,14 +348,20 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
                     i = end + 3;
                     continue;
                 }
-                return Err(GeoError::GpxParse { offset: i, msg: "unterminated comment".into() });
+                return Err(GeoError::GpxParse {
+                    offset: i,
+                    msg: "unterminated comment".into(),
+                });
             }
             if i + 2 <= bytes.len() && bytes[i + 1] == b'?' {
                 if let Some(end) = find_bytes(bytes, i + 2, b"?>") {
                     i = end + 2;
                     continue;
                 }
-                return Err(GeoError::GpxParse { offset: i, msg: "unterminated xml declaration".into() });
+                return Err(GeoError::GpxParse {
+                    offset: i,
+                    msg: "unterminated xml declaration".into(),
+                });
             }
             if i + 9 <= bytes.len() && &bytes[i..i + 9] == b"<![CDATA[" {
                 if let Some(end) = find_bytes(bytes, i + 9, b"]]>") {
@@ -319,7 +371,10 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
                     i = end + 3;
                     continue;
                 }
-                return Err(GeoError::GpxParse { offset: i, msg: "unterminated CDATA".into() });
+                return Err(GeoError::GpxParse {
+                    offset: i,
+                    msg: "unterminated CDATA".into(),
+                });
             }
             if i + 2 <= bytes.len() && bytes[i + 1] == b'/' {
                 let end = find_gt(bytes, i + 2).ok_or_else(|| GeoError::GpxParse {
@@ -357,14 +412,22 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
             }
 
             let (name, attrs) = parse_start_tag(raw, i)?;
-            let node = XmlNode { name, attrs, children: Vec::new(), text: String::new() };
+            let node = XmlNode {
+                name,
+                attrs,
+                children: Vec::new(),
+                text: String::new(),
+            };
             if self_close {
                 if let Some(parent) = stack.last_mut() {
                     parent.children.push(node);
                 } else if root.is_none() {
                     root = Some(node);
                 } else {
-                    return Err(GeoError::GpxParse { offset: i, msg: "multiple root elements".into() });
+                    return Err(GeoError::GpxParse {
+                        offset: i,
+                        msg: "multiple root elements".into(),
+                    });
                 }
             } else {
                 stack.push(node);
@@ -394,7 +457,10 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
         });
     }
 
-    root.ok_or_else(|| GeoError::GpxParse { offset: 0, msg: "no root element".into() })
+    root.ok_or_else(|| GeoError::GpxParse {
+        offset: 0,
+        msg: "no root element".into(),
+    })
 }
 
 fn find_gt(bytes: &[u8], mut i: usize) -> Option<usize> {
@@ -459,7 +525,10 @@ fn parse_start_tag(raw: &str, offset: usize) -> Result<(String, HashMap<String, 
             i += 1;
         }
         if i >= bytes.len() {
-            return Err(GeoError::GpxParse { offset, msg: "truncated attribute value".into() });
+            return Err(GeoError::GpxParse {
+                offset,
+                msg: "truncated attribute value".into(),
+            });
         }
 
         let quote = bytes[i];
@@ -475,7 +544,10 @@ fn parse_start_tag(raw: &str, offset: usize) -> Result<(String, HashMap<String, 
             i += 1;
         }
         if i >= bytes.len() {
-            return Err(GeoError::GpxParse { offset, msg: "unterminated quoted attribute".into() });
+            return Err(GeoError::GpxParse {
+                offset,
+                msg: "unterminated quoted attribute".into(),
+            });
         }
         let val = decode_entities(&raw[v0..i]);
         i += 1;
@@ -828,9 +900,15 @@ mod tests {
 
         assert_eq!(parsed.crs_epsg(), Some(4326));
         assert_eq!(parsed.len(), 1);
-        assert!(matches!(parsed.features[0].geometry, Some(Geometry::Point(_))));
+        assert!(matches!(
+            parsed.features[0].geometry,
+            Some(Geometry::Point(_))
+        ));
         assert_eq!(
-            parsed.features[0].get(&parsed.schema, "gpx_type").unwrap().as_str(),
+            parsed.features[0]
+                .get(&parsed.schema, "gpx_type")
+                .unwrap()
+                .as_str(),
             Some("wpt")
         );
     }
@@ -861,8 +939,14 @@ mod tests {
         assert_eq!(layer.len(), 2);
         assert_eq!(layer.crs_epsg(), Some(4326));
 
-        assert!(matches!(layer.features[0].geometry, Some(Geometry::LineString(_))));
-        assert!(matches!(layer.features[1].geometry, Some(Geometry::MultiLineString(_))));
+        assert!(matches!(
+            layer.features[0].geometry,
+            Some(Geometry::LineString(_))
+        ));
+        assert!(matches!(
+            layer.features[1].geometry,
+            Some(Geometry::MultiLineString(_))
+        ));
     }
 
     #[test]
@@ -879,7 +963,19 @@ mod tests {
 </gpx>
 "#;
         let layer = parse_str(gpx).unwrap();
-        assert_eq!(layer.features[0].get(&layer.schema, "surface").unwrap().as_str(), Some("gravel"));
-        assert_eq!(layer.features[0].get(&layer.schema, "difficulty").unwrap().as_i64(), Some(2));
+        assert_eq!(
+            layer.features[0]
+                .get(&layer.schema, "surface")
+                .unwrap()
+                .as_str(),
+            Some("gravel")
+        );
+        assert_eq!(
+            layer.features[0]
+                .get(&layer.schema, "difficulty")
+                .unwrap()
+                .as_i64(),
+            Some(2)
+        );
     }
 }

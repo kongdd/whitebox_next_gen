@@ -2,10 +2,10 @@
 //!
 //! Usage: cargo run --example gpx_io
 
+use std::path::PathBuf;
 use wbvector::feature::{FieldDef, FieldType, Layer};
 use wbvector::geometry::{Coord, Geometry, GeometryType};
 use wbvector::{gpx, Result};
-use std::path::PathBuf;
 
 fn data_dir() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -43,7 +43,11 @@ fn main() -> Result<()> {
     let back = gpx::read(&path)?;
 
     println!("Wrote {} feature(s) to {}", layer.len(), path.display());
-    println!("Read back {} feature(s), {} field(s)", back.len(), back.schema.len());
+    println!(
+        "Read back {} feature(s), {} field(s)",
+        back.len(),
+        back.schema.len()
+    );
 
     Ok(())
 }

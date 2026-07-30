@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::error::{GeoError, Result};
-use crate::feature::{FieldDef, FieldType, FieldValue, Feature, Layer};
+use crate::feature::{Feature, FieldDef, FieldType, FieldValue, Layer};
 use crate::geometry::{Coord, Geometry, GeometryType, Ring};
 use crate::reproject;
 
@@ -147,7 +147,11 @@ impl XmlNode {
     fn attr(&self, key: &str) -> Option<&str> {
         self.attrs
             .get(key)
-            .or_else(|| self.attrs.iter().find_map(|(k, v)| (local_name(k) == key).then_some(v)))
+            .or_else(|| {
+                self.attrs
+                    .iter()
+                    .find_map(|(k, v)| (local_name(k) == key).then_some(v))
+            })
             .map(|s| s.as_str())
     }
 
@@ -177,14 +181,20 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
                     i = end + 3;
                     continue;
                 }
-                return Err(GeoError::GmlParse { offset: i, msg: "unterminated comment".into() });
+                return Err(GeoError::GmlParse {
+                    offset: i,
+                    msg: "unterminated comment".into(),
+                });
             }
             if i + 2 <= bytes.len() && bytes[i + 1] == b'?' {
                 if let Some(end) = find_bytes(bytes, i + 2, b"?>") {
                     i = end + 2;
                     continue;
                 }
-                return Err(GeoError::GmlParse { offset: i, msg: "unterminated xml declaration".into() });
+                return Err(GeoError::GmlParse {
+                    offset: i,
+                    msg: "unterminated xml declaration".into(),
+                });
             }
             if i + 9 <= bytes.len() && &bytes[i..i + 9] == b"<![CDATA[" {
                 if let Some(end) = find_bytes(bytes, i + 9, b"]]>") {
@@ -194,7 +204,10 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
                     i = end + 3;
                     continue;
                 }
-                return Err(GeoError::GmlParse { offset: i, msg: "unterminated CDATA".into() });
+                return Err(GeoError::GmlParse {
+                    offset: i,
+                    msg: "unterminated CDATA".into(),
+                });
             }
             if i + 2 <= bytes.len() && bytes[i + 1] == b'/' {
                 let end = find_gt(bytes, i + 2).ok_or_else(|| GeoError::GmlParse {
@@ -232,14 +245,22 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
             }
 
             let (name, attrs) = parse_start_tag(raw, i)?;
-            let node = XmlNode { name, attrs, children: Vec::new(), text: String::new() };
+            let node = XmlNode {
+                name,
+                attrs,
+                children: Vec::new(),
+                text: String::new(),
+            };
             if self_close {
                 if let Some(parent) = stack.last_mut() {
                     parent.children.push(node);
                 } else if root.is_none() {
                     root = Some(node);
                 } else {
-                    return Err(GeoError::GmlParse { offset: i, msg: "multiple root elements".into() });
+                    return Err(GeoError::GmlParse {
+                        offset: i,
+                        msg: "multiple root elements".into(),
+                    });
                 }
             } else {
                 stack.push(node);
@@ -269,7 +290,10 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
         });
     }
 
-    root.ok_or_else(|| GeoError::GmlParse { offset: 0, msg: "no root element".into() })
+    root.ok_or_else(|| GeoError::GmlParse {
+        offset: 0,
+        msg: "no root element".into(),
+    })
 }
 
 fn find_gt(bytes: &[u8], mut i: usize) -> Option<usize> {
@@ -334,7 +358,10 @@ fn parse_start_tag(raw: &str, offset: usize) -> Result<(String, HashMap<String, 
             i += 1;
         }
         if i >= bytes.len() {
-            return Err(GeoError::GmlParse { offset, msg: "truncated attribute value".into() });
+            return Err(GeoError::GmlParse {
+                offset,
+                msg: "truncated attribute value".into(),
+            });
         }
 
         let quote = bytes[i];
@@ -350,7 +377,10 @@ fn parse_start_tag(raw: &str, offset: usize) -> Result<(String, HashMap<String, 
             i += 1;
         }
         if i >= bytes.len() {
-            return Err(GeoError::GmlParse { offset, msg: "unterminated quoted attribute".into() });
+            return Err(GeoError::GmlParse {
+                offset,
+                msg: "unterminated quoted attribute".into(),
+            });
         }
         let val = decode_entities(&raw[v0..i]);
         i += 1;
@@ -595,14 +625,15 @@ fn parse_polygon(node: &XmlNode) -> Result<Geometry> {
             offset: 0,
             msg: "KML Polygon missing outerBoundaryIs".into(),
         })?;
-    let outer_ring = parse_ring(
-        outer
-            .child_by_local("LinearRing")
-            .ok_or_else(|| GeoError::GmlParse {
-                offset: 0,
-                msg: "KML Polygon outerBoundaryIs missing LinearRing".into(),
-            })?,
-    )?;
+    let outer_ring =
+        parse_ring(
+            outer
+                .child_by_local("LinearRing")
+                .ok_or_else(|| GeoError::GmlParse {
+                    offset: 0,
+                    msg: "KML Polygon outerBoundaryIs missing LinearRing".into(),
+                })?,
+        )?;
 
     let mut holes = Vec::<Ring>::new();
     for inner in node.children_by_local("innerBoundaryIs") {
@@ -667,7 +698,10 @@ fn parse_multi_geometry(node: &XmlNode) -> Result<Geometry> {
         let polys = geoms
             .into_iter()
             .filter_map(|g| match g {
-                Geometry::Polygon { exterior, interiors } => Some((exterior, interiors)),
+                Geometry::Polygon {
+                    exterior,
+                    interiors,
+                } => Some((exterior, interiors)),
                 _ => None,
             })
             .collect();
@@ -705,7 +739,11 @@ fn parse_multi_polygon(node: &XmlNode) -> Result<Geometry> {
     let mut polys = Vec::new();
     for child in node.element_children() {
         if child.local_name() == "Polygon" {
-            if let Geometry::Polygon { exterior, interiors } = parse_polygon(child)? {
+            if let Geometry::Polygon {
+                exterior,
+                interiors,
+            } = parse_polygon(child)?
+            {
                 polys.push((exterior, interiors));
             }
         }
@@ -723,14 +761,20 @@ fn parse_kml_coordinates(text: &str) -> Result<Vec<Coord>> {
                 msg: format!("invalid KML coordinate tuple '{tuple}'"),
             });
         }
-        let x = parts[0].trim().parse::<f64>().map_err(|_| GeoError::GmlParse {
-            offset: 0,
-            msg: format!("invalid longitude '{}'", parts[0].trim()),
-        })?;
-        let y = parts[1].trim().parse::<f64>().map_err(|_| GeoError::GmlParse {
-            offset: 0,
-            msg: format!("invalid latitude '{}'", parts[1].trim()),
-        })?;
+        let x = parts[0]
+            .trim()
+            .parse::<f64>()
+            .map_err(|_| GeoError::GmlParse {
+                offset: 0,
+                msg: format!("invalid longitude '{}'", parts[0].trim()),
+            })?;
+        let y = parts[1]
+            .trim()
+            .parse::<f64>()
+            .map_err(|_| GeoError::GmlParse {
+                offset: 0,
+                msg: format!("invalid latitude '{}'", parts[1].trim()),
+            })?;
 
         let z = if parts.len() >= 3 {
             let z_text = parts[2].trim();
@@ -818,7 +862,10 @@ fn parse_value_as_type(raw: &str, ty: FieldType) -> FieldValue {
 }
 
 fn is_bool_text(s: &str) -> bool {
-    matches!(s.to_ascii_lowercase().as_str(), "true" | "false" | "1" | "0" | "yes" | "no")
+    matches!(
+        s.to_ascii_lowercase().as_str(),
+        "true" | "false" | "1" | "0" | "yes" | "no"
+    )
 }
 
 fn is_yyyy_mm_dd(s: &str) -> bool {
@@ -835,7 +882,9 @@ fn is_yyyy_mm_dd(s: &str) -> bool {
 
 fn is_iso_datetime(s: &str) -> bool {
     // Practical heuristic to avoid false positives while keeping parser simple.
-    s.contains('T') && s.contains('-') && (s.ends_with('Z') || s.contains('+') || s.matches(':').count() >= 2)
+    s.contains('T')
+        && s.contains('-')
+        && (s.ends_with('Z') || s.contains('+') || s.matches(':').count() >= 2)
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -855,13 +904,20 @@ fn write_geom(out: &mut String, geom: &Geometry, indent: usize) {
             push_coord_tuples(out, cs);
             out.push_str("</coordinates></LineString>\n");
         }
-        Geometry::Polygon { exterior, interiors } => {
+        Geometry::Polygon {
+            exterior,
+            interiors,
+        } => {
             out.push_str(&format!("{pad}<Polygon>\n"));
-            out.push_str(&format!("{pad}  <outerBoundaryIs><LinearRing><coordinates>"));
+            out.push_str(&format!(
+                "{pad}  <outerBoundaryIs><LinearRing><coordinates>"
+            ));
             push_coord_tuples_closed(out, &exterior.0);
             out.push_str("</coordinates></LinearRing></outerBoundaryIs>\n");
             for ring in interiors {
-                out.push_str(&format!("{pad}  <innerBoundaryIs><LinearRing><coordinates>"));
+                out.push_str(&format!(
+                    "{pad}  <innerBoundaryIs><LinearRing><coordinates>"
+                ));
                 push_coord_tuples_closed(out, &ring.0);
                 out.push_str("</coordinates></LinearRing></innerBoundaryIs>\n");
             }
@@ -889,11 +945,15 @@ fn write_geom(out: &mut String, geom: &Geometry, indent: usize) {
             out.push_str(&format!("{pad}<MultiGeometry>\n"));
             for (exterior, holes) in polys {
                 out.push_str(&format!("{pad}  <Polygon>\n"));
-                out.push_str(&format!("{pad}    <outerBoundaryIs><LinearRing><coordinates>"));
+                out.push_str(&format!(
+                    "{pad}    <outerBoundaryIs><LinearRing><coordinates>"
+                ));
                 push_coord_tuples_closed(out, &exterior.0);
                 out.push_str("</coordinates></LinearRing></outerBoundaryIs>\n");
                 for ring in holes {
-                    out.push_str(&format!("{pad}    <innerBoundaryIs><LinearRing><coordinates>"));
+                    out.push_str(&format!(
+                        "{pad}    <innerBoundaryIs><LinearRing><coordinates>"
+                    ));
                     push_coord_tuples_closed(out, &ring.0);
                     out.push_str("</coordinates></LinearRing></innerBoundaryIs>\n");
                 }
@@ -985,7 +1045,10 @@ mod tests {
         layer
             .add_feature(
                 Some(Geometry::point(-0.1278, 51.5074)),
-                &[("name", "London".into()), ("population", 9_000_000i64.into())],
+                &[
+                    ("name", "London".into()),
+                    ("population", 9_000_000i64.into()),
+                ],
             )
             .unwrap();
 
@@ -996,8 +1059,17 @@ mod tests {
         assert_eq!(parsed.crs_epsg(), Some(4326));
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed.schema.len(), 2);
-        assert!(matches!(parsed.features[0].geometry, Some(Geometry::Point(_))));
-        assert_eq!(parsed.features[0].get(&parsed.schema, "name").unwrap().as_str(), Some("London"));
+        assert!(matches!(
+            parsed.features[0].geometry,
+            Some(Geometry::Point(_))
+        ));
+        assert_eq!(
+            parsed.features[0]
+                .get(&parsed.schema, "name")
+                .unwrap()
+                .as_str(),
+            Some("London")
+        );
     }
 
     #[test]
@@ -1025,9 +1097,24 @@ mod tests {
         assert_eq!(layer.name, "roads");
         assert_eq!(layer.crs_epsg(), Some(4326));
         assert_eq!(layer.len(), 1);
-        assert!(matches!(layer.features[0].geometry, Some(Geometry::MultiLineString(_))));
-        assert_eq!(layer.features[0].get(&layer.schema, "speed").unwrap().as_i64(), Some(80));
-        assert_eq!(layer.features[0].get(&layer.schema, "toll").unwrap().as_bool(), Some(false));
+        assert!(matches!(
+            layer.features[0].geometry,
+            Some(Geometry::MultiLineString(_))
+        ));
+        assert_eq!(
+            layer.features[0]
+                .get(&layer.schema, "speed")
+                .unwrap()
+                .as_i64(),
+            Some(80)
+        );
+        assert_eq!(
+            layer.features[0]
+                .get(&layer.schema, "toll")
+                .unwrap()
+                .as_bool(),
+            Some(false)
+        );
     }
 
     #[test]
@@ -1047,7 +1134,10 @@ mod tests {
 
         let layer = parse_str(kml).unwrap();
         match &layer.features[0].geometry {
-            Some(Geometry::Polygon { exterior, interiors }) => {
+            Some(Geometry::Polygon {
+                exterior,
+                interiors,
+            }) => {
                 assert_eq!(exterior.0.first(), exterior.0.last());
                 assert_eq!(interiors.len(), 1);
                 assert_eq!(interiors[0].0.first(), interiors[0].0.last());

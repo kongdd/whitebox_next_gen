@@ -2,17 +2,17 @@
 //!
 //! Usage: cargo run --example geojson_io
 
+use std::path::PathBuf;
 use wbvector::feature::{FieldDef, FieldType, Layer};
 use wbvector::geometry::{Coord, Geometry, GeometryType};
 use wbvector::{geojson, Result};
-use std::path::PathBuf;
 
 fn data_dir() -> PathBuf {
-  let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-    .join("data")
-    .join("geojson_io");
-  std::fs::create_dir_all(&dir).unwrap();
-  dir
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("data")
+        .join("geojson_io");
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
 }
 
 const SAMPLE_JSON: &str = r#"{
@@ -50,12 +50,14 @@ fn main() -> Result<()> {
 
     for feat in layer.iter() {
         let city = feat.get(&layer.schema, "city")?;
-        let pop  = feat.get(&layer.schema, "pop")?;
+        let pop = feat.get(&layer.schema, "pop")?;
         print!("  {} — pop={}", city, pop);
         if let Some(g) = &feat.geometry {
             match g {
                 Geometry::Point(c) => print!("  (Point {:.4},{:.4})", c.x, c.y),
-                Geometry::Polygon { exterior, .. } => print!("  (Polygon {} verts)", exterior.len()),
+                Geometry::Polygon { exterior, .. } => {
+                    print!("  (Polygon {} verts)", exterior.len())
+                }
                 _ => {}
             }
         }
@@ -63,7 +65,7 @@ fn main() -> Result<()> {
     }
 
     // ── Write to file and read back ───────────────────────────────────────────
-    let dir  = data_dir();
+    let dir = data_dir();
     let path = dir.join("sf.geojson");
 
     geojson::write(&layer, &path)?;
@@ -73,12 +75,20 @@ fn main() -> Result<()> {
     println!("Read back {} features", loaded.len());
 
     // ── Build and serialise a MultiPolygon layer ──────────────────────────────
-    let mut ml = Layer::new("countries").with_geom_type(GeometryType::MultiPolygon).with_epsg(4326);
+    let mut ml = Layer::new("countries")
+        .with_geom_type(GeometryType::MultiPolygon)
+        .with_epsg(4326);
     ml.add_field(FieldDef::new("iso2", FieldType::Text));
     ml.add_feature(
         Some(Geometry::multi_polygon(vec![
-            (vec![Coord::xy(0.,0.), Coord::xy(1.,0.), Coord::xy(0.5,1.)], vec![]),
-            (vec![Coord::xy(2.,0.), Coord::xy(3.,0.), Coord::xy(2.5,1.)], vec![]),
+            (
+                vec![Coord::xy(0., 0.), Coord::xy(1., 0.), Coord::xy(0.5, 1.)],
+                vec![],
+            ),
+            (
+                vec![Coord::xy(2., 0.), Coord::xy(3., 0.), Coord::xy(2.5, 1.)],
+                vec![],
+            ),
         ])),
         &[("iso2", "XX".into())],
     )?;
@@ -93,7 +103,10 @@ fn main() -> Result<()> {
         {"type":"LineString","coordinates":[[0,0],[1,1],[2,0]]}
     ]}"#;
     let gc_layer = geojson::parse_str(gc_json)?;
-    assert!(matches!(gc_layer[0].geometry, Some(Geometry::GeometryCollection(_))));
+    assert!(matches!(
+        gc_layer[0].geometry,
+        Some(Geometry::GeometryCollection(_))
+    ));
     println!("\nGeometryCollection parsed OK ✓");
 
     println!("\nGeoJSON example OK ✓");

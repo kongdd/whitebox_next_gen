@@ -16,7 +16,7 @@ use std::path::Path;
 use osmpbfreader::{OsmId, OsmObj, OsmPbfReader, Tags};
 
 use crate::error::{GeoError, Result};
-use crate::feature::{FieldDef, FieldType, FieldValue, Feature, Layer};
+use crate::feature::{Feature, FieldDef, FieldType, FieldValue, Layer};
 use crate::geometry::{Coord, Geometry, GeometryType, Ring};
 
 /// Filtering options for OSM PBF reads.
@@ -64,8 +64,16 @@ impl OsmPbfReadOptions {
         I: IntoIterator<Item = S>,
         S: Into<String>,
     {
-        let keys_vec: Vec<String> = keys.into_iter().map(Into::into).filter(|k| !k.is_empty()).collect();
-        self.include_tag_keys = if keys_vec.is_empty() { None } else { Some(keys_vec) };
+        let keys_vec: Vec<String> = keys
+            .into_iter()
+            .map(Into::into)
+            .filter(|k| !k.is_empty())
+            .collect();
+        self.include_tag_keys = if keys_vec.is_empty() {
+            None
+        } else {
+            Some(keys_vec)
+        };
         self
     }
 }
@@ -150,19 +158,46 @@ fn layer_from_objs(objs: &BTreeMap<OsmId, OsmObj>, options: &OsmPbfReadOptions) 
             declared_geom = Some(gt);
         }
 
-        let name = way.tags.get("name").map(|s| s.to_string()).unwrap_or_default();
-        let highway = way.tags.get("highway").map(|s| s.to_string()).unwrap_or_default();
-        let building = way.tags.get("building").map(|s| s.to_string()).unwrap_or_default();
+        let name = way
+            .tags
+            .get("name")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let highway = way
+            .tags
+            .get("highway")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+        let building = way
+            .tags
+            .get("building")
+            .map(|s| s.to_string())
+            .unwrap_or_default();
 
         layer.push(Feature {
             fid: way.id.0 as u64,
             geometry: Some(geom),
             attributes: vec![
                 FieldValue::Integer(way.id.0),
-                if name.is_empty() { FieldValue::Null } else { FieldValue::Text(name) },
-                if highway.is_empty() { FieldValue::Null } else { FieldValue::Text(highway) },
-                if building.is_empty() { FieldValue::Null } else { FieldValue::Text(building) },
-                FieldValue::Text(tags_to_json_filtered(&way.tags, options.include_tag_keys.as_deref())),
+                if name.is_empty() {
+                    FieldValue::Null
+                } else {
+                    FieldValue::Text(name)
+                },
+                if highway.is_empty() {
+                    FieldValue::Null
+                } else {
+                    FieldValue::Text(highway)
+                },
+                if building.is_empty() {
+                    FieldValue::Null
+                } else {
+                    FieldValue::Text(building)
+                },
+                FieldValue::Text(tags_to_json_filtered(
+                    &way.tags,
+                    options.include_tag_keys.as_deref(),
+                )),
             ],
         });
     }
@@ -196,13 +231,7 @@ fn way_is_area(tags: &Tags) -> bool {
     }
 
     [
-        "building",
-        "landuse",
-        "natural",
-        "amenity",
-        "leisure",
-        "water",
-        "waterway",
+        "building", "landuse", "natural", "amenity", "leisure", "water", "waterway",
     ]
     .iter()
     .any(|k| tags.contains_key(*k))

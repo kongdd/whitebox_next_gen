@@ -23,8 +23,8 @@
 //! 0=NULL, 1=i8, 2=i16, 3=i24, 4=i32, 5=i48, 6=i64, 7=f64,
 //! 8=literal-0, 9=literal-1, ≥12 even=blob, ≥13 odd=text
 
-use std::collections::HashMap;
 use crate::error::{GeoError, Result};
+use std::collections::HashMap;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SQLite value
@@ -41,17 +41,31 @@ pub enum SqlVal {
 
 impl SqlVal {
     pub fn as_i64(&self) -> Option<i64> {
-        match self { Self::Int(v) => Some(*v), Self::Real(v) => Some(*v as i64), _ => None }
+        match self {
+            Self::Int(v) => Some(*v),
+            Self::Real(v) => Some(*v as i64),
+            _ => None,
+        }
     }
     #[cfg(test)]
     pub fn as_f64(&self) -> Option<f64> {
-        match self { Self::Real(v) => Some(*v), Self::Int(v) => Some(*v as f64), _ => None }
+        match self {
+            Self::Real(v) => Some(*v),
+            Self::Int(v) => Some(*v as f64),
+            _ => None,
+        }
     }
     pub fn as_str(&self) -> Option<&str> {
-        match self { Self::Text(s) => Some(s.as_str()), _ => None }
+        match self {
+            Self::Text(s) => Some(s.as_str()),
+            _ => None,
+        }
     }
     pub fn as_blob(&self) -> Option<&[u8]> {
-        match self { Self::Blob(b) => Some(b.as_slice()), _ => None }
+        match self {
+            Self::Blob(b) => Some(b.as_slice()),
+            _ => None,
+        }
     }
 }
 
@@ -66,7 +80,9 @@ fn read_varint(data: &[u8], mut pos: usize) -> (u64, usize) {
     let start = pos;
     let mut v = 0u64;
     for i in 0..9 {
-        if pos >= data.len() { break; }
+        if pos >= data.len() {
+            break;
+        }
         let b = data[pos] as u64;
         pos += 1;
         if i == 8 {
@@ -122,8 +138,8 @@ fn write_varint(mut v: u64) -> Vec<u8> {
 
 #[derive(Debug, Clone)]
 pub struct TableMeta {
-    pub root_page:  usize,   // 1-based page number
-    pub columns:    Vec<String>,
+    pub root_page: usize, // 1-based page number
+    pub columns: Vec<String>,
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -132,9 +148,9 @@ pub struct TableMeta {
 
 /// An in-memory SQLite 3 database.
 pub struct Db {
-    pages:     Vec<Vec<u8>>,   // 0-indexed; page 1 = pages[0]
+    pages: Vec<Vec<u8>>, // 0-indexed; page 1 = pages[0]
     page_size: usize,
-    tables:    HashMap<String, TableMeta>,
+    tables: HashMap<String, TableMeta>,
     next_rowid: HashMap<String, i64>,
 }
 
@@ -149,17 +165,24 @@ impl Db {
         let ps_raw = u16::from_be_bytes([data[16], data[17]]) as usize;
         let page_size = if ps_raw == 1 { 65536 } else { ps_raw };
         if page_size < 512 || !page_size.is_power_of_two() {
-            return Err(GeoError::NotGeoPackage(format!("invalid page size {page_size}")));
+            return Err(GeoError::NotGeoPackage(format!(
+                "invalid page size {page_size}"
+            )));
         }
 
         let mut pages = Vec::new();
-        let mut off   = 0;
+        let mut off = 0;
         while off + page_size <= data.len() {
             pages.push(data[off..off + page_size].to_vec());
             off += page_size;
         }
 
-        let mut db = Self { pages, page_size, tables: HashMap::new(), next_rowid: HashMap::new() };
+        let mut db = Self {
+            pages,
+            page_size,
+            tables: HashMap::new(),
+            next_rowid: HashMap::new(),
+        };
         db.load_schema()?;
         db.rebuild_next_rowid_cache()?;
         Ok(db)
@@ -185,7 +208,7 @@ impl Db {
         p1[40..44].copy_from_slice(&1u32.to_be_bytes()); // schema cookie
         p1[44..48].copy_from_slice(&4u32.to_be_bytes()); // schema format 4
         p1[56..60].copy_from_slice(&1u32.to_be_bytes()); // text encoding UTF-8
-        // GeoPackage application_id = 0x47504B47 ("GPKG") — required by OGC spec and GDAL
+                                                         // GeoPackage application_id = 0x47504B47 ("GPKG") — required by OGC spec and GDAL
         p1[68..72].copy_from_slice(&0x4750_4B47u32.to_be_bytes());
         // GeoPackage user_version = 0x000027D8 (10200) — encodes GPKG version 1.2.0
         p1[60..64].copy_from_slice(&0x0000_27D8u32.to_be_bytes());
@@ -195,13 +218,20 @@ impl Db {
         p1[103..105].copy_from_slice(&0u16.to_be_bytes()); // ncells = 0
         p1[105..107].copy_from_slice(&(ps as u16).to_be_bytes()); // content area
 
-        Self { pages: vec![p1], page_size: ps, tables: HashMap::new(), next_rowid: HashMap::new() }
+        Self {
+            pages: vec![p1],
+            page_size: ps,
+            tables: HashMap::new(),
+            next_rowid: HashMap::new(),
+        }
     }
 
     /// Serialise to bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.pages.len() * self.page_size);
-        for p in &self.pages { out.extend_from_slice(p); }
+        for p in &self.pages {
+            out.extend_from_slice(p);
+        }
         out
     }
 
@@ -210,14 +240,24 @@ impl Db {
     fn load_schema(&mut self) -> Result<()> {
         let rows = self.scan_btree(1, 100)?;
         for row in rows {
-            if row.len() < 5 { continue; }
+            if row.len() < 5 {
+                continue;
+            }
             let kind = row[0].as_str().unwrap_or("").to_ascii_lowercase();
-            if kind != "table" { continue; }
-            let name  = row[1].as_str().unwrap_or("").to_owned();
-            let root  = row[3].as_i64().unwrap_or(0) as usize;
-            let sql   = row[4].as_str().unwrap_or("").to_owned();
-            let cols  = extract_column_names(&sql);
-            self.tables.insert(name, TableMeta { root_page: root, columns: cols });
+            if kind != "table" {
+                continue;
+            }
+            let name = row[1].as_str().unwrap_or("").to_owned();
+            let root = row[3].as_i64().unwrap_or(0) as usize;
+            let sql = row[4].as_str().unwrap_or("").to_owned();
+            let cols = extract_column_names(&sql);
+            self.tables.insert(
+                name,
+                TableMeta {
+                    root_page: root,
+                    columns: cols,
+                },
+            );
         }
         Ok(())
     }
@@ -233,14 +273,18 @@ impl Db {
     // ── SELECT * ──────────────────────────────────────────────────────────────
 
     pub fn select_all(&self, table: &str) -> Result<Vec<Row>> {
-        let root = self.tables.get(table)
+        let root = self
+            .tables
+            .get(table)
             .map(|m| m.root_page)
             .ok_or_else(|| GeoError::GpkgSchema(format!("table '{table}' not found")))?;
         self.scan_btree(root, if root == 1 { 100 } else { 0 })
     }
 
     pub fn select_all_with_rowid(&self, table: &str) -> Result<Vec<(i64, Row)>> {
-        let root = self.tables.get(table)
+        let root = self
+            .tables
+            .get(table)
             .map(|m| m.root_page)
             .ok_or_else(|| GeoError::GpkgSchema(format!("table '{table}' not found")))?;
         self.scan_btree_with_rowid(root, if root == 1 { 100 } else { 0 })
@@ -254,19 +298,27 @@ impl Db {
         Ok(rows)
     }
 
-    fn scan_btree_with_rowid(&self, page_no: usize, header_offset: usize) -> Result<Vec<(i64, Row)>> {
+    fn scan_btree_with_rowid(
+        &self,
+        page_no: usize,
+        header_offset: usize,
+    ) -> Result<Vec<(i64, Row)>> {
         let mut rows = Vec::new();
         self.walk_page_with_rowid(page_no, header_offset, &mut rows)?;
         Ok(rows)
     }
 
     fn walk_page(&self, page_no: usize, ho: usize, rows: &mut Vec<Row>) -> Result<()> {
-        if page_no == 0 || page_no > self.pages.len() { return Ok(()); }
+        if page_no == 0 || page_no > self.pages.len() {
+            return Ok(());
+        }
         let page = &self.pages[page_no - 1];
-        if page.len() < ho + 8 { return Ok(()); }
+        if page.len() < ho + 8 {
+            return Ok(());
+        }
 
         let page_type = page[ho];
-        let n_cells   = u16::from_be_bytes([page[ho+3], page[ho+4]]) as usize;
+        let n_cells = u16::from_be_bytes([page[ho + 3], page[ho + 4]]) as usize;
 
         match page_type {
             0x0D => {
@@ -274,8 +326,10 @@ impl Db {
                 let cell_arr_start = ho + 8;
                 for i in 0..n_cells {
                     let ptr_off = cell_arr_start + i * 2;
-                    if ptr_off + 2 > page.len() { break; }
-                    let cell_off = u16::from_be_bytes([page[ptr_off], page[ptr_off+1]]) as usize;
+                    if ptr_off + 2 > page.len() {
+                        break;
+                    }
+                    let cell_off = u16::from_be_bytes([page[ptr_off], page[ptr_off + 1]]) as usize;
                     if let Some(row) = self.parse_leaf_cell(page, cell_off) {
                         rows.push(row);
                     }
@@ -284,13 +338,24 @@ impl Db {
             0x05 => {
                 // Interior table page — recurse into children
                 let cell_arr_start = ho + 12;
-                let right_child = u32::from_be_bytes([page[ho+8], page[ho+9], page[ho+10], page[ho+11]]) as usize;
+                let right_child =
+                    u32::from_be_bytes([page[ho + 8], page[ho + 9], page[ho + 10], page[ho + 11]])
+                        as usize;
                 for i in 0..n_cells {
                     let ptr_off = cell_arr_start + i * 2;
-                    if ptr_off + 2 > page.len() { break; }
-                    let cell_off = u16::from_be_bytes([page[ptr_off], page[ptr_off+1]]) as usize;
-                    if cell_off + 4 > page.len() { continue; }
-                    let child = u32::from_be_bytes([page[cell_off], page[cell_off+1], page[cell_off+2], page[cell_off+3]]) as usize;
+                    if ptr_off + 2 > page.len() {
+                        break;
+                    }
+                    let cell_off = u16::from_be_bytes([page[ptr_off], page[ptr_off + 1]]) as usize;
+                    if cell_off + 4 > page.len() {
+                        continue;
+                    }
+                    let child = u32::from_be_bytes([
+                        page[cell_off],
+                        page[cell_off + 1],
+                        page[cell_off + 2],
+                        page[cell_off + 3],
+                    ]) as usize;
                     self.walk_page(child, 0, rows)?;
                 }
                 self.walk_page(right_child, 0, rows)?;
@@ -300,21 +365,32 @@ impl Db {
         Ok(())
     }
 
-    fn walk_page_with_rowid(&self, page_no: usize, ho: usize, rows: &mut Vec<(i64, Row)>) -> Result<()> {
-        if page_no == 0 || page_no > self.pages.len() { return Ok(()); }
+    fn walk_page_with_rowid(
+        &self,
+        page_no: usize,
+        ho: usize,
+        rows: &mut Vec<(i64, Row)>,
+    ) -> Result<()> {
+        if page_no == 0 || page_no > self.pages.len() {
+            return Ok(());
+        }
         let page = &self.pages[page_no - 1];
-        if page.len() < ho + 8 { return Ok(()); }
+        if page.len() < ho + 8 {
+            return Ok(());
+        }
 
         let page_type = page[ho];
-        let n_cells   = u16::from_be_bytes([page[ho+3], page[ho+4]]) as usize;
+        let n_cells = u16::from_be_bytes([page[ho + 3], page[ho + 4]]) as usize;
 
         match page_type {
             0x0D => {
                 let cell_arr_start = ho + 8;
                 for i in 0..n_cells {
                     let ptr_off = cell_arr_start + i * 2;
-                    if ptr_off + 2 > page.len() { break; }
-                    let cell_off = u16::from_be_bytes([page[ptr_off], page[ptr_off+1]]) as usize;
+                    if ptr_off + 2 > page.len() {
+                        break;
+                    }
+                    let cell_off = u16::from_be_bytes([page[ptr_off], page[ptr_off + 1]]) as usize;
                     if let Some(row) = self.parse_leaf_cell_with_rowid(page, cell_off) {
                         rows.push(row);
                     }
@@ -322,13 +398,24 @@ impl Db {
             }
             0x05 => {
                 let cell_arr_start = ho + 12;
-                let right_child = u32::from_be_bytes([page[ho+8], page[ho+9], page[ho+10], page[ho+11]]) as usize;
+                let right_child =
+                    u32::from_be_bytes([page[ho + 8], page[ho + 9], page[ho + 10], page[ho + 11]])
+                        as usize;
                 for i in 0..n_cells {
                     let ptr_off = cell_arr_start + i * 2;
-                    if ptr_off + 2 > page.len() { break; }
-                    let cell_off = u16::from_be_bytes([page[ptr_off], page[ptr_off+1]]) as usize;
-                    if cell_off + 4 > page.len() { continue; }
-                    let child = u32::from_be_bytes([page[cell_off], page[cell_off+1], page[cell_off+2], page[cell_off+3]]) as usize;
+                    if ptr_off + 2 > page.len() {
+                        break;
+                    }
+                    let cell_off = u16::from_be_bytes([page[ptr_off], page[ptr_off + 1]]) as usize;
+                    if cell_off + 4 > page.len() {
+                        continue;
+                    }
+                    let child = u32::from_be_bytes([
+                        page[cell_off],
+                        page[cell_off + 1],
+                        page[cell_off + 2],
+                        page[cell_off + 3],
+                    ]) as usize;
                     self.walk_page_with_rowid(child, 0, rows)?;
                 }
                 self.walk_page_with_rowid(right_child, 0, rows)?;
@@ -339,11 +426,14 @@ impl Db {
     }
 
     fn parse_leaf_cell(&self, page: &[u8], off: usize) -> Option<Row> {
-        self.parse_leaf_cell_with_rowid(page, off).map(|(_, row)| row)
+        self.parse_leaf_cell_with_rowid(page, off)
+            .map(|(_, row)| row)
     }
 
     fn parse_leaf_cell_with_rowid(&self, page: &[u8], off: usize) -> Option<(i64, Row)> {
-        if off >= page.len() { return None; }
+        if off >= page.len() {
+            return None;
+        }
 
         // [payload_size varint][rowid varint][payload]
         let (payload_size, n1) = read_varint(page, off);
@@ -351,7 +441,9 @@ impl Db {
         let payload_size = usize::try_from(payload_size).ok()?;
         let payload_start = off + n1 + n2;
 
-        if payload_start >= page.len() { return None; }
+        if payload_start >= page.len() {
+            return None;
+        }
 
         let local_payload = Self::table_leaf_local_payload(payload_size, self.page_size);
         let local_end = payload_start.saturating_add(local_payload).min(page.len());
@@ -385,7 +477,9 @@ impl Db {
 
     /// Append a row to a table and return the new rowid.
     pub fn insert(&mut self, table: &str, values: Vec<SqlVal>) -> Result<i64> {
-        let root = self.tables.get(table)
+        let root = self
+            .tables
+            .get(table)
             .map(|m| m.root_page)
             .ok_or_else(|| GeoError::GpkgSchema(format!("table '{table}' not found")))?;
 
@@ -400,19 +494,27 @@ impl Db {
         };
 
         let cell = self.build_leaf_cell_with_overflow(rowid as u64, &values)?;
-        let leaf  = self.find_rightmost_leaf(root, if root == 1 { 100 } else { 0 });
+        let leaf = self.find_rightmost_leaf(root, if root == 1 { 100 } else { 0 });
         self.insert_cell(leaf, cell)?;
         self.next_rowid.insert(table.to_owned(), rowid + 1);
         Ok(rowid)
     }
 
     fn find_rightmost_leaf(&self, page_no: usize, ho: usize) -> usize {
-        if page_no == 0 || page_no > self.pages.len() { return page_no; }
+        if page_no == 0 || page_no > self.pages.len() {
+            return page_no;
+        }
         let page = &self.pages[page_no - 1];
-        if page.len() <= ho { return page_no; }
+        if page.len() <= ho {
+            return page_no;
+        }
         if page[ho] == 0x05 {
-            let right = u32::from_be_bytes([page[ho+8], page[ho+9], page[ho+10], page[ho+11]]) as usize;
-            if right > 0 { return self.find_rightmost_leaf(right, 0); }
+            let right =
+                u32::from_be_bytes([page[ho + 8], page[ho + 9], page[ho + 10], page[ho + 11]])
+                    as usize;
+            if right > 0 {
+                return self.find_rightmost_leaf(right, 0);
+            }
         }
         page_no
     }
@@ -424,12 +526,22 @@ impl Db {
         let ho = if page_no == 1 { 100 } else { 0 };
         let ps = self.page_size;
 
-        let n_cells       = u16::from_be_bytes([self.pages[page_no-1][ho+3], self.pages[page_no-1][ho+4]]) as usize;
-        let content_start_raw = u16::from_be_bytes([self.pages[page_no-1][ho+5], self.pages[page_no-1][ho+6]]) as usize;
-        let content_start = if content_start_raw == 0 { ps } else { content_start_raw };
+        let n_cells = u16::from_be_bytes([
+            self.pages[page_no - 1][ho + 3],
+            self.pages[page_no - 1][ho + 4],
+        ]) as usize;
+        let content_start_raw = u16::from_be_bytes([
+            self.pages[page_no - 1][ho + 5],
+            self.pages[page_no - 1][ho + 6],
+        ]) as usize;
+        let content_start = if content_start_raw == 0 {
+            ps
+        } else {
+            content_start_raw
+        };
 
-        let cell_arr_end  = ho + 8 + n_cells * 2;
-        let free_space    = content_start.saturating_sub(cell_arr_end);
+        let cell_arr_end = ho + 8 + n_cells * 2;
+        let free_space = content_start.saturating_sub(cell_arr_end);
 
         if cell.len() + 2 > free_space {
             return self.spill_to_new_page(page_no, cell);
@@ -439,10 +551,10 @@ impl Db {
         let p = &mut self.pages[page_no - 1];
         p[new_content..new_content + cell.len()].copy_from_slice(&cell);
         let ptr_off = ho + 8 + n_cells * 2;
-        p[ptr_off..ptr_off+2].copy_from_slice(&(new_content as u16).to_be_bytes());
+        p[ptr_off..ptr_off + 2].copy_from_slice(&(new_content as u16).to_be_bytes());
         let new_n = (n_cells + 1) as u16;
-        p[ho+3..ho+5].copy_from_slice(&new_n.to_be_bytes());
-        p[ho+5..ho+7].copy_from_slice(&(new_content as u16).to_be_bytes());
+        p[ho + 3..ho + 5].copy_from_slice(&new_n.to_be_bytes());
+        p[ho + 5..ho + 7].copy_from_slice(&(new_content as u16).to_be_bytes());
         Ok(())
     }
 
@@ -481,7 +593,9 @@ impl Db {
                 continue;
             }
             let n_cells = u16::from_be_bytes([page[ho + 3], page[ho + 4]]) as usize;
-            let right = u32::from_be_bytes([page[ho + 8], page[ho + 9], page[ho + 10], page[ho + 11]]) as usize;
+            let right =
+                u32::from_be_bytes([page[ho + 8], page[ho + 9], page[ho + 10], page[ho + 11]])
+                    as usize;
             if right == child_page_no {
                 return Some((pno, ho));
             }
@@ -568,7 +682,7 @@ impl Db {
     }
 
     fn spill_to_new_page(&mut self, old_page_no: usize, cell: Vec<u8>) -> Result<()> {
-        let ps        = self.page_size;
+        let ps = self.page_size;
         let ho = if old_page_no == 1 { 100 } else { 0 };
         if old_page_no == 0 || old_page_no > self.pages.len() {
             return Err(GeoError::Sqlite(format!("page {old_page_no} out of range")));
@@ -580,7 +694,8 @@ impl Db {
             )));
         }
 
-        let separator = self.max_rowid_in_leaf_page(old_page_no, ho)
+        let separator = self
+            .max_rowid_in_leaf_page(old_page_no, ho)
             .ok_or_else(|| GeoError::Sqlite("cannot split empty leaf page".to_owned()))?;
 
         // Non-root leaf split: keep old page as leaf, allocate a new right leaf,
@@ -630,7 +745,9 @@ impl Db {
         interior_cell.extend_from_slice(&write_varint(separator));
         let content_start = ps.saturating_sub(interior_cell.len());
         if content_start <= ho + 12 {
-            return Err(GeoError::Sqlite("interior split cell does not fit page".to_owned()));
+            return Err(GeoError::Sqlite(
+                "interior split cell does not fit page".to_owned(),
+            ));
         }
 
         let p = &mut self.pages[old_page_no - 1];
@@ -652,7 +769,9 @@ impl Db {
     pub fn create_table(&mut self, sql: &str) -> Result<()> {
         let name = extract_table_name(sql)
             .ok_or_else(|| GeoError::Sqlite(format!("cannot parse table name from: {sql}")))?;
-        if self.tables.contains_key(&name) { return Ok(()); }
+        if self.tables.contains_key(&name) {
+            return Ok(());
+        }
 
         // Allocate a new B-tree page for this table
         let ps = self.page_size;
@@ -668,7 +787,7 @@ impl Db {
 
         // Insert row into sqlite_master (page 1)
         let existing = self.scan_btree(1, 100)?;
-        let rowid    = (existing.len() as i64) + 1;
+        let rowid = (existing.len() as i64) + 1;
         let master_row = vec![
             SqlVal::Text("table".into()),
             SqlVal::Text(name.clone()),
@@ -680,7 +799,13 @@ impl Db {
         self.insert_cell(1, cell)?;
 
         let cols = extract_column_names(sql);
-        self.tables.insert(name.clone(), TableMeta { root_page: new_page_no, columns: cols });
+        self.tables.insert(
+            name.clone(),
+            TableMeta {
+                root_page: new_page_no,
+                columns: cols,
+            },
+        );
         self.next_rowid.insert(name, 1);
         Ok(())
     }
@@ -692,10 +817,8 @@ impl Db {
             let Some(meta) = self.tables.get(&table) else {
                 continue;
             };
-            let rows = self.scan_btree_with_rowid(
-                meta.root_page,
-                if meta.root_page == 1 { 100 } else { 0 },
-            )?;
+            let rows = self
+                .scan_btree_with_rowid(meta.root_page, if meta.root_page == 1 { 100 } else { 0 })?;
             let next = rows.iter().map(|(rid, _)| *rid).max().unwrap_or(0) + 1;
             self.next_rowid.insert(table, next);
         }
@@ -709,7 +832,8 @@ impl Db {
         if payload_size <= max_local {
             payload_size
         } else {
-            let mut local = min_local + ((payload_size - min_local) % (usable.saturating_sub(4).max(1)));
+            let mut local =
+                min_local + ((payload_size - min_local) % (usable.saturating_sub(4).max(1)));
             if local > max_local {
                 local = min_local;
             }
@@ -801,20 +925,24 @@ impl Db {
 // ══════════════════════════════════════════════════════════════════════════════
 
 fn parse_record(data: &[u8]) -> Option<Row> {
-    if data.is_empty() { return None; }
+    if data.is_empty() {
+        return None;
+    }
     let (hdr_size, hn) = read_varint(data, 0);
     let hdr_size = hdr_size as usize;
-    if hdr_size > data.len() { return None; }
+    if hdr_size > data.len() {
+        return None;
+    }
 
     let mut types = Vec::new();
-    let mut pos   = hn;
+    let mut pos = hn;
     while pos < hdr_size {
         let (t, n) = read_varint(data, pos);
         types.push(t);
         pos += n;
     }
 
-    let mut row  = Vec::with_capacity(types.len());
+    let mut row = Vec::with_capacity(types.len());
     let mut dpos = hdr_size;
 
     for &t in &types {
@@ -827,7 +955,7 @@ fn parse_record(data: &[u8]) -> Option<Row> {
 
 fn decode_serial(data: &[u8], pos: usize, t: u64) -> (SqlVal, usize) {
     let get = |off: usize, n: usize| -> Vec<u8> {
-        data.get(pos+off..pos+off+n).unwrap_or(&[]).to_vec()
+        data.get(pos + off..pos + off + n).unwrap_or(&[]).to_vec()
     };
     match t {
         0 => (SqlVal::Null, 0),
@@ -836,37 +964,41 @@ fn decode_serial(data: &[u8], pos: usize, t: u64) -> (SqlVal, usize) {
             (SqlVal::Int(v), 1)
         }
         2 => {
-            let b: [u8;2] = get(0,2).try_into().unwrap_or([0;2]);
+            let b: [u8; 2] = get(0, 2).try_into().unwrap_or([0; 2]);
             (SqlVal::Int(i16::from_be_bytes(b) as i64), 2)
         }
         3 => {
-            let b = get(0,3);
+            let b = get(0, 3);
             let v = (b.get(0).copied().unwrap_or(0) as i32) << 16
-                  | (b.get(1).copied().unwrap_or(0) as i32) << 8
-                  | (b.get(2).copied().unwrap_or(0) as i32);
-            let v = if v & 0x80_0000 != 0 { v | !0xFF_FFFF } else { v };
+                | (b.get(1).copied().unwrap_or(0) as i32) << 8
+                | (b.get(2).copied().unwrap_or(0) as i32);
+            let v = if v & 0x80_0000 != 0 {
+                v | !0xFF_FFFF
+            } else {
+                v
+            };
             (SqlVal::Int(v as i64), 3)
         }
         4 => {
-            let b: [u8;4] = get(0,4).try_into().unwrap_or([0;4]);
+            let b: [u8; 4] = get(0, 4).try_into().unwrap_or([0; 4]);
             (SqlVal::Int(i32::from_be_bytes(b) as i64), 4)
         }
         5 => {
-            let b = get(0,6);
+            let b = get(0, 6);
             let v: i64 = (b.get(0).copied().unwrap_or(0) as i64) << 40
-                       | (b.get(1).copied().unwrap_or(0) as i64) << 32
-                       | (b.get(2).copied().unwrap_or(0) as i64) << 24
-                       | (b.get(3).copied().unwrap_or(0) as i64) << 16
-                       | (b.get(4).copied().unwrap_or(0) as i64) << 8
-                       | (b.get(5).copied().unwrap_or(0) as i64);
+                | (b.get(1).copied().unwrap_or(0) as i64) << 32
+                | (b.get(2).copied().unwrap_or(0) as i64) << 24
+                | (b.get(3).copied().unwrap_or(0) as i64) << 16
+                | (b.get(4).copied().unwrap_or(0) as i64) << 8
+                | (b.get(5).copied().unwrap_or(0) as i64);
             (SqlVal::Int(v), 6)
         }
         6 => {
-            let b: [u8;8] = get(0,8).try_into().unwrap_or([0;8]);
+            let b: [u8; 8] = get(0, 8).try_into().unwrap_or([0; 8]);
             (SqlVal::Int(i64::from_be_bytes(b)), 8)
         }
         7 => {
-            let b: [u8;8] = get(0,8).try_into().unwrap_or([0;8]);
+            let b: [u8; 8] = get(0, 8).try_into().unwrap_or([0; 8]);
             (SqlVal::Real(f64::from_be_bytes(b)), 8)
         }
         8 => (SqlVal::Int(0), 0),
@@ -877,7 +1009,7 @@ fn decode_serial(data: &[u8], pos: usize, t: u64) -> (SqlVal, usize) {
         }
         t if t >= 13 && t % 2 == 1 => {
             let len = ((t - 13) / 2) as usize;
-            let s   = String::from_utf8_lossy(&get(0, len)).into_owned();
+            let s = String::from_utf8_lossy(&get(0, len)).into_owned();
             (SqlVal::Text(s), len)
         }
         _ => (SqlVal::Null, 0),
@@ -886,14 +1018,24 @@ fn decode_serial(data: &[u8], pos: usize, t: u64) -> (SqlVal, usize) {
 
 fn encode_serial(val: &SqlVal) -> (u64, Vec<u8>) {
     match val {
-        SqlVal::Null    => (0, vec![]),
-        SqlVal::Int(v)  => {
+        SqlVal::Null => (0, vec![]),
+        SqlVal::Int(v) => {
             let v = *v;
-            if v == 0 { return (8, vec![]); }
-            if v == 1 { return (9, vec![]); }
-            if v >= i8::MIN as i64  && v <= i8::MAX as i64  { return (1, vec![v as i8 as u8]); }
-            if v >= i16::MIN as i64 && v <= i16::MAX as i64 { return (2, (v as i16).to_be_bytes().to_vec()); }
-            if v >= i32::MIN as i64 && v <= i32::MAX as i64 { return (4, (v as i32).to_be_bytes().to_vec()); }
+            if v == 0 {
+                return (8, vec![]);
+            }
+            if v == 1 {
+                return (9, vec![]);
+            }
+            if v >= i8::MIN as i64 && v <= i8::MAX as i64 {
+                return (1, vec![v as i8 as u8]);
+            }
+            if v >= i16::MIN as i64 && v <= i16::MAX as i64 {
+                return (2, (v as i16).to_be_bytes().to_vec());
+            }
+            if v >= i32::MIN as i64 && v <= i32::MAX as i64 {
+                return (4, (v as i32).to_be_bytes().to_vec());
+            }
             (6, v.to_be_bytes().to_vec())
         }
         SqlVal::Real(v) => (7, v.to_be_bytes().to_vec()),
@@ -906,7 +1048,7 @@ fn encode_serial(val: &SqlVal) -> (u64, Vec<u8>) {
 }
 
 fn build_record_payload(values: &[SqlVal]) -> Vec<u8> {
-    let mut types  = Vec::new();
+    let mut types = Vec::new();
     let mut bodies = Vec::new();
     for v in values {
         let (t, b) = encode_serial(v);
@@ -916,14 +1058,18 @@ fn build_record_payload(values: &[SqlVal]) -> Vec<u8> {
 
     // Build header: first encode all type varints
     let mut hdr_body = Vec::new();
-    for t in &types { hdr_body.extend_from_slice(&write_varint(*t)); }
+    for t in &types {
+        hdr_body.extend_from_slice(&write_varint(*t));
+    }
     // Header size includes the varint that stores header size itself.
     let total_hdr_content = hdr_body.len();
     let mut hdr_size = total_hdr_content + 1;
     loop {
         let len = write_varint(hdr_size as u64).len();
         let next = total_hdr_content + len;
-        if next == hdr_size { break; }
+        if next == hdr_size {
+            break;
+        }
         hdr_size = next;
     }
     let hdr_size_varint = write_varint(hdr_size as u64);
@@ -947,26 +1093,34 @@ pub(crate) fn extract_table_name(sql: &str) -> Option<String> {
     let rest = sql[after_create + 12..].trim_start();
     let rest = if rest.to_ascii_lowercase().starts_with("if not exists") {
         rest[13..].trim_start()
-    } else { rest };
-    let end = rest.find(|c: char| c.is_whitespace() || c == '(').unwrap_or(rest.len());
+    } else {
+        rest
+    };
+    let end = rest
+        .find(|c: char| c.is_whitespace() || c == '(')
+        .unwrap_or(rest.len());
     Some(rest[..end].trim_matches('"').to_owned())
 }
 
 pub(crate) fn extract_column_names(sql: &str) -> Vec<String> {
     let start = sql.find('(').map(|i| i + 1).unwrap_or(0);
-    let end   = sql.rfind(')').unwrap_or(sql.len());
-    if start >= end { return Vec::new(); }
+    let end = sql.rfind(')').unwrap_or(sql.len());
+    if start >= end {
+        return Vec::new();
+    }
 
     sql[start..end]
         .split(',')
         .filter_map(|col| {
             let t = col.trim();
-            if t.is_empty() { return None; }
+            if t.is_empty() {
+                return None;
+            }
             let first = t.split_whitespace().next()?;
-            let name  = first.trim_matches(|c| matches!(c, '"' | '[' | ']' | '`'));
+            let name = first.trim_matches(|c| matches!(c, '"' | '[' | ']' | '`'));
             // Skip table-level constraints
             let low = name.to_ascii_lowercase();
-            if ["constraint","primary","unique","check","foreign"].contains(&low.as_str()) {
+            if ["constraint", "primary", "unique", "check", "foreign"].contains(&low.as_str()) {
                 return None;
             }
             Some(name.to_owned())
@@ -984,7 +1138,9 @@ mod tests {
 
     fn btree_depth_and_check(db: &Db, page_no: usize, ho: usize) -> Result<usize> {
         if page_no == 0 || page_no > db.pages.len() {
-            return Err(GeoError::Sqlite(format!("invalid page reference {page_no}")));
+            return Err(GeoError::Sqlite(format!(
+                "invalid page reference {page_no}"
+            )));
         }
         let page = &db.pages[page_no - 1];
         if page.len() < ho + 8 {
@@ -996,18 +1152,24 @@ mod tests {
             0x0D => Ok(1),
             0x05 => {
                 if page.len() < ho + 12 {
-                    return Err(GeoError::Sqlite(format!("interior page {page_no} too short")));
+                    return Err(GeoError::Sqlite(format!(
+                        "interior page {page_no} too short"
+                    )));
                 }
                 let mut depths = Vec::with_capacity(n_cells + 1);
                 let cell_arr_start = ho + 12;
                 for i in 0..n_cells {
                     let ptr_off = cell_arr_start + i * 2;
                     if ptr_off + 2 > page.len() {
-                        return Err(GeoError::Sqlite(format!("bad cell pointer array on page {page_no}")));
+                        return Err(GeoError::Sqlite(format!(
+                            "bad cell pointer array on page {page_no}"
+                        )));
                     }
                     let cell_off = u16::from_be_bytes([page[ptr_off], page[ptr_off + 1]]) as usize;
                     if cell_off + 4 > page.len() {
-                        return Err(GeoError::Sqlite(format!("bad cell offset on page {page_no}")));
+                        return Err(GeoError::Sqlite(format!(
+                            "bad cell offset on page {page_no}"
+                        )));
                     }
                     let child = u32::from_be_bytes([
                         page[cell_off],
@@ -1017,12 +1179,9 @@ mod tests {
                     ]) as usize;
                     depths.push(btree_depth_and_check(db, child, 0)?);
                 }
-                let right = u32::from_be_bytes([
-                    page[ho + 8],
-                    page[ho + 9],
-                    page[ho + 10],
-                    page[ho + 11],
-                ]) as usize;
+                let right =
+                    u32::from_be_bytes([page[ho + 8], page[ho + 9], page[ho + 10], page[ho + 11]])
+                        as usize;
                 depths.push(btree_depth_and_check(db, right, 0)?);
                 let first = *depths.first().ok_or_else(|| {
                     GeoError::Sqlite(format!("interior page {page_no} has no children"))
@@ -1034,16 +1193,21 @@ mod tests {
                 }
                 Ok(first + 1)
             }
-            other => Err(GeoError::Sqlite(format!("unexpected page type 0x{other:02X}"))),
+            other => Err(GeoError::Sqlite(format!(
+                "unexpected page type 0x{other:02X}"
+            ))),
         }
     }
 
     #[test]
     fn create_and_insert() {
         let mut db = Db::new_empty();
-        db.create_table("CREATE TABLE foo (id INTEGER, name TEXT)").unwrap();
-        db.insert("foo", vec![SqlVal::Int(1), SqlVal::Text("hello".into())]).unwrap();
-        db.insert("foo", vec![SqlVal::Int(2), SqlVal::Text("world".into())]).unwrap();
+        db.create_table("CREATE TABLE foo (id INTEGER, name TEXT)")
+            .unwrap();
+        db.insert("foo", vec![SqlVal::Int(1), SqlVal::Text("hello".into())])
+            .unwrap();
+        db.insert("foo", vec![SqlVal::Int(2), SqlVal::Text("world".into())])
+            .unwrap();
         let rows = db.select_all("foo").unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0][1].as_str(), Some("hello"));
@@ -1056,8 +1220,8 @@ mod tests {
         db.create_table("CREATE TABLE nums (v REAL)").unwrap();
         db.insert("nums", vec![SqlVal::Real(3.14)]).unwrap();
         let bytes = db.to_bytes();
-        let db2   = Db::from_bytes(bytes).unwrap();
-        let rows  = db2.select_all("nums").unwrap();
+        let db2 = Db::from_bytes(bytes).unwrap();
+        let rows = db2.select_all("nums").unwrap();
         assert_eq!(rows.len(), 1);
         assert!((rows[0][0].as_f64().unwrap() - 3.14).abs() < 1e-9);
     }
@@ -1068,7 +1232,8 @@ mod tests {
         db.create_table("CREATE TABLE blobs (b BLOB)").unwrap();
 
         let blob: Vec<u8> = (0..200_000usize).map(|i| (i % 251) as u8).collect();
-        db.insert("blobs", vec![SqlVal::Blob(blob.clone())]).unwrap();
+        db.insert("blobs", vec![SqlVal::Blob(blob.clone())])
+            .unwrap();
 
         let bytes = db.to_bytes();
         let db2 = Db::from_bytes(bytes).unwrap();
@@ -1108,7 +1273,8 @@ mod tests {
     #[test]
     fn many_inserts_across_page_splits_remain_visible() {
         let mut db = Db::new_empty();
-        db.create_table("CREATE TABLE items (id INTEGER, name TEXT)").unwrap();
+        db.create_table("CREATE TABLE items (id INTEGER, name TEXT)")
+            .unwrap();
 
         for i in 0..5000i64 {
             db.insert(
@@ -1123,8 +1289,14 @@ mod tests {
 
         let rows = db.select_all("items").unwrap();
         assert_eq!(rows.len(), 5000);
-        assert_eq!(rows.first().and_then(|r| r.get(0)).and_then(|v| v.as_i64()), Some(0));
-        assert_eq!(rows.last().and_then(|r| r.get(0)).and_then(|v| v.as_i64()), Some(4999));
+        assert_eq!(
+            rows.first().and_then(|r| r.get(0)).and_then(|v| v.as_i64()),
+            Some(0)
+        );
+        assert_eq!(
+            rows.last().and_then(|r| r.get(0)).and_then(|v| v.as_i64()),
+            Some(4999)
+        );
 
         let root = db.table_meta("items").unwrap().root_page;
         btree_depth_and_check(&db, root, 0).unwrap();
@@ -1133,7 +1305,10 @@ mod tests {
         let db2 = Db::from_bytes(db.to_bytes()).unwrap();
         let rows2 = db2.select_all("items").unwrap();
         assert_eq!(rows2.len(), 5000);
-        assert_eq!(rows2.last().and_then(|r| r.get(0)).and_then(|v| v.as_i64()), Some(4999));
+        assert_eq!(
+            rows2.last().and_then(|r| r.get(0)).and_then(|v| v.as_i64()),
+            Some(4999)
+        );
 
         let root2 = db2.table_meta("items").unwrap().root_page;
         btree_depth_and_check(&db2, root2, 0).unwrap();
@@ -1141,13 +1316,20 @@ mod tests {
 
     #[test]
     fn extract_name() {
-        assert_eq!(extract_table_name("CREATE TABLE gpkg_contents (id INTEGER)"), Some("gpkg_contents".into()));
-        assert_eq!(extract_table_name("create table if not exists foo (x text)"), Some("foo".into()));
+        assert_eq!(
+            extract_table_name("CREATE TABLE gpkg_contents (id INTEGER)"),
+            Some("gpkg_contents".into())
+        );
+        assert_eq!(
+            extract_table_name("create table if not exists foo (x text)"),
+            Some("foo".into())
+        );
     }
 
     #[test]
     fn extract_cols() {
-        let cols = extract_column_names("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT, val REAL)");
+        let cols =
+            extract_column_names("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT, val REAL)");
         assert_eq!(cols, vec!["id", "name", "val"]);
     }
 

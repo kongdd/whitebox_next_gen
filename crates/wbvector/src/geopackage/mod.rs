@@ -22,12 +22,12 @@
 
 mod sqlite;
 
-use std::path::Path;
 use crate::crs;
 use crate::error::{GeoError, Result};
-use crate::feature::{FieldDef, FieldType, FieldValue, Feature, Layer};
+use crate::feature::{Feature, FieldDef, FieldType, FieldValue, Layer};
 use crate::geometry::{Geometry, GeometryType};
-use sqlite::{Db, SqlVal, Row};
+use sqlite::{Db, Row, SqlVal};
+use std::path::Path;
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Required GeoPackage table DDL
@@ -74,21 +74,21 @@ CREATE TABLE gpkg_geometry_columns (\
 /// Read the first feature layer from a GeoPackage file.
 pub fn read<P: AsRef<Path>>(path: P) -> Result<Layer> {
     let data = std::fs::read(path).map_err(GeoError::Io)?;
-    let db   = Db::from_bytes(data)?;
+    let db = Db::from_bytes(data)?;
     read_first_layer(&db)
 }
 
 /// Read a named layer from a GeoPackage file.
 pub fn read_layer<P: AsRef<Path>>(path: P, layer_name: &str) -> Result<Layer> {
     let data = std::fs::read(path).map_err(GeoError::Io)?;
-    let db   = Db::from_bytes(data)?;
+    let db = Db::from_bytes(data)?;
     extract_layer(&db, layer_name)
 }
 
 /// List all feature layer names in a GeoPackage file.
 pub fn list_layers<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
     let data = std::fs::read(path).map_err(GeoError::Io)?;
-    let db   = Db::from_bytes(data)?;
+    let db = Db::from_bytes(data)?;
     layer_names(&db)
 }
 
@@ -96,6 +96,188 @@ pub fn list_layers<P: AsRef<Path>>(path: P) -> Result<Vec<String>> {
 pub fn write<P: AsRef<Path>>(layer: &Layer, path: P) -> Result<()> {
     let db = layers_to_db(&[layer])?;
     std::fs::write(path, db.to_bytes()).map_err(GeoError::Io)
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Streaming writer
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// A streaming writer that appends features one at a time to a new GeoPackage.
+///
+/// Unlike [`write`], which requires a fully-assembled [`Layer`] before any data
+/// is written, `GpkgStreamWriter` lets the caller push each feature immediately
+/// after it is computed.  This avoids holding the full output dataset in memory
+/// alongside any intermediate data structures (e.g. raw contour segments).
+///
+/// The GeoPackage file is not written to disk until [`finish`](Self::finish) is
+/// called.  The in-memory SQLite B-tree grows as features are inserted, but the
+/// calling code can release upstream intermediates (segment Vecs, chain Vecs,
+/// etc.) before calling `finish`.
+///
+/// # Example
+/// ```no_run
+/// use wbvector::{Layer, FieldDef, FieldType, FieldValue, Geometry, GeometryType};
+/// use wbvector::geopackage::GpkgStreamWriter;
+///
+/// let mut schema = Layer::new("contours").with_geom_type(GeometryType::LineString);
+/// schema.add_field(FieldDef::new("FID", FieldType::Integer));
+/// schema.add_field(FieldDef::new("HEIGHT", FieldType::Float));
+///
+/// let mut writer = GpkgStreamWriter::create("out.gpkg", &schema).unwrap();
+/// writer.push_feature(
+///     Some(&Geometry::line_string(vec![])),
+///     &[FieldValue::Integer(1), FieldValue::Float(100.0)],
+/// ).unwrap();
+/// writer.finish().unwrap();
+/// ```
+pub struct GpkgStreamWriter {
+    db: Db,
+    table_name: String,
+    srs_id: i64,
+    /// Field definitions excluding `fid`; the usize is the position in the
+    /// caller-visible full attribute list so that attrs can be indexed correctly.
+    schema_fields: Vec<(usize, FieldDef)>,
+    bbox: Option<crate::geometry::BBox>,
+    /// Output file path; accessible after consuming the writer via [`finish`](Self::finish).
+    pub path: String,
+}
+
+impl GpkgStreamWriter {
+    /// Create a new streaming GeoPackage writer at `path`.
+    ///
+    /// `schema` is an empty (zero-feature) [`Layer`] that supplies the table
+    /// name, CRS, geometry type, and field definitions.  The `fid` field, if
+    /// present, is handled automatically by GeoPackage autoincrement and must
+    /// not appear in the `attrs` slice passed to [`push_feature`](Self::push_feature).
+    pub fn create(path: &str, schema: &Layer) -> Result<Self> {
+        let mut db = Db::new_empty();
+        db.create_table(DDL_SRS)?;
+        db.create_table(DDL_CONTENTS)?;
+        db.create_table(DDL_GEOM_COLS)?;
+        seed_srs(&mut db)?;
+
+        let srs_id = schema.crs_epsg().unwrap_or(4326) as i64;
+        ensure_srs_row(&mut db, schema, srs_id)?;
+
+        let table_name = schema.name.clone();
+        let gt_name = schema
+            .geom_type
+            .map(|g| g.as_str().to_ascii_uppercase())
+            .unwrap_or_else(|| "GEOMETRY".into());
+
+        // Collect field defs, skipping the GeoPackage-reserved `fid` column.
+        let schema_fields: Vec<(usize, FieldDef)> = schema
+            .schema
+            .fields()
+            .iter()
+            .enumerate()
+            .filter(|(_, fd)| !fd.name.eq_ignore_ascii_case("fid"))
+            .map(|(i, fd)| (i, fd.clone()))
+            .collect();
+
+        // CREATE TABLE for the feature layer.
+        let mut col_defs =
+            format!("  fid INTEGER PRIMARY KEY,\n  \"geom\" BLOB");
+        for (_, fd) in &schema_fields {
+            let sql_type = match fd.field_type {
+                FieldType::Integer => "INTEGER",
+                FieldType::Float => "REAL",
+                FieldType::Boolean => "INTEGER",
+                FieldType::Blob => "BLOB",
+                _ => "TEXT",
+            };
+            col_defs.push_str(&format!(",\n  \"{}\" {}", fd.name, sql_type));
+        }
+        db.create_table(&format!(
+            "CREATE TABLE \"{}\" (\n{}\n)",
+            table_name, col_defs
+        ))?;
+
+        // Register geometry column.
+        db.insert(
+            "gpkg_geometry_columns",
+            vec![
+                SqlVal::Text(table_name.clone()),
+                SqlVal::Text("geom".into()),
+                SqlVal::Text(gt_name),
+                SqlVal::Int(srs_id),
+                SqlVal::Int(0),
+                SqlVal::Int(0),
+            ],
+        )?;
+
+        // gpkg_contents is inserted in finish() once the accumulated bbox is known.
+
+        Ok(GpkgStreamWriter {
+            db,
+            table_name,
+            srs_id,
+            schema_fields,
+            bbox: None,
+            path: path.to_string(),
+        })
+    }
+
+    /// Append one feature.
+    ///
+    /// `attrs` must contain values for **all** fields in the schema supplied to
+    /// [`create`](Self::create), in schema order (including a placeholder for
+    /// `fid` if present — it is ignored and GeoPackage autoincrement is used).
+    pub fn push_feature(
+        &mut self,
+        geom: Option<&Geometry>,
+        attrs: &[FieldValue],
+    ) -> Result<()> {
+        // Grow the bounding box.
+        if let Some(g) = geom {
+            if let Some(bb) = g.bbox() {
+                match &mut self.bbox {
+                    Some(existing) => existing.expand_to(&bb),
+                    None => self.bbox = Some(bb),
+                }
+            }
+        }
+
+        let geom_blob = geom
+            .map(|g| SqlVal::Blob(g.to_gpkg_wkb(self.srs_id as i32)))
+            .unwrap_or(SqlVal::Null);
+
+        // fid = NULL triggers SQLite autoincrement.
+        let mut row: Vec<SqlVal> = vec![SqlVal::Null, geom_blob];
+        for (idx, _) in &self.schema_fields {
+            let val = attrs.get(*idx).map(field_to_sqlval).unwrap_or(SqlVal::Null);
+            row.push(val);
+        }
+        // Pad in case the caller supplied fewer attrs than expected.
+        while row.len() < 2 + self.schema_fields.len() {
+            row.push(SqlVal::Null);
+        }
+
+        self.db.insert(&self.table_name, row)?;
+        Ok(())
+    }
+
+    /// Finalize: register the layer in `gpkg_contents` with the accumulated
+    /// bounding box, then serialize the SQLite database and write to disk.
+    pub fn finish(mut self) -> Result<()> {
+        let bb = self.bbox.unwrap_or_else(|| crate::geometry::BBox::new(0., 0., 0., 0.));
+        self.db.insert(
+            "gpkg_contents",
+            vec![
+                SqlVal::Text(self.table_name.clone()),
+                SqlVal::Text("features".into()),
+                SqlVal::Text(self.table_name.clone()),
+                SqlVal::Text(String::new()),
+                SqlVal::Text("2024-01-01T00:00:00Z".into()),
+                SqlVal::Real(bb.min_x),
+                SqlVal::Real(bb.min_y),
+                SqlVal::Real(bb.max_x),
+                SqlVal::Real(bb.max_y),
+                SqlVal::Int(self.srs_id),
+            ],
+        )?;
+        std::fs::write(&self.path, self.db.to_bytes()).map_err(GeoError::Io)
+    }
 }
 
 /// Write multiple layers to a GeoPackage file.
@@ -112,13 +294,16 @@ fn layer_names(db: &Db) -> Result<Vec<String>> {
     // Try gpkg_contents first
     if db.table_meta("gpkg_contents").is_some() {
         let rows = db.select_all("gpkg_contents")?;
-        return Ok(rows.iter()
+        return Ok(rows
+            .iter()
             .filter(|r| r.get(1).and_then(|v| v.as_str()) == Some("features"))
             .filter_map(|r| r.get(0).and_then(|v| v.as_str()).map(|s| s.to_owned()))
             .collect());
     }
     // Fall back: all non-system tables
-    Ok(db.table_names().into_iter()
+    Ok(db
+        .table_names()
+        .into_iter()
         .filter(|n| !n.starts_with("gpkg_") && !n.starts_with("sqlite_"))
         .map(|s| s.to_owned())
         .collect())
@@ -126,23 +311,29 @@ fn layer_names(db: &Db) -> Result<Vec<String>> {
 
 fn read_first_layer(db: &Db) -> Result<Layer> {
     let names = layer_names(db)?;
-    let name  = names.into_iter().next()
+    let name = names
+        .into_iter()
+        .next()
         .ok_or_else(|| GeoError::GpkgSchema("no feature layers found".into()))?;
     extract_layer(db, &name)
 }
 
 fn extract_layer(db: &Db, name: &str) -> Result<Layer> {
-    let meta = db.table_meta(name)
+    let meta = db
+        .table_meta(name)
         .ok_or_else(|| GeoError::GpkgSchema(format!("table '{name}' not found")))?;
 
     // Identify geometry column and SRS
     let (geom_col, srs_id, geom_type_name) = geometry_column_info(db, name)?;
 
     let mut layer = Layer::new(name);
-    layer.set_crs_epsg(if srs_id > 0 { Some(srs_id as u32) } else { None });
+    layer.set_crs_epsg(if srs_id > 0 {
+        Some(srs_id as u32)
+    } else {
+        None
+    });
     layer.set_crs_wkt(
-        spatial_ref_wkt(db, srs_id)
-            .or_else(|| layer.crs_epsg().and_then(crs::ogc_wkt_from_epsg))
+        spatial_ref_wkt(db, srs_id).or_else(|| layer.crs_epsg().and_then(crs::ogc_wkt_from_epsg)),
     );
     if layer.crs_epsg().is_none() {
         layer.set_crs_epsg(layer.crs_wkt().and_then(crs::epsg_from_wkt_lenient));
@@ -152,8 +343,12 @@ fn extract_layer(db: &Db, name: &str) -> Result<Layer> {
     // Identify non-geometry, non-fid columns
     let all_cols = &meta.columns;
     let fid_idx = all_cols.iter().position(|n| n.eq_ignore_ascii_case("fid"));
-    let geom_idx = all_cols.iter().position(|n| n.eq_ignore_ascii_case(&geom_col));
-    let attr_cols: Vec<(usize, &str)> = all_cols.iter().enumerate()
+    let geom_idx = all_cols
+        .iter()
+        .position(|n| n.eq_ignore_ascii_case(&geom_col));
+    let attr_cols: Vec<(usize, &str)> = all_cols
+        .iter()
+        .enumerate()
         .filter(|(i, _)| Some(*i) != fid_idx && Some(*i) != geom_idx)
         .map(|(i, n)| (i, n.as_str()))
         .collect();
@@ -188,7 +383,11 @@ fn extract_layer(db: &Db, name: &str) -> Result<Layer> {
             }
         }
 
-        layer.push(Feature { fid, geometry: geom, attributes: attrs });
+        layer.push(Feature {
+            fid,
+            geometry: geom,
+            attributes: attrs,
+        });
     }
 
     Ok(layer)
@@ -200,9 +399,17 @@ fn geometry_column_info(db: &Db, table_name: &str) -> Result<(String, i64, Strin
             for row in &rows {
                 let tn = row.get(0).and_then(|v| v.as_str()).unwrap_or("");
                 if tn == table_name {
-                    let col   = row.get(1).and_then(|v| v.as_str()).unwrap_or("geom").to_owned();
-                    let srs   = row.get(3).and_then(|v| v.as_i64()).unwrap_or(4326);
-                    let gtype = row.get(2).and_then(|v| v.as_str()).unwrap_or("GEOMETRY").to_owned();
+                    let col = row
+                        .get(1)
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("geom")
+                        .to_owned();
+                    let srs = row.get(3).and_then(|v| v.as_i64()).unwrap_or(4326);
+                    let gtype = row
+                        .get(2)
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("GEOMETRY")
+                        .to_owned();
                     return Ok((col, srs, gtype));
                 }
             }
@@ -212,7 +419,7 @@ fn geometry_column_info(db: &Db, table_name: &str) -> Result<(String, i64, Strin
     if let Some(meta) = db.table_meta(table_name) {
         for col in &meta.columns {
             let lc = col.to_ascii_lowercase();
-            if ["geom","geometry","shape","wkb_geometry","the_geom"].contains(&lc.as_str()) {
+            if ["geom", "geometry", "shape", "wkb_geometry", "the_geom"].contains(&lc.as_str()) {
                 return Ok((col.clone(), 4326, "GEOMETRY".into()));
             }
         }
@@ -238,17 +445,26 @@ fn spatial_ref_wkt(db: &Db, srs_id: i64) -> Option<String> {
     None
 }
 
-fn infer_types(rows: &[Row], cols: &[(usize, &str)]) -> std::collections::HashMap<String, FieldType> {
+fn infer_types(
+    rows: &[Row],
+    cols: &[(usize, &str)],
+) -> std::collections::HashMap<String, FieldType> {
     let mut map: std::collections::HashMap<String, FieldType> = std::collections::HashMap::new();
     for row in rows {
         for &(row_idx, col_name) in cols {
             if let Some(sv) = row.get(row_idx) {
                 let ft = match sv {
-                    SqlVal::Null    => continue,
-                    SqlVal::Int(_)  => FieldType::Integer,
+                    SqlVal::Null => continue,
+                    SqlVal::Int(_) => FieldType::Integer,
                     SqlVal::Real(_) => FieldType::Float,
                     SqlVal::Blob(_) => FieldType::Blob,
-                    SqlVal::Text(s) => if looks_like_date(s) { FieldType::Date } else { FieldType::Text },
+                    SqlVal::Text(s) => {
+                        if looks_like_date(s) {
+                            FieldType::Date
+                        } else {
+                            FieldType::Text
+                        }
+                    }
                 };
                 let e = map.entry(col_name.to_owned()).or_insert(ft);
                 *e = FieldValue::widen_type(*e, ft);
@@ -265,8 +481,8 @@ fn looks_like_date(s: &str) -> bool {
 
 fn sqlval_to_field(v: &SqlVal) -> FieldValue {
     match v {
-        SqlVal::Null    => FieldValue::Null,
-        SqlVal::Int(n)  => FieldValue::Integer(*n),
+        SqlVal::Null => FieldValue::Null,
+        SqlVal::Int(n) => FieldValue::Integer(*n),
         SqlVal::Real(n) => FieldValue::Float(*n),
         SqlVal::Text(s) => FieldValue::Text(s.clone()),
         SqlVal::Blob(b) => FieldValue::Blob(b.clone()),
@@ -274,15 +490,18 @@ fn sqlval_to_field(v: &SqlVal) -> FieldValue {
 }
 
 fn parse_geom_type_name(s: &str) -> Option<GeometryType> {
-    match s.to_ascii_uppercase().trim_end_matches(|c: char| c == 'Z' || c == 'M') {
-        "POINT"              => Some(GeometryType::Point),
-        "LINESTRING"         => Some(GeometryType::LineString),
-        "POLYGON"            => Some(GeometryType::Polygon),
-        "MULTIPOINT"         => Some(GeometryType::MultiPoint),
-        "MULTILINESTRING"    => Some(GeometryType::MultiLineString),
-        "MULTIPOLYGON"       => Some(GeometryType::MultiPolygon),
+    match s
+        .to_ascii_uppercase()
+        .trim_end_matches(|c: char| c == 'Z' || c == 'M')
+    {
+        "POINT" => Some(GeometryType::Point),
+        "LINESTRING" => Some(GeometryType::LineString),
+        "POLYGON" => Some(GeometryType::Polygon),
+        "MULTIPOINT" => Some(GeometryType::MultiPoint),
+        "MULTILINESTRING" => Some(GeometryType::MultiLineString),
+        "MULTIPOLYGON" => Some(GeometryType::MultiPolygon),
         "GEOMETRYCOLLECTION" => Some(GeometryType::GeometryCollection),
-        _                    => None,
+        _ => None,
     }
 }
 
@@ -301,7 +520,9 @@ fn layers_to_db(layers: &[&Layer]) -> Result<Db> {
     // Insert standard SRS rows required by the spec
     seed_srs(&mut db)?;
 
-    for layer in layers { write_layer(&mut db, layer)?; }
+    for layer in layers {
+        write_layer(&mut db, layer)?;
+    }
 
     Ok(db)
 }
@@ -317,32 +538,40 @@ fn seed_srs(db: &mut Db) -> Result<()> {
         SqlVal::Null,
     ])?;
     // Undefined Cartesian
-    db.insert("gpkg_spatial_ref_sys", vec![
-        SqlVal::Text("Undefined Cartesian SRS".into()),
-        SqlVal::Int(-1),
-        SqlVal::Text("NONE".into()),
-        SqlVal::Int(-1),
-        SqlVal::Text("undefined".into()),
-        SqlVal::Null,
-    ])?;
+    db.insert(
+        "gpkg_spatial_ref_sys",
+        vec![
+            SqlVal::Text("Undefined Cartesian SRS".into()),
+            SqlVal::Int(-1),
+            SqlVal::Text("NONE".into()),
+            SqlVal::Int(-1),
+            SqlVal::Text("undefined".into()),
+            SqlVal::Null,
+        ],
+    )?;
     // Undefined Geographic
-    db.insert("gpkg_spatial_ref_sys", vec![
-        SqlVal::Text("Undefined geographic SRS".into()),
-        SqlVal::Int(0),
-        SqlVal::Text("NONE".into()),
-        SqlVal::Int(0),
-        SqlVal::Text("undefined".into()),
-        SqlVal::Null,
-    ])?;
+    db.insert(
+        "gpkg_spatial_ref_sys",
+        vec![
+            SqlVal::Text("Undefined geographic SRS".into()),
+            SqlVal::Int(0),
+            SqlVal::Text("NONE".into()),
+            SqlVal::Int(0),
+            SqlVal::Text("undefined".into()),
+            SqlVal::Null,
+        ],
+    )?;
     Ok(())
 }
 
 fn write_layer(db: &mut Db, layer: &Layer) -> Result<()> {
-    let table   = &layer.name;
+    let table = &layer.name;
     let geom_col = "geom";
-    let srs_id  = layer.crs_epsg().unwrap_or(4326) as i64;
-    let gt_name = layer.geom_type.map(|g| g.as_str().to_ascii_uppercase())
-                       .unwrap_or_else(|| "GEOMETRY".into());
+    let srs_id = layer.crs_epsg().unwrap_or(4326) as i64;
+    let gt_name = layer
+        .geom_type
+        .map(|g| g.as_str().to_ascii_uppercase())
+        .unwrap_or_else(|| "GEOMETRY".into());
 
     ensure_srs_row(db, layer, srs_id)?;
 
@@ -361,11 +590,11 @@ fn write_layer(db: &mut Db, layer: &Layer) -> Result<()> {
     let mut col_defs = format!("  fid INTEGER PRIMARY KEY,\n  \"{geom_col}\" BLOB");
     for (_idx, fd) in &schema_fields {
         let sql_type = match fd.field_type {
-            FieldType::Integer  => "INTEGER",
-            FieldType::Float    => "REAL",
-            FieldType::Boolean  => "INTEGER",
-            FieldType::Blob     => "BLOB",
-            _                   => "TEXT",
+            FieldType::Integer => "INTEGER",
+            FieldType::Float => "REAL",
+            FieldType::Boolean => "INTEGER",
+            FieldType::Blob => "BLOB",
+            _ => "TEXT",
         };
         col_defs.push_str(&format!(",\n  \"{}\" {}", fd.name, sql_type));
     }
@@ -373,38 +602,58 @@ fn write_layer(db: &mut Db, layer: &Layer) -> Result<()> {
     db.create_table(&create_sql)?;
 
     // Register in gpkg_geometry_columns
-    db.insert("gpkg_geometry_columns", vec![
-        SqlVal::Text(table.clone()),
-        SqlVal::Text(geom_col.into()),
-        SqlVal::Text(gt_name),
-        SqlVal::Int(srs_id),
-        SqlVal::Int(0), // z
-        SqlVal::Int(0), // m
-    ])?;
+    db.insert(
+        "gpkg_geometry_columns",
+        vec![
+            SqlVal::Text(table.clone()),
+            SqlVal::Text(geom_col.into()),
+            SqlVal::Text(gt_name),
+            SqlVal::Int(srs_id),
+            SqlVal::Int(0), // z
+            SqlVal::Int(0), // m
+        ],
+    )?;
 
     // Register in gpkg_contents
     let mut bb_vals = [SqlVal::Null, SqlVal::Null, SqlVal::Null, SqlVal::Null];
-    if let Some(bb) = layer.features.iter()
+    if let Some(bb) = layer
+        .features
+        .iter()
         .filter_map(|f| f.geometry.as_ref().and_then(|g| g.bbox()))
-        .reduce(|mut a, b| { a.expand_to(&b); a })
+        .reduce(|mut a, b| {
+            a.expand_to(&b);
+            a
+        })
     {
-        bb_vals = [SqlVal::Real(bb.min_x), SqlVal::Real(bb.min_y),
-                   SqlVal::Real(bb.max_x), SqlVal::Real(bb.max_y)];
+        bb_vals = [
+            SqlVal::Real(bb.min_x),
+            SqlVal::Real(bb.min_y),
+            SqlVal::Real(bb.max_x),
+            SqlVal::Real(bb.max_y),
+        ];
     }
 
-    db.insert("gpkg_contents", vec![
-        SqlVal::Text(table.clone()),
-        SqlVal::Text("features".into()),
-        SqlVal::Text(table.clone()),
-        SqlVal::Text(String::new()),
-        SqlVal::Text("2024-01-01T00:00:00Z".into()),
-        bb_vals[0].clone(), bb_vals[1].clone(), bb_vals[2].clone(), bb_vals[3].clone(),
-        SqlVal::Int(srs_id),
-    ])?;
+    db.insert(
+        "gpkg_contents",
+        vec![
+            SqlVal::Text(table.clone()),
+            SqlVal::Text("features".into()),
+            SqlVal::Text(table.clone()),
+            SqlVal::Text(String::new()),
+            SqlVal::Text("2024-01-01T00:00:00Z".into()),
+            bb_vals[0].clone(),
+            bb_vals[1].clone(),
+            bb_vals[2].clone(),
+            bb_vals[3].clone(),
+            SqlVal::Int(srs_id),
+        ],
+    )?;
 
     // Insert feature rows
     for feat in &layer.features {
-        let geom_blob = feat.geometry.as_ref()
+        let geom_blob = feat
+            .geometry
+            .as_ref()
             .map(|g| SqlVal::Blob(g.to_gpkg_wkb(srs_id as i32)))
             .unwrap_or(SqlVal::Null);
 
@@ -435,37 +684,45 @@ fn ensure_srs_row(db: &mut Db, layer: &Layer, srs_id: i64) -> Result<()> {
     }
 
     let epsg = srs_id as u32;
-    let definition = layer.crs_wkt().map(|w| w.to_owned())
+    let definition = layer
+        .crs_wkt()
+        .map(|w| w.to_owned())
         .or_else(|| crs::ogc_wkt_from_epsg(epsg))
         .unwrap_or_else(|| "undefined".to_owned());
-    let srs_name = crs::crs_name_from_epsg(epsg)
-        .unwrap_or_else(|| format!("EPSG:{epsg}"));
+    let srs_name = crs::crs_name_from_epsg(epsg).unwrap_or_else(|| format!("EPSG:{epsg}"));
 
-    db.insert("gpkg_spatial_ref_sys", vec![
-        SqlVal::Text(srs_name),
-        SqlVal::Int(srs_id),
-        SqlVal::Text("EPSG".into()),
-        SqlVal::Int(srs_id),
-        SqlVal::Text(definition),
-        SqlVal::Null,
-    ])?;
+    db.insert(
+        "gpkg_spatial_ref_sys",
+        vec![
+            SqlVal::Text(srs_name),
+            SqlVal::Int(srs_id),
+            SqlVal::Text("EPSG".into()),
+            SqlVal::Int(srs_id),
+            SqlVal::Text(definition),
+            SqlVal::Null,
+        ],
+    )?;
 
     Ok(())
 }
 
 fn srs_row_exists(db: &Db, srs_id: i64) -> Result<bool> {
     let rows = db.select_all("gpkg_spatial_ref_sys")?;
-    Ok(rows.iter().any(|row| row.get(1).and_then(|v| v.as_i64()) == Some(srs_id)))
+    Ok(rows
+        .iter()
+        .any(|row| row.get(1).and_then(|v| v.as_i64()) == Some(srs_id)))
 }
 
 fn field_to_sqlval(v: &FieldValue) -> SqlVal {
     match v {
-        FieldValue::Null        => SqlVal::Null,
-        FieldValue::Integer(n)  => SqlVal::Int(*n),
-        FieldValue::Float(n)    => SqlVal::Real(*n),
-        FieldValue::Boolean(b)  => SqlVal::Int(*b as i64),
-        FieldValue::Text(s) | FieldValue::Date(s) | FieldValue::DateTime(s) => SqlVal::Text(s.clone()),
-        FieldValue::Blob(b)     => SqlVal::Blob(b.clone()),
+        FieldValue::Null => SqlVal::Null,
+        FieldValue::Integer(n) => SqlVal::Int(*n),
+        FieldValue::Float(n) => SqlVal::Real(*n),
+        FieldValue::Boolean(b) => SqlVal::Int(*b as i64),
+        FieldValue::Text(s) | FieldValue::Date(s) | FieldValue::DateTime(s) => {
+            SqlVal::Text(s.clone())
+        }
+        FieldValue::Blob(b) => SqlVal::Blob(b.clone()),
     }
 }
 
@@ -483,29 +740,45 @@ mod tests {
         let mut l = Layer::new("cities")
             .with_geom_type(GeometryType::Point)
             .with_epsg(4326);
-        l.add_field(FieldDef::new("name",       FieldType::Text));
+        l.add_field(FieldDef::new("name", FieldType::Text));
         l.add_field(FieldDef::new("population", FieldType::Integer));
         l.add_feature(
             Some(Geometry::point(-0.1278, 51.5074)),
-            &[("name", "London".into()), ("population", 9_000_000i64.into())],
-        ).unwrap();
+            &[
+                ("name", "London".into()),
+                ("population", 9_000_000i64.into()),
+            ],
+        )
+        .unwrap();
         l.add_feature(
             Some(Geometry::point(2.3522, 48.8566)),
-            &[("name", "Paris".into()), ("population", 2_100_000i64.into())],
-        ).unwrap();
+            &[
+                ("name", "Paris".into()),
+                ("population", 2_100_000i64.into()),
+            ],
+        )
+        .unwrap();
         l
     }
 
     fn polygon_layer() -> Layer {
-        let mut l = Layer::new("regions").with_geom_type(GeometryType::Polygon).with_epsg(4326);
+        let mut l = Layer::new("regions")
+            .with_geom_type(GeometryType::Polygon)
+            .with_epsg(4326);
         l.add_field(FieldDef::new("region_id", FieldType::Integer));
         l.add_feature(
             Some(Geometry::polygon(
-                vec![Coord::xy(0.,0.), Coord::xy(10.,0.), Coord::xy(10.,10.), Coord::xy(0.,10.)],
+                vec![
+                    Coord::xy(0., 0.),
+                    Coord::xy(10., 0.),
+                    Coord::xy(10., 10.),
+                    Coord::xy(0., 10.),
+                ],
                 vec![],
             )),
             &[("region_id", 42i64.into())],
-        ).unwrap();
+        )
+        .unwrap();
         l
     }
 
@@ -532,32 +805,34 @@ mod tests {
 
     #[test]
     fn roundtrip_points() {
-        let dir  = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("cities.gpkg");
-        let l1   = point_layer();
+        let l1 = point_layer();
         write(&l1, &path).unwrap();
         let l2 = read(&path).unwrap();
         assert_eq!(l2.len(), 2);
         if let Some(Geometry::Point(c)) = &l2[0].geometry {
             assert!((c.x - (-0.1278)).abs() < 1e-6);
-        } else { panic!("expected Point"); }
+        } else {
+            panic!("expected Point");
+        }
     }
 
     #[test]
     fn attributes_preserved() {
-        let dir  = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("cities.gpkg");
         write(&point_layer(), &path).unwrap();
         let l = read(&path).unwrap();
         let name = l[0].get(&l.schema, "name").unwrap();
         assert_eq!(name.as_str(), Some("London"));
-        let pop  = l[0].get(&l.schema, "population").unwrap().as_i64();
+        let pop = l[0].get(&l.schema, "population").unwrap().as_i64();
         assert_eq!(pop, Some(9_000_000));
     }
 
     #[test]
     fn roundtrip_polygon() {
-        let dir  = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("regions.gpkg");
         write(&polygon_layer(), &path).unwrap();
         let l = read(&path).unwrap();
@@ -567,8 +842,8 @@ mod tests {
 
     #[test]
     fn list_layers_works() {
-        let dir   = tempfile::tempdir().unwrap();
-        let path  = dir.path().join("multi.gpkg");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("multi.gpkg");
         write_layers(&[&point_layer(), &polygon_layer()], &path).unwrap();
         let names = list_layers(&path).unwrap();
         assert!(names.contains(&"cities".to_owned()));
@@ -577,8 +852,8 @@ mod tests {
 
     #[test]
     fn read_named_layer() {
-        let dir   = tempfile::tempdir().unwrap();
-        let path  = dir.path().join("multi.gpkg");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("multi.gpkg");
         write_layers(&[&point_layer(), &polygon_layer()], &path).unwrap();
         let l = read_layer(&path, "regions").unwrap();
         assert_eq!(l.len(), 1);
@@ -593,10 +868,12 @@ mod tests {
             .with_geom_type(GeometryType::Point)
             .with_epsg(3857);
         layer.add_field(FieldDef::new("name", FieldType::Text));
-        layer.add_feature(
-            Some(Geometry::point(0.0, 0.0)),
-            &[("name", "origin".into())],
-        ).unwrap();
+        layer
+            .add_feature(
+                Some(Geometry::point(0.0, 0.0)),
+                &[("name", "origin".into())],
+            )
+            .unwrap();
 
         write(&layer, &path).unwrap();
         let out = read(&path).unwrap();
@@ -640,42 +917,68 @@ mod tests {
 
         let path = std::env::var("WBVECTOR_REAL_MISSISSAUGA_GPKG")
             .expect("WBVECTOR_REAL_MISSISSAUGA_GPKG must point to the Mississauga parcel fixture");
-        assert!(std::fs::metadata(&path).is_ok(), "fixture path does not exist: {}", path);
+        assert!(
+            std::fs::metadata(&path).is_ok(),
+            "fixture path does not exist: {}",
+            path
+        );
 
         let db = Db::from_bytes(std::fs::read(&path).unwrap()).unwrap();
         let rows = db.select_all("Parcel").unwrap();
         let rows_with_rowid = db.select_all_with_rowid("Parcel").unwrap();
         assert!(!rows.is_empty(), "expected Parcel table rows");
 
-        assert!(rows_with_rowid[0].0 > 0, "expected positive rowid for first Parcel row");
-        assert!(matches!(rows[0][0], SqlVal::Null), "expected FID payload placeholder to be NULL");
+        assert!(
+            rows_with_rowid[0].0 > 0,
+            "expected positive rowid for first Parcel row"
+        );
+        assert!(
+            matches!(rows[0][0], SqlVal::Null),
+            "expected FID payload placeholder to be NULL"
+        );
 
         let first_blob = rows[0][1]
             .as_blob()
             .expect("expected second Parcel column to be geometry blob");
         let (geom, srs) = Geometry::from_gpkg_wkb(first_blob)
             .expect("expected first GeoPackage geometry blob to decode");
-        assert_eq!(srs, 3857, "expected EPSG:3857 in first Mississauga geometry blob");
+        assert_eq!(
+            srs, 3857,
+            "expected EPSG:3857 in first Mississauga geometry blob"
+        );
         assert!(
             matches!(geom, Geometry::Polygon { .. } | Geometry::MultiPolygon(_)),
             "expected polygonal geometry from Mississauga blob"
         );
 
         let layer = read(&path).unwrap();
-        let decoded_geometries = layer.features.iter().filter(|f| f.geometry.is_some()).count();
-        assert!(decoded_geometries > 0, "expected at least one decoded geometry in layer read");
-        assert!(layer.features[0].fid > 0, "expected rowid-backed feature fid");
+        let decoded_geometries = layer
+            .features
+            .iter()
+            .filter(|f| f.geometry.is_some())
+            .count();
+        assert!(
+            decoded_geometries > 0,
+            "expected at least one decoded geometry in layer read"
+        );
+        assert!(
+            layer.features[0].fid > 0,
+            "expected rowid-backed feature fid"
+        );
 
         // Verify that decoded MultiPolygon rings have non-zero shoelace area.
-        let areas_nonzero = layer.features.iter().take(100).filter(|f| {
-            match &f.geometry {
-                Some(Geometry::MultiPolygon(polys)) => polys.iter().any(|(ext, _)| {
-                    ext.signed_area().abs() > 0.0
-                }),
+        let areas_nonzero = layer
+            .features
+            .iter()
+            .take(100)
+            .filter(|f| match &f.geometry {
+                Some(Geometry::MultiPolygon(polys)) => {
+                    polys.iter().any(|(ext, _)| ext.signed_area().abs() > 0.0)
+                }
                 Some(Geometry::Polygon { exterior, .. }) => exterior.signed_area().abs() > 0.0,
                 _ => false,
-            }
-        }).count();
+            })
+            .count();
         assert!(
             areas_nonzero > 0,
             "expected at least one decoded Mississauga parcel to have non-zero shoelace area"
@@ -696,36 +999,41 @@ mod tests {
         let mut layer = Layer::new("test_special_cols")
             .with_geom_type(GeometryType::Point)
             .with_epsg(4326);
-        
+
         // Add fields with special characters (like dist.m from meuse.csv)
         layer.add_field(FieldDef::new("dist.m", FieldType::Float));
         layer.add_field(FieldDef::new("name-en", FieldType::Text));
         layer.add_field(FieldDef::new("normal_field", FieldType::Integer));
-        
-        layer.add_feature(
-            Some(Geometry::point(0.0, 0.0)),
-            &[
-                ("dist.m", 42.5f64.into()),
-                ("name-en", "test".into()),
-                ("normal_field", 123i64.into()),
-            ],
-        ).unwrap();
-        
+
+        layer
+            .add_feature(
+                Some(Geometry::point(0.0, 0.0)),
+                &[
+                    ("dist.m", 42.5f64.into()),
+                    ("name-en", "test".into()),
+                    ("normal_field", 123i64.into()),
+                ],
+            )
+            .unwrap();
+
         // Write to GeoPackage
         let bytes = layers_to_db(&[&layer]).unwrap().to_bytes();
-        
+
         // Read back and verify
         let db = Db::from_bytes(bytes).unwrap();
         let rows = db.select_all("test_special_cols").unwrap();
         assert!(!rows.is_empty(), "expected rows in test_special_cols table");
-        
+
         // Verify layer can be reconstructed
         let roundtrip = extract_layer(&db, "test_special_cols").unwrap();
         assert_eq!(roundtrip.schema.fields().len(), 3);
         assert_eq!(roundtrip.features.len(), 1);
-        
+
         // Verify column names are preserved (not double-quoted)
-        let field_names: Vec<&str> = roundtrip.schema.fields().iter()
+        let field_names: Vec<&str> = roundtrip
+            .schema
+            .fields()
+            .iter()
             .map(|f| f.name.as_str())
             .collect();
         assert!(field_names.contains(&"dist.m"), "expected dist.m column");
@@ -740,14 +1048,17 @@ mod tests {
         // file is treated as an unknown SQLite database and refused by GDAL.
         let layer = point_layer();
         let bytes = layers_to_db(&[&layer]).unwrap().to_bytes();
-        assert!(bytes.len() >= 72, "GeoPackage bytes too short to contain header");
-        
+        assert!(
+            bytes.len() >= 72,
+            "GeoPackage bytes too short to contain header"
+        );
+
         let app_id = u32::from_be_bytes(bytes[68..72].try_into().unwrap());
         assert_eq!(
             app_id, 0x47504B47,
             "SQLite application_id must be 0x47504B47 (\"GPKG\") for GDAL/QGIS compatibility, got 0x{app_id:08X}"
         );
-        
+
         let user_version = u32::from_be_bytes(bytes[60..64].try_into().unwrap());
         assert_eq!(
             user_version, 0x000027D8,

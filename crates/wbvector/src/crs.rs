@@ -1,11 +1,8 @@
 use wbprojection::{
-    EpsgIdentifyPolicy,
-    EpsgIdentifyReport,
     epsg_from_srs_reference as wb_epsg_from_srs_reference,
     identify_epsg_from_wkt_report as wb_identify_epsg_from_wkt_report,
-    identify_epsg_from_wkt_with_policy as wb_identify_epsg_from_wkt_with_policy,
-    to_ogc_wkt,
-    Crs,
+    identify_epsg_from_wkt_with_policy as wb_identify_epsg_from_wkt_with_policy, to_ogc_wkt, Crs,
+    EpsgIdentifyPolicy, EpsgIdentifyReport,
 };
 
 pub(crate) fn ogc_wkt_from_epsg(epsg: u32) -> Option<String> {
@@ -75,7 +72,10 @@ mod tests {
 
     #[test]
     fn parses_epsg_urn_reference() {
-        assert_eq!(epsg_from_srs_reference("urn:ogc:def:crs:EPSG::32633"), Some(32633));
+        assert_eq!(
+            epsg_from_srs_reference("urn:ogc:def:crs:EPSG::32633"),
+            Some(32633)
+        );
     }
 
     #[test]

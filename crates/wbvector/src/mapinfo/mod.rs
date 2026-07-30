@@ -13,7 +13,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::{GeoError, Result};
-use crate::feature::{FieldDef, FieldType, FieldValue, Feature, Layer};
+use crate::feature::{Feature, FieldDef, FieldType, FieldValue, Layer};
 use crate::geometry::{Coord, Geometry, GeometryType, Ring};
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -259,10 +259,11 @@ fn parse_mif(text: &str) -> Result<ParsedMif> {
             let (_, count) = parse_columns_header(line, line_no + 1)?;
             lines.next();
             for i in 0..count {
-                let (col_line_no, col_line_raw) = lines.next().ok_or_else(|| GeoError::MifParse {
-                    line: line_no + 1,
-                    msg: format!("expected {count} column lines, found only {i}"),
-                })?;
+                let (col_line_no, col_line_raw) =
+                    lines.next().ok_or_else(|| GeoError::MifParse {
+                        line: line_no + 1,
+                        msg: format!("expected {count} column lines, found only {i}"),
+                    })?;
                 let fd = parse_column_def(col_line_raw.trim(), col_line_no + 1)?;
                 columns.push(fd);
             }
@@ -442,7 +443,12 @@ where
                 msg: "Point requires x y".into(),
             });
         }
-        let c = Coord { x: nums[0], y: nums[1], z: None, m: None };
+        let c = Coord {
+            x: nums[0],
+            y: nums[1],
+            z: None,
+            m: None,
+        };
         return Ok(Some(Geometry::Point(c)));
     }
 
@@ -454,10 +460,7 @@ where
                 msg: "Line requires x1 y1 x2 y2".into(),
             });
         }
-        let cs = vec![
-            Coord::xy(nums[0], nums[1]),
-            Coord::xy(nums[2], nums[3]),
-        ];
+        let cs = vec![Coord::xy(nums[0], nums[1]), Coord::xy(nums[2], nums[3])];
         return Ok(Some(Geometry::LineString(cs)));
     }
 
@@ -497,10 +500,16 @@ where
                 line: line_no,
                 msg: "Pline Multiple missing part point count".into(),
             })?;
-            let n = n_line_raw.trim().parse::<usize>().map_err(|_| GeoError::MifParse {
-                line: n_line_no + 1,
-                msg: format!("invalid Pline part point count '{}': expected integer", n_line_raw.trim()),
-            })?;
+            let n = n_line_raw
+                .trim()
+                .parse::<usize>()
+                .map_err(|_| GeoError::MifParse {
+                    line: n_line_no + 1,
+                    msg: format!(
+                        "invalid Pline part point count '{}': expected integer",
+                        n_line_raw.trim()
+                    ),
+                })?;
             let cs = read_coord_lines(n, lines, n_line_no + 1)?;
             parts.push(cs);
         }
@@ -531,10 +540,16 @@ where
             line: line_no,
             msg: "Region missing ring point count".into(),
         })?;
-        let n = n_line_raw.trim().parse::<usize>().map_err(|_| GeoError::MifParse {
-            line: n_line_no + 1,
-            msg: format!("invalid Region ring point count '{}': expected integer", n_line_raw.trim()),
-        })?;
+        let n = n_line_raw
+            .trim()
+            .parse::<usize>()
+            .map_err(|_| GeoError::MifParse {
+                line: n_line_no + 1,
+                msg: format!(
+                    "invalid Region ring point count '{}': expected integer",
+                    n_line_raw.trim()
+                ),
+            })?;
         let mut cs = read_coord_lines(n, lines, n_line_no + 1)?;
         close_ring_if_needed(&mut cs);
         rings.push(Ring::new(cs));
@@ -550,7 +565,10 @@ where
     // polygon with first ring as exterior and remaining rings as interiors.
     let exterior = rings[0].clone();
     let interiors = rings[1..].to_vec();
-    Ok(Geometry::Polygon { exterior, interiors })
+    Ok(Geometry::Polygon {
+        exterior,
+        interiors,
+    })
 }
 
 fn parse_numbers_after_keyword(line: &str, kw: &str, line_no: usize) -> Result<Vec<f64>> {
@@ -580,10 +598,13 @@ fn parse_count_after_keyword(line: &str, kw: &str, line_no: usize) -> Result<usi
         msg: format!("missing keyword '{kw}'"),
     })?;
     let rest = line[pos + kw.len()..].trim();
-    let first = rest.split_whitespace().next().ok_or_else(|| GeoError::MifParse {
-        line: line_no,
-        msg: format!("{kw} requires a count"),
-    })?;
+    let first = rest
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| GeoError::MifParse {
+            line: line_no,
+            msg: format!("{kw} requires a count"),
+        })?;
     first.parse::<usize>().map_err(|_| GeoError::MifParse {
         line: line_no,
         msg: format!("invalid count '{first}'"),
@@ -773,7 +794,10 @@ fn write_geometry_mif(out: &mut String, geom: Option<&Geometry>) -> Result<()> {
                 }
             }
         }
-        Some(Geometry::Polygon { exterior, interiors }) => {
+        Some(Geometry::Polygon {
+            exterior,
+            interiors,
+        }) => {
             let ring_count = 1 + interiors.len();
             out.push_str(&format!("Region {}\n", ring_count));
 
@@ -840,11 +864,13 @@ fn write_mid_row(out: &mut String, attrs: &[FieldValue], schema: &[FieldDef], de
             FieldValue::Integer(n) => n.to_string(),
             FieldValue::Float(n) => n.to_string(),
             FieldValue::Boolean(b) => {
-                if b { "T".into() } else { "F".into() }
+                if b {
+                    "T".into()
+                } else {
+                    "F".into()
+                }
             }
-            FieldValue::Date(s) | FieldValue::DateTime(s) | FieldValue::Text(s) => {
-                quote_mid(&s)
-            }
+            FieldValue::Date(s) | FieldValue::DateTime(s) | FieldValue::Text(s) => quote_mid(&s),
             FieldValue::Blob(b) => quote_mid(&format!("<blob {} bytes>", b.len())),
         };
 
@@ -891,9 +917,24 @@ mod tests {
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed.schema.len(), 2);
         assert_eq!(parsed.crs_epsg(), Some(4326));
-        assert!(matches!(parsed.features[0].geometry, Some(Geometry::LineString(_))));
-        assert_eq!(parsed.features[0].get(&parsed.schema, "name").unwrap().as_str(), Some("A-Road"));
-        assert_eq!(parsed.features[0].get(&parsed.schema, "speed").unwrap().as_i64(), Some(80));
+        assert!(matches!(
+            parsed.features[0].geometry,
+            Some(Geometry::LineString(_))
+        ));
+        assert_eq!(
+            parsed.features[0]
+                .get(&parsed.schema, "name")
+                .unwrap()
+                .as_str(),
+            Some("A-Road")
+        );
+        assert_eq!(
+            parsed.features[0]
+                .get(&parsed.schema, "speed")
+                .unwrap()
+                .as_i64(),
+            Some(80)
+        );
     }
 
     #[test]
@@ -918,7 +959,10 @@ Pline Multiple 2
 
         let layer = parse_pair_str(mif, mid).unwrap();
         assert_eq!(layer.crs_epsg(), Some(4326));
-        assert!(matches!(layer.features[0].geometry, Some(Geometry::MultiLineString(_))));
+        assert!(matches!(
+            layer.features[0].geometry,
+            Some(Geometry::MultiLineString(_))
+        ));
     }
 
     #[test]
@@ -947,7 +991,10 @@ Region 2
 
         let layer = parse_pair_str(mif, mid).unwrap();
         match &layer.features[0].geometry {
-            Some(Geometry::Polygon { exterior, interiors }) => {
+            Some(Geometry::Polygon {
+                exterior,
+                interiors,
+            }) => {
                 assert_eq!(exterior.0.first(), exterior.0.last());
                 assert_eq!(interiors.len(), 1);
                 assert_eq!(interiors[0].0.first(), interiors[0].0.last());

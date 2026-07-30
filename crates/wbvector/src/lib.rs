@@ -125,9 +125,6 @@ pub mod flatgeobuf;
 pub mod geojson;
 pub mod geometry;
 pub mod geopackage;
-pub mod topojson;
-/// In-process vector memory store for passing vectors between tools without disk I/O.
-pub mod memory_store;
 #[cfg(feature = "geoparquet")]
 pub mod geoparquet;
 pub mod gml;
@@ -136,10 +133,13 @@ pub mod kml;
 #[cfg(feature = "kmz")]
 pub mod kmz;
 pub mod mapinfo;
+/// In-process vector memory store for passing vectors between tools without disk I/O.
+pub mod memory_store;
 #[cfg(feature = "osmpbf")]
 pub mod osmpbf;
 pub mod reproject;
 pub mod shapefile;
+pub mod topojson;
 
 // Re-export the most commonly used types at the crate root
 pub use error::{GeoError, Result};
@@ -149,252 +149,370 @@ pub use geometry::{BBox, Coord, Geometry, GeometryType, Ring};
 /// Supported vector formats for crate-level sniffed I/O.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VectorFormat {
-	/// FlatGeobuf binary vector format (`.fgb`).
-	FlatGeobuf,
-	/// GeoJSON text format (`.geojson`).
-	GeoJson,
-	/// TopoJSON topology-preserving JSON format (`.topojson`).
-	TopoJson,
-	/// GeoPackage SQLite container format (`.gpkg`).
-	GeoPackage,
-	#[cfg(feature = "geoparquet")]
-	/// GeoParquet columnar format (`.parquet`).
-	GeoParquet,
-	/// Geography Markup Language XML format (`.gml`).
-	Gml,
-	/// GPS Exchange Format XML format (`.gpx`).
-	Gpx,
-	/// Keyhole Markup Language XML format (`.kml`).
-	Kml,
-	#[cfg(feature = "kmz")]
-	/// Zipped KML container format (`.kmz`).
-	Kmz,
-	/// MapInfo interchange format (`.mif` + `.mid`).
-	MapInfoMif,
-	#[cfg(feature = "osmpbf")]
-	/// OpenStreetMap PBF binary format (`.osm.pbf`).
-	OsmPbf,
-	/// ESRI Shapefile dataset (`.shp` + sidecars).
-	Shapefile,
+    /// FlatGeobuf binary vector format (`.fgb`).
+    FlatGeobuf,
+    /// GeoJSON text format (`.geojson`).
+    GeoJson,
+    /// TopoJSON topology-preserving JSON format (`.topojson`).
+    TopoJson,
+    /// GeoPackage SQLite container format (`.gpkg`).
+    GeoPackage,
+    #[cfg(feature = "geoparquet")]
+    /// GeoParquet columnar format (`.parquet`).
+    GeoParquet,
+    /// Geography Markup Language XML format (`.gml`).
+    Gml,
+    /// GPS Exchange Format XML format (`.gpx`).
+    Gpx,
+    /// Keyhole Markup Language XML format (`.kml`).
+    Kml,
+    #[cfg(feature = "kmz")]
+    /// Zipped KML container format (`.kmz`).
+    Kmz,
+    /// MapInfo interchange format (`.mif` + `.mid`).
+    MapInfoMif,
+    #[cfg(feature = "osmpbf")]
+    /// OpenStreetMap PBF binary format (`.osm.pbf`).
+    OsmPbf,
+    /// ESRI Shapefile dataset (`.shp` + sidecars).
+    Shapefile,
 }
 
 impl VectorFormat {
-	/// Detect format from extension and lightweight file sniffing.
-	pub fn detect<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
-		let path = path.as_ref();
-		let file_name_lc = path
-			.file_name()
-			.and_then(|s| s.to_str())
-			.unwrap_or("")
-			.to_ascii_lowercase();
-		let ext_lc = path
-			.extension()
-			.and_then(|s| s.to_str())
-			.unwrap_or("")
-			.to_ascii_lowercase();
+    /// Detect format from extension and lightweight file sniffing.
+    pub fn detect<P: AsRef<std::path::Path>>(path: P) -> Result<Self> {
+        let path = path.as_ref();
+        let file_name_lc = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let ext_lc = path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
 
-		if file_name_lc.ends_with(".osm.pbf") {
-			#[cfg(feature = "osmpbf")]
-			{
-				return Ok(Self::OsmPbf);
-			}
-			#[cfg(not(feature = "osmpbf"))]
-			{
-				return Err(GeoError::NotImplemented(
-					"OSM PBF support requires enabling the `osmpbf` feature".into(),
-				));
-			}
-		}
+        if file_name_lc.ends_with(".osm.pbf") {
+            #[cfg(feature = "osmpbf")]
+            {
+                return Ok(Self::OsmPbf);
+            }
+            #[cfg(not(feature = "osmpbf"))]
+            {
+                return Err(GeoError::NotImplemented(
+                    "OSM PBF support requires enabling the `osmpbf` feature".into(),
+                ));
+            }
+        }
 
-		match ext_lc.as_str() {
-			"fgb" => return Ok(Self::FlatGeobuf),
-			"geojson" => return Ok(Self::GeoJson),
-			"topojson" => return Ok(Self::TopoJson),
-			"gpkg" => return Ok(Self::GeoPackage),
-			"gml" => return Ok(Self::Gml),
-			"gpx" => return Ok(Self::Gpx),
-			"kml" => return Ok(Self::Kml),
-			"mif" => return Ok(Self::MapInfoMif),
-			"shp" => return Ok(Self::Shapefile),
-			"parquet" => {
-				#[cfg(feature = "geoparquet")]
-				{
-					return Ok(Self::GeoParquet);
-				}
-				#[cfg(not(feature = "geoparquet"))]
-				{
-					return Err(GeoError::NotImplemented(
-						"GeoParquet support requires enabling the `geoparquet` feature".into(),
-					));
-				}
-			}
-			"kmz" => {
-				#[cfg(feature = "kmz")]
-				{
-					return Ok(Self::Kmz);
-				}
-				#[cfg(not(feature = "kmz"))]
-				{
-					return Err(GeoError::NotImplemented(
-						"KMZ support requires enabling the `kmz` feature".into(),
-					));
-				}
-			}
-			"json" => {
-				if let Some(kind) = sniff_json(path)? {
-					return Ok(kind);
-				}
-				return Ok(Self::GeoJson);
-			}
-			"xml" => {
-				if let Some(kind) = sniff_xml(path)? {
-					return Ok(kind);
-				}
-			}
-			_ => {}
-		}
+        match ext_lc.as_str() {
+            "fgb" => return Ok(Self::FlatGeobuf),
+            "geojson" => return Ok(Self::GeoJson),
+            "topojson" => return Ok(Self::TopoJson),
+            "gpkg" => return Ok(Self::GeoPackage),
+            "gml" => return Ok(Self::Gml),
+            "gpx" => return Ok(Self::Gpx),
+            "kml" => return Ok(Self::Kml),
+            "mif" => return Ok(Self::MapInfoMif),
+            "shp" => return Ok(Self::Shapefile),
+            "parquet" => {
+                #[cfg(feature = "geoparquet")]
+                {
+                    return Ok(Self::GeoParquet);
+                }
+                #[cfg(not(feature = "geoparquet"))]
+                {
+                    return Err(GeoError::NotImplemented(
+                        "GeoParquet support requires enabling the `geoparquet` feature".into(),
+                    ));
+                }
+            }
+            "kmz" => {
+                #[cfg(feature = "kmz")]
+                {
+                    return Ok(Self::Kmz);
+                }
+                #[cfg(not(feature = "kmz"))]
+                {
+                    return Err(GeoError::NotImplemented(
+                        "KMZ support requires enabling the `kmz` feature".into(),
+                    ));
+                }
+            }
+            "json" => {
+                if let Some(kind) = sniff_json(path)? {
+                    return Ok(kind);
+                }
+                return Ok(Self::GeoJson);
+            }
+            "xml" => {
+                if let Some(kind) = sniff_xml(path)? {
+                    return Ok(kind);
+                }
+            }
+            _ => {}
+        }
 
-		// Shapefile convenience: accept base path without extension.
-		if path.extension().is_none() {
-			let shp = path.with_extension("shp");
-			if shp.exists() {
-				return Ok(Self::Shapefile);
-			}
-		}
+        // Shapefile convenience: accept base path without extension.
+        if path.extension().is_none() {
+            let shp = path.with_extension("shp");
+            if shp.exists() {
+                return Ok(Self::Shapefile);
+            }
+        }
 
-		if path.is_file() {
-			let sig = read_signature(path, 16)?;
-			if sig.starts_with(&flatgeobuf::MAGIC) {
-				return Ok(Self::FlatGeobuf);
-			}
-			if sig.starts_with(b"SQLite format 3\0") {
-				return Ok(Self::GeoPackage);
-			}
-			if sig.starts_with(b"PAR1") {
-				#[cfg(feature = "geoparquet")]
-				{
-					return Ok(Self::GeoParquet);
-				}
-			}
-			if sig.starts_with(b"PK\x03\x04") {
-				#[cfg(feature = "kmz")]
-				{
-					return Ok(Self::Kmz);
-				}
-			}
-			if let Some(kind) = sniff_xml(path)? {
-				return Ok(kind);
-			}
-		}
+        if path.is_file() {
+            let sig = read_signature(path, 16)?;
+            if sig.starts_with(&flatgeobuf::MAGIC) {
+                return Ok(Self::FlatGeobuf);
+            }
+            if sig.starts_with(b"SQLite format 3\0") {
+                return Ok(Self::GeoPackage);
+            }
+            if sig.starts_with(b"PAR1") {
+                #[cfg(feature = "geoparquet")]
+                {
+                    return Ok(Self::GeoParquet);
+                }
+            }
+            if sig.starts_with(b"PK\x03\x04") {
+                #[cfg(feature = "kmz")]
+                {
+                    return Ok(Self::Kmz);
+                }
+            }
+            if let Some(kind) = sniff_xml(path)? {
+                return Ok(kind);
+            }
+        }
 
-		Err(GeoError::UnknownFormat(path.display().to_string()))
-	}
+        Err(GeoError::UnknownFormat(path.display().to_string()))
+    }
 
-	/// Read using this format driver.
-	pub fn read<P: AsRef<std::path::Path>>(&self, path: P) -> Result<Layer> {
-		match self {
-			Self::FlatGeobuf => flatgeobuf::read(path),
-			Self::GeoJson => geojson::read(path),
-			Self::TopoJson => topojson::read(path),
-			Self::GeoPackage => geopackage::read(path),
-			#[cfg(feature = "geoparquet")]
-			Self::GeoParquet => geoparquet::read(path),
-			Self::Gml => gml::read(path),
-			Self::Gpx => gpx::read(path),
-			Self::Kml => kml::read(path),
-			#[cfg(feature = "kmz")]
-			Self::Kmz => kmz::read(path),
-			Self::MapInfoMif => mapinfo::read(path),
-			#[cfg(feature = "osmpbf")]
-			Self::OsmPbf => osmpbf::read(path),
-			Self::Shapefile => shapefile::read(path),
-		}
-	}
+    /// Read using this format driver.
+    pub fn read<P: AsRef<std::path::Path>>(&self, path: P) -> Result<Layer> {
+        match self {
+            Self::FlatGeobuf => flatgeobuf::read(path),
+            Self::GeoJson => geojson::read(path),
+            Self::TopoJson => topojson::read(path),
+            Self::GeoPackage => geopackage::read(path),
+            #[cfg(feature = "geoparquet")]
+            Self::GeoParquet => geoparquet::read(path),
+            Self::Gml => gml::read(path),
+            Self::Gpx => gpx::read(path),
+            Self::Kml => kml::read(path),
+            #[cfg(feature = "kmz")]
+            Self::Kmz => kmz::read(path),
+            Self::MapInfoMif => mapinfo::read(path),
+            #[cfg(feature = "osmpbf")]
+            Self::OsmPbf => osmpbf::read(path),
+            Self::Shapefile => shapefile::read(path),
+        }
+    }
 
-	/// Write using this format driver.
-	pub fn write<P: AsRef<std::path::Path>>(&self, layer: &Layer, path: P) -> Result<()> {
-		match self {
-			Self::FlatGeobuf => flatgeobuf::write(layer, path),
-			Self::GeoJson => geojson::write(layer, path),
-			Self::TopoJson => topojson::write(layer, path),
-			Self::GeoPackage => geopackage::write(layer, path),
-			#[cfg(feature = "geoparquet")]
-			Self::GeoParquet => geoparquet::write(layer, path),
-			Self::Gml => gml::write(layer, path),
-			Self::Gpx => gpx::write(layer, path),
-			Self::Kml => kml::write(layer, path),
-			#[cfg(feature = "kmz")]
-			Self::Kmz => kmz::write(layer, path),
-			Self::MapInfoMif => mapinfo::write(layer, path),
-			#[cfg(feature = "osmpbf")]
-			Self::OsmPbf => Err(GeoError::NotImplemented(
-				"OSM PBF writer is not implemented".into(),
-			)),
-			Self::Shapefile => shapefile::write(layer, path),
-		}
-	}
+    /// Write using this format driver.
+    pub fn write<P: AsRef<std::path::Path>>(&self, layer: &Layer, path: P) -> Result<()> {
+        match self {
+            Self::FlatGeobuf => flatgeobuf::write(layer, path),
+            Self::GeoJson => geojson::write(layer, path),
+            Self::TopoJson => topojson::write(layer, path),
+            Self::GeoPackage => geopackage::write(layer, path),
+            #[cfg(feature = "geoparquet")]
+            Self::GeoParquet => geoparquet::write(layer, path),
+            Self::Gml => gml::write(layer, path),
+            Self::Gpx => gpx::write(layer, path),
+            Self::Kml => kml::write(layer, path),
+            #[cfg(feature = "kmz")]
+            Self::Kmz => kmz::write(layer, path),
+            Self::MapInfoMif => mapinfo::write(layer, path),
+            #[cfg(feature = "osmpbf")]
+            Self::OsmPbf => Err(GeoError::NotImplemented(
+                "OSM PBF writer is not implemented".into(),
+            )),
+            Self::Shapefile => shapefile::write(layer, path),
+        }
+    }
 }
 
 /// Generic vector read with automatic format sniffing.
 pub fn read<P: AsRef<std::path::Path>>(path: P) -> Result<Layer> {
-	let fmt = VectorFormat::detect(path.as_ref())?;
-	fmt.read(path)
+    let fmt = VectorFormat::detect(path.as_ref())?;
+    fmt.read(path)
 }
 
 /// Generic vector write when the target format is known.
-pub fn write<P: AsRef<std::path::Path>>(layer: &Layer, path: P, format: VectorFormat) -> Result<()> {
-	format.write(layer, path)
+pub fn write<P: AsRef<std::path::Path>>(
+    layer: &Layer,
+    path: P,
+    format: VectorFormat,
+) -> Result<()> {
+    format.write(layer, path)
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Universal streaming writer
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Re-export individual streaming writers at the crate root for convenience.
+pub use geopackage::GpkgStreamWriter;
+pub use geojson::GeoJsonStreamWriter;
+pub use flatgeobuf::FgbStreamWriter;
+
+/// A format-agnostic streaming vector writer.
+///
+/// `VectorStreamWriter::open` inspects the output path and selects the best
+/// streaming back-end automatically:
+///
+/// | Format         | Streaming back-end                         | Notes                              |
+/// |----------------|--------------------------------------------|------------------------------------|
+/// | GeoPackage     | [`GpkgStreamWriter`]                       | In-memory SQLite, written at finish |
+/// | GeoJSON        | [`GeoJsonStreamWriter`]                    | Direct-to-disk text; WGS 84 assumed |
+/// | FlatGeobuf     | [`FgbStreamWriter`]                        | Direct-to-disk binary; no spatial index |
+/// | Shapefile      | buffered file (existing streaming writer)  | 2 GB spec limit applies            |
+/// | Everything else / in-memory | [`Layer`] accumulation        | Written as a whole at finish       |
+///
+/// All back-ends expose the same `push_feature` / `finish` interface so callers
+/// do not need to know the output format at compile time.
+pub enum VectorStreamWriter {
+    /// Streaming GeoPackage writer: accumulates in an in-memory SQLite B-tree, written at finish.
+    GeoPackage(GpkgStreamWriter),
+    /// Streaming GeoJSON writer: writes text directly to disk feature-by-feature.
+    GeoJson(GeoJsonStreamWriter),
+    /// Streaming FlatGeobuf writer: writes binary directly to disk without a spatial index.
+    FlatGeobuf(FgbStreamWriter),
+    /// Fallback: accumulate in a [`Layer`] and write all at once in [`finish`](Self::finish).
+    Layer(Layer, String),
+}
+
+impl VectorStreamWriter {
+    /// Open a streaming writer for `path`.
+    ///
+    /// `schema` is an empty (zero-feature) [`Layer`] that supplies the table
+    /// name, CRS, geometry type, and field definitions.
+    pub fn open(path: &str, schema: &Layer) -> Result<Self> {
+        // In-memory paths always fall through to the Layer fallback.
+        if memory_store::vector_is_memory_path(path) {
+            return Ok(Self::Layer(schema_layer_empty(schema), path.to_string()));
+        }
+
+        match VectorFormat::detect(path).ok() {
+            Some(VectorFormat::GeoPackage) => {
+                Ok(Self::GeoPackage(GpkgStreamWriter::create(path, schema)?))
+            }
+            Some(VectorFormat::GeoJson) => {
+                Ok(Self::GeoJson(GeoJsonStreamWriter::create(path, schema)?))
+            }
+            Some(VectorFormat::FlatGeobuf) => {
+                Ok(Self::FlatGeobuf(FgbStreamWriter::create(path, schema)?))
+            }
+            _ => Ok(Self::Layer(schema_layer_empty(schema), path.to_string())),
+        }
+    }
+
+    /// Append one feature.  `attrs` must be aligned to the full schema supplied
+    /// to [`open`](Self::open) in schema-field order.
+    pub fn push_feature(
+        &mut self,
+        geom: Option<&Geometry>,
+        attrs: &[FieldValue],
+    ) -> Result<()> {
+        match self {
+            Self::GeoPackage(w) => w.push_feature(geom, attrs),
+            Self::GeoJson(w) => w.push_feature(geom, attrs),
+            Self::FlatGeobuf(w) => w.push_feature(geom, attrs),
+            Self::Layer(layer, _) => {
+                layer.push(Feature {
+                    fid: layer.features.len() as u64,
+                    geometry: geom.cloned(),
+                    attributes: attrs.to_vec(),
+                });
+                Ok(())
+            }
+        }
+    }
+
+    /// Finalise the output and return the written path.
+    pub fn finish(self) -> Result<String> {
+        match self {
+            Self::GeoPackage(w) => { let p = w.path.clone(); w.finish()?; Ok(p) }
+            Self::GeoJson(w) => { let p = w.path.clone(); w.finish()?; Ok(p) }
+            Self::FlatGeobuf(w) => { let p = w.path.clone(); w.finish()?; Ok(p) }
+            Self::Layer(layer, path) => {
+                if memory_store::vector_is_memory_path(&path) {
+                    let id = memory_store::put_vector(layer);
+                    Ok(memory_store::make_vector_memory_path(&id))
+                } else {
+                    let fmt = VectorFormat::detect(&path).map_err(|_| {
+                        GeoError::UnknownFormat(path.clone())
+                    })?;
+                    fmt.write(&layer, &path)?;
+                    Ok(path)
+                }
+            }
+        }
+    }
+}
+
+/// Build an empty Layer with the same schema and metadata as `schema` but no features.
+fn schema_layer_empty(schema: &Layer) -> Layer {
+    let mut layer = Layer::new(schema.name.clone());
+    layer.geom_type = schema.geom_type;
+    layer.crs = schema.crs.clone();
+    for fd in schema.schema.fields() {
+        layer.add_field(fd.clone());
+    }
+    layer
 }
 
 fn read_signature(path: &std::path::Path, n: usize) -> Result<Vec<u8>> {
-	use std::io::Read;
-	let mut f = std::fs::File::open(path)?;
-	let mut buf = vec![0u8; n];
-	let read_n = f.read(&mut buf)?;
-	buf.truncate(read_n);
-	Ok(buf)
+    use std::io::Read;
+    let mut f = std::fs::File::open(path)?;
+    let mut buf = vec![0u8; n];
+    let read_n = f.read(&mut buf)?;
+    buf.truncate(read_n);
+    Ok(buf)
 }
 
 fn sniff_xml(path: &std::path::Path) -> Result<Option<VectorFormat>> {
-	use std::io::Read;
-	let mut f = match std::fs::File::open(path) {
-		Ok(f) => f,
-		Err(_) => return Ok(None),
-	};
-	let mut buf = vec![0u8; 4096];
-	let n = f.read(&mut buf)?;
-	buf.truncate(n);
-	let txt = String::from_utf8_lossy(&buf).to_ascii_lowercase();
-	if txt.contains("<kml") {
-		return Ok(Some(VectorFormat::Kml));
-	}
-	if txt.contains("<gpx") {
-		return Ok(Some(VectorFormat::Gpx));
-	}
-	if txt.contains("<gml") || txt.contains("opengis.net/gml") {
-		return Ok(Some(VectorFormat::Gml));
-	}
-	Ok(None)
+    use std::io::Read;
+    let mut f = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return Ok(None),
+    };
+    let mut buf = vec![0u8; 4096];
+    let n = f.read(&mut buf)?;
+    buf.truncate(n);
+    let txt = String::from_utf8_lossy(&buf).to_ascii_lowercase();
+    if txt.contains("<kml") {
+        return Ok(Some(VectorFormat::Kml));
+    }
+    if txt.contains("<gpx") {
+        return Ok(Some(VectorFormat::Gpx));
+    }
+    if txt.contains("<gml") || txt.contains("opengis.net/gml") {
+        return Ok(Some(VectorFormat::Gml));
+    }
+    Ok(None)
 }
 
 fn sniff_json(path: &std::path::Path) -> Result<Option<VectorFormat>> {
-	use std::io::Read;
-	let mut f = match std::fs::File::open(path) {
-		Ok(f) => f,
-		Err(_) => return Ok(None),
-	};
-	let mut buf = vec![0u8; 4096];
-	let n = f.read(&mut buf)?;
-	buf.truncate(n);
-	let txt = String::from_utf8_lossy(&buf).to_ascii_lowercase();
-	if txt.contains("\"type\"") && txt.contains("\"topology\"") {
-		return Ok(Some(VectorFormat::TopoJson));
-	}
-	if txt.contains("\"type\"")
-		&& (txt.contains("\"featurecollection\"") || txt.contains("\"feature\""))
-	{
-		return Ok(Some(VectorFormat::GeoJson));
-	}
-	Ok(None)
+    use std::io::Read;
+    let mut f = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return Ok(None),
+    };
+    let mut buf = vec![0u8; 4096];
+    let n = f.read(&mut buf)?;
+    buf.truncate(n);
+    let txt = String::from_utf8_lossy(&buf).to_ascii_lowercase();
+    if txt.contains("\"type\"") && txt.contains("\"topology\"") {
+        return Ok(Some(VectorFormat::TopoJson));
+    }
+    if txt.contains("\"type\"")
+        && (txt.contains("\"featurecollection\"") || txt.contains("\"feature\""))
+    {
+        return Ok(Some(VectorFormat::GeoJson));
+    }
+    Ok(None)
 }
-

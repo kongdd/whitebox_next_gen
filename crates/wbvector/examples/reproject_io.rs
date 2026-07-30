@@ -59,10 +59,16 @@ fn sample_layer() -> Layer {
     layer.add_field(FieldDef::new("name", FieldType::Text));
 
     layer
-        .add_feature(Some(Geometry::point(-75.0, 45.0)), &[("name", "Ottawa".into())])
+        .add_feature(
+            Some(Geometry::point(-75.0, 45.0)),
+            &[("name", "Ottawa".into())],
+        )
         .unwrap();
     layer
-        .add_feature(Some(Geometry::point(-0.1278, 51.5074)), &[("name", "London".into())])
+        .add_feature(
+            Some(Geometry::point(-0.1278, 51.5074)),
+            &[("name", "London".into())],
+        )
         .unwrap();
     layer
 }
@@ -92,7 +98,10 @@ fn main() -> Result<()> {
     println!("  roundtrip EPSG: {:?}", layer_back.crs_epsg());
 
     if let Some(Geometry::Point(c)) = &layer_3857.features[0].geometry {
-        println!("\nFirst projected point (approx Web Mercator): x={:.3}, y={:.3}", c.x, c.y);
+        println!(
+            "\nFirst projected point (approx Web Mercator): x={:.3}, y={:.3}",
+            c.x, c.y
+        );
     }
 
     // Options-style reprojection with antimeridian split + topology normalization.

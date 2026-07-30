@@ -22,8 +22,8 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Layer> {
 /// Parse KMZ bytes into a [`Layer`].
 pub fn from_bytes(bytes: &[u8]) -> Result<Layer> {
     let cursor = Cursor::new(bytes);
-    let mut archive = ZipArchive::new(cursor)
-        .map_err(|e| GeoError::Kmz(format!("invalid zip archive: {e}")))?;
+    let mut archive =
+        ZipArchive::new(cursor).map_err(|e| GeoError::Kmz(format!("invalid zip archive: {e}")))?;
 
     let mut preferred_index: Option<usize> = None;
     let mut fallback_index: Option<usize> = None;
@@ -111,15 +111,27 @@ mod tests {
             .with_epsg(4326);
         layer.add_field(FieldDef::new("name", FieldType::Text));
         layer
-            .add_feature(Some(Geometry::point(-0.1278, 51.5074)), &[("name", "London".into())])
+            .add_feature(
+                Some(Geometry::point(-0.1278, 51.5074)),
+                &[("name", "London".into())],
+            )
             .unwrap();
 
         let bytes = to_bytes(&layer).unwrap();
         let parsed = from_bytes(&bytes).unwrap();
 
         assert_eq!(parsed.len(), 1);
-        assert!(matches!(parsed.features[0].geometry, Some(Geometry::Point(_))));
-        assert_eq!(parsed.features[0].get(&parsed.schema, "name").unwrap().as_str(), Some("London"));
+        assert!(matches!(
+            parsed.features[0].geometry,
+            Some(Geometry::Point(_))
+        ));
+        assert_eq!(
+            parsed.features[0]
+                .get(&parsed.schema, "name")
+                .unwrap()
+                .as_str(),
+            Some("London")
+        );
     }
 
     #[test]

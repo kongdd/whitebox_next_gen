@@ -17,19 +17,31 @@
 //! The geometry payload uses FlatGeobuf geometry tables (`xy`, `ends`, `parts`).
 //! Properties are encoded in standard FlatGeobuf property binary form.
 
+use crate::crs;
+use crate::error::{GeoError, Result};
+use crate::feature::{Feature, FieldDef, FieldType, FieldValue, Layer};
+use crate::geometry::{BBox, Coord, Geometry, GeometryType, Ring};
+use flatbuffers::FlatBufferBuilder;
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use flatbuffers::FlatBufferBuilder;
-use crate::crs;
-use crate::error::{GeoError, Result};
-use crate::feature::{FieldDef, FieldType, FieldValue, Feature, Layer};
-use crate::geometry::{BBox, Coord, Geometry, GeometryType, Ring};
 
-#[allow(unused_imports, dead_code, non_snake_case, non_camel_case_types, clippy::all)]
-mod header_generated;
-#[allow(unused_imports, dead_code, non_snake_case, non_camel_case_types, clippy::all)]
+#[allow(
+    unused_imports,
+    dead_code,
+    non_snake_case,
+    non_camel_case_types,
+    clippy::all
+)]
 mod feature_generated;
+#[allow(
+    unused_imports,
+    dead_code,
+    non_snake_case,
+    non_camel_case_types,
+    clippy::all
+)]
+mod header_generated;
 
 use self::feature_generated as fg;
 use self::header_generated as hg;
@@ -59,33 +71,33 @@ fn has_compatible_magic(sig: &[u8]) -> bool {
 
 // ── FlatGeobuf column-type codes ─────────────────────────────────────────────
 mod ct {
-    pub const BYTE:     u8 =  0;
-    pub const UBYTE:    u8 =  1;
-    pub const BOOL:     u8 =  2;
-    pub const SHORT:    u8 =  3;
-    pub const USHORT:   u8 =  4;
-    pub const INT:      u8 =  5;
-    pub const UINT:     u8 =  6;
-    pub const LONG:     u8 =  7;
-    pub const ULONG:    u8 =  8;
-    pub const FLOAT:    u8 =  9;
-    pub const DOUBLE:   u8 = 10;
-    pub const STRING:   u8 = 11;
-    pub const JSON:     u8 = 12;
+    pub const BYTE: u8 = 0;
+    pub const UBYTE: u8 = 1;
+    pub const BOOL: u8 = 2;
+    pub const SHORT: u8 = 3;
+    pub const USHORT: u8 = 4;
+    pub const INT: u8 = 5;
+    pub const UINT: u8 = 6;
+    pub const LONG: u8 = 7;
+    pub const ULONG: u8 = 8;
+    pub const FLOAT: u8 = 9;
+    pub const DOUBLE: u8 = 10;
+    pub const STRING: u8 = 11;
+    pub const JSON: u8 = 12;
     pub const DATETIME: u8 = 13;
-    pub const BINARY:   u8 = 14;
+    pub const BINARY: u8 = 14;
 }
 
 // ── FlatGeobuf geometry-type codes ───────────────────────────────────────────
 mod gt {
     #[allow(dead_code)]
-    pub const UNKNOWN:            u8 = 0;
-    pub const POINT:              u8 = 1;
-    pub const LINESTRING:         u8 = 2;
-    pub const POLYGON:            u8 = 3;
-    pub const MULTIPOINT:         u8 = 4;
-    pub const MULTILINESTRING:    u8 = 5;
-    pub const MULTIPOLYGON:       u8 = 6;
+    pub const UNKNOWN: u8 = 0;
+    pub const POINT: u8 = 1;
+    pub const LINESTRING: u8 = 2;
+    pub const POLYGON: u8 = 3;
+    pub const MULTIPOINT: u8 = 4;
+    pub const MULTILINESTRING: u8 = 5;
+    pub const MULTIPOLYGON: u8 = 6;
     pub const GEOMETRYCOLLECTION: u8 = 7;
 }
 
@@ -114,7 +126,12 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Layer> {
                 Ok(layer) => {
                     if indexed_native_parse_is_valid(producer_count, layer.len()) {
                         FGB_INDEXED_NATIVE_ACCEPTED.fetch_add(1, Ordering::Relaxed);
-                        maybe_log_indexed_read_decision(path_ref, "indexed-direct-accepted", producer_count, layer.len());
+                        maybe_log_indexed_read_decision(
+                            path_ref,
+                            "indexed-direct-accepted",
+                            producer_count,
+                            layer.len(),
+                        );
                         return Ok(layer);
                     }
                     if telemetry_enabled() {
@@ -148,7 +165,12 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Layer> {
     if let Ok(layer) = native.as_ref() {
         if indexed_native_parse_is_valid(expected_count, layer.len()) {
             FGB_INDEXED_NATIVE_ACCEPTED.fetch_add(1, Ordering::Relaxed);
-            maybe_log_indexed_read_decision(path_ref, "native-accepted", expected_count, layer.len());
+            maybe_log_indexed_read_decision(
+                path_ref,
+                "native-accepted",
+                expected_count,
+                layer.len(),
+            );
             return Ok(layer.clone());
         }
         FGB_INDEXED_NATIVE_REJECTED.fetch_add(1, Ordering::Relaxed);
@@ -157,7 +179,12 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Layer> {
             if let Some(pc) = ogr_feature_count(path_ref) {
                 if layer.len() == pc {
                     FGB_INDEXED_NATIVE_ACCEPTED.fetch_add(1, Ordering::Relaxed);
-                    maybe_log_indexed_read_decision(path_ref, "native-accepted-via-ogrinfo", pc, layer.len());
+                    maybe_log_indexed_read_decision(
+                        path_ref,
+                        "native-accepted-via-ogrinfo",
+                        pc,
+                        layer.len(),
+                    );
                     return Ok(layer.clone());
                 }
 
@@ -166,7 +193,12 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Layer> {
                 if let Ok(retry) = from_bytes_with_expected_count(&data, Some(pc)) {
                     if retry.len() == pc {
                         FGB_INDEXED_NATIVE_ACCEPTED.fetch_add(1, Ordering::Relaxed);
-                        maybe_log_indexed_read_decision(path_ref, "native-accepted-via-override", pc, retry.len());
+                        maybe_log_indexed_read_decision(
+                            path_ref,
+                            "native-accepted-via-override",
+                            pc,
+                            retry.len(),
+                        );
                         return Ok(retry);
                     }
                 }
@@ -189,7 +221,12 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Layer> {
                 if let Ok(retry) = from_bytes_with_expected_count(&data, Some(pc)) {
                     if retry.len() == pc {
                         FGB_INDEXED_NATIVE_ACCEPTED.fetch_add(1, Ordering::Relaxed);
-                        maybe_log_indexed_read_decision(path_ref, "native-accepted-via-override", pc, retry.len());
+                        maybe_log_indexed_read_decision(
+                            path_ref,
+                            "native-accepted-via-override",
+                            pc,
+                            retry.len(),
+                        );
                         return Ok(retry);
                     }
                 }
@@ -213,7 +250,12 @@ fn telemetry_enabled() -> bool {
         .unwrap_or(false)
 }
 
-fn maybe_log_indexed_read_decision(path: &Path, decision: &str, expected_count: usize, parsed_count: usize) {
+fn maybe_log_indexed_read_decision(
+    path: &Path,
+    decision: &str,
+    expected_count: usize,
+    parsed_count: usize,
+) {
     if !telemetry_enabled() {
         return;
     }
@@ -245,7 +287,7 @@ fn header_index_node_size(data: &[u8]) -> Option<u16> {
     if data.len() < 12 || !has_compatible_magic(&data[0..8]) {
         return None;
     }
-    let hdr_size  = u32::from_le_bytes(data[8..12].try_into().ok()?) as usize;
+    let hdr_size = u32::from_le_bytes(data[8..12].try_into().ok()?) as usize;
     if 12 + hdr_size > data.len() {
         return None;
     }
@@ -313,13 +355,17 @@ pub fn from_bytes(data: &[u8]) -> Result<Layer> {
     from_bytes_with_expected_count(data, None)
 }
 
-fn from_bytes_with_expected_count(data: &[u8], expected_count_override: Option<usize>) -> Result<Layer> {
+fn from_bytes_with_expected_count(
+    data: &[u8],
+    expected_count_override: Option<usize>,
+) -> Result<Layer> {
     if data.len() < 12 || !has_compatible_magic(&data[0..8]) {
-        return Err(GeoError::NotFlatGeobuf(
-            format!("bad magic {:?}", &data[..8.min(data.len())])
-        ));
+        return Err(GeoError::NotFlatGeobuf(format!(
+            "bad magic {:?}",
+            &data[..8.min(data.len())]
+        )));
     }
-    let hdr_size  = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
+    let hdr_size = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
     if 12 + hdr_size > data.len() {
         return Err(GeoError::NotFlatGeobuf("header extends beyond EOF".into()));
     }
@@ -361,7 +407,11 @@ fn from_bytes_legacy(data: &[u8], hdr_size: usize) -> Result<Layer> {
     let hdr_data = &data[12..12 + hdr_size];
     let hdr = parse_header(hdr_data)?;
 
-    let mut layer = Layer::new(if hdr.name.is_empty() { "layer" } else { &hdr.name });
+    let mut layer = Layer::new(if hdr.name.is_empty() {
+        "layer"
+    } else {
+        &hdr.name
+    });
     layer.geom_type = geom_type_from_code(hdr.geom_type);
     layer.set_crs_epsg(hdr.srs_epsg);
     layer.set_crs_wkt(layer.crs_epsg().and_then(crs::ogc_wkt_from_epsg));
@@ -372,30 +422,45 @@ fn from_bytes_legacy(data: &[u8], hdr_size: usize) -> Result<Layer> {
     }
 
     // Parse feature records
-    let mut pos   = 12 + hdr_size;
-    let mut fidx  = 0usize;
+    let mut pos = 12 + hdr_size;
+    let mut fidx = 0usize;
 
     while pos + 4 <= data.len() {
-        let feat_size = u32::from_le_bytes(data[pos..pos+4].try_into().unwrap()) as usize;
+        let feat_size = u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
         pos += 4;
-        if feat_size == 0 || pos + feat_size > data.len() { break; }
+        if feat_size == 0 || pos + feat_size > data.len() {
+            break;
+        }
         let feat_data = &data[pos..pos + feat_size];
         pos += feat_size;
 
         // Feature layout: [4 geom_size LE] [geom bytes] [props bytes]
-        if feat_data.len() < 4 { fidx += 1; continue; }
+        if feat_data.len() < 4 {
+            fidx += 1;
+            continue;
+        }
         let geom_size = u32::from_le_bytes(feat_data[0..4].try_into().unwrap()) as usize;
-        if 4 + geom_size > feat_data.len() { fidx += 1; continue; }
+        if 4 + geom_size > feat_data.len() {
+            fidx += 1;
+            continue;
+        }
 
-        let geom_bytes  = &feat_data[4..4 + geom_size];
+        let geom_bytes = &feat_data[4..4 + geom_size];
         let props_bytes = &feat_data[4 + geom_size..];
 
-        let geom = if geom_bytes.is_empty() { None }
-                   else { decode_geom(geom_bytes, hdr.geom_type, hdr.has_z).ok() };
+        let geom = if geom_bytes.is_empty() {
+            None
+        } else {
+            decode_geom(geom_bytes, hdr.geom_type, hdr.has_z).ok()
+        };
 
         let attrs = decode_props(props_bytes, &hdr.columns);
 
-        layer.push(Feature { fid: fidx as u64, geometry: geom, attributes: attrs });
+        layer.push(Feature {
+            fid: fidx as u64,
+            geometry: geom,
+            attributes: attrs,
+        });
         fidx += 1;
     }
 
@@ -478,19 +543,20 @@ fn from_bytes_standard(
     let mut candidate_attempts = 0usize;
     let mut candidate_successes = 0usize;
 
-    let better_candidate = |current: &Option<(Vec<Feature>, usize)>, candidate: &(Vec<Feature>, usize)| -> bool {
-        match current {
-            None => true,
-            Some((curr_features, curr_end)) => {
-                let cand_count = candidate.0.len();
-                let curr_count = curr_features.len();
-                if cand_count > curr_count {
-                    return true;
+    let better_candidate =
+        |current: &Option<(Vec<Feature>, usize)>, candidate: &(Vec<Feature>, usize)| -> bool {
+            match current {
+                None => true,
+                Some((curr_features, curr_end)) => {
+                    let cand_count = candidate.0.len();
+                    let curr_count = curr_features.len();
+                    if cand_count > curr_count {
+                        return true;
+                    }
+                    cand_count == curr_count && candidate.1 > *curr_end
                 }
-                cand_count == curr_count && candidate.1 > *curr_end
             }
-        }
-    };
+        };
 
     let try_parse_from = |start: usize| -> Option<(Vec<Feature>, usize)> {
         if start + 4 > data.len() {
@@ -545,16 +611,17 @@ fn from_bytes_standard(
             let extended_end = (frame_start + feat_size + 16).min(data.len());
             let feat_buf_extended = &data[frame_start..extended_end];
 
-            let (feat, consumed_hint) = if let Some(v) = parse_feature_record_compat(feat_buf, feat_buf_extended) {
-                v
-            } else {
-                if resync_budget > 0 {
-                    pos += 1;
-                    resync_budget -= 1;
-                    continue;
-                }
-                return None;
-            };
+            let (feat, consumed_hint) =
+                if let Some(v) = parse_feature_record_compat(feat_buf, feat_buf_extended) {
+                    v
+                } else {
+                    if resync_budget > 0 {
+                        pos += 1;
+                        resync_budget -= 1;
+                        continue;
+                    }
+                    return None;
+                };
             let geometry = match feat.geometry() {
                 Some(g) => decode_geom_standard(g).ok(),
                 None => None,
@@ -843,6 +910,81 @@ pub fn write<P: AsRef<Path>>(layer: &Layer, path: P) -> Result<()> {
     std::fs::write(path, to_bytes(layer)).map_err(GeoError::Io)
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// Streaming writer
+// ══════════════════════════════════════════════════════════════════════════════
+
+/// A streaming FlatGeobuf writer that appends features one at a time.
+///
+/// Unlike [`write`], which requires a fully-assembled [`Layer`], `FgbStreamWriter`
+/// writes features directly to disk as they arrive.  To support streaming the
+/// spatial index is omitted (`index_node_size = 0`) — the output is a valid
+/// FlatGeobuf file that can be read by any compliant reader, but it will not
+/// benefit from the packed R-tree for random-access spatial queries.  If you
+/// need the index, use the batch [`write`] function instead.
+pub struct FgbStreamWriter {
+    file: std::io::BufWriter<std::fs::File>,
+    schema: crate::feature::Schema,
+    fid: u64,
+    /// Output file path; accessible after consuming the writer via [`finish`](Self::finish).
+    pub path: String,
+}
+
+impl FgbStreamWriter {
+    /// Create a streaming FlatGeobuf writer at `path`.
+    ///
+    /// `schema` is an empty [`Layer`] supplying the table name, CRS, geometry
+    /// type, and field definitions.  `features_count` is written as 0 in the
+    /// header (streaming/unknown) and `index_node_size` is set to 0 (no index).
+    pub fn create(path: &str, schema: &Layer) -> Result<Self> {
+        use std::io::Write;
+        let file = std::fs::File::create(path).map_err(GeoError::Io)?;
+        let mut w = std::io::BufWriter::new(file);
+
+        // Build the streaming header using the empty schema layer.
+        // features_count = 0 (unknown / streaming), index_node_size = 0 (no index).
+        let hdr = build_standard_header(schema, 0);
+        w.write_all(&MAGIC).map_err(GeoError::Io)?;
+        w.write_all(&(hdr.len() as u32).to_le_bytes())
+            .map_err(GeoError::Io)?;
+        w.write_all(&hdr).map_err(GeoError::Io)?;
+
+        Ok(FgbStreamWriter {
+            file: w,
+            schema: schema.schema.clone(),
+            fid: 0,
+            path: path.to_string(),
+        })
+    }
+
+    /// Append one feature.  `attrs` must be aligned to the full schema in
+    /// schema-field order.
+    pub fn push_feature(
+        &mut self,
+        geom: Option<&Geometry>,
+        attrs: &[crate::feature::FieldValue],
+    ) -> Result<()> {
+        use std::io::Write;
+        let feat = crate::feature::Feature {
+            fid: self.fid,
+            geometry: geom.cloned(),
+            attributes: attrs.to_vec(),
+        };
+        self.fid += 1;
+        let feat_bytes = build_standard_feature(&feat, &self.schema);
+        self.file
+            .write_all(&(feat_bytes.len() as u32).to_le_bytes())
+            .map_err(GeoError::Io)?;
+        self.file.write_all(&feat_bytes).map_err(GeoError::Io)
+    }
+
+    /// Flush and close the file.
+    pub fn finish(mut self) -> Result<()> {
+        use std::io::Write;
+        self.file.flush().map_err(GeoError::Io)
+    }
+}
+
 /// Serialise a [`Layer`] as FlatGeobuf bytes.
 pub fn to_bytes(layer: &Layer) -> Vec<u8> {
     let feature_buffers: Vec<Vec<u8>> = layer
@@ -852,11 +994,12 @@ pub fn to_bytes(layer: &Layer) -> Vec<u8> {
         .collect();
 
     let mut index_bytes = Vec::new();
-    let index_node_size = if try_build_packed_spatial_index(layer, &feature_buffers, 16, &mut index_bytes) {
-        16
-    } else {
-        0
-    };
+    let index_node_size =
+        if try_build_packed_spatial_index(layer, &feature_buffers, 16, &mut index_bytes) {
+            16
+        } else {
+            0
+        };
 
     let hdr = build_standard_header(layer, index_node_size);
     let mut out = Vec::new();
@@ -886,19 +1029,36 @@ fn build_standard_header(layer: &Layer, index_node_size: u16) -> Vec<u8> {
             name: Some(name),
             type_: std_col_type(field_type_to_col_type(fd.field_type)),
             width: if fd.width == 0 { -1 } else { fd.width as i32 },
-            precision: if fd.precision == 0 { -1 } else { fd.precision as i32 },
+            precision: if fd.precision == 0 {
+                -1
+            } else {
+                fd.precision as i32
+            },
             nullable: fd.nullable,
             ..Default::default()
         };
         cols.push(hg::Column::create(&mut fbb, &args));
     }
-    let cols_off = if cols.is_empty() { None } else { Some(fbb.create_vector(&cols)) };
+    let cols_off = if cols.is_empty() {
+        None
+    } else {
+        Some(fbb.create_vector(&cols))
+    };
 
-    let has_z = layer.features.iter().any(|f| f.geometry.as_ref().map_or(false, |g| g.has_z()));
+    let has_z = layer
+        .features
+        .iter()
+        .any(|f| f.geometry.as_ref().map_or(false, |g| g.has_z()));
     let name = fbb.create_string(&layer.name);
-    let envelope = layer_bbox(layer).map(|bb| fbb.create_vector(&[bb.min_x, bb.min_y, bb.max_x, bb.max_y]));
-    let epsg = layer.crs_epsg().or_else(|| layer.crs_wkt().and_then(crs::epsg_from_wkt_lenient));
-    let srs_wkt = layer.crs_wkt().map(|w| w.to_owned()).or_else(|| epsg.and_then(crs::ogc_wkt_from_epsg));
+    let envelope =
+        layer_bbox(layer).map(|bb| fbb.create_vector(&[bb.min_x, bb.min_y, bb.max_x, bb.max_y]));
+    let epsg = layer
+        .crs_epsg()
+        .or_else(|| layer.crs_wkt().and_then(crs::epsg_from_wkt_lenient));
+    let srs_wkt = layer
+        .crs_wkt()
+        .map(|w| w.to_owned())
+        .or_else(|| epsg.and_then(crs::ogc_wkt_from_epsg));
     let crs_name = epsg.and_then(crs::crs_name_from_epsg);
 
     let crs = if epsg.is_none() && srs_wkt.is_none() {
@@ -908,14 +1068,17 @@ fn build_standard_header(layer: &Layer, index_node_size: u16) -> Vec<u8> {
         let code_string = epsg.map(|e| fbb.create_string(&crs::canonical_epsg_srs_name(e)));
         let name_text = crs_name.map(|v| fbb.create_string(&v));
         let wkt_text = srs_wkt.map(|v| fbb.create_string(&v));
-        Some(hg::Crs::create(&mut fbb, &hg::CrsArgs {
-            org,
-            code: epsg.map(|e| e as i32).unwrap_or(0),
-            name: name_text,
-            description: None,
-            wkt: wkt_text,
-            code_string,
-        }))
+        Some(hg::Crs::create(
+            &mut fbb,
+            &hg::CrsArgs {
+                org,
+                code: epsg.map(|e| e as i32).unwrap_or(0),
+                name: name_text,
+                description: None,
+                wkt: wkt_text,
+                code_string,
+            },
+        ))
     };
 
     let args = hg::HeaderArgs {
@@ -937,9 +1100,16 @@ fn build_standard_header(layer: &Layer, index_node_size: u16) -> Vec<u8> {
 fn build_standard_feature(feat: &Feature, schema: &crate::feature::Schema) -> Vec<u8> {
     let mut fbb = FlatBufferBuilder::new();
 
-    let geom = feat.geometry.as_ref().map(|g| encode_geom_standard(&mut fbb, g));
+    let geom = feat
+        .geometry
+        .as_ref()
+        .map(|g| encode_geom_standard(&mut fbb, g));
     let props = encode_props(feat, schema);
-    let props_off = if props.is_empty() { None } else { Some(fbb.create_vector(&props)) };
+    let props_off = if props.is_empty() {
+        None
+    } else {
+        Some(fbb.create_vector(&props))
+    };
 
     let args = fg::FeatureArgs {
         geometry: geom,
@@ -951,56 +1121,76 @@ fn build_standard_feature(feat: &Feature, schema: &crate::feature::Schema) -> Ve
     fbb.finished_data().to_vec()
 }
 
-fn encode_geom_standard<'a>(fbb: &mut FlatBufferBuilder<'a>, geom: &Geometry) -> flatbuffers::WIPOffset<fg::Geometry<'a>> {
+fn encode_geom_standard<'a>(
+    fbb: &mut FlatBufferBuilder<'a>,
+    geom: &Geometry,
+) -> flatbuffers::WIPOffset<fg::Geometry<'a>> {
     match geom {
         Geometry::Point(c) => {
             let xy = fbb.create_vector(&[c.x, c.y]);
             let z = c.z.map(|v| fbb.create_vector(&[v]));
-            fg::Geometry::create(fbb, &fg::GeometryArgs {
-                type_: std_geom_type(GeometryType::Point),
-                xy: Some(xy),
-                z,
-                ..Default::default()
-            })
+            fg::Geometry::create(
+                fbb,
+                &fg::GeometryArgs {
+                    type_: std_geom_type(GeometryType::Point),
+                    xy: Some(xy),
+                    z,
+                    ..Default::default()
+                },
+            )
         }
         Geometry::LineString(cs) => {
             let (xy, z) = flatten_coords(cs);
             let xy = fbb.create_vector(&xy);
             let z = z.map(|vals| fbb.create_vector(&vals));
-            fg::Geometry::create(fbb, &fg::GeometryArgs {
-                type_: std_geom_type(GeometryType::LineString),
-                xy: Some(xy),
-                z,
-                ..Default::default()
-            })
+            fg::Geometry::create(
+                fbb,
+                &fg::GeometryArgs {
+                    type_: std_geom_type(GeometryType::LineString),
+                    xy: Some(xy),
+                    z,
+                    ..Default::default()
+                },
+            )
         }
-        Geometry::Polygon { exterior, interiors } => {
+        Geometry::Polygon {
+            exterior,
+            interiors,
+        } => {
             let mut coords = Vec::new();
             let mut ends = Vec::new();
             append_ring(&mut coords, &mut ends, exterior);
-            for r in interiors { append_ring(&mut coords, &mut ends, r); }
+            for r in interiors {
+                append_ring(&mut coords, &mut ends, r);
+            }
             let (xy, z) = flatten_coords(&coords);
             let xy = fbb.create_vector(&xy);
             let ends = fbb.create_vector(&ends);
             let z = z.map(|vals| fbb.create_vector(&vals));
-            fg::Geometry::create(fbb, &fg::GeometryArgs {
-                type_: std_geom_type(GeometryType::Polygon),
-                xy: Some(xy),
-                z,
-                ends: Some(ends),
-                ..Default::default()
-            })
+            fg::Geometry::create(
+                fbb,
+                &fg::GeometryArgs {
+                    type_: std_geom_type(GeometryType::Polygon),
+                    xy: Some(xy),
+                    z,
+                    ends: Some(ends),
+                    ..Default::default()
+                },
+            )
         }
         Geometry::MultiPoint(cs) => {
             let (xy, z) = flatten_coords(cs);
             let xy = fbb.create_vector(&xy);
             let z = z.map(|vals| fbb.create_vector(&vals));
-            fg::Geometry::create(fbb, &fg::GeometryArgs {
-                type_: std_geom_type(GeometryType::MultiPoint),
-                xy: Some(xy),
-                z,
-                ..Default::default()
-            })
+            fg::Geometry::create(
+                fbb,
+                &fg::GeometryArgs {
+                    type_: std_geom_type(GeometryType::MultiPoint),
+                    xy: Some(xy),
+                    z,
+                    ..Default::default()
+                },
+            )
         }
         Geometry::MultiLineString(lines) => {
             let mut coords = Vec::new();
@@ -1013,36 +1203,50 @@ fn encode_geom_standard<'a>(fbb: &mut FlatBufferBuilder<'a>, geom: &Geometry) ->
             let xy = fbb.create_vector(&xy);
             let ends = fbb.create_vector(&ends);
             let z = z.map(|vals| fbb.create_vector(&vals));
-            fg::Geometry::create(fbb, &fg::GeometryArgs {
-                type_: std_geom_type(GeometryType::MultiLineString),
-                xy: Some(xy),
-                z,
-                ends: Some(ends),
-                ..Default::default()
-            })
+            fg::Geometry::create(
+                fbb,
+                &fg::GeometryArgs {
+                    type_: std_geom_type(GeometryType::MultiLineString),
+                    xy: Some(xy),
+                    z,
+                    ends: Some(ends),
+                    ..Default::default()
+                },
+            )
         }
         Geometry::MultiPolygon(polys) => {
             let mut parts = Vec::new();
             for (ext, holes) in polys {
-                let pg = Geometry::Polygon { exterior: ext.clone(), interiors: holes.clone() };
+                let pg = Geometry::Polygon {
+                    exterior: ext.clone(),
+                    interiors: holes.clone(),
+                };
                 parts.push(encode_geom_standard(fbb, &pg));
             }
             let parts = fbb.create_vector(&parts);
-            fg::Geometry::create(fbb, &fg::GeometryArgs {
-                type_: std_geom_type(GeometryType::MultiPolygon),
-                parts: Some(parts),
-                ..Default::default()
-            })
+            fg::Geometry::create(
+                fbb,
+                &fg::GeometryArgs {
+                    type_: std_geom_type(GeometryType::MultiPolygon),
+                    parts: Some(parts),
+                    ..Default::default()
+                },
+            )
         }
         Geometry::GeometryCollection(gs) => {
             let mut parts = Vec::new();
-            for g in gs { parts.push(encode_geom_standard(fbb, g)); }
+            for g in gs {
+                parts.push(encode_geom_standard(fbb, g));
+            }
             let parts = fbb.create_vector(&parts);
-            fg::Geometry::create(fbb, &fg::GeometryArgs {
-                type_: std_geom_type(GeometryType::GeometryCollection),
-                parts: Some(parts),
-                ..Default::default()
-            })
+            fg::Geometry::create(
+                fbb,
+                &fg::GeometryArgs {
+                    type_: std_geom_type(GeometryType::GeometryCollection),
+                    parts: Some(parts),
+                    ..Default::default()
+                },
+            )
         }
     }
 }
@@ -1057,7 +1261,10 @@ fn decode_geom_standard(geom: fg::Geometry<'_>) -> Result<Geometry> {
                 for i in 0..parts.len() {
                     let p = decode_geom_standard(parts.get(i))?;
                     match p {
-                        Geometry::Polygon { exterior, interiors } => polys.push((exterior, interiors)),
+                        Geometry::Polygon {
+                            exterior,
+                            interiors,
+                        } => polys.push((exterior, interiors)),
                         Geometry::MultiPolygon(mut more) => polys.append(&mut more),
                         _ => {}
                     }
@@ -1066,14 +1273,18 @@ fn decode_geom_standard(geom: fg::Geometry<'_>) -> Result<Geometry> {
             }
             gt::GEOMETRYCOLLECTION => {
                 let mut gs = Vec::new();
-                for i in 0..parts.len() { gs.push(decode_geom_standard(parts.get(i))?); }
+                for i in 0..parts.len() {
+                    gs.push(decode_geom_standard(parts.get(i))?);
+                }
                 return Ok(Geometry::GeometryCollection(gs));
             }
             _ => {}
         }
     }
 
-    let xy = geom.xy().ok_or_else(|| GeoError::NotFlatGeobuf("geometry missing xy".into()))?;
+    let xy = geom
+        .xy()
+        .ok_or_else(|| GeoError::NotFlatGeobuf("geometry missing xy".into()))?;
     if xy.len() % 2 != 0 {
         return Err(GeoError::NotFlatGeobuf("invalid xy vector length".into()));
     }
@@ -1084,7 +1295,12 @@ fn decode_geom_standard(geom: fg::Geometry<'_>) -> Result<Geometry> {
         let x = xy.get(i * 2);
         let y = xy.get(i * 2 + 1);
         let zv = z.and_then(|zz| if i < zz.len() { Some(zz.get(i)) } else { None });
-        coords.push(Coord { x, y, z: zv, m: None });
+        coords.push(Coord {
+            x,
+            y,
+            z: zv,
+            m: None,
+        });
     }
 
     let ends: Vec<usize> = geom
@@ -1092,13 +1308,25 @@ fn decode_geom_standard(geom: fg::Geometry<'_>) -> Result<Geometry> {
         .map(|e| (0..e.len()).map(|i| e.get(i) as usize).collect())
         .unwrap_or_default();
 
-    build_geometry(gtype, &coords, &if ends.is_empty() { vec![coords.len()] } else { ends })
+    build_geometry(
+        gtype,
+        &coords,
+        &if ends.is_empty() {
+            vec![coords.len()]
+        } else {
+            ends
+        },
+    )
 }
 
 fn flatten_coords(coords: &[Coord]) -> (Vec<f64>, Option<Vec<f64>>) {
     let mut xy = Vec::with_capacity(coords.len() * 2);
     let has_z = coords.iter().any(|c| c.z.is_some());
-    let mut z = if has_z { Some(Vec::with_capacity(coords.len())) } else { None };
+    let mut z = if has_z {
+        Some(Vec::with_capacity(coords.len()))
+    } else {
+        None
+    };
     for c in coords {
         xy.push(c.x);
         xy.push(c.y);
@@ -1145,14 +1373,18 @@ fn packed_index_size(num_items: usize, node_size: u16) -> usize {
     loop {
         n = n.div_ceil(node_size_min);
         num_nodes += n;
-        if n == 1 { break; }
+        if n == 1 {
+            break;
+        }
     }
     num_nodes * std::mem::size_of::<(f64, f64, f64, f64, u64)>()
 }
 
 fn from_bytes_indexed_exact(data: &[u8], expected_count: usize) -> Result<Layer> {
     if expected_count == 0 {
-        return Err(GeoError::NotFlatGeobuf("indexed parse needs a known feature count".into()));
+        return Err(GeoError::NotFlatGeobuf(
+            "indexed parse needs a known feature count".into(),
+        ));
     }
     if data.len() < 12 || !has_compatible_magic(&data[0..8]) {
         return Err(GeoError::NotFlatGeobuf("bad magic".into()));
@@ -1243,7 +1475,9 @@ fn from_bytes_indexed_exact(data: &[u8], expected_count: usize) -> Result<Layer>
 
     let mut parsed = None;
     for start in candidate_starts {
-        if let Some(features) = parse_standard_feature_stream_exact(data, start, expected_count, &columns) {
+        if let Some(features) =
+            parse_standard_feature_stream_exact(data, start, expected_count, &columns)
+        {
             parsed = Some(features);
             break;
         }
@@ -1334,14 +1568,26 @@ impl IndexNodeItem {
     }
 
     fn expand(&mut self, other: &Self) {
-        if other.min_x < self.min_x { self.min_x = other.min_x; }
-        if other.min_y < self.min_y { self.min_y = other.min_y; }
-        if other.max_x > self.max_x { self.max_x = other.max_x; }
-        if other.max_y > self.max_y { self.max_y = other.max_y; }
+        if other.min_x < self.min_x {
+            self.min_x = other.min_x;
+        }
+        if other.min_y < self.min_y {
+            self.min_y = other.min_y;
+        }
+        if other.max_x > self.max_x {
+            self.max_x = other.max_x;
+        }
+        if other.max_y > self.max_y {
+            self.max_y = other.max_y;
+        }
     }
 
-    fn width(&self) -> f64 { self.max_x - self.min_x }
-    fn height(&self) -> f64 { self.max_y - self.min_y }
+    fn width(&self) -> f64 {
+        self.max_x - self.min_x
+    }
+    fn height(&self) -> f64 {
+        self.max_y - self.min_y
+    }
 }
 
 fn index_calc_extent(nodes: &[IndexNodeItem]) -> IndexNodeItem {
@@ -1381,14 +1627,20 @@ fn hilbert_bbox(r: &IndexNodeItem, hilbert_max: u32, extent: &IndexNodeItem) -> 
     if width == 0.0 || height == 0.0 {
         return 0;
     }
-    let x = (hilbert_max as f64 * ((r.min_x + r.max_x) / 2.0 - extent.min_x) / width).floor().clamp(0.0, hilbert_max as f64) as u32;
-    let y = (hilbert_max as f64 * ((r.min_y + r.max_y) / 2.0 - extent.min_y) / height).floor().clamp(0.0, hilbert_max as f64) as u32;
+    let x = (hilbert_max as f64 * ((r.min_x + r.max_x) / 2.0 - extent.min_x) / width)
+        .floor()
+        .clamp(0.0, hilbert_max as f64) as u32;
+    let y = (hilbert_max as f64 * ((r.min_y + r.max_y) / 2.0 - extent.min_y) / height)
+        .floor()
+        .clamp(0.0, hilbert_max as f64) as u32;
     hilbert(x, y)
 }
 
 fn index_hilbert_sort(items: &mut [IndexNodeItem], extent: &IndexNodeItem) {
     const HILBERT_MAX: u32 = (1 << 16) - 1;
-    items.sort_by(|a, b| hilbert_bbox(b, HILBERT_MAX, extent).cmp(&hilbert_bbox(a, HILBERT_MAX, extent)));
+    items.sort_by(|a, b| {
+        hilbert_bbox(b, HILBERT_MAX, extent).cmp(&hilbert_bbox(a, HILBERT_MAX, extent))
+    });
 }
 
 struct PackedIndexTree {
@@ -1488,7 +1740,12 @@ impl PackedIndexTree {
     }
 }
 
-fn try_build_packed_spatial_index(layer: &Layer, feature_buffers: &[Vec<u8>], node_size: u16, out_index_bytes: &mut Vec<u8>) -> bool {
+fn try_build_packed_spatial_index(
+    layer: &Layer,
+    feature_buffers: &[Vec<u8>],
+    node_size: u16,
+    out_index_bytes: &mut Vec<u8>,
+) -> bool {
     if layer.features.is_empty() || layer.features.len() != feature_buffers.len() {
         return false;
     }
@@ -1507,7 +1764,8 @@ fn try_build_packed_spatial_index(layer: &Layer, feature_buffers: &[Vec<u8>], no
             max_y: bbox.max_y,
             offset: offset_in_feature_section,
         });
-        offset_in_feature_section = offset_in_feature_section.saturating_add((4 + feat_buf.len()) as u64);
+        offset_in_feature_section =
+            offset_in_feature_section.saturating_add((4 + feat_buf.len()) as u64);
     }
 
     let extent = index_calc_extent(&leaves);
@@ -1522,19 +1780,19 @@ fn try_build_packed_spatial_index(layer: &Layer, feature_buffers: &[Vec<u8>], no
 // ══════════════════════════════════════════════════════════════════════════════
 
 struct FgbHeader {
-    name:      String,
+    name: String,
     geom_type: u8,
-    has_z:     bool,
-    srs_epsg:  Option<u32>,
-    columns:   Vec<FgbColumn>,
+    has_z: bool,
+    srs_epsg: Option<u32>,
+    columns: Vec<FgbColumn>,
 }
 
 #[derive(Debug, Clone)]
 struct FgbColumn {
-    name:     String,
+    name: String,
     col_type: u8,
     _nullable: bool,
-    width:    i32,
+    width: i32,
 }
 
 /// Parse the simplified binary header written by [`build_header`].
@@ -1559,34 +1817,66 @@ fn parse_header(data: &[u8]) -> Result<FgbHeader> {
         return Err(GeoError::NotFlatGeobuf("header too short".into()));
     }
     let geom_type = data[0];
-    let has_z     = data[1] != 0;
+    let has_z = data[1] != 0;
     // data[2] = has_m (ignored)
     let srs_epsg_raw = u32::from_le_bytes(data[3..7].try_into().unwrap());
-    let srs_epsg  = if srs_epsg_raw == 0 { None } else { Some(srs_epsg_raw) };
-    let num_cols  = u16::from_le_bytes(data[7..9].try_into().unwrap()) as usize;
+    let srs_epsg = if srs_epsg_raw == 0 {
+        None
+    } else {
+        Some(srs_epsg_raw)
+    };
+    let num_cols = u16::from_le_bytes(data[7..9].try_into().unwrap()) as usize;
 
     let mut pos = 9usize;
     let mut columns = Vec::with_capacity(num_cols);
 
     for _ in 0..num_cols {
-        if pos >= data.len() { break; }
-        let name_len = data[pos] as usize; pos += 1;
-        if pos + name_len + 6 > data.len() { break; }
-        let name = String::from_utf8_lossy(&data[pos..pos+name_len]).to_string(); pos += name_len;
-        let col_type = data[pos]; pos += 1;
-        let nullable = data[pos] != 0; pos += 1;
-        let width    = i32::from_le_bytes(data[pos..pos+4].try_into().unwrap()); pos += 4;
-        columns.push(FgbColumn { name, col_type, _nullable: nullable, width });
+        if pos >= data.len() {
+            break;
+        }
+        let name_len = data[pos] as usize;
+        pos += 1;
+        if pos + name_len + 6 > data.len() {
+            break;
+        }
+        let name = String::from_utf8_lossy(&data[pos..pos + name_len]).to_string();
+        pos += name_len;
+        let col_type = data[pos];
+        pos += 1;
+        let nullable = data[pos] != 0;
+        pos += 1;
+        let width = i32::from_le_bytes(data[pos..pos + 4].try_into().unwrap());
+        pos += 4;
+        columns.push(FgbColumn {
+            name,
+            col_type,
+            _nullable: nullable,
+            width,
+        });
     }
 
     // Skip feature_count (4 bytes, informational)
-    Ok(FgbHeader { name: String::new(), geom_type, has_z, srs_epsg, columns })
+    Ok(FgbHeader {
+        name: String::new(),
+        geom_type,
+        has_z,
+        srs_epsg,
+        columns,
+    })
 }
 
 #[allow(dead_code)]
 fn build_header(layer: &Layer) -> Vec<u8> {
     let geom_type = layer.geom_type.map(geom_type_code).unwrap_or(gt::UNKNOWN);
-    let has_z: u8 = if layer.features.iter().any(|f| f.geometry.as_ref().map_or(false, |g| g.has_z())) { 1 } else { 0 };
+    let has_z: u8 = if layer
+        .features
+        .iter()
+        .any(|f| f.geometry.as_ref().map_or(false, |g| g.has_z()))
+    {
+        1
+    } else {
+        0
+    };
     let srs_epsg: u32 = layer.crs_epsg().unwrap_or(0);
 
     let mut buf = Vec::new();
@@ -1598,7 +1888,7 @@ fn build_header(layer: &Layer) -> Vec<u8> {
 
     for fd in layer.schema.fields() {
         let col_type = field_type_to_col_type(fd.field_type);
-        let name_b   = fd.name.as_bytes();
+        let name_b = fd.name.as_bytes();
         buf.push(name_b.len() as u8);
         buf.extend_from_slice(name_b);
         buf.push(col_type);
@@ -1624,11 +1914,11 @@ fn build_header(layer: &Layer) -> Vec<u8> {
 
 #[allow(dead_code)]
 fn encode_geom(geom: &Geometry) -> Vec<u8> {
-    let gt   = geom_type_code(geom.geom_type());
+    let gt = geom_type_code(geom.geom_type());
     let has_z = geom.has_z();
 
     let mut coords: Vec<Coord> = Vec::new();
-    let mut ends:   Vec<u32>   = Vec::new();
+    let mut ends: Vec<u32> = Vec::new();
 
     collect_coords(geom, &mut coords, &mut ends);
 
@@ -1639,10 +1929,14 @@ fn encode_geom(geom: &Geometry) -> Vec<u8> {
     for c in &coords {
         buf.extend_from_slice(&c.x.to_le_bytes());
         buf.extend_from_slice(&c.y.to_le_bytes());
-        if has_z { buf.extend_from_slice(&c.z.unwrap_or(0.0).to_le_bytes()); }
+        if has_z {
+            buf.extend_from_slice(&c.z.unwrap_or(0.0).to_le_bytes());
+        }
     }
     buf.extend_from_slice(&(ends.len() as u32).to_le_bytes());
-    for e in &ends { buf.extend_from_slice(&e.to_le_bytes()); }
+    for e in &ends {
+        buf.extend_from_slice(&e.to_le_bytes());
+    }
     buf
 }
 
@@ -1654,7 +1948,10 @@ fn collect_coords(geom: &Geometry, coords: &mut Vec<Coord>, ends: &mut Vec<u32>)
             coords.extend_from_slice(cs);
             ends.push(coords.len() as u32);
         }
-        Geometry::Polygon { exterior, interiors } => {
+        Geometry::Polygon {
+            exterior,
+            interiors,
+        } => {
             push_closed_ring(coords, exterior);
             ends.push(coords.len() as u32);
             for r in interiors {
@@ -1688,16 +1985,21 @@ fn collect_coords(geom: &Geometry, coords: &mut Vec<Coord>, ends: &mut Vec<u32>)
 #[allow(dead_code)]
 fn push_closed_ring(coords: &mut Vec<Coord>, ring: &Ring) {
     coords.extend_from_slice(&ring.0);
-    if ring.0.len() > 1 { coords.push(ring.0[0].clone()); }
+    if ring.0.len() > 1 {
+        coords.push(ring.0[0].clone());
+    }
 }
 
 fn decode_geom(data: &[u8], _header_gt: u8, header_has_z: bool) -> Result<Geometry> {
     if data.len() < 6 {
-        return Err(GeoError::InvalidFgbFeature { index: 0, msg: "geom data too short".into() });
+        return Err(GeoError::InvalidFgbFeature {
+            index: 0,
+            msg: "geom data too short".into(),
+        });
     }
     let geom_type = data[0];
-    let has_z     = data[1] != 0 || header_has_z;
-    let stride    = if has_z { 3usize } else { 2 };
+    let has_z = data[1] != 0 || header_has_z;
+    let stride = if has_z { 3usize } else { 2 };
 
     let n_pts = u32::from_le_bytes(data[2..6].try_into().unwrap()) as usize;
     let coord_bytes = n_pts
@@ -1716,15 +2018,24 @@ fn decode_geom(data: &[u8], _header_gt: u8, header_has_z: bool) -> Result<Geomet
         })?;
 
     if data.len() < min_len {
-        return Err(GeoError::InvalidFgbFeature { index: 0, msg: "geom data truncated".into() });
+        return Err(GeoError::InvalidFgbFeature {
+            index: 0,
+            msg: "geom data truncated".into(),
+        });
     }
 
     let mut coords = Vec::with_capacity(n_pts);
     for i in 0..n_pts {
         let off = 6 + i * stride * 8;
-        let x = f64::from_le_bytes(data[off..off+8].try_into().unwrap());
-        let y = f64::from_le_bytes(data[off+8..off+16].try_into().unwrap());
-        let z = if has_z { Some(f64::from_le_bytes(data[off+16..off+24].try_into().unwrap())) } else { None };
+        let x = f64::from_le_bytes(data[off..off + 8].try_into().unwrap());
+        let y = f64::from_le_bytes(data[off + 8..off + 16].try_into().unwrap());
+        let z = if has_z {
+            Some(f64::from_le_bytes(
+                data[off + 16..off + 24].try_into().unwrap(),
+            ))
+        } else {
+            None
+        };
         coords.push(Coord { x, y, z, m: None });
     }
 
@@ -1749,13 +2060,19 @@ fn decode_geom(data: &[u8], _header_gt: u8, header_has_z: bool) -> Result<Geomet
             msg: "geom ends truncated".into(),
         });
     }
-    let ends: Vec<usize> = (0..n_ends).map(|i| {
-        let off = ends_off + 4 + i * 4;
-        u32::from_le_bytes(data[off..off+4].try_into().unwrap()) as usize
-    }).collect();
+    let ends: Vec<usize> = (0..n_ends)
+        .map(|i| {
+            let off = ends_off + 4 + i * 4;
+            u32::from_le_bytes(data[off..off + 4].try_into().unwrap()) as usize
+        })
+        .collect();
 
     // default ends = whole coordinate array as one part
-    let effective_ends: Vec<usize> = if ends.is_empty() { vec![coords.len()] } else { ends };
+    let effective_ends: Vec<usize> = if ends.is_empty() {
+        vec![coords.len()]
+    } else {
+        ends
+    };
 
     build_geometry(geom_type, &coords, &effective_ends)
 }
@@ -1770,8 +2087,11 @@ fn build_geometry(geom_type: u8, coords: &[Coord], ends: &[usize]) -> Result<Geo
         gt::POLYGON => {
             let rings = ends_to_rings(coords, ends);
             let mut it = rings.into_iter();
-            let ext  = it.next().unwrap_or_default();
-            Ok(Geometry::Polygon { exterior: ext, interiors: it.collect() })
+            let ext = it.next().unwrap_or_default();
+            Ok(Geometry::Polygon {
+                exterior: ext,
+                interiors: it.collect(),
+            })
         }
         gt::MULTIPOINT => Ok(Geometry::MultiPoint(coords.to_vec())),
         gt::MULTILINESTRING => {
@@ -1798,7 +2118,8 @@ fn ends_to_rings(coords: &[Coord], ends: &[usize]) -> Vec<Ring> {
         if end > start {
             let mut part = coords[start..end].to_vec();
             // drop closing point
-            if part.len() > 1 && part.first().map(|c|(c.x,c.y)) == part.last().map(|c|(c.x,c.y)) {
+            if part.len() > 1 && part.first().map(|c| (c.x, c.y)) == part.last().map(|c| (c.x, c.y))
+            {
                 part.pop();
             }
             rings.push(Ring::new(part));
@@ -1813,7 +2134,9 @@ fn ends_to_parts(coords: &[Coord], ends: &[usize]) -> Vec<Vec<Coord>> {
     let mut start = 0;
     for &end in ends {
         let end = end.min(coords.len());
-        if end > start { parts.push(coords[start..end].to_vec()); }
+        if end > start {
+            parts.push(coords[start..end].to_vec());
+        }
         start = end;
     }
     parts
@@ -1830,17 +2153,19 @@ fn encode_props(feat: &Feature, schema: &crate::feature::Schema) -> Vec<u8> {
     let mut buf = Vec::new();
     for (i, _fd) in schema.fields().iter().enumerate() {
         let val = feat.attributes.get(i).unwrap_or(&FieldValue::Null);
-        if val.is_null() { continue; }
+        if val.is_null() {
+            continue;
+        }
         buf.extend_from_slice(&(i as u16).to_le_bytes());
         match val {
-            FieldValue::Boolean(v)  => buf.push(*v as u8),
-            FieldValue::Integer(v)  => buf.extend_from_slice(&v.to_le_bytes()),
-            FieldValue::Float(v)    => buf.extend_from_slice(&v.to_le_bytes()),
+            FieldValue::Boolean(v) => buf.push(*v as u8),
+            FieldValue::Integer(v) => buf.extend_from_slice(&v.to_le_bytes()),
+            FieldValue::Float(v) => buf.extend_from_slice(&v.to_le_bytes()),
             FieldValue::Text(s) | FieldValue::Date(s) | FieldValue::DateTime(s) => {
                 buf.extend_from_slice(&(s.len() as u32).to_le_bytes());
                 buf.extend_from_slice(s.as_bytes());
             }
-            FieldValue::Blob(b)     => {
+            FieldValue::Blob(b) => {
                 buf.extend_from_slice(&(b.len() as u32).to_le_bytes());
                 buf.extend_from_slice(b);
             }
@@ -1852,62 +2177,114 @@ fn encode_props(feat: &Feature, schema: &crate::feature::Schema) -> Vec<u8> {
 
 fn decode_props(data: &[u8], columns: &[FgbColumn]) -> Vec<FieldValue> {
     let mut vals = vec![FieldValue::Null; columns.len()];
-    let mut pos  = 0;
+    let mut pos = 0;
 
     while pos + 2 <= data.len() {
-        let col_idx = u16::from_le_bytes(data[pos..pos+2].try_into().unwrap()) as usize;
+        let col_idx = u16::from_le_bytes(data[pos..pos + 2].try_into().unwrap()) as usize;
         pos += 2;
-        if col_idx >= columns.len() { break; }
+        if col_idx >= columns.len() {
+            break;
+        }
         let col = &columns[col_idx];
 
         let (val, consumed) = match col.col_type {
             ct::BOOL => {
-                if pos >= data.len() { break; }
+                if pos >= data.len() {
+                    break;
+                }
                 (FieldValue::Boolean(data[pos] != 0), 1)
             }
             ct::BYTE | ct::UBYTE => {
-                if pos >= data.len() { break; }
+                if pos >= data.len() {
+                    break;
+                }
                 (FieldValue::Integer(data[pos] as i64), 1)
             }
             ct::SHORT | ct::USHORT => {
-                if pos + 2 > data.len() { break; }
-                (FieldValue::Integer(i16::from_le_bytes(data[pos..pos+2].try_into().unwrap()) as i64), 2)
+                if pos + 2 > data.len() {
+                    break;
+                }
+                (
+                    FieldValue::Integer(
+                        i16::from_le_bytes(data[pos..pos + 2].try_into().unwrap()) as i64
+                    ),
+                    2,
+                )
             }
             ct::INT | ct::UINT => {
-                if pos + 4 > data.len() { break; }
-                (FieldValue::Integer(i32::from_le_bytes(data[pos..pos+4].try_into().unwrap()) as i64), 4)
+                if pos + 4 > data.len() {
+                    break;
+                }
+                (
+                    FieldValue::Integer(
+                        i32::from_le_bytes(data[pos..pos + 4].try_into().unwrap()) as i64
+                    ),
+                    4,
+                )
             }
             ct::LONG | ct::ULONG => {
-                if pos + 8 > data.len() { break; }
-                (FieldValue::Integer(i64::from_le_bytes(data[pos..pos+8].try_into().unwrap())), 8)
+                if pos + 8 > data.len() {
+                    break;
+                }
+                (
+                    FieldValue::Integer(i64::from_le_bytes(data[pos..pos + 8].try_into().unwrap())),
+                    8,
+                )
             }
             ct::FLOAT => {
-                if pos + 4 > data.len() { break; }
-                (FieldValue::Float(f32::from_le_bytes(data[pos..pos+4].try_into().unwrap()) as f64), 4)
+                if pos + 4 > data.len() {
+                    break;
+                }
+                (
+                    FieldValue::Float(
+                        f32::from_le_bytes(data[pos..pos + 4].try_into().unwrap()) as f64
+                    ),
+                    4,
+                )
             }
             ct::DOUBLE => {
-                if pos + 8 > data.len() { break; }
-                (FieldValue::Float(f64::from_le_bytes(data[pos..pos+8].try_into().unwrap())), 8)
+                if pos + 8 > data.len() {
+                    break;
+                }
+                (
+                    FieldValue::Float(f64::from_le_bytes(data[pos..pos + 8].try_into().unwrap())),
+                    8,
+                )
             }
             ct::STRING | ct::JSON => {
-                if pos + 4 > data.len() { break; }
-                let len = u32::from_le_bytes(data[pos..pos+4].try_into().unwrap()) as usize; pos += 4;
-                if pos + len > data.len() { break; }
-                let s = String::from_utf8_lossy(&data[pos..pos+len]).to_string();
+                if pos + 4 > data.len() {
+                    break;
+                }
+                let len = u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
+                pos += 4;
+                if pos + len > data.len() {
+                    break;
+                }
+                let s = String::from_utf8_lossy(&data[pos..pos + len]).to_string();
                 (FieldValue::Text(s), len)
             }
             ct::DATETIME => {
-                if pos + 4 > data.len() { break; }
-                let len = u32::from_le_bytes(data[pos..pos+4].try_into().unwrap()) as usize; pos += 4;
-                if pos + len > data.len() { break; }
-                let s = String::from_utf8_lossy(&data[pos..pos+len]).to_string();
+                if pos + 4 > data.len() {
+                    break;
+                }
+                let len = u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
+                pos += 4;
+                if pos + len > data.len() {
+                    break;
+                }
+                let s = String::from_utf8_lossy(&data[pos..pos + len]).to_string();
                 (FieldValue::DateTime(s), len)
             }
             ct::BINARY => {
-                if pos + 4 > data.len() { break; }
-                let len = u32::from_le_bytes(data[pos..pos+4].try_into().unwrap()) as usize; pos += 4;
-                if pos + len > data.len() { break; }
-                (FieldValue::Blob(data[pos..pos+len].to_vec()), len)
+                if pos + 4 > data.len() {
+                    break;
+                }
+                let len = u32::from_le_bytes(data[pos..pos + 4].try_into().unwrap()) as usize;
+                pos += 4;
+                if pos + len > data.len() {
+                    break;
+                }
+                (FieldValue::Blob(data[pos..pos + len].to_vec()), len)
             }
             _ => break,
         };
@@ -1924,85 +2301,91 @@ fn decode_props(data: &[u8], columns: &[FgbColumn]) -> Vec<FieldValue> {
 #[allow(dead_code)]
 fn geom_type_code(gt: GeometryType) -> u8 {
     match gt {
-        GeometryType::Point              => gt::POINT,
-        GeometryType::LineString         => gt::LINESTRING,
-        GeometryType::Polygon            => gt::POLYGON,
-        GeometryType::MultiPoint         => gt::MULTIPOINT,
-        GeometryType::MultiLineString    => gt::MULTILINESTRING,
-        GeometryType::MultiPolygon       => gt::MULTIPOLYGON,
+        GeometryType::Point => gt::POINT,
+        GeometryType::LineString => gt::LINESTRING,
+        GeometryType::Polygon => gt::POLYGON,
+        GeometryType::MultiPoint => gt::MULTIPOINT,
+        GeometryType::MultiLineString => gt::MULTILINESTRING,
+        GeometryType::MultiPolygon => gt::MULTIPOLYGON,
         GeometryType::GeometryCollection => gt::GEOMETRYCOLLECTION,
     }
 }
 
 fn geom_type_from_code(code: u8) -> Option<GeometryType> {
     match code {
-        gt::POINT              => Some(GeometryType::Point),
-        gt::LINESTRING         => Some(GeometryType::LineString),
-        gt::POLYGON            => Some(GeometryType::Polygon),
-        gt::MULTIPOINT         => Some(GeometryType::MultiPoint),
-        gt::MULTILINESTRING    => Some(GeometryType::MultiLineString),
-        gt::MULTIPOLYGON       => Some(GeometryType::MultiPolygon),
+        gt::POINT => Some(GeometryType::Point),
+        gt::LINESTRING => Some(GeometryType::LineString),
+        gt::POLYGON => Some(GeometryType::Polygon),
+        gt::MULTIPOINT => Some(GeometryType::MultiPoint),
+        gt::MULTILINESTRING => Some(GeometryType::MultiLineString),
+        gt::MULTIPOLYGON => Some(GeometryType::MultiPolygon),
         gt::GEOMETRYCOLLECTION => Some(GeometryType::GeometryCollection),
-        _                      => None,
+        _ => None,
     }
 }
 
 fn col_type_to_field_type(ct: u8) -> FieldType {
     match ct {
-        ct::BOOL                                           => FieldType::Boolean,
-        ct::BYTE|ct::UBYTE|ct::SHORT|ct::USHORT
-        |ct::INT|ct::UINT|ct::LONG|ct::ULONG              => FieldType::Integer,
-        ct::FLOAT|ct::DOUBLE                              => FieldType::Float,
-        ct::DATETIME                                       => FieldType::DateTime,
-        ct::BINARY                                         => FieldType::Blob,
-        ct::JSON                                           => FieldType::Json,
-        _                                                  => FieldType::Text,
+        ct::BOOL => FieldType::Boolean,
+        ct::BYTE
+        | ct::UBYTE
+        | ct::SHORT
+        | ct::USHORT
+        | ct::INT
+        | ct::UINT
+        | ct::LONG
+        | ct::ULONG => FieldType::Integer,
+        ct::FLOAT | ct::DOUBLE => FieldType::Float,
+        ct::DATETIME => FieldType::DateTime,
+        ct::BINARY => FieldType::Blob,
+        ct::JSON => FieldType::Json,
+        _ => FieldType::Text,
     }
 }
 
 fn field_type_to_col_type(ft: FieldType) -> u8 {
     match ft {
-        FieldType::Boolean  => ct::BOOL,
-        FieldType::Integer  => ct::LONG,
-        FieldType::Float    => ct::DOUBLE,
-        FieldType::Text     => ct::STRING,
-        FieldType::Date     => ct::STRING,
+        FieldType::Boolean => ct::BOOL,
+        FieldType::Integer => ct::LONG,
+        FieldType::Float => ct::DOUBLE,
+        FieldType::Text => ct::STRING,
+        FieldType::Date => ct::STRING,
         FieldType::DateTime => ct::DATETIME,
-        FieldType::Blob     => ct::BINARY,
-        FieldType::Json     => ct::JSON,
+        FieldType::Blob => ct::BINARY,
+        FieldType::Json => ct::JSON,
     }
 }
 
 fn std_geom_type(gt: GeometryType) -> hg::GeometryType {
     match gt {
-        GeometryType::Point              => hg::GeometryType::Point,
-        GeometryType::LineString         => hg::GeometryType::LineString,
-        GeometryType::Polygon            => hg::GeometryType::Polygon,
-        GeometryType::MultiPoint         => hg::GeometryType::MultiPoint,
-        GeometryType::MultiLineString    => hg::GeometryType::MultiLineString,
-        GeometryType::MultiPolygon       => hg::GeometryType::MultiPolygon,
+        GeometryType::Point => hg::GeometryType::Point,
+        GeometryType::LineString => hg::GeometryType::LineString,
+        GeometryType::Polygon => hg::GeometryType::Polygon,
+        GeometryType::MultiPoint => hg::GeometryType::MultiPoint,
+        GeometryType::MultiLineString => hg::GeometryType::MultiLineString,
+        GeometryType::MultiPolygon => hg::GeometryType::MultiPolygon,
         GeometryType::GeometryCollection => hg::GeometryType::GeometryCollection,
     }
 }
 
 fn std_col_type(ct_code: u8) -> hg::ColumnType {
     match ct_code {
-        ct::BYTE     => hg::ColumnType::Byte,
-        ct::UBYTE    => hg::ColumnType::UByte,
-        ct::BOOL     => hg::ColumnType::Bool,
-        ct::SHORT    => hg::ColumnType::Short,
-        ct::USHORT   => hg::ColumnType::UShort,
-        ct::INT      => hg::ColumnType::Int,
-        ct::UINT     => hg::ColumnType::UInt,
-        ct::LONG     => hg::ColumnType::Long,
-        ct::ULONG    => hg::ColumnType::ULong,
-        ct::FLOAT    => hg::ColumnType::Float,
-        ct::DOUBLE   => hg::ColumnType::Double,
-        ct::STRING   => hg::ColumnType::String,
-        ct::JSON     => hg::ColumnType::Json,
+        ct::BYTE => hg::ColumnType::Byte,
+        ct::UBYTE => hg::ColumnType::UByte,
+        ct::BOOL => hg::ColumnType::Bool,
+        ct::SHORT => hg::ColumnType::Short,
+        ct::USHORT => hg::ColumnType::UShort,
+        ct::INT => hg::ColumnType::Int,
+        ct::UINT => hg::ColumnType::UInt,
+        ct::LONG => hg::ColumnType::Long,
+        ct::ULONG => hg::ColumnType::ULong,
+        ct::FLOAT => hg::ColumnType::Float,
+        ct::DOUBLE => hg::ColumnType::Double,
+        ct::STRING => hg::ColumnType::String,
+        ct::JSON => hg::ColumnType::Json,
         ct::DATETIME => hg::ColumnType::DateTime,
-        ct::BINARY   => hg::ColumnType::Binary,
-        _            => hg::ColumnType::String,
+        ct::BINARY => hg::ColumnType::Binary,
+        _ => hg::ColumnType::String,
     }
 }
 
@@ -2019,16 +2402,25 @@ mod tests {
         let mut l = Layer::new("rivers")
             .with_geom_type(GeometryType::LineString)
             .with_epsg(4326);
-        l.add_field(FieldDef::new("name",   FieldType::Text));
+        l.add_field(FieldDef::new("name", FieldType::Text));
         l.add_field(FieldDef::new("length", FieldType::Float));
         l.add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.,0.), Coord::xy(1.,1.), Coord::xy(2.,0.)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0., 0.),
+                Coord::xy(1., 1.),
+                Coord::xy(2., 0.),
+            ])),
             &[("name", "Nile".into()), ("length", 6650.0f64.into())],
-        ).unwrap();
+        )
+        .unwrap();
         l.add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(-80., 0.), Coord::xy(-79., 1.)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(-80., 0.),
+                Coord::xy(-79., 1.),
+            ])),
             &[("name", "Amazon".into()), ("length", 6400.0f64.into())],
-        ).unwrap();
+        )
+        .unwrap();
         l
     }
 
@@ -2064,7 +2456,9 @@ mod tests {
         if let Some(Geometry::LineString(cs)) = &l2[0].geometry {
             assert!((cs[0].x - 0.0).abs() < 1e-9);
             assert!((cs[1].x - 1.0).abs() < 1e-9);
-        } else { panic!("expected LineString"); }
+        } else {
+            panic!("expected LineString");
+        }
     }
 
     #[test]
@@ -2098,11 +2492,17 @@ mod tests {
         let mut l = Layer::new("polys").with_geom_type(GeometryType::Polygon);
         l.add_feature(
             Some(Geometry::polygon(
-                vec![Coord::xy(0.,0.), Coord::xy(1.,0.), Coord::xy(1.,1.), Coord::xy(0.,1.)],
+                vec![
+                    Coord::xy(0., 0.),
+                    Coord::xy(1., 0.),
+                    Coord::xy(1., 1.),
+                    Coord::xy(0., 1.),
+                ],
                 vec![],
             )),
             &[],
-        ).unwrap();
+        )
+        .unwrap();
         let bytes = to_bytes(&l);
         let l2 = from_bytes(&bytes).unwrap();
         assert!(matches!(l2[0].geometry, Some(Geometry::Polygon { .. })));

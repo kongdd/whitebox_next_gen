@@ -161,7 +161,12 @@ where
 
 /// Reproject a layer between explicit source/destination EPSG codes.
 pub fn layer_from_to_epsg(layer: &Layer, src_epsg: u32, dst_epsg: u32) -> Result<Layer> {
-    layer_from_to_epsg_with_options(layer, src_epsg, dst_epsg, &VectorReprojectOptions::default())
+    layer_from_to_epsg_with_options(
+        layer,
+        src_epsg,
+        dst_epsg,
+        &VectorReprojectOptions::default(),
+    )
 }
 
 /// Reproject a layer between explicit source/destination EPSG codes with options.
@@ -272,12 +277,7 @@ fn layer_with_crs_options_internal(
     Ok(out)
 }
 
-fn maybe_warn_area_of_use_mismatch(
-    layer: &Layer,
-    src: &Crs,
-    dst: &Crs,
-    enabled: bool,
-) {
+fn maybe_warn_area_of_use_mismatch(layer: &Layer, src: &Crs, dst: &Crs, enabled: bool) {
     if !enabled {
         return;
     }
@@ -387,11 +387,14 @@ fn reproject_geometry(
     let is_dst_4326 = dst_epsg_hint == Some(4326);
 
     Ok(match g {
-        Geometry::Point(c) => Geometry::Point(reproject_coord(c, src, dst, dst_epsg_hint, options)?),
+        Geometry::Point(c) => {
+            Geometry::Point(reproject_coord(c, src, dst, dst_epsg_hint, options)?)
+        }
         Geometry::LineString(cs) => {
             let densified = densify_coords(cs, options.max_segment_length)?;
             let projected = reproject_coords(&densified, src, dst, dst_epsg_hint, options)?;
-            if is_dst_4326 && matches!(options.antimeridian_policy, AntimeridianPolicy::SplitAt180) {
+            if is_dst_4326 && matches!(options.antimeridian_policy, AntimeridianPolicy::SplitAt180)
+            {
                 let parts = split_linestring_at_antimeridian(&projected);
                 if parts.len() <= 1 {
                     Geometry::LineString(projected)
@@ -402,7 +405,10 @@ fn reproject_geometry(
                 Geometry::LineString(projected)
             }
         }
-        Geometry::Polygon { exterior, interiors } => {
+        Geometry::Polygon {
+            exterior,
+            interiors,
+        } => {
             let exterior_proj = Ring::new(reproject_coords(
                 &densify_ring_coords(exterior.coords(), options.max_segment_length)?,
                 src,
@@ -418,7 +424,8 @@ fn reproject_geometry(
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            if is_dst_4326 && matches!(options.antimeridian_policy, AntimeridianPolicy::SplitAt180) {
+            if is_dst_4326 && matches!(options.antimeridian_policy, AntimeridianPolicy::SplitAt180)
+            {
                 split_polygon_if_needed(&exterior_proj, &interiors_proj)?
             } else {
                 Geometry::Polygon {
@@ -427,7 +434,9 @@ fn reproject_geometry(
                 }
             }
         }
-        Geometry::MultiPoint(cs) => Geometry::MultiPoint(reproject_coords(cs, src, dst, dst_epsg_hint, options)?),
+        Geometry::MultiPoint(cs) => {
+            Geometry::MultiPoint(reproject_coords(cs, src, dst, dst_epsg_hint, options)?)
+        }
         Geometry::MultiLineString(lines) => {
             let projected = lines
                 .iter()
@@ -437,7 +446,8 @@ fn reproject_geometry(
                 })
                 .collect::<Result<Vec<_>>>()?;
 
-            if is_dst_4326 && matches!(options.antimeridian_policy, AntimeridianPolicy::SplitAt180) {
+            if is_dst_4326 && matches!(options.antimeridian_policy, AntimeridianPolicy::SplitAt180)
+            {
                 let mut all_parts: Vec<Vec<Coord>> = Vec::new();
                 for line in &projected {
                     all_parts.extend(split_linestring_at_antimeridian(line));
@@ -451,7 +461,13 @@ fn reproject_geometry(
             let mut out_polys: Vec<(Ring, Vec<Ring>)> = Vec::new();
             for (ext, holes) in polys {
                 let ext_dense = densify_ring_coords(ext.coords(), options.max_segment_length)?;
-                let ext2 = Ring::new(reproject_coords(&ext_dense, src, dst, dst_epsg_hint, options)?);
+                let ext2 = Ring::new(reproject_coords(
+                    &ext_dense,
+                    src,
+                    dst,
+                    dst_epsg_hint,
+                    options,
+                )?);
                 let holes2 = holes
                     .iter()
                     .map(|h| {
@@ -460,11 +476,18 @@ fn reproject_geometry(
                     })
                     .collect::<Result<Vec<_>>>()?;
 
-                if is_dst_4326 && matches!(options.antimeridian_policy, AntimeridianPolicy::SplitAt180) {
+                if is_dst_4326
+                    && matches!(options.antimeridian_policy, AntimeridianPolicy::SplitAt180)
+                {
                     match split_polygon_if_needed(&ext2, &holes2)? {
-                        Geometry::Polygon { exterior, interiors } => out_polys.push((exterior, interiors)),
+                        Geometry::Polygon {
+                            exterior,
+                            interiors,
+                        } => out_polys.push((exterior, interiors)),
                         Geometry::MultiPolygon(parts) => out_polys.extend(parts),
-                        _ => unreachable!("split_polygon_if_needed returns Polygon or MultiPolygon"),
+                        _ => {
+                            unreachable!("split_polygon_if_needed returns Polygon or MultiPolygon")
+                        }
                     }
                 } else {
                     out_polys.push((ext2, holes2));
@@ -600,7 +623,9 @@ fn reproject_coord(
     options: &VectorReprojectOptions,
 ) -> Result<Coord> {
     if !coord.x.is_finite() || !coord.y.is_finite() {
-        return Err(GeoError::Projection("coordinate transform failed: non-finite coordinate".to_owned()));
+        return Err(GeoError::Projection(
+            "coordinate transform failed: non-finite coordinate".to_owned(),
+        ));
     }
 
     let ctx = options
@@ -622,7 +647,10 @@ fn reproject_coord(
     let (mut x, y) = match routed {
         Ok(v) => v,
         Err(e) => {
-            if matches!(options.epoch_transform.epoch_policy, EpochPolicy::AllowStaticFallback) {
+            if matches!(
+                options.epoch_transform.epoch_policy,
+                EpochPolicy::AllowStaticFallback
+            ) {
                 src.transform_to_with_policy(coord.x, coord.y, dst, CrsTransformPolicy::Auto)
                     .map_err(|fallback_err| {
                         GeoError::Projection(format!(
@@ -638,7 +666,9 @@ fn reproject_coord(
     };
 
     if !x.is_finite() || !y.is_finite() {
-        return Err(GeoError::Projection("coordinate transform failed: non-finite output".to_owned()));
+        return Err(GeoError::Projection(
+            "coordinate transform failed: non-finite output".to_owned(),
+        ));
     }
 
     if dst_epsg_hint == Some(4326)
@@ -693,7 +723,12 @@ fn split_linestring_at_antimeridian(coords: &[Coord]) -> Vec<Vec<Coord>> {
                     _ => None,
                 };
 
-                current.push(Coord { x: boundary, y: lat, z, m });
+                current.push(Coord {
+                    x: boundary,
+                    y: lat,
+                    z,
+                    m,
+                });
                 if current.len() >= 2 {
                     parts.push(current);
                 }
@@ -739,18 +774,28 @@ fn split_polygon_if_needed(exterior: &Ring, interiors: &[Ring]) -> Result<Geomet
     let parts = split_simple_ring_at_antimeridian(exterior.coords());
     if parts.len() <= 1 {
         Ok(Geometry::Polygon {
-            exterior: Ring::new(parts.into_iter().next().unwrap_or_else(|| exterior.coords().to_vec())),
+            exterior: Ring::new(
+                parts
+                    .into_iter()
+                    .next()
+                    .unwrap_or_else(|| exterior.coords().to_vec()),
+            ),
             interiors: interiors.to_vec(),
         })
     } else {
-        let mut part_polys: Vec<(Ring, Vec<Ring>)> =
-            parts.into_iter().map(|ring| (Ring::new(ring), Vec::new())).collect();
+        let mut part_polys: Vec<(Ring, Vec<Ring>)> = parts
+            .into_iter()
+            .map(|ring| (Ring::new(ring), Vec::new()))
+            .collect();
 
         for hole in interiors {
             let hole_parts = split_simple_ring_at_antimeridian(hole.coords());
             for hole_part in hole_parts {
-                let (hx, hy) = ring_centroid(&hole_part)
-                    .ok_or_else(|| GeoError::Projection("invalid polygon hole during antimeridian split".to_owned()))?;
+                let (hx, hy) = ring_centroid(&hole_part).ok_or_else(|| {
+                    GeoError::Projection(
+                        "invalid polygon hole during antimeridian split".to_owned(),
+                    )
+                })?;
 
                 let mut assigned = false;
                 for (ext, holes) in &mut part_polys {
@@ -781,7 +826,10 @@ fn split_simple_ring_at_antimeridian(coords: &[Coord]) -> Vec<Vec<Coord>> {
 
     let unwrapped = unwrap_ring(coords);
     let min_x = unwrapped.iter().map(|c| c.x).fold(f64::INFINITY, f64::min);
-    let max_x = unwrapped.iter().map(|c| c.x).fold(f64::NEG_INFINITY, f64::max);
+    let max_x = unwrapped
+        .iter()
+        .map(|c| c.x)
+        .fold(f64::NEG_INFINITY, f64::max);
 
     if max_x <= 180.0 && min_x >= -180.0 {
         return vec![coords.to_vec()];
@@ -832,7 +880,12 @@ fn unwrap_ring(coords: &[Coord]) -> Vec<Coord> {
         while x - prev_x < -180.0 {
             x += 360.0;
         }
-        out.push(Coord { x, y: c.y, z: c.z, m: c.m });
+        out.push(Coord {
+            x,
+            y: c.y,
+            z: c.z,
+            m: c.m,
+        });
     }
 
     out
@@ -848,8 +901,16 @@ fn clip_ring_against_vertical(coords: &[Coord], boundary: f64, keep_le: bool) ->
     for i in 0..coords.len() {
         let s = &coords[i];
         let e = &coords[(i + 1) % coords.len()];
-        let s_in = if keep_le { s.x <= boundary } else { s.x >= boundary };
-        let e_in = if keep_le { e.x <= boundary } else { e.x >= boundary };
+        let s_in = if keep_le {
+            s.x <= boundary
+        } else {
+            s.x >= boundary
+        };
+        let e_in = if keep_le {
+            e.x <= boundary
+        } else {
+            e.x >= boundary
+        };
 
         if s_in && e_in {
             output.push(e.clone());
@@ -937,7 +998,10 @@ fn enforce_topology_on_geometry(mut g: Geometry, policy: TopologyPolicy) -> Resu
     }
 
     match &mut g {
-        Geometry::Polygon { exterior, interiors } => {
+        Geometry::Polygon {
+            exterior,
+            interiors,
+        } => {
             enforce_polygon_topology(exterior, interiors, policy)?;
         }
         Geometry::MultiPolygon(polys) => {
@@ -956,13 +1020,21 @@ fn enforce_topology_on_geometry(mut g: Geometry, policy: TopologyPolicy) -> Resu
     Ok(g)
 }
 
-fn enforce_polygon_topology(exterior: &mut Ring, interiors: &mut [Ring], policy: TopologyPolicy) -> Result<()> {
+fn enforce_polygon_topology(
+    exterior: &mut Ring,
+    interiors: &mut [Ring],
+    policy: TopologyPolicy,
+) -> Result<()> {
     if exterior.coords().len() < 3 {
-        return Err(GeoError::Projection("polygon exterior ring has fewer than 3 vertices".to_owned()));
+        return Err(GeoError::Projection(
+            "polygon exterior ring has fewer than 3 vertices".to_owned(),
+        ));
     }
     for hole in interiors.iter() {
         if hole.coords().len() < 3 {
-            return Err(GeoError::Projection("polygon interior ring has fewer than 3 vertices".to_owned()));
+            return Err(GeoError::Projection(
+                "polygon interior ring has fewer than 3 vertices".to_owned(),
+            ));
         }
     }
 
@@ -1056,10 +1128,7 @@ mod tests {
         let mut layer = Layer::new("wkt_only").with_geom_type(GeometryType::Point);
         layer.set_crs_wkt(crs::ogc_wkt_from_epsg(4326));
         layer
-            .add_feature(
-                Some(Geometry::point(-75.0, 45.0)),
-                &[],
-            )
+            .add_feature(Some(Geometry::point(-75.0, 45.0)), &[])
             .unwrap();
 
         let out = layer_to_epsg(&layer, 3857).unwrap();
@@ -1090,8 +1159,8 @@ mod tests {
             .add_feature(Some(Geometry::point(-8_868_000.0, 5_410_000.0)), &[])
             .unwrap();
 
-        let out = layer_to_epsg_with_options(&layer, 26917, &VectorReprojectOptions::new())
-            .unwrap();
+        let out =
+            layer_to_epsg_with_options(&layer, 26917, &VectorReprojectOptions::new()).unwrap();
 
         let (x, y) = match &out.features[0].geometry {
             Some(Geometry::Point(c)) => (c.x, c.y),
@@ -1100,8 +1169,14 @@ mod tests {
 
         // Auto-policy path should stay close to current GDAL behavior for this
         // WGS84 Web Mercator -> NAD83 UTM17N scenario.
-        assert!((x - 607_870.525_104_465).abs() < 0.5, "unexpected easting: {x}");
-        assert!((y - 4_832_831.366_179_22).abs() < 0.5, "unexpected northing: {y}");
+        assert!(
+            (x - 607_870.525_104_465).abs() < 0.5,
+            "unexpected easting: {x}"
+        );
+        assert!(
+            (y - 4_832_831.366_179_22).abs() < 0.5,
+            "unexpected northing: {y}"
+        );
     }
 
     #[test]
@@ -1162,7 +1237,15 @@ mod tests {
             .with_crs_epsg(4326);
         layer.add_field(FieldDef::new("name", FieldType::Text));
         layer
-            .add_feature(Some(Geometry::Point(Coord { x: f64::NAN, y: 0.0, z: None, m: None })), &[("name", "bad".into())])
+            .add_feature(
+                Some(Geometry::Point(Coord {
+                    x: f64::NAN,
+                    y: 0.0,
+                    z: None,
+                    m: None,
+                })),
+                &[("name", "bad".into())],
+            )
             .unwrap();
         layer
             .add_feature(Some(Geometry::point(-75.0, 45.0)), &[("name", "ok".into())])
@@ -1183,14 +1266,22 @@ mod tests {
             .with_geom_type(GeometryType::Point)
             .with_crs_epsg(4326);
         layer
-            .add_feature(Some(Geometry::Point(Coord { x: f64::NAN, y: 0.0, z: None, m: None })), &[])
+            .add_feature(
+                Some(Geometry::Point(Coord {
+                    x: f64::NAN,
+                    y: 0.0,
+                    z: None,
+                    m: None,
+                })),
+                &[],
+            )
             .unwrap();
         layer
             .add_feature(Some(Geometry::point(-75.0, 45.0)), &[])
             .unwrap();
 
-        let opts = VectorReprojectOptions::new()
-            .with_failure_policy(TransformFailurePolicy::SkipFeature);
+        let opts =
+            VectorReprojectOptions::new().with_failure_policy(TransformFailurePolicy::SkipFeature);
         let out = layer_to_epsg_with_options(&layer, 3857, &opts).unwrap();
 
         assert_eq!(out.features.len(), 1);
@@ -1201,9 +1292,15 @@ mod tests {
         let mut layer = Layer::new("cities")
             .with_geom_type(GeometryType::Point)
             .with_crs_epsg(4326);
-        layer.add_feature(Some(Geometry::point(-75.0, 45.0)), &[]).unwrap();
-        layer.add_feature(Some(Geometry::point(-74.0, 46.0)), &[]).unwrap();
-        layer.add_feature(Some(Geometry::point(-73.0, 47.0)), &[]).unwrap();
+        layer
+            .add_feature(Some(Geometry::point(-75.0, 45.0)), &[])
+            .unwrap();
+        layer
+            .add_feature(Some(Geometry::point(-74.0, 46.0)), &[])
+            .unwrap();
+        layer
+            .add_feature(Some(Geometry::point(-73.0, 47.0)), &[])
+            .unwrap();
 
         let progress_values: Arc<Mutex<Vec<f64>>> = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&progress_values);
@@ -1222,7 +1319,9 @@ mod tests {
         assert_eq!(out.features.len(), 3);
         assert!(!values.is_empty());
         assert_eq!(values.len(), layer.features.len() + 1);
-        assert!(values.iter().all(|v| v.is_finite() && *v >= 0.0 && *v <= 1.0));
+        assert!(values
+            .iter()
+            .all(|v| v.is_finite() && *v >= 0.0 && *v <= 1.0));
         assert!((values.last().copied().unwrap() - 1.0).abs() < 1e-12);
     }
 
@@ -1253,7 +1352,10 @@ mod tests {
             .with_crs_epsg(4326);
         layer
             .add_feature(
-                Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+                Some(Geometry::LineString(vec![
+                    Coord::xy(0.0, 0.0),
+                    Coord::xy(1.0, 0.0),
+                ])),
                 &[],
             )
             .unwrap();
@@ -1333,13 +1435,16 @@ mod tests {
             .with_crs_epsg(4326);
         layer
             .add_feature(
-                Some(Geometry::LineString(vec![Coord::xy(179.0, 10.0), Coord::xy(-179.0, 10.0)])),
+                Some(Geometry::LineString(vec![
+                    Coord::xy(179.0, 10.0),
+                    Coord::xy(-179.0, 10.0),
+                ])),
                 &[],
             )
             .unwrap();
 
-        let opts = VectorReprojectOptions::new()
-            .with_antimeridian_policy(AntimeridianPolicy::SplitAt180);
+        let opts =
+            VectorReprojectOptions::new().with_antimeridian_policy(AntimeridianPolicy::SplitAt180);
         let out = layer_from_to_epsg_with_options(&layer, 4326, 4326, &opts).unwrap();
 
         match &out.features[0].geometry {
@@ -1448,8 +1553,8 @@ mod tests {
             )
             .unwrap();
 
-        let opts = VectorReprojectOptions::new()
-            .with_antimeridian_policy(AntimeridianPolicy::SplitAt180);
+        let opts =
+            VectorReprojectOptions::new().with_antimeridian_policy(AntimeridianPolicy::SplitAt180);
         let out = layer_from_to_epsg_with_options(&layer, 4326, 4326, &opts).unwrap();
 
         match &out.features[0].geometry {
@@ -1515,10 +1620,15 @@ mod tests {
             .add_feature(Some(Geometry::polygon(exterior_cw, vec![hole_ccw])), &[])
             .unwrap();
 
-        let opts = VectorReprojectOptions::new().with_topology_policy(TopologyPolicy::ValidateAndFixOrientation);
+        let opts = VectorReprojectOptions::new()
+            .with_topology_policy(TopologyPolicy::ValidateAndFixOrientation);
         let out = layer_from_to_epsg_with_options(&layer, 4326, 4326, &opts).unwrap();
 
-        if let Some(Geometry::Polygon { exterior, interiors }) = &out.features[0].geometry {
+        if let Some(Geometry::Polygon {
+            exterior,
+            interiors,
+        }) = &out.features[0].geometry
+        {
             assert!(ring_signed_area(exterior.coords()) > 0.0);
             assert!(ring_signed_area(interiors[0].coords()) < 0.0);
         } else {

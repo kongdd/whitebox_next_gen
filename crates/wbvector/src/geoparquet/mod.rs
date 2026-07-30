@@ -17,8 +17,8 @@ use parquet::basic::{Compression, ConvertedType, Type as PhysicalType};
 use parquet::data_type::{ByteArray, ByteArrayType, DoubleType, Int64Type};
 use parquet::file::metadata::KeyValue;
 use parquet::file::properties::WriterProperties;
-use parquet::file::writer::SerializedFileWriter;
 use parquet::file::reader::{FileReader, SerializedFileReader};
+use parquet::file::writer::SerializedFileWriter;
 use parquet::record::{Field, Row};
 use parquet::schema::types::{Type, TypePtr};
 use serde_json::Value;
@@ -86,7 +86,9 @@ impl GeoParquetWriteOptions {
             .with_max_rows_per_group(100_000)
             .with_data_page_size_limit(parquet::file::properties::DEFAULT_PAGE_SIZE)
             .with_write_batch_size(2_048)
-            .with_data_page_row_count_limit(parquet::file::properties::DEFAULT_DATA_PAGE_ROW_COUNT_LIMIT)
+            .with_data_page_row_count_limit(
+                parquet::file::properties::DEFAULT_DATA_PAGE_ROW_COUNT_LIMIT,
+            )
             .with_compression(Compression::UNCOMPRESSED)
     }
 
@@ -143,7 +145,8 @@ pub fn read<P: AsRef<Path>>(path: P) -> Result<Layer> {
 
     let mut rows = Vec::<Row>::new();
     for row in row_iter {
-        let row = row.map_err(|e| GeoError::GeoParquet(format!("failed reading parquet row: {e}")))?;
+        let row =
+            row.map_err(|e| GeoError::GeoParquet(format!("failed reading parquet row: {e}")))?;
         rows.push(row);
     }
 
@@ -278,7 +281,9 @@ pub fn write_with_options<P: AsRef<Path>>(
             let mut col_writer = row_group
                 .next_column()
                 .map_err(|e| GeoError::GeoParquet(format!("failed creating column writer: {e}")))?
-                .ok_or_else(|| GeoError::GeoParquet("missing column writer for schema field".to_owned()))?;
+                .ok_or_else(|| {
+                    GeoError::GeoParquet("missing column writer for schema field".to_owned())
+                })?;
             write_column_range(layer, col, start, end, &mut col_writer)?;
             col_writer
                 .close()
@@ -339,25 +344,45 @@ fn parquet_field_def(field: &FieldDef, idx: usize) -> Result<(Type, ColumnKind)>
         FieldType::Integer => Ok((
             Type::primitive_type_builder(&field.name, PhysicalType::INT64)
                 .build()
-                .map_err(|e| GeoError::GeoParquet(format!("failed building INT64 field '{}': {e}", field.name)))?,
+                .map_err(|e| {
+                    GeoError::GeoParquet(format!(
+                        "failed building INT64 field '{}': {e}",
+                        field.name
+                    ))
+                })?,
             ColumnKind::Integer(idx),
         )),
         FieldType::Float => Ok((
             Type::primitive_type_builder(&field.name, PhysicalType::DOUBLE)
                 .build()
-                .map_err(|e| GeoError::GeoParquet(format!("failed building DOUBLE field '{}': {e}", field.name)))?,
+                .map_err(|e| {
+                    GeoError::GeoParquet(format!(
+                        "failed building DOUBLE field '{}': {e}",
+                        field.name
+                    ))
+                })?,
             ColumnKind::Float(idx),
         )),
         FieldType::Boolean => Ok((
             Type::primitive_type_builder(&field.name, PhysicalType::BOOLEAN)
                 .build()
-                .map_err(|e| GeoError::GeoParquet(format!("failed building BOOLEAN field '{}': {e}", field.name)))?,
+                .map_err(|e| {
+                    GeoError::GeoParquet(format!(
+                        "failed building BOOLEAN field '{}': {e}",
+                        field.name
+                    ))
+                })?,
             ColumnKind::Boolean(idx),
         )),
         FieldType::Blob => Ok((
             Type::primitive_type_builder(&field.name, PhysicalType::BYTE_ARRAY)
                 .build()
-                .map_err(|e| GeoError::GeoParquet(format!("failed building BYTE_ARRAY field '{}': {e}", field.name)))?,
+                .map_err(|e| {
+                    GeoError::GeoParquet(format!(
+                        "failed building BYTE_ARRAY field '{}': {e}",
+                        field.name
+                    ))
+                })?,
             ColumnKind::Blob(idx),
         )),
         FieldType::Text | FieldType::Date | FieldType::DateTime | FieldType::Json => {
@@ -693,7 +718,10 @@ fn field_to_value_with_hint(field: &Field, hint: FieldType) -> FieldValue {
 fn build_wbvector_field_types_metadata(layer: &Layer) -> Value {
     let mut obj = serde_json::Map::new();
     for f in layer.schema.fields() {
-        obj.insert(f.name.clone(), Value::String(f.field_type.as_str().to_owned()));
+        obj.insert(
+            f.name.clone(),
+            Value::String(f.field_type.as_str().to_owned()),
+        );
     }
     Value::Object(obj)
 }
@@ -946,12 +974,21 @@ mod tests {
 
         assert!(out.features[0].geometry.is_some());
         assert!(out.features[1].geometry.is_none());
-        assert_eq!(out.features[0].attributes[0], FieldValue::Text("London".to_owned()));
+        assert_eq!(
+            out.features[0].attributes[0],
+            FieldValue::Text("London".to_owned())
+        );
         assert_eq!(out.features[0].attributes[1], FieldValue::Integer(7));
         assert_eq!(out.features[0].attributes[2], FieldValue::Float(2.5));
         assert_eq!(out.features[0].attributes[3], FieldValue::Boolean(true));
-        assert_eq!(out.features[0].attributes[4], FieldValue::Blob(vec![1, 2, 3]));
-        assert_eq!(out.features[0].attributes[5], FieldValue::Date("2026-03-12".to_owned()));
+        assert_eq!(
+            out.features[0].attributes[4],
+            FieldValue::Blob(vec![1, 2, 3])
+        );
+        assert_eq!(
+            out.features[0].attributes[5],
+            FieldValue::Date("2026-03-12".to_owned())
+        );
         assert_eq!(
             out.features[0].attributes[6],
             FieldValue::DateTime("2026-03-12T10:15:30Z".to_owned())
@@ -1093,7 +1130,10 @@ mod tests {
         assert_eq!(layer.len(), 1);
         assert_eq!(layer.schema.len(), 1);
         assert_eq!(layer.schema.fields()[0].name, "name");
-        assert_eq!(layer.features[0].geometry, Some(Geometry::point(1000.0, 2000.0)));
+        assert_eq!(
+            layer.features[0].geometry,
+            Some(Geometry::point(1000.0, 2000.0))
+        );
     }
 
     #[test]

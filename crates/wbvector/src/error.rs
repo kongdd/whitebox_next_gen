@@ -168,4 +168,9 @@ pub enum GeoError {
     #[error("Not implemented: {0}")]
     /// Feature exists in API surface but is not implemented yet.
     NotImplemented(String),
+
+    #[error("Output file too large for format: {0}")]
+    /// The encoded output would exceed the maximum size supported by the target
+    /// format.  Use a format without size restrictions (e.g. GeoPackage) instead.
+    FileTooLarge(String),
 }

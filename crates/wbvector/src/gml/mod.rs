@@ -12,7 +12,7 @@ use std::path::Path;
 
 use crate::crs;
 use crate::error::{GeoError, Result};
-use crate::feature::{FieldDef, FieldType, FieldValue, Feature, Layer};
+use crate::feature::{Feature, FieldDef, FieldType, FieldValue, Layer};
 use crate::geometry::{Coord, Geometry, Ring};
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -39,7 +39,9 @@ pub fn write<P: AsRef<Path>>(layer: &Layer, path: P) -> Result<()> {
 /// Serialize a [`Layer`] to a GML string.
 pub fn to_string(layer: &Layer) -> String {
     let mut out = String::new();
-    let srs_epsg = layer.crs_epsg().or_else(|| layer.crs_wkt().and_then(crs::epsg_from_wkt_lenient));
+    let srs_epsg = layer
+        .crs_epsg()
+        .or_else(|| layer.crs_wkt().and_then(crs::epsg_from_wkt_lenient));
     let srs_name = srs_epsg.map(crs::canonical_gml_epsg_srs_name);
 
     out.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -117,7 +119,11 @@ impl XmlNode {
     fn attr(&self, key: &str) -> Option<&str> {
         self.attrs
             .get(key)
-            .or_else(|| self.attrs.iter().find_map(|(k, v)| (local_name(k) == key).then_some(v)))
+            .or_else(|| {
+                self.attrs
+                    .iter()
+                    .find_map(|(k, v)| (local_name(k) == key).then_some(v))
+            })
             .map(|s| s.as_str())
     }
 
@@ -147,14 +153,20 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
                     i = end + 3;
                     continue;
                 }
-                return Err(GeoError::GmlParse { offset: i, msg: "unterminated comment".into() });
+                return Err(GeoError::GmlParse {
+                    offset: i,
+                    msg: "unterminated comment".into(),
+                });
             }
             if i + 2 <= bytes.len() && bytes[i + 1] == b'?' {
                 if let Some(end) = find_bytes(bytes, i + 2, b"?>") {
                     i = end + 2;
                     continue;
                 }
-                return Err(GeoError::GmlParse { offset: i, msg: "unterminated xml declaration".into() });
+                return Err(GeoError::GmlParse {
+                    offset: i,
+                    msg: "unterminated xml declaration".into(),
+                });
             }
             if i + 9 <= bytes.len() && &bytes[i..i + 9] == b"<![CDATA[" {
                 if let Some(end) = find_bytes(bytes, i + 9, b"]]>") {
@@ -164,7 +176,10 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
                     i = end + 3;
                     continue;
                 }
-                return Err(GeoError::GmlParse { offset: i, msg: "unterminated CDATA".into() });
+                return Err(GeoError::GmlParse {
+                    offset: i,
+                    msg: "unterminated CDATA".into(),
+                });
             }
             if i + 2 <= bytes.len() && bytes[i + 1] == b'/' {
                 let end = find_gt(bytes, i + 2).ok_or_else(|| GeoError::GmlParse {
@@ -202,14 +217,22 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
             }
 
             let (name, attrs) = parse_start_tag(raw, i)?;
-            let node = XmlNode { name, attrs, children: Vec::new(), text: String::new() };
+            let node = XmlNode {
+                name,
+                attrs,
+                children: Vec::new(),
+                text: String::new(),
+            };
             if self_close {
                 if let Some(parent) = stack.last_mut() {
                     parent.children.push(node);
                 } else if root.is_none() {
                     root = Some(node);
                 } else {
-                    return Err(GeoError::GmlParse { offset: i, msg: "multiple root elements".into() });
+                    return Err(GeoError::GmlParse {
+                        offset: i,
+                        msg: "multiple root elements".into(),
+                    });
                 }
             } else {
                 stack.push(node);
@@ -239,7 +262,10 @@ fn parse_xml(input: &str) -> Result<XmlNode> {
         });
     }
 
-    root.ok_or_else(|| GeoError::GmlParse { offset: 0, msg: "empty XML".into() })
+    root.ok_or_else(|| GeoError::GmlParse {
+        offset: 0,
+        msg: "empty XML".into(),
+    })
 }
 
 fn parse_start_tag(raw: &str, offset: usize) -> Result<(String, HashMap<String, String>)> {
@@ -254,7 +280,10 @@ fn parse_start_tag(raw: &str, offset: usize) -> Result<(String, HashMap<String, 
     }
     let name = raw[..name_end].trim();
     if name.is_empty() {
-        return Err(GeoError::GmlParse { offset, msg: "missing tag name".into() });
+        return Err(GeoError::GmlParse {
+            offset,
+            msg: "missing tag name".into(),
+        });
     }
 
     let mut attrs = HashMap::new();
@@ -266,11 +295,17 @@ fn parse_start_tag(raw: &str, offset: usize) -> Result<(String, HashMap<String, 
         })?;
         let key = rest[..eq].trim();
         if key.is_empty() {
-            return Err(GeoError::GmlParse { offset, msg: "empty attribute name".into() });
+            return Err(GeoError::GmlParse {
+                offset,
+                msg: "empty attribute name".into(),
+            });
         }
         rest = rest[eq + 1..].trim_start();
         if !rest.starts_with('"') && !rest.starts_with('\'') {
-            return Err(GeoError::GmlParse { offset, msg: "attribute must be quoted".into() });
+            return Err(GeoError::GmlParse {
+                offset,
+                msg: "attribute must be quoted".into(),
+            });
         }
         let q = rest.as_bytes()[0] as char;
         rest = &rest[1..];
@@ -349,10 +384,12 @@ fn layer_from_xml(root: &XmlNode) -> Result<Layer> {
     let mut inferred: HashMap<String, FieldType> = HashMap::new();
 
     for (idx, member) in members.iter().enumerate() {
-        let feat = member.first_element_child().ok_or_else(|| GeoError::GmlParse {
-            offset: idx,
-            msg: "empty featureMember".into(),
-        })?;
+        let feat = member
+            .first_element_child()
+            .ok_or_else(|| GeoError::GmlParse {
+                offset: idx,
+                msg: "empty featureMember".into(),
+            })?;
         let (geom, attrs) = parse_feature_node(feat)?;
         geoms.push(geom);
         for (k, v, t) in &attrs {
@@ -430,7 +467,11 @@ fn feature_srs_epsg(feature: &XmlNode) -> Option<u32> {
 
     for child in &feature.children {
         if child.local_name() == "geometry" {
-            if let Some(geom) = child.children.iter().find(|n| is_geometry_name(n.local_name())) {
+            if let Some(geom) = child
+                .children
+                .iter()
+                .find(|n| is_geometry_name(n.local_name()))
+            {
                 if let Some(srs) = geom.attr("srsName") {
                     if let Some(code) = crs::epsg_from_srs_reference(srs) {
                         return Some(code);
@@ -449,14 +490,20 @@ fn feature_srs_epsg(feature: &XmlNode) -> Option<u32> {
     None
 }
 
-fn parse_feature_node(feature: &XmlNode) -> Result<(Option<Geometry>, Vec<(String, String, Option<FieldType>)>)> {
+fn parse_feature_node(
+    feature: &XmlNode,
+) -> Result<(Option<Geometry>, Vec<(String, String, Option<FieldType>)>)> {
     let mut geom: Option<Geometry> = None;
     let mut attrs: Vec<(String, String, Option<FieldType>)> = Vec::new();
 
     for child in &feature.children {
         if child.local_name() == "geometry" {
             if geom.is_none() {
-                if let Some(g_node) = child.children.iter().find(|n| is_geometry_name(n.local_name())) {
+                if let Some(g_node) = child
+                    .children
+                    .iter()
+                    .find(|n| is_geometry_name(n.local_name()))
+                {
                     geom = Some(parse_geometry(g_node)?);
                 }
             }
@@ -530,7 +577,10 @@ fn parse_point(node: &XmlNode) -> Result<Coord> {
             msg: "empty gml:coordinates".into(),
         });
     }
-    Err(GeoError::GmlParse { offset: 0, msg: "Point missing pos/coordinates".into() })
+    Err(GeoError::GmlParse {
+        offset: 0,
+        msg: "Point missing pos/coordinates".into(),
+    })
 }
 
 fn parse_line_string(node: &XmlNode) -> Result<Vec<Coord>> {
@@ -548,17 +598,21 @@ fn parse_line_string(node: &XmlNode) -> Result<Vec<Coord>> {
     if let Some(coords) = node.child_by_local("coordinates") {
         return parse_coordinates_legacy(&coords.text);
     }
-    Err(GeoError::GmlParse { offset: 0, msg: "LineString missing coordinates".into() })
+    Err(GeoError::GmlParse {
+        offset: 0,
+        msg: "LineString missing coordinates".into(),
+    })
 }
 
 fn parse_ring(node: &XmlNode) -> Result<Ring> {
     let ring = if node.local_name() == "LinearRing" {
         node
     } else {
-        node.child_by_local("LinearRing").ok_or_else(|| GeoError::GmlParse {
-            offset: 0,
-            msg: "missing LinearRing".into(),
-        })?
+        node.child_by_local("LinearRing")
+            .ok_or_else(|| GeoError::GmlParse {
+                offset: 0,
+                msg: "missing LinearRing".into(),
+            })?
     };
     let mut cs = if let Some(pos_list) = ring.child_by_local("posList") {
         parse_coord_list(&pos_list.text)?
@@ -568,7 +622,10 @@ fn parse_ring(node: &XmlNode) -> Result<Ring> {
             out.extend(parse_coord_list(&p.text)?);
         }
         if out.is_empty() {
-            return Err(GeoError::GmlParse { offset: 0, msg: "LinearRing missing pos/posList".into() });
+            return Err(GeoError::GmlParse {
+                offset: 0,
+                msg: "LinearRing missing pos/posList".into(),
+            });
         }
         out
     };
@@ -583,7 +640,10 @@ fn parse_polygon(node: &XmlNode) -> Result<Geometry> {
     let ext = node
         .child_by_local("exterior")
         .or_else(|| node.child_by_local("outerBoundaryIs"))
-        .ok_or_else(|| GeoError::GmlParse { offset: 0, msg: "Polygon missing exterior".into() })?;
+        .ok_or_else(|| GeoError::GmlParse {
+            offset: 0,
+            msg: "Polygon missing exterior".into(),
+        })?;
     let exterior = parse_ring(ext)?;
 
     let mut interiors = Vec::new();
@@ -595,7 +655,10 @@ fn parse_polygon(node: &XmlNode) -> Result<Geometry> {
         interiors.push(parse_ring(i)?);
     }
 
-    Ok(Geometry::Polygon { exterior, interiors })
+    Ok(Geometry::Polygon {
+        exterior,
+        interiors,
+    })
 }
 
 fn parse_multi_point(node: &XmlNode) -> Result<Geometry> {
@@ -614,11 +677,12 @@ fn parse_multi_point(node: &XmlNode) -> Result<Geometry> {
 
 fn parse_multi_line_string(node: &XmlNode) -> Result<Geometry> {
     let mut lines = Vec::new();
-    for m in node
-        .children
-        .iter()
-        .filter(|c| matches!(c.local_name(), "lineStringMember" | "lineStringMembers" | "member"))
-    {
+    for m in node.children.iter().filter(|c| {
+        matches!(
+            c.local_name(),
+            "lineStringMember" | "lineStringMembers" | "member"
+        )
+    }) {
         if let Some(l) = m.children.iter().find(|n| n.local_name() == "LineString") {
             lines.push(parse_line_string(l)?);
         }
@@ -628,13 +692,18 @@ fn parse_multi_line_string(node: &XmlNode) -> Result<Geometry> {
 
 fn parse_multi_polygon(node: &XmlNode) -> Result<Geometry> {
     let mut polys = Vec::new();
-    for m in node
-        .children
-        .iter()
-        .filter(|c| matches!(c.local_name(), "polygonMember" | "polygonMembers" | "member"))
-    {
+    for m in node.children.iter().filter(|c| {
+        matches!(
+            c.local_name(),
+            "polygonMember" | "polygonMembers" | "member"
+        )
+    }) {
         if let Some(p) = m.children.iter().find(|n| n.local_name() == "Polygon") {
-            if let Geometry::Polygon { exterior, interiors } = parse_polygon(p)? {
+            if let Geometry::Polygon {
+                exterior,
+                interiors,
+            } = parse_polygon(p)?
+            {
                 polys.push((exterior, interiors));
             }
         }
@@ -644,7 +713,11 @@ fn parse_multi_polygon(node: &XmlNode) -> Result<Geometry> {
 
 fn parse_geometry_collection(node: &XmlNode) -> Result<Geometry> {
     let mut geoms = Vec::new();
-    for m in node.children.iter().filter(|c| matches!(c.local_name(), "geometryMember" | "member")) {
+    for m in node
+        .children
+        .iter()
+        .filter(|c| matches!(c.local_name(), "geometryMember" | "member"))
+    {
         if let Some(g) = m.children.iter().find(|n| is_geometry_name(n.local_name())) {
             geoms.push(parse_geometry(g)?);
         }
@@ -757,8 +830,14 @@ fn parse_field_value(v: &str, ft: FieldType) -> FieldValue {
         return FieldValue::Null;
     }
     match ft {
-        FieldType::Integer => v.parse::<i64>().map(FieldValue::Integer).unwrap_or_else(|_| FieldValue::Text(v.to_owned())),
-        FieldType::Float => v.parse::<f64>().map(FieldValue::Float).unwrap_or_else(|_| FieldValue::Text(v.to_owned())),
+        FieldType::Integer => v
+            .parse::<i64>()
+            .map(FieldValue::Integer)
+            .unwrap_or_else(|_| FieldValue::Text(v.to_owned())),
+        FieldType::Float => v
+            .parse::<f64>()
+            .map(FieldValue::Float)
+            .unwrap_or_else(|_| FieldValue::Text(v.to_owned())),
         FieldType::Boolean => {
             if v.eq_ignore_ascii_case("true") {
                 FieldValue::Boolean(true)
@@ -816,7 +895,10 @@ fn write_geom(out: &mut String, g: &Geometry, srs_name: Option<&str>) {
             push_coord_list(out, cs);
             out.push_str("</gml:posList></gml:LineString>");
         }
-        Geometry::Polygon { exterior, interiors } => {
+        Geometry::Polygon {
+            exterior,
+            interiors,
+        } => {
             out.push_str("<gml:Polygon");
             push_srs_name_attr(out, srs_name);
             out.push_str("><gml:exterior>");
@@ -857,7 +939,14 @@ fn write_geom(out: &mut String, g: &Geometry, srs_name: Option<&str>) {
             out.push('>');
             for (ext, ints) in polys {
                 out.push_str("<gml:polygonMember>");
-                write_geom(out, &Geometry::Polygon { exterior: ext.clone(), interiors: ints.clone() }, srs_name);
+                write_geom(
+                    out,
+                    &Geometry::Polygon {
+                        exterior: ext.clone(),
+                        interiors: ints.clone(),
+                    },
+                    srs_name,
+                );
                 out.push_str("</gml:polygonMember>");
             }
             out.push_str("</gml:MultiPolygon>");
@@ -944,7 +1033,10 @@ mod tests {
         layer
             .add_feature(
                 Some(Geometry::point(-0.1278, 51.5074)),
-                &[("name", "London".into()), ("population", 9_000_000i64.into())],
+                &[
+                    ("name", "London".into()),
+                    ("population", 9_000_000i64.into()),
+                ],
             )
             .unwrap();
 
@@ -955,7 +1047,10 @@ mod tests {
         assert_eq!(parsed.schema.len(), 2);
         assert_eq!(parsed.schema.fields()[0].name, "name");
         assert_eq!(parsed.schema.fields()[1].name, "population");
-        assert!(matches!(parsed.features[0].geometry, Some(Geometry::Point(_))));
+        assert!(matches!(
+            parsed.features[0].geometry,
+            Some(Geometry::Point(_))
+        ));
     }
 
     #[test]
@@ -974,7 +1069,10 @@ mod tests {
         let layer = parse_str(xml).unwrap();
         assert_eq!(layer.len(), 1);
         assert_eq!(layer.schema.len(), 2);
-        assert!(matches!(layer.features[0].geometry, Some(Geometry::LineString(_))));
+        assert!(matches!(
+            layer.features[0].geometry,
+            Some(Geometry::LineString(_))
+        ));
     }
 
     #[test]
@@ -1002,7 +1100,9 @@ mod tests {
             "GEOGCS[\"WGS 84\",DATUM[\"WGS_1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],AUTHORITY[\"EPSG\",\"4326\"]]"
                 .to_owned(),
         ));
-        layer.add_feature(Some(Geometry::point(1.0, 2.0)), &[]).unwrap();
+        layer
+            .add_feature(Some(Geometry::point(1.0, 2.0)), &[])
+            .unwrap();
 
         let xml = to_string(&layer);
         assert!(xml.contains("srsName=\"http://www.opengis.net/def/crs/EPSG/0/4326\""));

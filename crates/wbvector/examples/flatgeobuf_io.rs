@@ -2,10 +2,10 @@
 //!
 //! Usage: cargo run --example flatgeobuf_io
 
+use std::path::PathBuf;
 use wbvector::feature::{FieldDef, FieldType, Layer};
 use wbvector::geometry::{Coord, Geometry, GeometryType};
 use wbvector::{flatgeobuf, geojson, Result};
-use std::path::PathBuf;
 
 fn data_dir() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -21,44 +21,48 @@ fn main() -> Result<()> {
         .with_geom_type(GeometryType::Polygon)
         .with_epsg(4326);
 
-    layer.add_field(FieldDef::new("name",     FieldType::Text));
-    layer.add_field(FieldDef::new("iso3",     FieldType::Text));
+    layer.add_field(FieldDef::new("name", FieldType::Text));
+    layer.add_field(FieldDef::new("iso3", FieldType::Text));
     layer.add_field(FieldDef::new("area_km2", FieldType::Float));
-    layer.add_field(FieldDef::new("pop",      FieldType::Integer));
+    layer.add_field(FieldDef::new("pop", FieldType::Integer));
 
     layer.add_feature(
         Some(Geometry::polygon(
             vec![
-                Coord::xy(-5.0,  49.0), Coord::xy(2.0,  49.0),
-                Coord::xy(2.0,   60.0), Coord::xy(-5.0, 60.0),
+                Coord::xy(-5.0, 49.0),
+                Coord::xy(2.0, 49.0),
+                Coord::xy(2.0, 60.0),
+                Coord::xy(-5.0, 60.0),
             ],
             vec![],
         )),
         &[
-            ("name",     "United Kingdom".into()),
-            ("iso3",     "GBR".into()),
+            ("name", "United Kingdom".into()),
+            ("iso3", "GBR".into()),
             ("area_km2", 242495.0f64.into()),
-            ("pop",      67_000_000i64.into()),
+            ("pop", 67_000_000i64.into()),
         ],
     )?;
     layer.add_feature(
         Some(Geometry::polygon(
             vec![
-                Coord::xy(-5.0, 35.0), Coord::xy(10.0, 35.0),
-                Coord::xy(10.0, 51.0), Coord::xy(-5.0, 51.0),
+                Coord::xy(-5.0, 35.0),
+                Coord::xy(10.0, 35.0),
+                Coord::xy(10.0, 51.0),
+                Coord::xy(-5.0, 51.0),
             ],
             vec![],
         )),
         &[
-            ("name",     "France".into()),
-            ("iso3",     "FRA".into()),
+            ("name", "France".into()),
+            ("iso3", "FRA".into()),
             ("area_km2", 643801.0f64.into()),
-            ("pop",      68_000_000i64.into()),
+            ("pop", 68_000_000i64.into()),
         ],
     )?;
 
     // ── In-memory roundtrip ───────────────────────────────────────────────────
-    let bytes  = flatgeobuf::to_bytes(&layer);
+    let bytes = flatgeobuf::to_bytes(&layer);
     println!("Serialised {} bytes", bytes.len());
     assert!(bytes.starts_with(&flatgeobuf::MAGIC));
 
@@ -67,16 +71,18 @@ fn main() -> Result<()> {
 
     for feat in loaded.iter() {
         let name = feat.get(&loaded.schema, "name")?;
-        let pop  = feat.get(&loaded.schema, "pop")?;
+        let pop = feat.get(&loaded.schema, "pop")?;
         if let Some(g) = &feat.geometry {
             let bb = g.bbox().unwrap();
-            println!("  {} — pop={}, bbox=[{:.1},{:.1},{:.1},{:.1}]",
-                name, pop, bb.min_x, bb.min_y, bb.max_x, bb.max_y);
+            println!(
+                "  {} — pop={}, bbox=[{:.1},{:.1},{:.1},{:.1}]",
+                name, pop, bb.min_x, bb.min_y, bb.max_x, bb.max_y
+            );
         }
     }
 
     // ── File roundtrip ────────────────────────────────────────────────────────
-    let dir  = data_dir();
+    let dir = data_dir();
     let path = dir.join("countries.fgb");
     flatgeobuf::write(&layer, &path)?;
     println!("\nWrote {}", path.display());
@@ -101,8 +107,12 @@ fn main() -> Result<()> {
     let z_bytes = flatgeobuf::to_bytes(&z_layer);
     let z_loaded = flatgeobuf::from_bytes(&z_bytes)?;
     if let Some(Geometry::Point(c)) = &z_loaded[0].geometry {
-        println!("\nEverest: ({:.4}, {:.4}, {:.2}m)",
-            c.x, c.y, c.z.unwrap_or(0.0));
+        println!(
+            "\nEverest: ({:.4}, {:.4}, {:.2}m)",
+            c.x,
+            c.y,
+            c.z.unwrap_or(0.0)
+        );
     }
 
     println!("\nFlatGeobuf example OK ✓");

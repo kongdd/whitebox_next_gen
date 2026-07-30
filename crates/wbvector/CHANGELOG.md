@@ -6,7 +6,44 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+### Fixed
+- **Shapefile writer: streaming I/O and file-size guard.** The previous writer
+  assembled the entire `.shp` and `.shx` content as in-memory `Vec<u8>` before
+  writing to disk. For large outputs (e.g. state-wide contour layers) this
+  imposed a peak RAM cost roughly equal to the final file size, and the
+  `(shp.len() / 2) as u32` file-length cast would silently overflow for files
+  larger than ~8.6 GB, producing a corrupt header. Changed to stream records
+  directly to disk via `BufWriter<File>`, seeking back to patch the 100-byte
+  header's file-length field after all records are written. Added a per-record
+  u64 byte counter with a pre-write guard against `i32::MAX × 2` bytes (the
+  Shapefile spec maximum); if the limit would be exceeded the partially-written
+  files are deleted and `GeoError::FileTooLarge` is returned with a message
+  directing the caller to use GeoPackage. Added `GeoError::FileTooLarge(String)`
+  variant to the error enum.
+
 ### Added
+- **`GpkgStreamWriter`** — a new streaming GeoPackage feature writer that lets
+  callers append features one at a time without pre-building a complete `Layer`.
+  `create()` initialises the SQLite B-tree and feature-table DDL; `push_feature()`
+  accepts individual features while tracking the bounding box incrementally;
+  `finish()` inserts the `gpkg_contents` row with the accumulated bbox and writes
+  the final file to disk.
+- **`GeoJsonStreamWriter`** — streams GeoJSON directly to a `BufWriter<File>`,
+  writing the `FeatureCollection` header on `create()`, one feature per
+  `push_feature()`, and the closing delimiter in `finish()`.  No intermediate
+  `Layer` or in-memory string accumulation.
+- **`FgbStreamWriter`** — streams FlatGeobuf directly to a `BufWriter<File>`.
+  The header is written with `features_count = 0` (streaming/unknown) and
+  `index_node_size = 0` (no spatial index) so features can be appended one at a
+  time.  The output is valid FlatGeobuf v3 readable by any compliant reader;
+  the packed R-tree is omitted as a known streaming trade-off.
+- **`VectorStreamWriter`** — a format-agnostic routing enum that selects
+  `GpkgStreamWriter`, `GeoJsonStreamWriter`, or `FgbStreamWriter` for the three
+  natively-streaming formats and falls back to `Layer` accumulation for all
+  others (Shapefile, GML, KML, etc.).  `open(path, schema)` detects the output
+  format from the extension; `push_feature` and `finish` are the same for all
+  variants.  `GpkgStreamWriter`, `GeoJsonStreamWriter`, and `FgbStreamWriter` are
+  also re-exported at the crate root for direct use.
 - Interoperability-focused datum handling is now the sole vector reprojection
 	mode, routed through `CrsTransformPolicy::Auto`.
 - `VectorReprojectOptions::epoch_transform` plus

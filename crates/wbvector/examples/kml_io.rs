@@ -2,10 +2,10 @@
 //!
 //! Usage: cargo run --example kml_io
 
+use std::path::PathBuf;
 use wbvector::feature::{FieldDef, FieldType, Layer};
 use wbvector::geometry::{Coord, Geometry, GeometryType};
 use wbvector::{kml, Result};
-use std::path::PathBuf;
 
 fn data_dir() -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -29,7 +29,10 @@ fn main() -> Result<()> {
             Coord::xy(-79.39, 43.71),
             Coord::xy(-79.38, 43.72),
         ])),
-        &[("name", "Ridge Trail".into()), ("difficulty", "Moderate".into())],
+        &[
+            ("name", "Ridge Trail".into()),
+            ("difficulty", "Moderate".into()),
+        ],
     )?;
 
     let dir = data_dir();
@@ -38,7 +41,11 @@ fn main() -> Result<()> {
     let back = kml::read(&path)?;
 
     println!("Wrote {} feature(s) to {}", layer.len(), path.display());
-    println!("Read back {} feature(s), {} field(s)", back.len(), back.schema.len());
+    println!(
+        "Read back {} feature(s), {} field(s)",
+        back.len(),
+        back.schema.len()
+    );
 
     Ok(())
 }

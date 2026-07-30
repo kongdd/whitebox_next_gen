@@ -37,7 +37,11 @@ fn main() -> wbvector::Result<()> {
     let back = kmz::read(&path)?;
 
     println!("Wrote {} feature(s) to {}", layer.len(), path.display());
-    println!("Read back {} feature(s), {} field(s)", back.len(), back.schema.len());
+    println!(
+        "Read back {} feature(s), {} field(s)",
+        back.len(),
+        back.schema.len()
+    );
 
     Ok(())
 }
