@@ -5,12 +5,12 @@
 //! table is back-patched to its placeholder location at the beginning of the
 //! LAZ data block, then the LAS header is back-patched with final counts.
 
-use std::io::{Seek, SeekFrom, Write};
-use wide::f64x4;
 use crate::io::{le, PointWriter};
 use crate::las::header::PointDataFormat;
 use crate::las::writer::{LasWriter, WriterConfig};
 use crate::laz::chunk::ChunkTable;
+use std::io::{Seek, SeekFrom, Write};
+use wide::f64x4;
 
 use crate::laz::laszip_chunk_table::{write_laszip_chunk_table, LaszipChunkTableEntry};
 use crate::laz::standard_point10_write::encode_standard_pointwise_chunk_point10_v2;
@@ -36,7 +36,10 @@ pub struct LazWriterConfig {
     /// Ignored. Writer always emits standards-compliant LASzip v2/v3 payloads.
     ///
     /// Kept for backward compatibility with code that sets this field.
-    #[deprecated(since = "0.2.0", note = "field is ignored; writer always uses standards-compliant encoding")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "field is ignored; writer always uses standards-compliant encoding"
+    )]
     pub standards_compliant: bool,
 }
 
@@ -77,9 +80,12 @@ pub struct LazWriter<W: Write + Seek> {
     /// LAS header position (start of file).
     _las_header_pos: u64,
     total_points: u64,
-    min_x: f64, max_x: f64,
-    min_y: f64, max_y: f64,
-    min_z: f64, max_z: f64,
+    min_x: f64,
+    max_x: f64,
+    min_y: f64,
+    max_y: f64,
+    min_z: f64,
+    max_z: f64,
 }
 
 impl<W: Write + Seek> LazWriter<W> {
@@ -163,7 +169,8 @@ impl<W: Write + Seek> LazWriter<W> {
         };
 
         Ok(LazWriter {
-            inner, config,
+            inner,
+            config,
             chunk_buf: Vec::with_capacity(DEFAULT_CHUNK_SIZE as usize),
             chunk_table: ChunkTable::default(),
             cumulative_offset: 0,
@@ -172,14 +179,19 @@ impl<W: Write + Seek> LazWriter<W> {
             standard_chunk_entries: Vec::new(),
             _las_header_pos: las_header_pos,
             total_points: 0,
-            min_x: f64::MAX, max_x: f64::MIN,
-            min_y: f64::MAX, max_y: f64::MIN,
-            min_z: f64::MAX, max_z: f64::MIN,
+            min_x: f64::MAX,
+            max_x: f64::MIN,
+            min_y: f64::MAX,
+            max_y: f64::MIN,
+            min_z: f64::MAX,
+            max_z: f64::MIN,
         })
     }
 
     fn flush_chunk(&mut self) -> Result<()> {
-        if self.chunk_buf.is_empty() { return Ok(()); }
+        if self.chunk_buf.is_empty() {
+            return Ok(());
+        }
 
         match self.payload_mode {
             LazPayloadMode::StandardPoint10 => {
@@ -296,10 +308,12 @@ impl<W: Write + Seek> PointWriter for LazWriter<W> {
             )?;
 
             let file_end_after_table = self.inner.seek(SeekFrom::Current(0))?;
-            let ptr_pos = self.chunk_table_ptr_pos.ok_or_else(|| crate::Error::InvalidValue {
-                field: "laz.chunk_table_pointer",
-                detail: "missing standard chunk-table pointer position".to_string(),
-            })?;
+            let ptr_pos = self
+                .chunk_table_ptr_pos
+                .ok_or_else(|| crate::Error::InvalidValue {
+                    field: "laz.chunk_table_pointer",
+                    detail: "missing standard chunk-table pointer position".to_string(),
+                })?;
             self.inner.seek(SeekFrom::Start(ptr_pos))?;
             le::write_u64(&mut self.inner, chunk_table_offset)?;
             self.inner.seek(SeekFrom::Start(file_end_after_table))?;
@@ -340,13 +354,13 @@ impl<W: Write + Seek> PointWriter for LazWriter<W> {
 mod tests {
     use super::*;
     use crate::io::le;
-    use std::io::Cursor;
     use crate::io::{PointReader, PointWriter};
     use crate::las::reader::LasReader;
-    use crate::laz::reader::LazReader;
     use crate::laz::laszip_chunk_table::read_laszip_chunk_table_entries;
+    use crate::laz::reader::LazReader;
     use crate::laz::{parse_laszip_vlr, LaszipCompressorType};
     use crate::point::{GpsTime, Rgb16, WaveformPacket};
+    use std::io::Cursor;
 
     #[test]
     fn point14_compression_level_reduces_chunk_target_at_low_levels() {
@@ -453,7 +467,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(42.0)),
-                color: Some(Rgb16 { red: 1000, green: 2000, blue: 3000 }),
+                color: Some(Rgb16 {
+                    red: 1000,
+                    green: 2000,
+                    blue: 3000,
+                }),
                 ..PointRecord::default()
             })?;
             writer.write_point(&PointRecord {
@@ -465,7 +483,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(43.0)),
-                color: Some(Rgb16 { red: 1100, green: 2100, blue: 3100 }),
+                color: Some(Rgb16 {
+                    red: 1100,
+                    green: 2100,
+                    blue: 3100,
+                }),
                 ..PointRecord::default()
             })?;
             writer.finish()?;
@@ -503,7 +525,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(42.0)),
-                color: Some(Rgb16 { red: 1000, green: 2000, blue: 3000 }),
+                color: Some(Rgb16 {
+                    red: 1000,
+                    green: 2000,
+                    blue: 3000,
+                }),
                 ..PointRecord::default()
             };
             p1.extra_bytes.data[0] = 7;
@@ -518,7 +544,11 @@ mod tests {
             p2.intensity = 101;
             p2.classification = 3;
             p2.gps_time = Some(GpsTime(43.0));
-            p2.color = Some(Rgb16 { red: 1100, green: 2100, blue: 3100 });
+            p2.color = Some(Rgb16 {
+                red: 1100,
+                green: 2100,
+                blue: 3100,
+            });
             p2.extra_bytes.data[0] = 8;
             writer.write_point(&p2)?;
             writer.finish()?;
@@ -531,8 +561,22 @@ mod tests {
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].classification, 2);
         assert_eq!(out[1].classification, 3);
-        assert_eq!(out[0].color, Some(Rgb16 { red: 1000, green: 2000, blue: 3000 }));
-        assert_eq!(out[1].color, Some(Rgb16 { red: 1100, green: 2100, blue: 3100 }));
+        assert_eq!(
+            out[0].color,
+            Some(Rgb16 {
+                red: 1000,
+                green: 2000,
+                blue: 3000
+            })
+        );
+        assert_eq!(
+            out[1].color,
+            Some(Rgb16 {
+                red: 1100,
+                green: 2100,
+                blue: 3100
+            })
+        );
         assert_eq!(out[0].extra_bytes.len, 2);
         assert_eq!(out[1].extra_bytes.len, 2);
         assert_eq!(out[0].extra_bytes.data[0], 7);
@@ -558,7 +602,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(42.0)),
-                color: Some(Rgb16 { red: 1000, green: 2000, blue: 3000 }),
+                color: Some(Rgb16 {
+                    red: 1000,
+                    green: 2000,
+                    blue: 3000,
+                }),
                 waveform: Some(WaveformPacket {
                     descriptor_index: 3,
                     byte_offset: 1234,
@@ -602,7 +650,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(142.0)),
-                color: Some(Rgb16 { red: 2000, green: 3000, blue: 4000 }),
+                color: Some(Rgb16 {
+                    red: 2000,
+                    green: 3000,
+                    blue: 4000,
+                }),
                 waveform: Some(WaveformPacket {
                     descriptor_index: 7,
                     byte_offset: 98765,
@@ -1114,7 +1166,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(100.5)),
-                color: Some(Rgb16 { red: 1200, green: 2200, blue: 3200 }),
+                color: Some(Rgb16 {
+                    red: 1200,
+                    green: 2200,
+                    blue: 3200,
+                }),
                 nir: Some(4200),
                 ..PointRecord::default()
             })?;
@@ -1127,7 +1183,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(101.5)),
-                color: Some(Rgb16 { red: 1300, green: 2300, blue: 3300 }),
+                color: Some(Rgb16 {
+                    red: 1300,
+                    green: 2300,
+                    blue: 3300,
+                }),
                 nir: Some(4300),
                 ..PointRecord::default()
             })?;
@@ -1141,8 +1201,22 @@ mod tests {
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].nir, Some(4200));
         assert_eq!(out[1].nir, Some(4300));
-        assert_eq!(out[0].color, Some(Rgb16 { red: 1200, green: 2200, blue: 3200 }));
-        assert_eq!(out[1].color, Some(Rgb16 { red: 1300, green: 2300, blue: 3300 }));
+        assert_eq!(
+            out[0].color,
+            Some(Rgb16 {
+                red: 1200,
+                green: 2200,
+                blue: 3200
+            })
+        );
+        assert_eq!(
+            out[1].color,
+            Some(Rgb16 {
+                red: 1300,
+                green: 2300,
+                blue: 3300
+            })
+        );
         Ok(())
     }
 
@@ -1215,7 +1289,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(7.0)),
-                color: Some(Rgb16 { red: 100, green: 200, blue: 300 }),
+                color: Some(Rgb16 {
+                    red: 100,
+                    green: 200,
+                    blue: 300,
+                }),
                 nir: Some(400),
                 ..PointRecord::default()
             })?;
@@ -1256,7 +1334,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(7.0)),
-                color: Some(Rgb16 { red: 100, green: 200, blue: 300 }),
+                color: Some(Rgb16 {
+                    red: 100,
+                    green: 200,
+                    blue: 300,
+                }),
                 ..PointRecord::default()
             };
             point.extra_bytes.data[0] = 11;
@@ -1275,9 +1357,18 @@ mod tests {
         assert_eq!(info.compressor, LaszipCompressorType::PointWiseChunked);
         assert_eq!(info.chunk_size, 321);
         assert!(info.has_point10_item());
-        assert!(info.items.iter().any(|i| i.item_type == 7 && i.item_size == 8 && i.item_version == 2));
-        assert!(info.items.iter().any(|i| i.item_type == 8 && i.item_size == 6 && i.item_version == 2));
-        assert!(info.items.iter().any(|i| i.item_type == 0 && i.item_size == 2 && i.item_version == 2));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 7 && i.item_size == 8 && i.item_version == 2));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 8 && i.item_size == 6 && i.item_version == 2));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 0 && i.item_size == 2 && i.item_version == 2));
         Ok(())
     }
 
@@ -1345,7 +1436,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(7.0)),
-                color: Some(Rgb16 { red: 100, green: 200, blue: 300 }),
+                color: Some(Rgb16 {
+                    red: 100,
+                    green: 200,
+                    blue: 300,
+                }),
                 nir: Some(400),
                 ..PointRecord::default()
             };
@@ -1362,7 +1457,10 @@ mod tests {
             detail: "LASzip VLR missing in standards output".to_string(),
         })?;
 
-        assert!(info.items.iter().any(|i| i.item_type == 14 && i.item_size == 2 && i.item_version == 3));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 14 && i.item_size == 2 && i.item_version == 3));
         Ok(())
     }
 
@@ -1486,8 +1584,14 @@ mod tests {
         assert_eq!(info.compressor, LaszipCompressorType::PointWiseChunked);
         assert_eq!(info.chunk_size, 444);
         assert!(info.has_point10_item());
-        assert!(info.items.iter().any(|i| i.item_type == 7 && i.item_size == 8 && i.item_version == 2));
-        assert!(info.items.iter().any(|i| i.item_type == 0 && i.item_size == 29 && i.item_version == 2));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 7 && i.item_size == 8 && i.item_version == 2));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 0 && i.item_size == 29 && i.item_version == 2));
         Ok(())
     }
 
@@ -1537,9 +1641,18 @@ mod tests {
         assert_eq!(info.compressor, LaszipCompressorType::PointWiseChunked);
         assert_eq!(info.chunk_size, 555);
         assert!(info.has_point10_item());
-        assert!(info.items.iter().any(|i| i.item_type == 7 && i.item_size == 8 && i.item_version == 2));
-        assert!(info.items.iter().any(|i| i.item_type == 8 && i.item_size == 6 && i.item_version == 2));
-        assert!(info.items.iter().any(|i| i.item_type == 0 && i.item_size == 29 && i.item_version == 2));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 7 && i.item_size == 8 && i.item_version == 2));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 8 && i.item_size == 6 && i.item_version == 2));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 0 && i.item_size == 29 && i.item_version == 2));
         Ok(())
     }
 
@@ -1586,7 +1699,10 @@ mod tests {
         assert!(info.has_point14_item());
         assert!(!info.has_rgb14_item());
         assert!(!info.has_nir14_item());
-        assert!(info.items.iter().any(|i| i.item_type == 14 && i.item_size == 29 && i.item_version == 3));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 14 && i.item_size == 29 && i.item_version == 3));
         Ok(())
     }
 
@@ -1638,7 +1754,10 @@ mod tests {
         assert!(info.has_point14_item());
         assert!(info.has_rgb14_item());
         assert!(!info.has_nir14_item());
-        assert!(info.items.iter().any(|i| i.item_type == 14 && i.item_size == 29 && i.item_version == 3));
+        assert!(info
+            .items
+            .iter()
+            .any(|i| i.item_type == 14 && i.item_size == 29 && i.item_version == 3));
         Ok(())
     }
 
@@ -1709,7 +1828,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(1000.0)),
-                color: Some(Rgb16 { red: 1000, green: 2000, blue: 3000 }),
+                color: Some(Rgb16 {
+                    red: 1000,
+                    green: 2000,
+                    blue: 3000,
+                }),
                 ..PointRecord::default()
             })?;
             writer.write_point(&PointRecord {
@@ -1721,7 +1844,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(1001.0)),
-                color: Some(Rgb16 { red: 1100, green: 2100, blue: 3100 }),
+                color: Some(Rgb16 {
+                    red: 1100,
+                    green: 2100,
+                    blue: 3100,
+                }),
                 ..PointRecord::default()
             })?;
             writer.finish()?;
@@ -1734,8 +1861,22 @@ mod tests {
         assert_eq!(out.len(), 2);
         assert!((out[0].x - 10.0).abs() < 1e-3);
         assert_eq!(out[0].classification, 3);
-        assert_eq!(out[0].color, Some(Rgb16 { red: 1000, green: 2000, blue: 3000 }));
-        assert_eq!(out[1].color, Some(Rgb16 { red: 1100, green: 2100, blue: 3100 }));
+        assert_eq!(
+            out[0].color,
+            Some(Rgb16 {
+                red: 1000,
+                green: 2000,
+                blue: 3000
+            })
+        );
+        assert_eq!(
+            out[1].color,
+            Some(Rgb16 {
+                red: 1100,
+                green: 2100,
+                blue: 3100
+            })
+        );
         Ok(())
     }
 
@@ -1759,7 +1900,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 2,
                 gps_time: Some(GpsTime(500.0)),
-                color: Some(Rgb16 { red: 5000, green: 6000, blue: 7000 }),
+                color: Some(Rgb16 {
+                    red: 5000,
+                    green: 6000,
+                    blue: 7000,
+                }),
                 nir: Some(8000),
                 ..PointRecord::default()
             })?;
@@ -1772,7 +1917,11 @@ mod tests {
                 return_number: 2,
                 number_of_returns: 2,
                 gps_time: Some(GpsTime(501.0)),
-                color: Some(Rgb16 { red: 5100, green: 6100, blue: 7100 }),
+                color: Some(Rgb16 {
+                    red: 5100,
+                    green: 6100,
+                    blue: 7100,
+                }),
                 nir: Some(8100),
                 ..PointRecord::default()
             })?;
@@ -1784,9 +1933,23 @@ mod tests {
         let out = reader.read_all()?;
 
         assert_eq!(out.len(), 2);
-        assert_eq!(out[0].color, Some(Rgb16 { red: 5000, green: 6000, blue: 7000 }));
+        assert_eq!(
+            out[0].color,
+            Some(Rgb16 {
+                red: 5000,
+                green: 6000,
+                blue: 7000
+            })
+        );
         assert_eq!(out[0].nir, Some(8000));
-        assert_eq!(out[1].color, Some(Rgb16 { red: 5100, green: 6100, blue: 7100 }));
+        assert_eq!(
+            out[1].color,
+            Some(Rgb16 {
+                red: 5100,
+                green: 6100,
+                blue: 7100
+            })
+        );
         assert_eq!(out[1].nir, Some(8100));
         Ok(())
     }
@@ -1809,7 +1972,11 @@ mod tests {
                 return_number: 1,
                 number_of_returns: 1,
                 gps_time: Some(GpsTime(200.0)),
-                color: Some(Rgb16 { red: 2000, green: 3000, blue: 4000 }),
+                color: Some(Rgb16 {
+                    red: 2000,
+                    green: 3000,
+                    blue: 4000,
+                }),
                 waveform: Some(WaveformPacket {
                     descriptor_index: 5,
                     byte_offset: 55555,
@@ -1829,9 +1996,18 @@ mod tests {
         let out = reader.read_all()?;
 
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].color, Some(Rgb16 { red: 2000, green: 3000, blue: 4000 }));
+        assert_eq!(
+            out[0].color,
+            Some(Rgb16 {
+                red: 2000,
+                green: 3000,
+                blue: 4000
+            })
+        );
         assert!(out[0].nir.is_none());
-        let wf = out[0].waveform.expect("waveform must survive LAZ roundtrip");
+        let wf = out[0]
+            .waveform
+            .expect("waveform must survive LAZ roundtrip");
         assert_eq!(wf.descriptor_index, 5);
         assert_eq!(wf.byte_offset, 55555);
         assert_eq!(wf.packet_size, 100);
@@ -1857,7 +2033,11 @@ mod tests {
                 return_number: 2,
                 number_of_returns: 3,
                 gps_time: Some(GpsTime(3000.0)),
-                color: Some(Rgb16 { red: 60000, green: 50000, blue: 40000 }),
+                color: Some(Rgb16 {
+                    red: 60000,
+                    green: 50000,
+                    blue: 40000,
+                }),
                 nir: Some(55000),
                 waveform: Some(WaveformPacket {
                     descriptor_index: 9,
@@ -1878,9 +2058,18 @@ mod tests {
         let out = reader.read_all()?;
 
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].color, Some(Rgb16 { red: 60000, green: 50000, blue: 40000 }));
+        assert_eq!(
+            out[0].color,
+            Some(Rgb16 {
+                red: 60000,
+                green: 50000,
+                blue: 40000
+            })
+        );
         assert_eq!(out[0].nir, Some(55000));
-        let wf = out[0].waveform.expect("waveform must survive LAZ roundtrip");
+        let wf = out[0]
+            .waveform
+            .expect("waveform must survive LAZ roundtrip");
         assert_eq!(wf.descriptor_index, 9);
         assert_eq!(wf.byte_offset, 77777);
         assert_eq!(wf.packet_size, 256);

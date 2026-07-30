@@ -64,17 +64,28 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Error::Io(e) => write!(f, "I/O error: {e}"),
-            Error::InvalidSignature { format, found } =>
-                write!(f, "invalid {format} signature: {found:?}"),
-            Error::InvalidValue { field, detail } =>
-                write!(f, "invalid value for field '{field}': {detail}"),
-            Error::UnsupportedVersion { major, minor, pdrf } =>
-                write!(f, "unsupported LAS {major}.{minor} PDRF {pdrf}"),
+            Error::InvalidSignature { format, found } => {
+                write!(f, "invalid {format} signature: {found:?}")
+            }
+            Error::InvalidValue { field, detail } => {
+                write!(f, "invalid value for field '{field}': {detail}")
+            }
+            Error::UnsupportedVersion { major, minor, pdrf } => {
+                write!(f, "unsupported LAS {major}.{minor} PDRF {pdrf}")
+            }
             Error::Unimplemented(msg) => write!(f, "not implemented: {msg}"),
-            Error::CrcMismatch { expected, computed } =>
-                write!(f, "CRC-32 mismatch: expected 0x{expected:08X}, computed 0x{computed:08X}"),
-            Error::SizeMismatch { context, expected, actual } =>
-                write!(f, "size mismatch in '{context}': expected {expected}, got {actual}"),
+            Error::CrcMismatch { expected, computed } => write!(
+                f,
+                "CRC-32 mismatch: expected 0x{expected:08X}, computed 0x{computed:08X}"
+            ),
+            Error::SizeMismatch {
+                context,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "size mismatch in '{context}': expected {expected}, got {actual}"
+            ),
             Error::Utf8(e) => write!(f, "UTF-8 error: {e}"),
             Error::Compression(msg) => write!(f, "compression error: {msg}"),
             Error::Projection(msg) => write!(f, "projection error: {msg}"),
@@ -84,11 +95,21 @@ impl fmt::Display for Error {
 
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self { Error::Io(e) => Some(e), Error::Utf8(e) => Some(e), _ => None }
+        match self {
+            Error::Io(e) => Some(e),
+            Error::Utf8(e) => Some(e),
+            _ => None,
+        }
     }
 }
 
-impl From<io::Error> for Error { fn from(e: io::Error) -> Self { Error::Io(e) } }
+impl From<io::Error> for Error {
+    fn from(e: io::Error) -> Self {
+        Error::Io(e)
+    }
+}
 impl From<std::string::FromUtf8Error> for Error {
-    fn from(e: std::string::FromUtf8Error) -> Self { Error::Utf8(e) }
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        Error::Utf8(e)
+    }
 }

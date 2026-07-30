@@ -73,8 +73,7 @@ fn main() -> Result<()> {
     if src_pdrf != dst_pdrf {
         println!(
             "  note: source PDRF {} promoted to standards-compatible PDRF {}",
-            src_pdrf as u8,
-            dst_pdrf as u8
+            src_pdrf as u8, dst_pdrf as u8
         );
     }
     println!(
@@ -104,7 +103,8 @@ fn main() -> Result<()> {
 
     writer.finish()?;
 
-    let mut verify_reader = LazReader::new(BufReader::new(File::open(&out_path).map_err(Error::Io)?))?;
+    let mut verify_reader =
+        LazReader::new(BufReader::new(File::open(&out_path).map_err(Error::Io)?))?;
     let mut verified = 0u64;
     while verify_reader.read_point(&mut p)? {
         verified += 1;

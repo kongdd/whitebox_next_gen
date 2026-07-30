@@ -1,8 +1,8 @@
 //! LAS public file header for versions 1.1 – 1.5.
 
-use std::io::{Read, Seek, SeekFrom, Write};
 use crate::io::le;
 use crate::{Error, Result};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 /// The four-byte file signature of every LAS file.
 pub const SIGNATURE: &[u8; 4] = b"LASF";
@@ -24,7 +24,9 @@ impl GlobalEncoding {
     pub const WKT: u16 = 0x0010;
 
     /// Test a bit flag.
-    pub fn is_set(self, flag: u16) -> bool { self.0 & flag != 0 }
+    pub fn is_set(self, flag: u16) -> bool {
+        self.0 & flag != 0
+    }
 }
 
 /// Point-data record format identifier.
@@ -103,11 +105,11 @@ impl PointDataFormat {
             Self::Pdrf8 => 38,
             Self::Pdrf9 => 59,
             Self::Pdrf10 => 67,
-            Self::Pdrf11 => 30,  // LAS 1.5: PDRF 6 base (no extras)
-            Self::Pdrf12 => 36,  // LAS 1.5: 30 base + 6 RGB
-            Self::Pdrf13 => 46,  // LAS 1.5: 30 base + 6 RGB + 2 NIR + 8 ThermalRGB
-            Self::Pdrf14 => 65,  // LAS 1.5: 30 base + 6 RGB + 29 waveform
-            Self::Pdrf15 => 75,  // LAS 1.5: 30 base + 6 RGB + 2 NIR + 29 waveform + 8 ThermalRGB
+            Self::Pdrf11 => 30, // LAS 1.5: PDRF 6 base (no extras)
+            Self::Pdrf12 => 36, // LAS 1.5: 30 base + 6 RGB
+            Self::Pdrf13 => 46, // LAS 1.5: 30 base + 6 RGB + 2 NIR + 8 ThermalRGB
+            Self::Pdrf14 => 65, // LAS 1.5: 30 base + 6 RGB + 29 waveform
+            Self::Pdrf15 => 75, // LAS 1.5: 30 base + 6 RGB + 2 NIR + 29 waveform + 8 ThermalRGB
         }
     }
 
@@ -118,27 +120,50 @@ impl PointDataFormat {
 
     /// Whether this PDRF carries RGB colour.
     pub fn has_rgb(self) -> bool {
-        matches!(self, Self::Pdrf2 | Self::Pdrf3 | Self::Pdrf5 | Self::Pdrf7 | Self::Pdrf8 | Self::Pdrf10
-                      | Self::Pdrf12 | Self::Pdrf13 | Self::Pdrf14 | Self::Pdrf15)
+        matches!(
+            self,
+            Self::Pdrf2
+                | Self::Pdrf3
+                | Self::Pdrf5
+                | Self::Pdrf7
+                | Self::Pdrf8
+                | Self::Pdrf10
+                | Self::Pdrf12
+                | Self::Pdrf13
+                | Self::Pdrf14
+                | Self::Pdrf15
+        )
     }
 
     /// Whether this PDRF carries NIR.
-    pub fn has_nir(self) -> bool { matches!(self, Self::Pdrf8 | Self::Pdrf13 | Self::Pdrf15) }
+    pub fn has_nir(self) -> bool {
+        matches!(self, Self::Pdrf8 | Self::Pdrf13 | Self::Pdrf15)
+    }
 
     /// Whether this PDRF carries waveform data.
     pub fn has_waveform(self) -> bool {
-        matches!(self, Self::Pdrf4 | Self::Pdrf5 | Self::Pdrf9 | Self::Pdrf10 | Self::Pdrf14 | Self::Pdrf15)
+        matches!(
+            self,
+            Self::Pdrf4 | Self::Pdrf5 | Self::Pdrf9 | Self::Pdrf10 | Self::Pdrf14 | Self::Pdrf15
+        )
     }
 
     /// Whether this is a LAS 1.4 PDRF (6–10).
-    pub fn is_v14(self) -> bool { (6..=10).contains(&(self as u8)) }
+    pub fn is_v14(self) -> bool {
+        (6..=10).contains(&(self as u8))
+    }
 
     /// Whether this is a LAS 1.5 PDRF (11–15).
-    pub fn is_v15(self) -> bool { (11..=15).contains(&(self as u8)) }
+    pub fn is_v15(self) -> bool {
+        (11..=15).contains(&(self as u8))
+    }
 
     /// Whether this PDRF uses extended 16-bit RGB (LAS 1.5 PDRFs 12–15).
     pub fn has_extended_rgb(self) -> bool {
-        matches!(self, Self::Pdrf12 | Self::Pdrf13 | Self::Pdrf14 | Self::Pdrf15)
+        matches!(
+            self,
+            Self::Pdrf12 | Self::Pdrf13 | Self::Pdrf14 | Self::Pdrf15
+        )
     }
 }
 
@@ -232,7 +257,10 @@ impl LasHeader {
         let mut sig = [0u8; 4];
         r.read_exact(&mut sig)?;
         if &sig != SIGNATURE {
-            return Err(Error::InvalidSignature { format: "LAS", found: sig.to_vec() });
+            return Err(Error::InvalidSignature {
+                format: "LAS",
+                found: sig.to_vec(),
+            });
         }
 
         let file_source_id = le::read_u16(r)?;
@@ -250,23 +278,25 @@ impl LasHeader {
         let mut gen_sw = [0u8; 32];
         r.read_exact(&mut gen_sw)?;
 
-        let file_creation_day  = le::read_u16(r)?;
+        let file_creation_day = le::read_u16(r)?;
         let file_creation_year = le::read_u16(r)?;
-        let header_size        = le::read_u16(r)?;
+        let header_size = le::read_u16(r)?;
         let offset_to_point_data = le::read_u32(r)?;
-        let number_of_vlrs     = le::read_u32(r)?;
-        let raw_pdrf           = le::read_u8(r)?;
+        let number_of_vlrs = le::read_u32(r)?;
+        let raw_pdrf = le::read_u8(r)?;
 
-        let point_data_format = PointDataFormat::from_u8(raw_pdrf & 0x7F)
-            .ok_or_else(|| Error::InvalidValue {
+        let point_data_format =
+            PointDataFormat::from_u8(raw_pdrf & 0x7F).ok_or_else(|| Error::InvalidValue {
                 field: "point_data_format_id",
                 detail: format!("unknown PDRF {raw_pdrf}"),
             })?;
 
         let point_data_record_length = le::read_u16(r)?;
-        let legacy_point_count       = le::read_u32(r)?;
-        let mut legacy_returns       = [0u32; 5];
-        for v in &mut legacy_returns { *v = le::read_u32(r)?; }
+        let legacy_point_count = le::read_u32(r)?;
+        let mut legacy_returns = [0u32; 5];
+        for v in &mut legacy_returns {
+            *v = le::read_u32(r)?;
+        }
 
         // Scale and offset
         let x_scale = le::read_f64(r)?;
@@ -293,7 +323,9 @@ impl LasHeader {
                     let ec = le::read_u32(r)?;
                     let pc = le::read_u64(r)?;
                     let mut ret = [0u64; 15];
-                    for v in &mut ret { *v = le::read_u64(r)?; }
+                    for v in &mut ret {
+                        *v = le::read_u64(r)?;
+                    }
                     (Some(es), Some(ec), Some(pc), Some(ret))
                 } else {
                     (None, None, None, None)
@@ -303,22 +335,35 @@ impl LasHeader {
                 (None, None, None, None, None)
             };
 
-        let extra_bytes_count = point_data_record_length
-            .saturating_sub(point_data_format.core_size());
+        let extra_bytes_count =
+            point_data_record_length.saturating_sub(point_data_format.core_size());
 
         Ok(LasHeader {
-            version_major, version_minor,
+            version_major,
+            version_minor,
             system_identifier: null_padded_str(&sys_id),
             generating_software: null_padded_str(&gen_sw),
-            file_creation_day, file_creation_year,
+            file_creation_day,
+            file_creation_year,
             header_size,
-            offset_to_point_data, number_of_vlrs,
+            offset_to_point_data,
+            number_of_vlrs,
             point_data_format,
             point_data_record_length,
-            global_encoding, project_id,
-            x_scale, y_scale, z_scale,
-            x_offset, y_offset, z_offset,
-            max_x, min_x, max_y, min_y, max_z, min_z,
+            global_encoding,
+            project_id,
+            x_scale,
+            y_scale,
+            z_scale,
+            x_offset,
+            y_offset,
+            z_offset,
+            max_x,
+            min_x,
+            max_y,
+            min_y,
+            max_z,
+            min_z,
             legacy_point_count,
             legacy_point_count_by_return: legacy_returns,
             waveform_data_packet_offset: waveform_offset,
@@ -332,7 +377,8 @@ impl LasHeader {
 
     /// Total point count: prefers 64-bit field when available.
     pub fn point_count(&self) -> u64 {
-        self.point_count_64.unwrap_or(u64::from(self.legacy_point_count))
+        self.point_count_64
+            .unwrap_or(u64::from(self.legacy_point_count))
     }
 
     /// Write the LAS public file header (375 bytes for versions 1.0 – 1.5).
@@ -353,7 +399,9 @@ impl LasHeader {
         le::write_u8(w, self.point_data_format as u8)?;
         le::write_u16(w, self.point_data_record_length)?;
         le::write_u32(w, self.legacy_point_count.min(u32::MAX))?;
-        for v in &self.legacy_point_count_by_return { le::write_u32(w, *v)?; }
+        for v in &self.legacy_point_count_by_return {
+            le::write_u32(w, *v)?;
+        }
         le::write_f64(w, self.x_scale)?;
         le::write_f64(w, self.y_scale)?;
         le::write_f64(w, self.z_scale)?;
@@ -372,9 +420,15 @@ impl LasHeader {
         le::write_u64(w, self.start_of_first_evlr.unwrap_or(0))?;
         le::write_u32(w, self.number_of_evlrs.unwrap_or(0))?;
         // LAS 1.4 point counts
-        le::write_u64(w, self.point_count_64.unwrap_or(u64::from(self.legacy_point_count)))?;
+        le::write_u64(
+            w,
+            self.point_count_64
+                .unwrap_or(u64::from(self.legacy_point_count)),
+        )?;
         let pcr = self.point_count_by_return_64.unwrap_or([0u64; 15]);
-        for v in &pcr { le::write_u64(w, *v)?; }
+        for v in &pcr {
+            le::write_u64(w, *v)?;
+        }
         Ok(())
     }
 }

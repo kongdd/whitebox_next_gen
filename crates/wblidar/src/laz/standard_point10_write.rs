@@ -220,7 +220,10 @@ impl Point10Common {
             last_y_diff_median: [StreamingMedianI32::new(); 16],
             last_height: [0; 8],
             changed_values: ArithmeticSymbolModel::new(64),
-            scan_angle_rank: [ArithmeticSymbolModel::new(256), ArithmeticSymbolModel::new(256)],
+            scan_angle_rank: [
+                ArithmeticSymbolModel::new(256),
+                ArithmeticSymbolModel::new(256),
+            ],
             bit_byte: (0..256).map(|_| ArithmeticSymbolModel::new(256)).collect(),
             classification: (0..256).map(|_| ArithmeticSymbolModel::new(256)).collect(),
             user_data: (0..256).map(|_| ArithmeticSymbolModel::new(256)).collect(),
@@ -342,7 +345,12 @@ impl Point10V2Compressor {
                 enc,
                 median_y,
                 diff_y,
-                (n == 1) as u32 + if k_bits < 20 { u32_zero_bit(k_bits) } else { 20 },
+                (n == 1) as u32
+                    + if k_bits < 20 {
+                        u32_zero_bit(k_bits)
+                    } else {
+                        20
+                    },
             )
             .map_err(Error::Io)?;
         self.common.last_y_diff_median[m as usize].add(diff_y);
@@ -353,7 +361,12 @@ impl Point10V2Compressor {
                 enc,
                 self.common.last_height[l as usize],
                 current.z,
-                (n == 1) as u32 + if k_bits < 18 { u32_zero_bit(k_bits) } else { 18 },
+                (n == 1) as u32
+                    + if k_bits < 18 {
+                        u32_zero_bit(k_bits)
+                    } else {
+                        18
+                    },
             )
             .map_err(Error::Io)?;
         self.common.last_height[l as usize] = current.z;
@@ -414,7 +427,8 @@ impl GpsTimeV2Compressor {
                 return Ok(());
             }
 
-            let curr_gps_diff_64 = gps_bits.wrapping_sub(self.common.last_gps_times[self.common.last]);
+            let curr_gps_diff_64 =
+                gps_bits.wrapping_sub(self.common.last_gps_times[self.common.last]);
             let curr_gps_diff = curr_gps_diff_64 as i32;
             if curr_gps_diff_64 == i64::from(curr_gps_diff) {
                 enc.encode_symbol(&mut self.common.gps_time_0_diff, 1)
@@ -430,7 +444,8 @@ impl GpsTimeV2Compressor {
 
             for i in 1..4usize {
                 let candidate_index = (self.common.last + i) & 3;
-                let other_gps_diff_64 = gps_bits.wrapping_sub(self.common.last_gps_times[candidate_index]);
+                let other_gps_diff_64 =
+                    gps_bits.wrapping_sub(self.common.last_gps_times[candidate_index]);
                 let other_gps_diff = other_gps_diff_64 as i32;
                 if other_gps_diff_64 == i64::from(other_gps_diff) {
                     enc.encode_symbol(&mut self.common.gps_time_0_diff, (i + 2) as u32)
@@ -495,8 +510,11 @@ impl GpsTimeV2Compressor {
                         )
                         .map_err(Error::Io)?;
                 } else {
-                    enc.encode_symbol(&mut self.common.gps_time_multi, LASZIP_GPS_TIME_MULTI as u32)
-                        .map_err(Error::Io)?;
+                    enc.encode_symbol(
+                        &mut self.common.gps_time_multi,
+                        LASZIP_GPS_TIME_MULTI as u32,
+                    )
+                    .map_err(Error::Io)?;
                     self.ic_gps_time
                         .compress(
                             enc,
@@ -560,7 +578,8 @@ impl GpsTimeV2Compressor {
 
         for i in 1..4usize {
             let candidate_index = (self.common.last + i) & 3;
-            let other_gps_diff_64 = gps_bits.wrapping_sub(self.common.last_gps_times[candidate_index]);
+            let other_gps_diff_64 =
+                gps_bits.wrapping_sub(self.common.last_gps_times[candidate_index]);
             let other_gps_diff = other_gps_diff_64 as i32;
             if other_gps_diff_64 == i64::from(other_gps_diff) {
                 enc.encode_symbol(
@@ -658,7 +677,8 @@ impl Rgb12V2Compressor {
             .map_err(Error::Io)?;
 
         if (sym & (1 << 0)) != 0 {
-            diff_l = i32::from((current.red & 0x00FF) as u8) - i32::from((self.last.red & 0x00FF) as u8);
+            diff_l =
+                i32::from((current.red & 0x00FF) as u8) - i32::from((self.last.red & 0x00FF) as u8);
             enc.encode_symbol(&mut self.models.lower_red_byte, u8_fold(diff_l) as u32)
                 .map_err(Error::Io)?;
         }
@@ -672,17 +692,20 @@ impl Rgb12V2Compressor {
         if (sym & (1 << 6)) != 0 {
             if (sym & (1 << 2)) != 0 {
                 corr = i32::from((current.green & 0x00FF) as u8)
-                    - i32::from(u8_clamp(diff_l + i32::from((self.last.green & 0x00FF) as u8)));
+                    - i32::from(u8_clamp(
+                        diff_l + i32::from((self.last.green & 0x00FF) as u8),
+                    ));
                 enc.encode_symbol(&mut self.models.lower_green_byte, u8_fold(corr) as u32)
                     .map_err(Error::Io)?;
             }
             if (sym & (1 << 4)) != 0 {
-                diff_l = (diff_l
-                    + i32::from((current.green & 0x00FF) as u8)
+                diff_l = (diff_l + i32::from((current.green & 0x00FF) as u8)
                     - i32::from((self.last.green & 0x00FF) as u8))
                     / 2;
                 corr = i32::from((current.blue & 0x00FF) as u8)
-                    - i32::from(u8_clamp(diff_l + i32::from((self.last.blue & 0x00FF) as u8)));
+                    - i32::from(u8_clamp(
+                        diff_l + i32::from((self.last.blue & 0x00FF) as u8),
+                    ));
                 enc.encode_symbol(&mut self.models.lower_blue_byte, u8_fold(corr) as u32)
                     .map_err(Error::Io)?;
             }
@@ -693,8 +716,7 @@ impl Rgb12V2Compressor {
                     .map_err(Error::Io)?;
             }
             if (sym & (1 << 5)) != 0 {
-                diff_h = (diff_h
-                    + i32::from((current.green >> 8) as u8)
+                diff_h = (diff_h + i32::from((current.green >> 8) as u8)
                     - i32::from((self.last.green >> 8) as u8))
                     / 2;
                 corr = i32::from((current.blue >> 8) as u8)
@@ -801,7 +823,8 @@ pub fn encode_standard_pointwise_chunk_point10_v2(
     } else {
         0usize
     };
-    let expected_payload_extra_count = expected_extra_bytes_count.saturating_add(waveform_bytes_count);
+    let expected_payload_extra_count =
+        expected_extra_bytes_count.saturating_add(waveform_bytes_count);
 
     let raw_points: Vec<RawPoint10> = points
         .iter()

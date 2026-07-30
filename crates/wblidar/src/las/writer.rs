@@ -1,14 +1,14 @@
 //! LAS 1.4 R15 writer (writes PDRF 6 / 7 / 8 by default).
 
-use std::io::{Seek, SeekFrom, Write};
-use wide::f64x4;
 use crate::crs::{ogc_wkt_from_epsg, Crs};
 use crate::io::le;
+use crate::io::PointWriter;
 use crate::las::header::{GlobalEncoding, LasHeader, PointDataFormat};
 use crate::las::vlr::{Vlr, LASF_PROJECTION_USER_ID, OGC_WKT_RECORD_ID};
 use crate::point::PointRecord;
 use crate::Result;
-use crate::io::PointWriter;
+use std::io::{Seek, SeekFrom, Write};
+use wide::f64x4;
 
 /// Configuration for the LAS writer.
 #[derive(Debug, Clone)]
@@ -68,9 +68,12 @@ pub struct LasWriter<W: Write + Seek> {
     point_count: u64,
     per_return: [u64; 15],
     // Running bounding box
-    min_x: f64, max_x: f64,
-    min_y: f64, max_y: f64,
-    min_z: f64, max_z: f64,
+    min_x: f64,
+    max_x: f64,
+    min_y: f64,
+    max_y: f64,
+    min_z: f64,
+    max_z: f64,
     // Byte offset of the start of the header (for back-patching).
     header_start: u64,
     // Byte offset of the first point record.
@@ -87,12 +90,15 @@ impl<W: Write + Seek> LasWriter<W> {
         let vlr_total: usize = config.vlrs.iter().map(|v| v.serialised_size()).sum();
         let offset_to_point_data = 375u32 + vlr_total as u32;
 
-        let record_length =
-            config.point_data_format.core_size() + config.extra_bytes_per_point;
+        let record_length = config.point_data_format.core_size() + config.extra_bytes_per_point;
         let global_encoding = global_encoding_for_vlrs(&config.vlrs);
 
         // Auto-detect LAS version based on PDRF
-        let version_minor = if config.point_data_format.is_v15() { 5 } else { 4 };
+        let version_minor = if config.point_data_format.is_v15() {
+            5
+        } else {
+            4
+        };
 
         // Build a skeleton header (bounding box and counts will be back-patched).
         let hdr = LasHeader {
@@ -115,9 +121,12 @@ impl<W: Write + Seek> LasWriter<W> {
             x_offset: config.x_offset,
             y_offset: config.y_offset,
             z_offset: config.z_offset,
-            max_x: 0.0, min_x: 0.0,
-            max_y: 0.0, min_y: 0.0,
-            max_z: 0.0, min_z: 0.0,
+            max_x: 0.0,
+            min_x: 0.0,
+            max_y: 0.0,
+            min_y: 0.0,
+            max_z: 0.0,
+            min_z: 0.0,
             legacy_point_count: 0,
             legacy_point_count_by_return: [0u32; 5],
             waveform_data_packet_offset: Some(0),
@@ -129,33 +138,46 @@ impl<W: Write + Seek> LasWriter<W> {
         };
 
         hdr.write(&mut inner)?;
-        for vlr in &config.vlrs { vlr.write(&mut inner)?; }
+        for vlr in &config.vlrs {
+            vlr.write(&mut inner)?;
+        }
 
         let point_data_start = inner.seek(SeekFrom::Current(0))?;
 
         Ok(LasWriter {
-            inner, config,
+            inner,
+            config,
             point_count: 0,
             per_return: [0u64; 15],
-            min_x: f64::MAX, max_x: f64::MIN,
-            min_y: f64::MAX, max_y: f64::MIN,
-            min_z: f64::MAX, max_z: f64::MIN,
-            header_start, point_data_start,
+            min_x: f64::MAX,
+            max_x: f64::MIN,
+            min_y: f64::MAX,
+            max_y: f64::MIN,
+            min_z: f64::MAX,
+            max_z: f64::MIN,
+            header_start,
+            point_data_start,
         })
     }
 }
 
 fn append_projection_vlrs(config: &mut WriterConfig) {
-    let Some(crs) = &config.crs else { return; };
+    let Some(crs) = &config.crs else {
+        return;
+    };
 
-    let has_wkt = config.vlrs.iter().any(|v| {
-        v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID
-    });
+    let has_wkt = config
+        .vlrs
+        .iter()
+        .any(|v| v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID);
 
     if !has_wkt {
-        if let Some(wkt) = crs.wkt.as_deref().map(ToOwned::to_owned).or_else(|| {
-            crs.epsg.and_then(ogc_wkt_from_epsg)
-        }) {
+        if let Some(wkt) = crs
+            .wkt
+            .as_deref()
+            .map(ToOwned::to_owned)
+            .or_else(|| crs.epsg.and_then(ogc_wkt_from_epsg))
+        {
             config.vlrs.push(Vlr::ogc_wkt(&wkt));
         }
     }
@@ -167,9 +189,9 @@ fn append_projection_vlrs(config: &mut WriterConfig) {
 
 fn global_encoding_for_vlrs(vlrs: &[Vlr]) -> GlobalEncoding {
     let mut bits = GlobalEncoding::GPS_TIME_TYPE;
-    let has_wkt = vlrs.iter().any(|v| {
-        v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID
-    });
+    let has_wkt = vlrs
+        .iter()
+        .any(|v| v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID);
     if has_wkt {
         bits |= GlobalEncoding::WKT;
     }
@@ -291,7 +313,9 @@ impl<W: Write + Seek> PointWriter for LasWriter<W> {
 
         // Update per-return counts
         let ret = p.return_number as usize;
-        if ret > 0 && ret <= 15 { self.per_return[ret - 1] += 1; }
+        if ret > 0 && ret <= 15 {
+            self.per_return[ret - 1] += 1;
+        }
         self.point_count += 1;
         Ok(())
     }
@@ -300,13 +324,27 @@ impl<W: Write + Seek> PointWriter for LasWriter<W> {
         // Seek back to header start and rewrite with correct counts + bounds.
         self.inner.seek(SeekFrom::Start(self.header_start))?;
 
-        let (min_x, max_x) = if self.point_count == 0 { (0.0, 0.0) } else { (self.min_x, self.max_x) };
-        let (min_y, max_y) = if self.point_count == 0 { (0.0, 0.0) } else { (self.min_y, self.max_y) };
-        let (min_z, max_z) = if self.point_count == 0 { (0.0, 0.0) } else { (self.min_z, self.max_z) };
+        let (min_x, max_x) = if self.point_count == 0 {
+            (0.0, 0.0)
+        } else {
+            (self.min_x, self.max_x)
+        };
+        let (min_y, max_y) = if self.point_count == 0 {
+            (0.0, 0.0)
+        } else {
+            (self.min_y, self.max_y)
+        };
+        let (min_z, max_z) = if self.point_count == 0 {
+            (0.0, 0.0)
+        } else {
+            (self.min_z, self.max_z)
+        };
 
         let legacy_count = self.point_count.min(u64::from(u32::MAX)) as u32;
         let mut legacy_per_return = [0u32; 5];
-        for i in 0..5 { legacy_per_return[i] = self.per_return[i].min(u64::from(u32::MAX)) as u32; }
+        for i in 0..5 {
+            legacy_per_return[i] = self.per_return[i].min(u64::from(u32::MAX)) as u32;
+        }
 
         let vlr_total: usize = self.config.vlrs.iter().map(|v| v.serialised_size()).sum();
         let record_length =
@@ -315,7 +353,11 @@ impl<W: Write + Seek> PointWriter for LasWriter<W> {
 
         let hdr = LasHeader {
             version_major: 1,
-            version_minor: if self.config.point_data_format.is_v15() { 5 } else { 4 },
+            version_minor: if self.config.point_data_format.is_v15() {
+                5
+            } else {
+                4
+            },
             system_identifier: self.config.system_identifier.clone(),
             generating_software: self.config.generating_software.clone(),
             file_creation_day: day_of_year(),
@@ -333,7 +375,12 @@ impl<W: Write + Seek> PointWriter for LasWriter<W> {
             x_offset: self.config.x_offset,
             y_offset: self.config.y_offset,
             z_offset: self.config.z_offset,
-            max_x, min_x, max_y, min_y, max_z, min_z,
+            max_x,
+            min_x,
+            max_y,
+            min_y,
+            max_z,
+            min_z,
             legacy_point_count: legacy_count,
             legacy_point_count_by_return: legacy_per_return,
             waveform_data_packet_offset: Some(0),
@@ -347,7 +394,7 @@ impl<W: Write + Seek> PointWriter for LasWriter<W> {
         hdr.write(&mut self.inner)?;
         // Seek back to end so further writes (if any) go to the right place.
         self.inner.seek(SeekFrom::Start(
-            self.point_data_start + self.point_count * u64::from(record_length)
+            self.point_data_start + self.point_count * u64::from(record_length),
         ))?;
         Ok(())
     }
@@ -381,17 +428,17 @@ fn current_year() -> u16 {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Seek, SeekFrom};
     use crate::crs::Crs;
     use crate::io::{PointReader, PointWriter};
     use crate::las::header::GlobalEncoding;
     use crate::las::reader::LasReader;
     use crate::las::vlr::{
-        find_epsg, find_ogc_wkt, Vlr, GEOKEY_DIRECTORY_RECORD_ID,
-        LASF_PROJECTION_USER_ID, OGC_WKT_RECORD_ID,
+        find_epsg, find_ogc_wkt, Vlr, GEOKEY_DIRECTORY_RECORD_ID, LASF_PROJECTION_USER_ID,
+        OGC_WKT_RECORD_ID,
     };
     use crate::las::writer::{LasWriter, WriterConfig};
     use crate::point::PointRecord;
+    use std::io::{Cursor, Seek, SeekFrom};
 
     #[test]
     fn las_does_not_duplicate_projection_vlrs() -> crate::Result<()> {
@@ -399,12 +446,20 @@ mod tests {
 
         let mut cfg = WriterConfig::default();
         cfg.crs = Some(Crs::from_epsg(4326));
-        cfg.vlrs.push(Vlr::ogc_wkt("GEOGCS[\"WGS 84\",AUTHORITY[\"EPSG\",\"4326\"]]"));
-        cfg.vlrs.push(Vlr::geokey_directory_for_epsg(4326).expect("valid epsg for geokey"));
+        cfg.vlrs.push(Vlr::ogc_wkt(
+            "GEOGCS[\"WGS 84\",AUTHORITY[\"EPSG\",\"4326\"]]",
+        ));
+        cfg.vlrs
+            .push(Vlr::geokey_directory_for_epsg(4326).expect("valid epsg for geokey"));
 
         {
             let mut writer = LasWriter::new(&mut cursor, cfg)?;
-            let point = PointRecord { x: -80.0, y: 43.0, z: 300.0, ..PointRecord::default() };
+            let point = PointRecord {
+                x: -80.0,
+                y: 43.0,
+                z: 300.0,
+                ..PointRecord::default()
+            };
             writer.write_point(&point)?;
             writer.finish()?;
         }
@@ -412,13 +467,21 @@ mod tests {
         cursor.seek(SeekFrom::Start(0))?;
         let mut reader = LasReader::new(&mut cursor)?;
 
-        let wkt_count = reader.vlrs().iter().filter(|v| {
-            v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID
-        }).count();
-        let geokey_count = reader.vlrs().iter().filter(|v| {
-            v.key.user_id == LASF_PROJECTION_USER_ID
-                && v.key.record_id == GEOKEY_DIRECTORY_RECORD_ID
-        }).count();
+        let wkt_count = reader
+            .vlrs()
+            .iter()
+            .filter(|v| {
+                v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID
+            })
+            .count();
+        let geokey_count = reader
+            .vlrs()
+            .iter()
+            .filter(|v| {
+                v.key.user_id == LASF_PROJECTION_USER_ID
+                    && v.key.record_id == GEOKEY_DIRECTORY_RECORD_ID
+            })
+            .count();
 
         assert_eq!(wkt_count, 1);
         assert_eq!(geokey_count, 1);

@@ -6,24 +6,22 @@
 //! * [`read`]/[`write()`]: generic path-based I/O helpers.
 
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom};
 use std::path::Path;
 
 use crate::copc::{CopcNodePointOrdering, CopcReader, CopcWriter, CopcWriterConfig};
 use crate::crs::Crs;
 use crate::e57::{E57Reader, E57Writer, E57WriterConfig};
 use crate::io::{PointReader, PointWriter};
-use crate::las::{LasReader, LasWriter, PointDataFormat, WriterConfig};
+use crate::las::{LasReader, LasWriter, PointDataFormat, Vlr, WriterConfig};
 use crate::laz::{parse_laszip_vlr, LazReader, LazWriter, LazWriterConfig};
 use crate::ply::{PlyEncoding, PlyReader, PlyWriter};
 use crate::reproject::{
-    points_in_place_to_epsg_with_options,
-    points_to_epsg_with_options,
-    points_to_epsg_with_options_and_progress,
-    LidarReprojectOptions,
+    points_in_place_to_epsg_with_options, points_to_epsg_with_options,
+    points_to_epsg_with_options_and_progress, LidarReprojectOptions,
 };
-use wide::f64x4;
 use crate::{Error, PointRecord, Result};
+use wide::f64x4;
 
 /// Named point-record fields that can be extracted to or applied from
 /// columnar numeric arrays.
@@ -211,7 +209,11 @@ impl PointCloud {
     ///
     /// # Errors
     /// Returns an error when extension-based format detection fails or encoding fails.
-    pub fn write_with_options<P: AsRef<Path>>(&self, path: P, options: &LidarWriteOptions) -> Result<()> {
+    pub fn write_with_options<P: AsRef<Path>>(
+        &self,
+        path: P,
+        options: &LidarWriteOptions,
+    ) -> Result<()> {
         write_auto_with_options(self, path, options)
     }
 
@@ -272,9 +274,11 @@ impl PointCloud {
         dst_epsg: u32,
         options: &LidarReprojectOptions,
     ) -> Result<Self> {
-        let src_crs = self.crs.as_ref().ok_or_else(|| Error::Projection(
-            "PointCloud reprojection requires source CRS metadata in cloud.crs".to_string(),
-        ))?;
+        let src_crs = self.crs.as_ref().ok_or_else(|| {
+            Error::Projection(
+                "PointCloud reprojection requires source CRS metadata in cloud.crs".to_string(),
+            )
+        })?;
 
         let points = points_to_epsg_with_options(&self.points, src_crs, dst_epsg, options)?;
         Ok(Self {
@@ -294,12 +298,19 @@ impl PointCloud {
     where
         F: Fn(f64) + Send + Sync,
     {
-        let src_crs = self.crs.as_ref().ok_or_else(|| Error::Projection(
-            "PointCloud reprojection requires source CRS metadata in cloud.crs".to_string(),
-        ))?;
+        let src_crs = self.crs.as_ref().ok_or_else(|| {
+            Error::Projection(
+                "PointCloud reprojection requires source CRS metadata in cloud.crs".to_string(),
+            )
+        })?;
 
-        let points =
-            points_to_epsg_with_options_and_progress(&self.points, src_crs, dst_epsg, options, progress)?;
+        let points = points_to_epsg_with_options_and_progress(
+            &self.points,
+            src_crs,
+            dst_epsg,
+            options,
+            progress,
+        )?;
         Ok(Self {
             points,
             crs: Some(Crs::from_epsg(dst_epsg)),
@@ -324,9 +335,11 @@ impl PointCloud {
         dst_epsg: u32,
         options: &LidarReprojectOptions,
     ) -> Result<()> {
-        let crs = self.crs.as_mut().ok_or_else(|| Error::Projection(
-            "PointCloud reprojection requires source CRS metadata in cloud.crs".to_string(),
-        ))?;
+        let crs = self.crs.as_mut().ok_or_else(|| {
+            Error::Projection(
+                "PointCloud reprojection requires source CRS metadata in cloud.crs".to_string(),
+            )
+        })?;
         points_in_place_to_epsg_with_options(&mut self.points, crs, dst_epsg, options)
     }
 
@@ -763,7 +776,9 @@ fn open_streaming_point_reader(path: &Path) -> Result<Box<dyn PointReader>> {
                 }
             }
         }
-        LidarFormat::Copc => Ok(Box::new(CopcReader::new(BufReader::new(File::open(path)?))?)),
+        LidarFormat::Copc => Ok(Box::new(CopcReader::new(BufReader::new(File::open(
+            path,
+        )?))?)),
         LidarFormat::Ply => Ok(Box::new(PlyReader::new(BufReader::new(File::open(path)?))?)),
         LidarFormat::E57 => Ok(Box::new(E57Reader::new(BufReader::new(File::open(path)?))?)),
     }
@@ -790,7 +805,10 @@ fn infer_stream_writer_config_from_source(path: &Path) -> Result<WriterConfig> {
     }
 }
 
-fn open_streaming_point_writer(input_path: &Path, output_path: &Path) -> Result<Box<dyn PointWriter>> {
+fn open_streaming_point_writer(
+    input_path: &Path,
+    output_path: &Path,
+) -> Result<Box<dyn PointWriter>> {
     let format = detect_by_extension(output_path).ok_or_else(|| Error::InvalidValue {
         field: "format",
         detail: format!(
@@ -829,10 +847,18 @@ fn field_value_as_f64(field: PointField, p: &PointRecord) -> f64 {
         PointField::ReturnNumber => f64::from(p.return_number),
         PointField::NumberOfReturns => f64::from(p.number_of_returns),
         PointField::ScanDirectionFlag => {
-            if p.scan_direction_flag { 1.0 } else { 0.0 }
+            if p.scan_direction_flag {
+                1.0
+            } else {
+                0.0
+            }
         }
         PointField::EdgeOfFlightLine => {
-            if p.edge_of_flight_line { 1.0 } else { 0.0 }
+            if p.edge_of_flight_line {
+                1.0
+            } else {
+                0.0
+            }
         }
         PointField::ScanAngle => f64::from(p.scan_angle),
         PointField::Flags => f64::from(p.flags),
@@ -977,10 +1003,18 @@ fn invalid_field_value(field: PointField, value: f64, detail: &str) -> Result<()
 
 fn parse_u8(field: PointField, value: f64) -> Result<u8> {
     if !value.is_finite() {
-        return Err(invalid_field_value_err(field, value, "must be a finite integer"));
+        return Err(invalid_field_value_err(
+            field,
+            value,
+            "must be a finite integer",
+        ));
     }
     if value.fract() != 0.0 {
-        return Err(invalid_field_value_err(field, value, "must be an integer value"));
+        return Err(invalid_field_value_err(
+            field,
+            value,
+            "must be an integer value",
+        ));
     }
     if value < f64::from(u8::MIN) || value > f64::from(u8::MAX) {
         return Err(invalid_field_value_err(field, value, "out of range for u8"));
@@ -990,26 +1024,50 @@ fn parse_u8(field: PointField, value: f64) -> Result<u8> {
 
 fn parse_u16(field: PointField, value: f64) -> Result<u16> {
     if !value.is_finite() {
-        return Err(invalid_field_value_err(field, value, "must be a finite integer"));
+        return Err(invalid_field_value_err(
+            field,
+            value,
+            "must be a finite integer",
+        ));
     }
     if value.fract() != 0.0 {
-        return Err(invalid_field_value_err(field, value, "must be an integer value"));
+        return Err(invalid_field_value_err(
+            field,
+            value,
+            "must be an integer value",
+        ));
     }
     if value < f64::from(u16::MIN) || value > f64::from(u16::MAX) {
-        return Err(invalid_field_value_err(field, value, "out of range for u16"));
+        return Err(invalid_field_value_err(
+            field,
+            value,
+            "out of range for u16",
+        ));
     }
     Ok(value as u16)
 }
 
 fn parse_i16(field: PointField, value: f64) -> Result<i16> {
     if !value.is_finite() {
-        return Err(invalid_field_value_err(field, value, "must be a finite integer"));
+        return Err(invalid_field_value_err(
+            field,
+            value,
+            "must be a finite integer",
+        ));
     }
     if value.fract() != 0.0 {
-        return Err(invalid_field_value_err(field, value, "must be an integer value"));
+        return Err(invalid_field_value_err(
+            field,
+            value,
+            "must be an integer value",
+        ));
     }
     if value < f64::from(i16::MIN) || value > f64::from(i16::MAX) {
-        return Err(invalid_field_value_err(field, value, "out of range for i16"));
+        return Err(invalid_field_value_err(
+            field,
+            value,
+            "out of range for i16",
+        ));
     }
     Ok(value as i16)
 }
@@ -1019,7 +1077,11 @@ fn parse_f32(field: PointField, value: f64) -> Result<f32> {
         return Err(invalid_field_value_err(field, value, "must be finite"));
     }
     if value < f64::from(f32::MIN) || value > f64::from(f32::MAX) {
-        return Err(invalid_field_value_err(field, value, "out of range for f32"));
+        return Err(invalid_field_value_err(
+            field,
+            value,
+            "out of range for f32",
+        ));
     }
     Ok(value as f32)
 }
@@ -1033,7 +1095,11 @@ fn parse_bool(field: PointField, value: f64) -> Result<bool> {
     } else if value == 1.0 {
         Ok(true)
     } else {
-        Err(invalid_field_value_err(field, value, "must be exactly 0 or 1"))
+        Err(invalid_field_value_err(
+            field,
+            value,
+            "must be exactly 0 or 1",
+        ))
     }
 }
 
@@ -1160,9 +1226,33 @@ pub fn read_with_diagnostics<P: AsRef<Path>>(path: P) -> Result<(PointCloud, Rea
             let mut reader = CopcReader::new(BufReader::new(File::open(path)?))?;
             let points = reader.read_all_nodes()?;
 
-            // Re-read LAS header/VLRs to extract CRS metadata.
-            let las_reader = LasReader::new(BufReader::new(File::open(path)?))?;
-            let crs = las_reader.crs().cloned();
+            // Extract CRS from VLRs (both standard VLRs and EVLRs).
+            // The CopcReader has already parsed the standard VLRs, but we still need
+            // to check for EVLRs which might contain additional CRS information.
+            let crs = {
+                let vlrs = reader.vlrs().to_vec();
+                let mut f = BufReader::new(File::open(path)?);
+
+                // Try to read EVLRs if the LAS 1.4 header points to them.
+                let header = reader.header();
+                let mut all_vlrs = vlrs;
+                if let (Some(evlr_offset), Some(evlr_count)) =
+                    (header.start_of_first_evlr, header.number_of_evlrs)
+                {
+                    if evlr_offset > 0 && evlr_count > 0 {
+                        if f.seek(SeekFrom::Start(evlr_offset)).is_ok() {
+                            for _ in 0..evlr_count {
+                                match Vlr::read_evlr(&mut f) {
+                                    Ok(evlr) => all_vlrs.push(evlr),
+                                    Err(_) => break,
+                                }
+                            }
+                        }
+                    }
+                }
+
+                crate::las::infer_crs(&all_vlrs)
+            };
             let (events, decoded, expected) = reader.point14_partial_recovery_stats();
 
             Ok((
@@ -1305,7 +1395,11 @@ fn write_laz(cloud: &PointCloud, path: &Path) -> Result<()> {
     write_laz_with_options(cloud, path, &LazWriteOptions::default())
 }
 
-fn write_laz_with_options(cloud: &PointCloud, path: &Path, options: &LazWriteOptions) -> Result<()> {
+fn write_laz_with_options(
+    cloud: &PointCloud,
+    path: &Path,
+    options: &LazWriteOptions,
+) -> Result<()> {
     let out = BufWriter::new(File::create(path)?);
     let mut cfg = LazWriterConfig::default();
     cfg.las = default_las_config(cloud);
@@ -1325,7 +1419,11 @@ fn write_copc(cloud: &PointCloud, path: &Path) -> Result<()> {
     write_copc_with_options(cloud, path, &CopcWriteOptions::default())
 }
 
-fn write_copc_with_options(cloud: &PointCloud, path: &Path, options: &CopcWriteOptions) -> Result<()> {
+fn write_copc_with_options(
+    cloud: &PointCloud,
+    path: &Path,
+    options: &CopcWriteOptions,
+) -> Result<()> {
     let out = BufWriter::new(File::create(path)?);
     let mut cfg = default_copc_config(cloud);
     cfg.las.crs = cloud.crs.clone();
@@ -1346,9 +1444,10 @@ fn write_copc_with_options(cloud: &PointCloud, path: &Path, options: &CopcWriteO
 fn write_ply(cloud: &PointCloud, path: &Path) -> Result<()> {
     let out = BufWriter::new(File::create(path)?);
     let has_color = cloud.points.iter().any(|p| p.color.is_some());
-    let has_normals = cloud.points.iter().any(|p| {
-        p.normal_x.is_some() || p.normal_y.is_some() || p.normal_z.is_some()
-    });
+    let has_normals = cloud
+        .points
+        .iter()
+        .any(|p| p.normal_x.is_some() || p.normal_y.is_some() || p.normal_z.is_some());
     let mut writer = PlyWriter::new(
         out,
         cloud.points.len() as u64,
@@ -1386,6 +1485,16 @@ fn default_las_config(cloud: &PointCloud) -> WriterConfig {
         PointDataFormat::Pdrf6
     };
 
+    // Propagate extra bytes per point so the writer declares them correctly.
+    // Without this, any input file with extra-byte payloads fails on write.
+    let max_extra = cloud
+        .points
+        .iter()
+        .map(|p| p.extra_bytes.len as u16)
+        .max()
+        .unwrap_or(0);
+    cfg.extra_bytes_per_point = max_extra;
+
     // Auto-compute offsets so quantised i32 values never overflow.
     // LAS stores each coordinate as: i32 = round((value - offset) / scale).
     // With scale = 0.001, the representable range is ±2 147 483.647 m from
@@ -1400,9 +1509,15 @@ fn default_las_config(cloud: &PointCloud) -> WriterConfig {
         let mut min_y = f64::INFINITY;
         let mut min_z = f64::INFINITY;
         for p in &cloud.points {
-            if p.x < min_x { min_x = p.x; }
-            if p.y < min_y { min_y = p.y; }
-            if p.z < min_z { min_z = p.z; }
+            if p.x < min_x {
+                min_x = p.x;
+            }
+            if p.y < min_y {
+                min_y = p.y;
+            }
+            if p.z < min_z {
+                min_z = p.z;
+            }
         }
         cfg.x_offset = min_x.floor();
         cfg.y_offset = min_y.floor();
@@ -1422,9 +1537,9 @@ fn default_copc_config(cloud: &PointCloud) -> CopcWriterConfig {
 
     // Accumulate bounding box using branchless SIMD min/max.
     // Layout: [x, y, z, unused].
-    let inf    = f64::INFINITY;
+    let inf = f64::INFINITY;
     let neg_inf = f64::NEG_INFINITY;
-    let mut acc_min = f64x4::new([inf,     inf,     inf,     inf]);
+    let mut acc_min = f64x4::new([inf, inf, inf, inf]);
     let mut acc_max = f64x4::new([neg_inf, neg_inf, neg_inf, neg_inf]);
 
     for p in &cloud.points {
@@ -1455,13 +1570,8 @@ fn default_copc_config(cloud: &PointCloud) -> CopcWriterConfig {
 #[cfg(test)]
 mod tests {
     use super::{
-        PointCloud,
-        PointColumnChunkReader,
-        PointColumnChunkRewriter,
-        PointField,
-        read,
-        read_columns_chunked,
-        rewrite_columns_chunked,
+        read, read_columns_chunked, rewrite_columns_chunked, PointCloud, PointColumnChunkReader,
+        PointColumnChunkRewriter, PointField,
     };
     use crate::crs::Crs;
     use crate::error::Error;
@@ -1592,9 +1702,18 @@ mod tests {
     fn apply_columns_range_updates_subset() {
         let mut cloud = PointCloud {
             points: vec![
-                PointRecord { x: 1.0, ..PointRecord::default() },
-                PointRecord { x: 2.0, ..PointRecord::default() },
-                PointRecord { x: 3.0, ..PointRecord::default() },
+                PointRecord {
+                    x: 1.0,
+                    ..PointRecord::default()
+                },
+                PointRecord {
+                    x: 2.0,
+                    ..PointRecord::default()
+                },
+                PointRecord {
+                    x: 3.0,
+                    ..PointRecord::default()
+                },
             ],
             crs: None,
         };
@@ -1662,12 +1781,8 @@ mod tests {
 
         cloud.write(&path).unwrap();
 
-        let chunks = read_columns_chunked(
-            &path,
-            &[PointField::X, PointField::Classification],
-            2,
-        )
-        .unwrap();
+        let chunks =
+            read_columns_chunked(&path, &[PointField::X, PointField::Classification], 2).unwrap();
 
         std::fs::remove_file(&path).ok();
 
@@ -1699,7 +1814,9 @@ mod tests {
             .unwrap();
         std::fs::remove_file(&path).ok();
         assert!(matches!(err, Error::InvalidValue { .. }));
-        assert!(err.to_string().contains("chunk_size must be greater than zero"));
+        assert!(err
+            .to_string()
+            .contains("chunk_size must be greater than zero"));
     }
 
     #[test]
@@ -1735,10 +1852,7 @@ mod tests {
 
         cloud.write(&input).unwrap();
 
-        let chunks = vec![
-            vec![vec![1.0], vec![7.0]],
-            vec![vec![4.0], vec![7.0]],
-        ];
+        let chunks = vec![vec![vec![1.0], vec![7.0]], vec![vec![4.0], vec![7.0]]];
 
         rewrite_columns_chunked(
             &input,
@@ -1776,7 +1890,8 @@ mod tests {
         output.push(format!("wblidar_rewriter_out_{unique}.las"));
         cloud.write(&input).unwrap();
 
-        let mut rewriter = PointColumnChunkRewriter::open(&input, &output, &[PointField::X]).unwrap();
+        let mut rewriter =
+            PointColumnChunkRewriter::open(&input, &output, &[PointField::X]).unwrap();
         rewriter.apply_chunk(&[vec![1.0]]).unwrap();
         let err = rewriter.finish().err().unwrap();
 

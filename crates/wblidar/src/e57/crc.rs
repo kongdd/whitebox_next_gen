@@ -10,8 +10,11 @@ pub fn crc32(data: &[u8]) -> u32 {
         for i in 0u32..256 {
             let mut c = i;
             for _ in 0..8 {
-                if c & 1 != 0 { c = 0xEDB8_8320 ^ (c >> 1); }
-                else { c >>= 1; }
+                if c & 1 != 0 {
+                    c = 0xEDB8_8320 ^ (c >> 1);
+                } else {
+                    c >>= 1;
+                }
             }
             t[i as usize] = c;
         }
@@ -28,7 +31,9 @@ pub fn crc32(data: &[u8]) -> u32 {
 mod tests {
     use super::*;
     #[test]
-    fn crc32_empty() { assert_eq!(crc32(b""), 0x0000_0000); }
+    fn crc32_empty() {
+        assert_eq!(crc32(b""), 0x0000_0000);
+    }
     #[test]
     fn crc32_known() {
         // CRC-32 of "123456789" = 0xCBF43926

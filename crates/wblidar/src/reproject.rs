@@ -1,9 +1,6 @@
 //! Point-cloud reprojection helpers powered by `wbprojection`.
 
-use wbprojection::{
-    Crs as ProjCrs,
-    EpochTransformOptions,
-};
+use wbprojection::{Crs as ProjCrs, EpochTransformOptions};
 
 use crate::crs::Crs;
 use crate::error::{Error, Result};
@@ -71,7 +68,11 @@ impl LidarReprojectOptions {
 /// Reproject points to a destination EPSG using source CRS metadata.
 ///
 /// Source EPSG is read from `src_crs.epsg`.
-pub fn points_to_epsg(points: &[PointRecord], src_crs: &Crs, dst_epsg: u32) -> Result<Vec<PointRecord>> {
+pub fn points_to_epsg(
+    points: &[PointRecord],
+    src_crs: &Crs,
+    dst_epsg: u32,
+) -> Result<Vec<PointRecord>> {
     points_to_epsg_with_options(points, src_crs, dst_epsg, &LidarReprojectOptions::default())
 }
 
@@ -138,7 +139,11 @@ pub fn points_to_epsg_with_output_crs_options(
 }
 
 /// Reproject points between explicit EPSG codes.
-pub fn points_from_to_epsg(points: &[PointRecord], src_epsg: u32, dst_epsg: u32) -> Result<Vec<PointRecord>> {
+pub fn points_from_to_epsg(
+    points: &[PointRecord],
+    src_epsg: u32,
+    dst_epsg: u32,
+) -> Result<Vec<PointRecord>> {
     points_from_to_epsg_with_options(
         points,
         src_epsg,
@@ -162,7 +167,11 @@ pub fn points_from_to_epsg_with_options(
 }
 
 /// Reproject points between caller-supplied CRS objects.
-pub fn points_with_crs(points: &[PointRecord], src: &ProjCrs, dst: &ProjCrs) -> Result<Vec<PointRecord>> {
+pub fn points_with_crs(
+    points: &[PointRecord],
+    src: &ProjCrs,
+    dst: &ProjCrs,
+) -> Result<Vec<PointRecord>> {
     points_with_crs_options(points, src, dst, &LidarReprojectOptions::default())
 }
 
@@ -203,15 +212,28 @@ fn points_with_crs_options_internal(
         .validate()
         .map_err(|e| Error::Projection(format!("invalid epoch transform options: {e}")))?;
 
-    let epoch_context = options.epoch_transform.build_context().map_err(|e| {
-        Error::Projection(format!("invalid epoch transform options: {e}"))
-    })?;
-    let epoch_routing_requested = options.epoch_transform.coordinate_epoch_decimal_year.is_some()
-        || options.epoch_transform.source_reference_epoch_decimal_year.is_some()
-        || options.epoch_transform.target_reference_epoch_decimal_year.is_some()
+    let epoch_context = options
+        .epoch_transform
+        .build_context()
+        .map_err(|e| Error::Projection(format!("invalid epoch transform options: {e}")))?;
+    let epoch_routing_requested = options
+        .epoch_transform
+        .coordinate_epoch_decimal_year
+        .is_some()
+        || options
+            .epoch_transform
+            .source_reference_epoch_decimal_year
+            .is_some()
+        || options
+            .epoch_transform
+            .target_reference_epoch_decimal_year
+            .is_some()
         || options.epoch_transform.operation_code.is_some()
         || !options.epoch_transform.prefer_official_operation
-        || matches!(options.epoch_transform.epoch_policy, wbprojection::EpochPolicy::AllowStaticFallback);
+        || matches!(
+            options.epoch_transform.epoch_policy,
+            wbprojection::EpochPolicy::AllowStaticFallback
+        );
 
     let mut out = Vec::with_capacity(points.len());
     let total_points = points.len();
@@ -226,8 +248,15 @@ fn points_with_crs_options_internal(
             }
         } else if let Some(operation_code) = options.epoch_transform.operation_code {
             if options.use_3d_transform {
-                src.transform_to_3d_with_operation(p.x, p.y, p.z, dst, operation_code, epoch_context)
-                    .map(|(x, y, z)| (x, y, Some(z)))
+                src.transform_to_3d_with_operation(
+                    p.x,
+                    p.y,
+                    p.z,
+                    dst,
+                    operation_code,
+                    epoch_context,
+                )
+                .map(|(x, y, z)| (x, y, Some(z)))
             } else {
                 src.transform_to_with_operation(p.x, p.y, dst, operation_code, epoch_context)
                     .map(|(x, y)| (x, y, None))
@@ -252,8 +281,7 @@ fn points_with_crs_options_internal(
             src.transform_to_with_context(p.x, p.y, dst, epoch_ctx)
                 .map(|(x, y)| (x, y, None))
         } else {
-            src.transform_to(p.x, p.y, dst)
-                .map(|(x, y)| (x, y, None))
+            src.transform_to(p.x, p.y, dst).map(|(x, y)| (x, y, None))
         };
 
         match transformed {
@@ -268,7 +296,9 @@ fn points_with_crs_options_internal(
             }
             Err(err) => match options.failure_policy {
                 TransformFailurePolicy::Error => {
-                    return Err(Error::Projection(format!("point reprojection failed: {err}")));
+                    return Err(Error::Projection(format!(
+                        "point reprojection failed: {err}"
+                    )));
                 }
                 TransformFailurePolicy::SetNaN => {
                     let mut q = *p;
@@ -296,7 +326,11 @@ fn points_with_crs_options_internal(
 }
 
 /// Reproject points in-place between explicit EPSG codes.
-pub fn points_in_place_from_to_epsg(points: &mut [PointRecord], src_epsg: u32, dst_epsg: u32) -> Result<()> {
+pub fn points_in_place_from_to_epsg(
+    points: &mut [PointRecord],
+    src_epsg: u32,
+    dst_epsg: u32,
+) -> Result<()> {
     let src = ProjCrs::from_epsg(src_epsg)
         .map_err(|e| Error::Projection(format!("invalid source EPSG {src_epsg}: {e}")))?;
     let dst = ProjCrs::from_epsg(dst_epsg)
@@ -345,15 +379,28 @@ pub fn points_in_place_to_epsg_with_options(
         .validate()
         .map_err(|e| Error::Projection(format!("invalid epoch transform options: {e}")))?;
 
-    let epoch_context = options.epoch_transform.build_context().map_err(|e| {
-        Error::Projection(format!("invalid epoch transform options: {e}"))
-    })?;
-    let epoch_routing_requested = options.epoch_transform.coordinate_epoch_decimal_year.is_some()
-        || options.epoch_transform.source_reference_epoch_decimal_year.is_some()
-        || options.epoch_transform.target_reference_epoch_decimal_year.is_some()
+    let epoch_context = options
+        .epoch_transform
+        .build_context()
+        .map_err(|e| Error::Projection(format!("invalid epoch transform options: {e}")))?;
+    let epoch_routing_requested = options
+        .epoch_transform
+        .coordinate_epoch_decimal_year
+        .is_some()
+        || options
+            .epoch_transform
+            .source_reference_epoch_decimal_year
+            .is_some()
+        || options
+            .epoch_transform
+            .target_reference_epoch_decimal_year
+            .is_some()
         || options.epoch_transform.operation_code.is_some()
         || !options.epoch_transform.prefer_official_operation
-        || matches!(options.epoch_transform.epoch_policy, wbprojection::EpochPolicy::AllowStaticFallback);
+        || matches!(
+            options.epoch_transform.epoch_policy,
+            wbprojection::EpochPolicy::AllowStaticFallback
+        );
 
     for p in points.iter_mut() {
         let transformed = if !epoch_routing_requested {
@@ -361,13 +408,19 @@ pub fn points_in_place_to_epsg_with_options(
                 src.transform_to_3d_preserve_horizontal(p.x, p.y, p.z, &dst)
                     .map(|(x, y, z)| (x, y, Some(z)))
             } else {
-                src.transform_to(p.x, p.y, &dst)
-                    .map(|(x, y)| (x, y, None))
+                src.transform_to(p.x, p.y, &dst).map(|(x, y)| (x, y, None))
             }
         } else if let Some(operation_code) = options.epoch_transform.operation_code {
             if options.use_3d_transform {
-                src.transform_to_3d_with_operation(p.x, p.y, p.z, &dst, operation_code, epoch_context)
-                    .map(|(x, y, z)| (x, y, Some(z)))
+                src.transform_to_3d_with_operation(
+                    p.x,
+                    p.y,
+                    p.z,
+                    &dst,
+                    operation_code,
+                    epoch_context,
+                )
+                .map(|(x, y, z)| (x, y, Some(z)))
             } else {
                 src.transform_to_with_operation(p.x, p.y, &dst, operation_code, epoch_context)
                     .map(|(x, y)| (x, y, None))
@@ -392,8 +445,7 @@ pub fn points_in_place_to_epsg_with_options(
             src.transform_to_with_context(p.x, p.y, &dst, epoch_ctx)
                 .map(|(x, y)| (x, y, None))
         } else {
-            src.transform_to(p.x, p.y, &dst)
-                .map(|(x, y)| (x, y, None))
+            src.transform_to(p.x, p.y, &dst).map(|(x, y)| (x, y, None))
         };
         let (x, y, z_opt) = transformed
             .map_err(|e| Error::Projection(format!("point reprojection failed: {e}")))?;
@@ -434,7 +486,11 @@ mod tests {
 
     #[test]
     fn reprojects_4326_to_3857() {
-        let points = vec![PointRecord { x: -2.0, y: -0.5, ..PointRecord::default() }];
+        let points = vec![PointRecord {
+            x: -2.0,
+            y: -0.5,
+            ..PointRecord::default()
+        }];
         let out = points_from_to_epsg(&points, 4326, 3857).unwrap();
         assert_eq!(out.len(), 1);
         assert!(out[0].x.abs() > 1000.0);
@@ -454,7 +510,11 @@ mod tests {
 
     #[test]
     fn points_to_epsg_accepts_source_wkt_without_epsg() {
-        let points = vec![PointRecord { x: -2.0, y: -0.5, ..PointRecord::default() }];
+        let points = vec![PointRecord {
+            x: -2.0,
+            y: -0.5,
+            ..PointRecord::default()
+        }];
         let src = Crs::new().with_wkt(
             "GEOGCRS[\"WGS 84\",DATUM[\"World Geodetic System 1984\",ELLIPSOID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],CS[ellipsoidal,2],AXIS[\"Geodetic latitude (Lat)\",north],AXIS[\"Geodetic longitude (Lon)\",east],UNIT[\"degree\",0.0174532925199433],ID[\"EPSG\",4326]]"
         );
@@ -466,7 +526,12 @@ mod tests {
 
     #[test]
     fn points_to_epsg_with_3d_option_preserves_z_path() {
-        let points = vec![PointRecord { x: -2.0, y: -0.5, z: 123.4, ..PointRecord::default() }];
+        let points = vec![PointRecord {
+            x: -2.0,
+            y: -0.5,
+            z: 123.4,
+            ..PointRecord::default()
+        }];
         let src = Crs::from_epsg(4326);
         let opts = LidarReprojectOptions::new().with_3d_transform(true);
         let out = points_to_epsg_with_options(&points, &src, 3857, &opts).unwrap();
@@ -478,7 +543,11 @@ mod tests {
 
     #[test]
     fn points_to_epsg_updates_coords() {
-        let points = vec![PointRecord { x: -2.0, y: -0.5, ..PointRecord::default() }];
+        let points = vec![PointRecord {
+            x: -2.0,
+            y: -0.5,
+            ..PointRecord::default()
+        }];
         let src = Crs::from_epsg(4326);
         let out = points_to_epsg(&points, &src, 3857).unwrap();
         assert_eq!(out.len(), 1);
@@ -488,7 +557,11 @@ mod tests {
 
     #[test]
     fn points_to_epsg_with_output_crs_returns_dst_crs() {
-        let points = vec![PointRecord { x: -2.0, y: -0.5, ..PointRecord::default() }];
+        let points = vec![PointRecord {
+            x: -2.0,
+            y: -0.5,
+            ..PointRecord::default()
+        }];
         let src = Crs::from_epsg(4326);
         let (out, dst_crs) = points_to_epsg_with_output_crs(&points, &src, 3857).unwrap();
         assert_eq!(out.len(), 1);
@@ -497,7 +570,11 @@ mod tests {
 
     #[test]
     fn points_in_place_to_epsg_updates_points_and_crs() {
-        let mut points = vec![PointRecord { x: -2.0, y: -0.5, ..PointRecord::default() }];
+        let mut points = vec![PointRecord {
+            x: -2.0,
+            y: -0.5,
+            ..PointRecord::default()
+        }];
         let mut crs = Crs::from_epsg(4326);
         points_in_place_to_epsg(&mut points, &mut crs, 3857).unwrap();
         assert_eq!(crs.epsg, Some(3857));
@@ -519,9 +596,21 @@ mod tests {
     #[test]
     fn points_to_epsg_with_progress_emits_point_updates() {
         let points = vec![
-            PointRecord { x: -2.0, y: -0.5, ..PointRecord::default() },
-            PointRecord { x: -1.5, y: -0.4, ..PointRecord::default() },
-            PointRecord { x: -1.0, y: -0.3, ..PointRecord::default() },
+            PointRecord {
+                x: -2.0,
+                y: -0.5,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: -1.5,
+                y: -0.4,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: -1.0,
+                y: -0.3,
+                ..PointRecord::default()
+            },
         ];
         let src = Crs::from_epsg(4326);
 
@@ -543,7 +632,9 @@ mod tests {
         assert_eq!(out.len(), points.len());
         assert!(!values.is_empty());
         assert_eq!(values.len(), points.len() + 1);
-        assert!(values.iter().all(|v| v.is_finite() && *v >= 0.0 && *v <= 1.0));
+        assert!(values
+            .iter()
+            .all(|v| v.is_finite() && *v >= 0.0 && *v <= 1.0));
         assert!((values.last().copied().unwrap() - 1.0).abs() < 1e-12);
     }
 }

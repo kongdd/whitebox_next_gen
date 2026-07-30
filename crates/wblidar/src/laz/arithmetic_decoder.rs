@@ -3,10 +3,7 @@
 use std::io::{self, Read};
 
 use crate::laz::arithmetic_model::{
-    ArithmeticBitModel,
-    ArithmeticSymbolModel,
-    BIT_LENGTH_SHIFT,
-    SYMBOL_LENGTH_SHIFT,
+    ArithmeticBitModel, ArithmeticSymbolModel, BIT_LENGTH_SHIFT, SYMBOL_LENGTH_SHIFT,
 };
 
 /// Upper bound for decoder interval length.

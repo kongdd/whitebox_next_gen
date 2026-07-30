@@ -124,9 +124,9 @@ impl LaszipVlrInfo {
 ///
 /// Returns `None` if no LASzip VLR is present or the payload is malformed.
 pub fn parse_laszip_vlr(vlrs: &[crate::las::Vlr]) -> Option<LaszipVlrInfo> {
-    let vlr = vlrs.iter().find(|v| {
-        v.key.user_id == LASZIP_USER_ID && v.key.record_id == LASZIP_RECORD_ID
-    })?;
+    let vlr = vlrs
+        .iter()
+        .find(|v| v.key.user_id == LASZIP_USER_ID && v.key.record_id == LASZIP_RECORD_ID)?;
 
     // Fixed LASzip VLR header size up to and including num_items.
     if vlr.data.len() < 34 {
@@ -272,10 +272,8 @@ pub fn build_laszip_vlr_for_format_with_extra_bytes(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_laszip_vlr_for_format,
-        build_laszip_vlr_for_format_with_extra_bytes,
-        parse_laszip_vlr,
-        LaszipCompressorType,
+        build_laszip_vlr_for_format, build_laszip_vlr_for_format_with_extra_bytes,
+        parse_laszip_vlr, LaszipCompressorType,
     };
     use crate::las::header::PointDataFormat;
     use crate::las::vlr::{Vlr, VlrKey};
@@ -293,7 +291,7 @@ mod tests {
         data.extend_from_slice(&(-1i64).to_le_bytes()); // num special evlrs
         data.extend_from_slice(&(-1i64).to_le_bytes()); // special evlr offset
         data.extend_from_slice(&2u16.to_le_bytes()); // num items
-        // Point14
+                                                     // Point14
         data.extend_from_slice(&10u16.to_le_bytes());
         data.extend_from_slice(&30u16.to_le_bytes());
         data.extend_from_slice(&3u16.to_le_bytes());
@@ -362,8 +360,17 @@ mod tests {
 
         assert_eq!(parsed.compressor, LaszipCompressorType::PointWiseChunked);
         assert!(parsed.has_point10_item());
-        assert!(parsed.items.iter().any(|item| item.item_type == 7 && item.item_size == 8));
-        assert!(parsed.items.iter().any(|item| item.item_type == 8 && item.item_size == 6));
-        assert!(parsed.items.iter().any(|item| item.item_type == 0 && item.item_size == 2));
+        assert!(parsed
+            .items
+            .iter()
+            .any(|item| item.item_type == 7 && item.item_size == 8));
+        assert!(parsed
+            .items
+            .iter()
+            .any(|item| item.item_type == 8 && item.item_size == 6));
+        assert!(parsed
+            .items
+            .iter()
+            .any(|item| item.item_type == 0 && item.item_size == 2));
     }
 }

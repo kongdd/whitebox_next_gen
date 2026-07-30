@@ -1,14 +1,14 @@
 //! LAS sequential point reader (all versions and all PDRFs).
 
-use std::io::{Read, Seek, SeekFrom};
-use wide::f64x4;
 use crate::crs::{epsg_from_wkt, Crs};
+use crate::io::PointReader;
 use crate::las::header::PointDataFormat;
 use crate::las::vlr::{find_epsg, find_ogc_wkt, Vlr};
 use crate::las::LasHeader;
 use crate::point::{GpsTime, PointRecord, Rgb16, ThermalRgb, WaveformPacket};
 use crate::{Error, Result};
-use crate::io::PointReader;
+use std::io::{Read, Seek, SeekFrom};
+use wide::f64x4;
 
 /// A streaming LAS reader.
 pub struct LasReader<R: Read + Seek> {
@@ -38,23 +38,40 @@ impl<R: Read + Seek> LasReader<R> {
         inner.seek(SeekFrom::Start(u64::from(header.offset_to_point_data)))?;
 
         let raw_buf = vec![0u8; header.point_data_record_length as usize];
-        Ok(Self { inner, header, vlrs, crs, points_read: 0, raw_buf })
+        Ok(Self {
+            inner,
+            header,
+            vlrs,
+            crs,
+            points_read: 0,
+            raw_buf,
+        })
     }
 
     /// Borrow the parsed header.
-    pub fn header(&self) -> &LasHeader { &self.header }
+    pub fn header(&self) -> &LasHeader {
+        &self.header
+    }
 
     /// Borrow the VLR list.
-    pub fn vlrs(&self) -> &[Vlr] { &self.vlrs }
+    pub fn vlrs(&self) -> &[Vlr] {
+        &self.vlrs
+    }
 
     /// Borrow detected CRS metadata from LAS projection VLRs (if present).
-    pub fn crs(&self) -> Option<&Crs> { self.crs.as_ref() }
+    pub fn crs(&self) -> Option<&Crs> {
+        self.crs.as_ref()
+    }
 
     /// Mutable access to the underlying reader (required by `LazReader`).
-    pub fn inner_mut(&mut self) -> &mut R { &mut self.inner }
+    pub fn inner_mut(&mut self) -> &mut R {
+        &mut self.inner
+    }
 
     /// Byte offset of the first point record (or chunk table for LAZ).
-    pub fn offset_to_point_data(&self) -> u64 { u64::from(self.header.offset_to_point_data) }
+    pub fn offset_to_point_data(&self) -> u64 {
+        u64::from(self.header.offset_to_point_data)
+    }
 }
 
 fn infer_crs_from_vlrs(vlrs: &[Vlr]) -> Option<Crs> {
@@ -65,6 +82,11 @@ fn infer_crs_from_vlrs(vlrs: &[Vlr]) -> Option<Crs> {
     } else {
         Some(Crs { epsg, wkt })
     }
+}
+
+/// Infer CRS from a slice of VLRs or EVLRs. Public for use by format readers.
+pub fn infer_crs(vlrs: &[Vlr]) -> Option<Crs> {
+    infer_crs_from_vlrs(vlrs)
 }
 
 impl<R: Read + Seek> PointReader for LasReader<R> {
@@ -85,7 +107,9 @@ impl<R: Read + Seek> PointReader for LasReader<R> {
         Ok(true)
     }
 
-    fn point_count(&self) -> Option<u64> { Some(self.header.point_count()) }
+    fn point_count(&self) -> Option<u64> {
+        Some(self.header.point_count())
+    }
 }
 
 // ── Point decode dispatch ────────────────────────────────────────────────────
@@ -120,8 +144,8 @@ fn decode_xyz(buf: &[u8], out: &mut PointRecord, hdr: &LasHeader) {
     let yi = i32::from_le_bytes(buf[4..8].try_into().unwrap());
     let zi = i32::from_le_bytes(buf[8..12].try_into().unwrap());
     // Compute x/y/z scale+offset in one f64x4 SIMD op (4th lane is unused).
-    let ints    = f64x4::new([xi as f64, yi as f64, zi as f64, 0.0]);
-    let scales  = f64x4::new([hdr.x_scale, hdr.y_scale, hdr.z_scale, 1.0]);
+    let ints = f64x4::new([xi as f64, yi as f64, zi as f64, 0.0]);
+    let scales = f64x4::new([hdr.x_scale, hdr.y_scale, hdr.z_scale, 1.0]);
     let offsets = f64x4::new([hdr.x_offset, hdr.y_offset, hdr.z_offset, 0.0]);
     let result: [f64; 4] = (ints * scales + offsets).into();
     out.x = result[0];
@@ -134,16 +158,16 @@ fn decode_xyz(buf: &[u8], out: &mut PointRecord, hdr: &LasHeader) {
 #[inline]
 fn decode_flags_v13(buf: &[u8], off: usize, out: &mut PointRecord) {
     let flags = buf[off];
-    out.return_number        = flags & 0x07;
-    out.number_of_returns    = (flags >> 3) & 0x07;
-    out.scan_direction_flag  = (flags >> 6) & 1 != 0;
-    out.edge_of_flight_line  = (flags >> 7) & 1 != 0;
+    out.return_number = flags & 0x07;
+    out.number_of_returns = (flags >> 3) & 0x07;
+    out.scan_direction_flag = (flags >> 6) & 1 != 0;
+    out.edge_of_flight_line = (flags >> 7) & 1 != 0;
     let cls = buf[off + 1];
-    out.classification       = cls & 0x1F;
-    out.flags                = (cls >> 5) & 0x07; // synthetic/key/withheld
-    out.user_data            = buf[off + 2];
-    out.scan_angle           = i16::from(buf[off + 3] as i8); // raw i8 in v1.x
-    out.point_source_id      = u16::from_le_bytes(buf[off+4..off+6].try_into().unwrap());
+    out.classification = cls & 0x1F;
+    out.flags = (cls >> 5) & 0x07; // synthetic/key/withheld
+    out.user_data = buf[off + 2];
+    out.scan_angle = i16::from(buf[off + 3] as i8); // raw i8 in v1.x
+    out.point_source_id = u16::from_le_bytes(buf[off + 4..off + 6].try_into().unwrap());
 }
 
 /// LAS 1.4 extended return/flag layout.
@@ -151,13 +175,13 @@ fn decode_flags_v13(buf: &[u8], off: usize, out: &mut PointRecord) {
 fn decode_flags_v14(buf: &[u8], off: usize, out: &mut PointRecord) {
     let ret_byte = buf[off];
     let flg_byte = buf[off + 1];
-    out.return_number       = ret_byte & 0x0F;
-    out.number_of_returns   = (ret_byte >> 4) & 0x0F;
-    out.classification      = buf[off + 2];
-    out.user_data           = buf[off + 3];
-    out.scan_angle          = i16::from_le_bytes(buf[off+4..off+6].try_into().unwrap());
-    out.point_source_id     = u16::from_le_bytes(buf[off+6..off+8].try_into().unwrap());
-    out.flags               = flg_byte & 0x1F; // scanner channel + flags
+    out.return_number = ret_byte & 0x0F;
+    out.number_of_returns = (ret_byte >> 4) & 0x0F;
+    out.classification = buf[off + 2];
+    out.user_data = buf[off + 3];
+    out.scan_angle = i16::from_le_bytes(buf[off + 4..off + 6].try_into().unwrap());
+    out.point_source_id = u16::from_le_bytes(buf[off + 6..off + 8].try_into().unwrap());
+    out.flags = flg_byte & 0x1F; // scanner channel + flags
     out.scan_direction_flag = (flg_byte >> 6) & 1 != 0;
     out.edge_of_flight_line = (flg_byte >> 7) != 0;
 }
@@ -165,45 +189,45 @@ fn decode_flags_v14(buf: &[u8], off: usize, out: &mut PointRecord) {
 #[inline]
 fn read_rgb(buf: &[u8], off: usize) -> Rgb16 {
     Rgb16 {
-        red:   u16::from_le_bytes(buf[off..off+2].try_into().unwrap()),
-        green: u16::from_le_bytes(buf[off+2..off+4].try_into().unwrap()),
-        blue:  u16::from_le_bytes(buf[off+4..off+6].try_into().unwrap()),
+        red: u16::from_le_bytes(buf[off..off + 2].try_into().unwrap()),
+        green: u16::from_le_bytes(buf[off + 2..off + 4].try_into().unwrap()),
+        blue: u16::from_le_bytes(buf[off + 4..off + 6].try_into().unwrap()),
     }
 }
 
 #[inline]
 fn read_thermal_rgb(buf: &[u8], off: usize) -> ThermalRgb {
     ThermalRgb {
-        thermal: u16::from_le_bytes(buf[off..off+2].try_into().unwrap()),
-        red:     u16::from_le_bytes(buf[off+2..off+4].try_into().unwrap()),
-        green:   u16::from_le_bytes(buf[off+4..off+6].try_into().unwrap()),
-        blue:    u16::from_le_bytes(buf[off+6..off+8].try_into().unwrap()),
+        thermal: u16::from_le_bytes(buf[off..off + 2].try_into().unwrap()),
+        red: u16::from_le_bytes(buf[off + 2..off + 4].try_into().unwrap()),
+        green: u16::from_le_bytes(buf[off + 4..off + 6].try_into().unwrap()),
+        blue: u16::from_le_bytes(buf[off + 6..off + 8].try_into().unwrap()),
     }
 }
 
 #[inline]
 fn read_gps_time(buf: &[u8], off: usize) -> GpsTime {
-    GpsTime(f64::from_le_bytes(buf[off..off+8].try_into().unwrap()))
+    GpsTime(f64::from_le_bytes(buf[off..off + 8].try_into().unwrap()))
 }
 
 #[inline]
 fn read_waveform(buf: &[u8], off: usize) -> WaveformPacket {
     WaveformPacket {
-        descriptor_index:    buf[off],
-        byte_offset:         u64::from_le_bytes(buf[off+1..off+9].try_into().unwrap()),
-        packet_size:         u32::from_le_bytes(buf[off+9..off+13].try_into().unwrap()),
-        return_point_location: f32::from_le_bytes(buf[off+13..off+17].try_into().unwrap()),
-        dx: f32::from_le_bytes(buf[off+17..off+21].try_into().unwrap()),
-        dy: f32::from_le_bytes(buf[off+21..off+25].try_into().unwrap()),
-        dz: f32::from_le_bytes(buf[off+25..off+29].try_into().unwrap()),
+        descriptor_index: buf[off],
+        byte_offset: u64::from_le_bytes(buf[off + 1..off + 9].try_into().unwrap()),
+        packet_size: u32::from_le_bytes(buf[off + 9..off + 13].try_into().unwrap()),
+        return_point_location: f32::from_le_bytes(buf[off + 13..off + 17].try_into().unwrap()),
+        dx: f32::from_le_bytes(buf[off + 17..off + 21].try_into().unwrap()),
+        dy: f32::from_le_bytes(buf[off + 21..off + 25].try_into().unwrap()),
+        dz: f32::from_le_bytes(buf[off + 25..off + 29].try_into().unwrap()),
     }
 }
 
 // ── PDRF decoders ─────────────────────────────────────────────────────────────
 
 fn decode_pdrf0(buf: &[u8], out: &mut PointRecord, hdr: &LasHeader) -> Result<()> {
-    decode_xyz(buf, out, hdr);                // 0..14
-    decode_flags_v13(buf, 14, out);           // 14..20
+    decode_xyz(buf, out, hdr); // 0..14
+    decode_flags_v13(buf, 14, out); // 14..20
     Ok(())
 }
 
@@ -225,7 +249,7 @@ fn decode_pdrf3(buf: &[u8], out: &mut PointRecord, hdr: &LasHeader) -> Result<()
     decode_xyz(buf, out, hdr);
     decode_flags_v13(buf, 14, out);
     out.gps_time = Some(read_gps_time(buf, 20));
-    out.color    = Some(read_rgb(buf, 28));
+    out.color = Some(read_rgb(buf, 28));
     Ok(())
 }
 
@@ -241,7 +265,7 @@ fn decode_pdrf5(buf: &[u8], out: &mut PointRecord, hdr: &LasHeader) -> Result<()
     decode_xyz(buf, out, hdr);
     decode_flags_v13(buf, 14, out);
     out.gps_time = Some(read_gps_time(buf, 20));
-    out.color    = Some(read_rgb(buf, 28));
+    out.color = Some(read_rgb(buf, 28));
     out.waveform = Some(read_waveform(buf, 34));
     Ok(())
 }
@@ -338,7 +362,12 @@ mod tests {
 
         {
             let mut writer = LasWriter::new(&mut cursor, cfg)?;
-            let point = PointRecord { x: -80.0, y: 43.0, z: 300.0, ..PointRecord::default() };
+            let point = PointRecord {
+                x: -80.0,
+                y: 43.0,
+                z: 300.0,
+                ..PointRecord::default()
+            };
             writer.write_point(&point)?;
             writer.finish()?;
         }
@@ -355,7 +384,10 @@ mod tests {
         Ok(())
     }
 
-    fn make_cursor_for_pdrf(fmt: PointDataFormat, point: PointRecord) -> crate::Result<Cursor<Vec<u8>>> {
+    fn make_cursor_for_pdrf(
+        fmt: PointDataFormat,
+        point: PointRecord,
+    ) -> crate::Result<Cursor<Vec<u8>>> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
         let mut cfg = WriterConfig::default();
         cfg.point_data_format = fmt;
@@ -410,7 +442,11 @@ mod tests {
             return_number: 1,
             number_of_returns: 1,
             gps_time: Some(GpsTime(9999.001)),
-            color: Some(Rgb16 { red: 5000, green: 6000, blue: 7000 }),
+            color: Some(Rgb16 {
+                red: 5000,
+                green: 6000,
+                blue: 7000,
+            }),
             ..PointRecord::default()
         };
         let mut cursor = make_cursor_for_pdrf(PointDataFormat::Pdrf12, input)?;
@@ -423,7 +459,14 @@ mod tests {
         assert!((p.z - input.z).abs() < 1e-3);
         assert_eq!(p.intensity, input.intensity);
         assert_eq!(p.classification, input.classification);
-        assert_eq!(p.color, Some(Rgb16 { red: 5000, green: 6000, blue: 7000 }));
+        assert_eq!(
+            p.color,
+            Some(Rgb16 {
+                red: 5000,
+                green: 6000,
+                blue: 7000
+            })
+        );
         assert!(p.waveform.is_none());
         assert!(p.thermal_rgb.is_none());
         Ok(())
@@ -440,9 +483,18 @@ mod tests {
             return_number: 1,
             number_of_returns: 2,
             gps_time: Some(GpsTime(1001.5)),
-            color: Some(Rgb16 { red: 10000, green: 20000, blue: 30000 }),
+            color: Some(Rgb16 {
+                red: 10000,
+                green: 20000,
+                blue: 30000,
+            }),
             nir: Some(40000),
-            thermal_rgb: Some(ThermalRgb { thermal: 1111, red: 2222, green: 3333, blue: 4444 }),
+            thermal_rgb: Some(ThermalRgb {
+                thermal: 1111,
+                red: 2222,
+                green: 3333,
+                blue: 4444,
+            }),
             ..PointRecord::default()
         };
         let mut cursor = make_cursor_for_pdrf(PointDataFormat::Pdrf13, input)?;
@@ -455,9 +507,24 @@ mod tests {
         assert!((p.z - input.z).abs() < 1e-3);
         assert_eq!(p.intensity, input.intensity);
         assert_eq!(p.classification, input.classification);
-        assert_eq!(p.color, Some(Rgb16 { red: 10000, green: 20000, blue: 30000 }));
+        assert_eq!(
+            p.color,
+            Some(Rgb16 {
+                red: 10000,
+                green: 20000,
+                blue: 30000
+            })
+        );
         assert_eq!(p.nir, Some(40000));
-        assert_eq!(p.thermal_rgb, Some(ThermalRgb { thermal: 1111, red: 2222, green: 3333, blue: 4444 }));
+        assert_eq!(
+            p.thermal_rgb,
+            Some(ThermalRgb {
+                thermal: 1111,
+                red: 2222,
+                green: 3333,
+                blue: 4444
+            })
+        );
         assert!(p.waveform.is_none());
         Ok(())
     }
@@ -482,7 +549,11 @@ mod tests {
             return_number: 1,
             number_of_returns: 1,
             gps_time: Some(GpsTime(777.777)),
-            color: Some(Rgb16 { red: 100, green: 200, blue: 300 }),
+            color: Some(Rgb16 {
+                red: 100,
+                green: 200,
+                blue: 300,
+            }),
             waveform: Some(wf),
             ..PointRecord::default()
         };
@@ -494,7 +565,14 @@ mod tests {
         assert!((p.x - input.x).abs() < 1e-3);
         assert!((p.y - input.y).abs() < 1e-3);
         assert!((p.z - input.z).abs() < 1e-3);
-        assert_eq!(p.color, Some(Rgb16 { red: 100, green: 200, blue: 300 }));
+        assert_eq!(
+            p.color,
+            Some(Rgb16 {
+                red: 100,
+                green: 200,
+                blue: 300
+            })
+        );
         assert!(p.nir.is_none());
         let pw = p.waveform.expect("waveform should be present");
         assert_eq!(pw.descriptor_index, 4);
@@ -524,10 +602,19 @@ mod tests {
             return_number: 3,
             number_of_returns: 5,
             gps_time: Some(GpsTime(3600.0)),
-            color: Some(Rgb16 { red: 60000, green: 50000, blue: 40000 }),
+            color: Some(Rgb16 {
+                red: 60000,
+                green: 50000,
+                blue: 40000,
+            }),
             nir: Some(55000),
             waveform: Some(wf),
-            thermal_rgb: Some(ThermalRgb { thermal: 9999, red: 8888, green: 7777, blue: 6666 }),
+            thermal_rgb: Some(ThermalRgb {
+                thermal: 9999,
+                red: 8888,
+                green: 7777,
+                blue: 6666,
+            }),
             ..PointRecord::default()
         };
         let mut cursor = make_cursor_for_pdrf(PointDataFormat::Pdrf15, input)?;
@@ -540,13 +627,28 @@ mod tests {
         assert!((p.z - input.z).abs() < 1e-3);
         assert_eq!(p.intensity, input.intensity);
         assert_eq!(p.classification, input.classification);
-        assert_eq!(p.color, Some(Rgb16 { red: 60000, green: 50000, blue: 40000 }));
+        assert_eq!(
+            p.color,
+            Some(Rgb16 {
+                red: 60000,
+                green: 50000,
+                blue: 40000
+            })
+        );
         assert_eq!(p.nir, Some(55000));
         let pw = p.waveform.expect("waveform should be present");
         assert_eq!(pw.descriptor_index, 7);
         assert_eq!(pw.byte_offset, 11111);
         assert_eq!(pw.packet_size, 64);
-        assert_eq!(p.thermal_rgb, Some(ThermalRgb { thermal: 9999, red: 8888, green: 7777, blue: 6666 }));
+        assert_eq!(
+            p.thermal_rgb,
+            Some(ThermalRgb {
+                thermal: 9999,
+                red: 8888,
+                green: 7777,
+                blue: 6666
+            })
+        );
         Ok(())
     }
 }

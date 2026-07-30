@@ -145,7 +145,9 @@ pub(crate) mod le {
     // ── Writers ──────────────────────────────────────────────────────────
 
     #[inline]
-    pub fn write_u8<W: Write>(w: &mut W, v: u8) -> io::Result<()> { w.write_all(&[v]) }
+    pub fn write_u8<W: Write>(w: &mut W, v: u8) -> io::Result<()> {
+        w.write_all(&[v])
+    }
 
     #[inline]
     pub fn write_u16<W: Write>(w: &mut W, v: u16) -> io::Result<()> {
@@ -208,7 +210,9 @@ mod tests {
     #[test]
     fn read_all_does_not_abort_on_huge_header_hint() {
         let mut r = HugeCountEmptyReader;
-        let pts = r.read_all().expect("read_all should handle oversized hint safely");
+        let pts = r
+            .read_all()
+            .expect("read_all should handle oversized hint safely");
         assert!(pts.is_empty());
     }
 }
@@ -220,19 +224,27 @@ pub(crate) mod be {
 
     #[inline]
     pub fn read_u16<R: Read>(r: &mut R) -> io::Result<u16> {
-        let mut b = [0u8; 2]; r.read_exact(&mut b)?; Ok(u16::from_be_bytes(b))
+        let mut b = [0u8; 2];
+        r.read_exact(&mut b)?;
+        Ok(u16::from_be_bytes(b))
     }
     #[inline]
     pub fn read_u32<R: Read>(r: &mut R) -> io::Result<u32> {
-        let mut b = [0u8; 4]; r.read_exact(&mut b)?; Ok(u32::from_be_bytes(b))
+        let mut b = [0u8; 4];
+        r.read_exact(&mut b)?;
+        Ok(u32::from_be_bytes(b))
     }
     #[inline]
     pub fn read_f32<R: Read>(r: &mut R) -> io::Result<f32> {
-        let mut b = [0u8; 4]; r.read_exact(&mut b)?; Ok(f32::from_be_bytes(b))
+        let mut b = [0u8; 4];
+        r.read_exact(&mut b)?;
+        Ok(f32::from_be_bytes(b))
     }
     #[inline]
     pub fn read_f64<R: Read>(r: &mut R) -> io::Result<f64> {
-        let mut b = [0u8; 8]; r.read_exact(&mut b)?; Ok(f64::from_be_bytes(b))
+        let mut b = [0u8; 8];
+        r.read_exact(&mut b)?;
+        Ok(f64::from_be_bytes(b))
     }
     #[inline]
     pub fn write_u32<W: Write>(w: &mut W, v: u32) -> io::Result<()> {
@@ -250,18 +262,18 @@ pub(crate) mod be {
 
 /// Buffered I/O helpers.
 #[allow(dead_code)]
-pub(crate) fn buffered_file_reader(path: &std::path::Path)
-    -> std::io::Result<std::io::BufReader<std::fs::File>>
-{
+pub(crate) fn buffered_file_reader(
+    path: &std::path::Path,
+) -> std::io::Result<std::io::BufReader<std::fs::File>> {
     let f = std::fs::File::open(path)?;
     // 256 KiB read buffer keeps system-call overhead low for large files
     Ok(std::io::BufReader::with_capacity(256 * 1024, f))
 }
 
 #[allow(dead_code)]
-pub(crate) fn buffered_file_writer(path: &std::path::Path)
-    -> std::io::Result<std::io::BufWriter<std::fs::File>>
-{
+pub(crate) fn buffered_file_writer(
+    path: &std::path::Path,
+) -> std::io::Result<std::io::BufWriter<std::fs::File>> {
     let f = std::fs::File::create(path)?;
     Ok(std::io::BufWriter::with_capacity(256 * 1024, f))
 }

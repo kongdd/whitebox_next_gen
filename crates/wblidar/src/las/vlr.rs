@@ -1,8 +1,8 @@
 //! Variable-Length Records (VLRs) and Extended VLRs (EVLRs).
 
-use std::io::{Read, Write};
 use crate::io::le;
 use crate::Result;
+use std::io::{Read, Write};
 
 /// Projection VLR user ID used by LAS files.
 pub const LASF_PROJECTION_USER_ID: &str = "LASF_Projection";
@@ -82,7 +82,11 @@ impl Vlr {
 
     /// Byte size of this VLR when serialised (header + data).
     pub fn serialised_size(&self) -> usize {
-        if self.extended { 60 + self.data.len() } else { 54 + self.data.len() }
+        if self.extended {
+            60 + self.data.len()
+        } else {
+            54 + self.data.len()
+        }
     }
 
     /// Write as a standard VLR.
@@ -141,11 +145,17 @@ impl Vlr {
     /// Build a minimal GeoKeyDirectory projection VLR for an EPSG code.
     pub fn geokey_directory_for_epsg(epsg: u32) -> Option<Self> {
         let epsg_u16 = u16::try_from(epsg).ok()?;
-        let key_id = if (4000..5000).contains(&epsg) { 2048u16 } else { 3072u16 };
+        let key_id = if (4000..5000).contains(&epsg) {
+            2048u16
+        } else {
+            3072u16
+        };
 
         let values: [u16; 8] = [
-            1, 1, 0, 1, // header: key-directory-version, key-revision, minor-revision, key-count
-            key_id, 0, 1, epsg_u16, // key entry: key-id, tiff-tag-location, count, value-offset
+            1, 1, 0,
+            1, // header: key-directory-version, key-revision, minor-revision, key-count
+            key_id, 0, 1,
+            epsg_u16, // key entry: key-id, tiff-tag-location, count, value-offset
         ];
 
         let mut data = Vec::with_capacity(values.len() * 2);
@@ -171,8 +181,14 @@ pub fn find_ogc_wkt(vlrs: &[Vlr]) -> Option<String> {
         v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID
     })?;
 
-    let end = vlr.data.iter().position(|&b| b == 0).unwrap_or(vlr.data.len());
-    String::from_utf8(vlr.data[..end].to_vec()).ok().map(|s| s.trim().to_owned())
+    let end = vlr
+        .data
+        .iter()
+        .position(|&b| b == 0)
+        .unwrap_or(vlr.data.len());
+    String::from_utf8(vlr.data[..end].to_vec())
+        .ok()
+        .map(|s| s.trim().to_owned())
 }
 
 /// Find EPSG code in GeoKeyDirectoryTag VLR.
@@ -197,6 +213,9 @@ pub fn find_epsg(vlrs: &[Vlr]) -> Option<u32> {
 
     let key_count = vals[3] as usize;
     let mut pos = 4usize;
+    let mut projected_epsg: Option<u32> = None;
+    let mut geographic_epsg: Option<u32> = None;
+
     for _ in 0..key_count {
         if pos + 3 >= vals.len() {
             break;
@@ -205,14 +224,21 @@ pub fn find_epsg(vlrs: &[Vlr]) -> Option<u32> {
         let tiff_tag_location = vals[pos + 1];
         let value_offset = vals[pos + 3];
 
-        if (key_id == 2048 || key_id == 3072) && tiff_tag_location == 0 {
-            return Some(u32::from(value_offset));
+        // Prefer ProjectedCSTypeGeoKey (3072) over GeographicTypeGeoKey (2048)
+        // Both indicate EPSG codes when tiff_tag_location == 0
+        if tiff_tag_location == 0 {
+            if key_id == 3072 {
+                projected_epsg = Some(u32::from(value_offset));
+            } else if key_id == 2048 && geographic_epsg.is_none() {
+                geographic_epsg = Some(u32::from(value_offset));
+            }
         }
 
         pos += 4;
     }
 
-    None
+    // Prefer projected CRS if available, otherwise fall back to geographic
+    projected_epsg.or(geographic_epsg)
 }
 
 fn null_terminated_string(bytes: &[u8]) -> String {

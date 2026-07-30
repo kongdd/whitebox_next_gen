@@ -4,10 +4,7 @@ use std::io::{self, Write};
 
 use crate::laz::arithmetic_decoder::{AC_MAX_LENGTH, AC_MIN_LENGTH};
 use crate::laz::arithmetic_model::{
-    ArithmeticBitModel,
-    ArithmeticSymbolModel,
-    BIT_LENGTH_SHIFT,
-    SYMBOL_LENGTH_SHIFT,
+    ArithmeticBitModel, ArithmeticSymbolModel, BIT_LENGTH_SHIFT, SYMBOL_LENGTH_SHIFT,
 };
 
 /// Streaming arithmetic encoder.
@@ -50,7 +47,11 @@ impl<W: Write> ArithmeticEncoder<W> {
     }
 
     /// Encode one modeled symbol.
-    pub fn encode_symbol(&mut self, model: &mut ArithmeticSymbolModel, symbol: u32) -> io::Result<()> {
+    pub fn encode_symbol(
+        &mut self,
+        model: &mut ArithmeticSymbolModel,
+        symbol: u32,
+    ) -> io::Result<()> {
         let full_length = self.length;
         self.length >>= SYMBOL_LENGTH_SHIFT;
 

@@ -147,8 +147,7 @@ pub fn resolve_icesat2_atl08_h_canopy_path_in_file(file_path: &Path) -> HdfAdapt
 
     Err(wbhdf::WbhdfError::DatasetPathNotFound(format!(
         "ATL08 h_canopy path not found under beam candidates {:?} with subpath '{}'",
-        ICESAT2_ATL08_BEAM_GROUP_CANDIDATES,
-        ICESAT2_ATL08_CANOPY_SUBPATH
+        ICESAT2_ATL08_BEAM_GROUP_CANDIDATES, ICESAT2_ATL08_CANOPY_SUBPATH
     )))
 }
 
@@ -169,14 +168,11 @@ pub fn read_icesat2_atl08_h_canopy_f32_window_in_file(
     }
 
     let parsed = resolve_icesat2_atl08_h_canopy_object_header_in_file(file_path)?;
-    let layout = parsed
-        .chunked_layouts
-        .first()
-        .ok_or_else(|| {
-            wbhdf::WbhdfError::UnsupportedLayout(
-                "ATL08 h_canopy decode requires a v1 chunked layout message".to_string(),
-            )
-        })?;
+    let layout = parsed.chunked_layouts.first().ok_or_else(|| {
+        wbhdf::WbhdfError::UnsupportedLayout(
+            "ATL08 h_canopy decode requires a v1 chunked layout message".to_string(),
+        )
+    })?;
     let first_record = read_first_chunked_storage_leaf_record_in_file(
         file_path,
         layout.index_address,
@@ -190,7 +186,11 @@ pub fn read_icesat2_atl08_h_canopy_f32_window_in_file(
         )));
     }
 
-    let compressed = read_chunk_payload_in_file(file_path, first_record.chunk_address, first_record.chunk_size)?;
+    let compressed = read_chunk_payload_in_file(
+        file_path,
+        first_record.chunk_address,
+        first_record.chunk_size,
+    )?;
     let decompressed = decompress_zlib(&compressed)?;
     if decompressed.len() > ICESAT2_ATL08_MAX_DECOMPRESSED_CHUNK_BYTES {
         return Err(wbhdf::WbhdfError::UnsupportedLayout(format!(
@@ -199,8 +199,10 @@ pub fn read_icesat2_atl08_h_canopy_f32_window_in_file(
             ICESAT2_ATL08_MAX_DECOMPRESSED_CHUNK_BYTES
         )));
     }
-    let values = wbhdf::datatypes::decode_f32_slice(&decompressed, Endianness::Little)
-        .map_err(|err| wbhdf::WbhdfError::InvalidInput(format!("ATL08 h_canopy f32 decode failed: {err}")))?;
+    let values =
+        wbhdf::datatypes::decode_f32_slice(&decompressed, Endianness::Little).map_err(|err| {
+            wbhdf::WbhdfError::InvalidInput(format!("ATL08 h_canopy f32 decode failed: {err}"))
+        })?;
 
     let fill = parsed
         .fill_values
@@ -227,7 +229,8 @@ pub fn read_icesat2_atl08_h_canopy_f32_window_in_file(
         Endianness::Little,
     );
 
-    let mapped = apply_fill_value_mapping_f32(&values, Some(fill_value), ICESAT2_ATL08_CANOPY_NODATA_VALUE);
+    let mapped =
+        apply_fill_value_mapping_f32(&values, Some(fill_value), ICESAT2_ATL08_CANOPY_NODATA_VALUE);
     if start_value >= mapped.values.len() {
         return Err(wbhdf::WbhdfError::InvalidInput(format!(
             "ATL08 h_canopy window start index {} is out of bounds for {} decoded values",
@@ -310,9 +313,11 @@ fn score_atl08_h_canopy_header(
     {
         score += 3;
     }
-    if header.fill_values.iter().any(|fill| {
-        fill.value_size == 4 && fill.value_bytes == [0xff, 0xff, 0x7f, 0x7f]
-    }) {
+    if header
+        .fill_values
+        .iter()
+        .any(|fill| fill.value_size == 4 && fill.value_bytes == [0xff, 0xff, 0x7f, 0x7f])
+    {
         score += 3;
     }
     if header
@@ -376,11 +381,8 @@ mod tests {
         read_gedi_l2b_canopy_style_f32_window_in_file,
         read_icesat2_atl08_h_canopy_f32_window_in_file,
         resolve_icesat2_atl08_h_canopy_object_header_in_file,
-        resolve_icesat2_atl08_h_canopy_path_in_file,
-        HdfDatasetProvider,
-        HdfI16WindowRequest,
-        ICESAT2_ATL08_CANOPY_NODATA_VALUE,
-        WbhdfDatasetProvider,
+        resolve_icesat2_atl08_h_canopy_path_in_file, HdfDatasetProvider, HdfI16WindowRequest,
+        WbhdfDatasetProvider, ICESAT2_ATL08_CANOPY_NODATA_VALUE,
     };
     use std::fs;
     use std::path::{Path, PathBuf};

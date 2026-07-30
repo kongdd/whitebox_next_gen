@@ -40,59 +40,29 @@ pub mod ply;
 pub mod point;
 pub mod reproject;
 
+pub use crs::Crs;
 pub use error::{Error, Result};
 pub use frontend::{
-	read,
-	read_columns,
-	read_columns_chunked,
-	read_point_count,
-	read_with_diagnostics,
-	rewrite_columns_chunked,
-	write,
-	write_auto,
-	write_auto_with_options,
-	write_with_options,
-	CopcWriteOptions,
-	LazWriteOptions,
-	LidarFormat,
-	LidarWriteOptions,
-	PointField,
-	PointColumnChunkReader,
-	PointColumnChunkRewriter,
-	PointCloud,
-	ReadDiagnostics,
+    read, read_columns, read_columns_chunked, read_point_count, read_with_diagnostics,
+    rewrite_columns_chunked, write, write_auto, write_auto_with_options, write_with_options,
+    CopcWriteOptions, LazWriteOptions, LidarFormat, LidarWriteOptions, PointCloud,
+    PointColumnChunkReader, PointColumnChunkRewriter, PointField, ReadDiagnostics,
 };
-pub use crs::Crs;
-pub use point::{Color, ExtraBytes, GpsTime, PointRecord, Rgb16, WaveformPacket};
-pub use io::{PointReader, PointWriter, SeekableReader};
 pub use hdf_adapter::{
-	GEDI_L2B_CANOPY_STYLE_DATASET_PATH,
-	GEDI_L2B_CANOPY_STYLE_KNOWN_BYTE_OFFSET,
-	HdfAdapterResult,
-	HdfDatasetProvider,
-	HdfI16WindowRequest,
-	ICESAT2_ATL08_BEAM_GROUP_CANDIDATES,
-	ICESAT2_ATL08_CANOPY_NODATA_VALUE,
-	ICESAT2_ATL08_CANOPY_SUBPATH,
-	ICESAT2_ATL08_MAX_COMPRESSED_CHUNK_BYTES,
-	ICESAT2_ATL08_MAX_DECOMPRESSED_CHUNK_BYTES,
-	WbhdfDatasetProvider,
-	read_gedi_l2b_canopy_style_f32_window_in_file,
-	read_icesat2_atl08_h_canopy_f32_window_in_file,
-	resolve_icesat2_atl08_h_canopy_object_header_in_file,
-	resolve_icesat2_atl08_h_canopy_path_in_file,
+    read_gedi_l2b_canopy_style_f32_window_in_file, read_icesat2_atl08_h_canopy_f32_window_in_file,
+    resolve_icesat2_atl08_h_canopy_object_header_in_file,
+    resolve_icesat2_atl08_h_canopy_path_in_file, HdfAdapterResult, HdfDatasetProvider,
+    HdfI16WindowRequest, WbhdfDatasetProvider, GEDI_L2B_CANOPY_STYLE_DATASET_PATH,
+    GEDI_L2B_CANOPY_STYLE_KNOWN_BYTE_OFFSET, ICESAT2_ATL08_BEAM_GROUP_CANDIDATES,
+    ICESAT2_ATL08_CANOPY_NODATA_VALUE, ICESAT2_ATL08_CANOPY_SUBPATH,
+    ICESAT2_ATL08_MAX_COMPRESSED_CHUNK_BYTES, ICESAT2_ATL08_MAX_DECOMPRESSED_CHUNK_BYTES,
 };
 pub use hdf_products::{
-	GediL2bCanopyProvider,
-	HdfLidarProductFamily,
-	HdfLidarProductProvider,
-	HdfLidarProductRegistry,
-	HdfLidarReadDiagnostics,
-	Icesat2Atl08CanopyProvider,
-	ResolvedHdfLidarProduct,
-	detect_hdf_lidar_product_family,
-	icesat2_atl08_canopy_subpath,
-	read_hdf_lidar_canopy_f32_window_in_file,
-	read_hdf_lidar_canopy_f32_window_with_diagnostics,
-	resolve_hdf_lidar_product,
+    detect_hdf_lidar_product_family, icesat2_atl08_canopy_subpath,
+    read_hdf_lidar_canopy_f32_window_in_file, read_hdf_lidar_canopy_f32_window_with_diagnostics,
+    resolve_hdf_lidar_product, GediL2bCanopyProvider, HdfLidarProductFamily,
+    HdfLidarProductProvider, HdfLidarProductRegistry, HdfLidarReadDiagnostics,
+    Icesat2Atl08CanopyProvider, ResolvedHdfLidarProduct,
 };
+pub use io::{PointReader, PointWriter, SeekableReader};
+pub use point::{Color, ExtraBytes, GpsTime, PointRecord, Rgb16, WaveformPacket};

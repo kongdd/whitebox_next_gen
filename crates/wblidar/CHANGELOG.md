@@ -6,10 +6,42 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 ### Changed
+- **`parallel` is now on by default.** The `parallel` feature (which enables `copc-parallel` and
+  `laz-parallel`) is included in the crate's `default` feature set. Parallel COPC decompression
+  and parallel LAZ decode are active without any explicit `features = ["parallel"]` declaration
+  by dependents. Consumers that need a serial build can opt out with `default-features = false`.
 - `LidarReprojectOptions` now carries shared epoch-aware routing parameters from `wbprojection`,
   and point reprojection helpers route through the epoch-aware CRS APIs when those options are
   supplied.
+### Added
+- **CopcReader VLR access:** `CopcReader` now stores and exposes VLRs via a new `vlrs()` method,
+  matching the API of `LasReader`. This allows downstream code to access VLRs without reopening
+  the file, reducing I/O overhead and improving CRS extraction efficiency in COPC readers.
+- **Parallel COPC decompression** (`copc-parallel` / `parallel` feature): `CopcReader::read_all_nodes`
+  now has two execution paths. When the `copc-parallel` feature is enabled (which it is when
+  `wbtools_oss` depends on `wblidar` with `features = ["parallel"]`), the reader:
+  1. Sorts all hierarchy entries by file offset and performs a single sequential forward-read
+     pass to collect all compressed chunk bytes (minimising seek overhead on buffered/rotational
+     storage).
+  2. Decompresses all chunks in parallel using rayon, fully exploiting available CPU cores for
+     the LASzip decompression step.
+  The sequential fallback (`not(copc-parallel)`) is unchanged. The internal free function
+  `decode_chunk` was extracted from `decode_node_points` to enable thread-safe decode without
+  holding a mutable reference to the reader.
 ### Fixed
+- **GeoKeyDirectory EPSG extraction:** The `find_epsg` function now prioritizes ProjectedCSTypeGeoKey
+  (ID 3072) over GeographicTypeGeoKey (ID 2048) when both are present in a GeoKeyDirectory VLR.
+  This ensures that LAS files with both geographic and projected coordinate system definitions
+  (which is common when the file contains NAD83 geographic + UTM projected) correctly extract the
+  projected EPSG code (e.g. EPSG:32145 for NAD83/Vermont) instead of the geographic code
+  (e.g. EPSG:4269 for NAD83). This fix resolves missing CRS information on TIN gridding outputs
+  when the source LAS file uses GeoKeyDirectory for CRS storage.
+- **COPC CRS propagation:** `PointCloud::read` on COPC (LAS 1.4) files now correctly extracts
+  the CRS from Extended VLRs (EVLRs) in addition to standard VLRs. LAS 1.4 files commonly store
+  the WKT CRS record (record_id 2112) as an EVLR after the point data, which the previous
+  implementation never read. All tools that grid COPC point clouds (e.g. `lidar_tin_gridding`)
+  were silently producing rasters with no projection assigned; they now correctly inherit the
+  source CRS (e.g. EPSG:32145).
 - `default_las_config` (used by all `PointCloud::write` / `write_las` / `write_laz` paths) now
   auto-computes `x_offset`, `y_offset`, `z_offset` from `floor(min)` of the point cloud's
   bounding box instead of leaving them at `0.0`. The previous default caused silent i32 overflow

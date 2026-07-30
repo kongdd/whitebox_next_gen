@@ -1,19 +1,24 @@
 //! COPC reader — reads points from individual hierarchy nodes.
 
-use std::collections::HashSet;
-use std::io::{Read, Seek};
 use crate::copc::hierarchy::{CopcEntry, CopcHierarchy, CopcInfo, VoxelKey};
 use crate::copc::range_io::{ByteRangeSource, LocalFileRangeSource};
 use crate::copc::{COPC_INFO_RECORD_ID, COPC_USER_ID};
 use crate::io::PointReader;
-use crate::las::{LasHeader, LasReader};
+use crate::las::{LasHeader, LasReader, Vlr};
+use std::collections::HashSet;
+use std::io::{Read, Seek};
 
+use crate::las::header::PointDataFormat;
 use crate::laz::standard_point10::decode_standard_pointwise_chunk_point10_v2;
 use crate::laz::standard_point14::decode_standard_layered_chunk_point14_v3_with_status;
-use crate::laz::{parse_laszip_vlr, LaszipCompressorType, LaszipVlrInfo, LASZIP_RECORD_ID, LASZIP_USER_ID};
-use crate::las::header::PointDataFormat;
+use crate::laz::{
+    parse_laszip_vlr, LaszipCompressorType, LaszipVlrInfo, LASZIP_RECORD_ID, LASZIP_USER_ID,
+};
 use crate::point::PointRecord;
 use crate::{Error, Result};
+
+#[cfg(feature = "copc-parallel")]
+use rayon::prelude::*;
 
 /// Indicates how the COPC hierarchy root offset was interpreted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,6 +60,7 @@ pub struct CopcBoundingBox {
 pub struct CopcReader<R: Read + Seek + ByteRangeSource> {
     inner: R,
     header: LasHeader,
+    vlrs: Vec<Vlr>,
     laszip_info: Option<LaszipVlrInfo>,
     /// COPC metadata block parsed from the COPC info VLR.
     pub info: CopcInfo,
@@ -84,12 +90,13 @@ impl<R: Read + Seek + ByteRangeSource> CopcReader<R> {
         let laszip_info = parse_laszip_vlr(&vlrs);
 
         // Find COPC info VLR
-        let info_vlr = vlrs.iter().find(|v| {
-            v.key.user_id == COPC_USER_ID && v.key.record_id == COPC_INFO_RECORD_ID
-        }).ok_or_else(|| Error::InvalidValue {
-            field: "copc_info_vlr",
-            detail: "COPC info VLR not found".to_owned(),
-        })?;
+        let info_vlr = vlrs
+            .iter()
+            .find(|v| v.key.user_id == COPC_USER_ID && v.key.record_id == COPC_INFO_RECORD_ID)
+            .ok_or_else(|| Error::InvalidValue {
+                field: "copc_info_vlr",
+                detail: "COPC info VLR not found".to_owned(),
+            })?;
 
         if info_vlr.data.len() < CopcInfo::SIZE {
             return Err(Error::SizeMismatch {
@@ -131,13 +138,16 @@ impl<R: Read + Seek + ByteRangeSource> CopcReader<R> {
         {
             return Err(Error::InvalidValue {
                 field: "copc.hierarchy_root_offset",
-                detail: "strict mode requires hierarchy_root_offset to point directly to hierarchy data".to_string(),
+                detail:
+                    "strict mode requires hierarchy_root_offset to point directly to hierarchy data"
+                        .to_string(),
             });
         }
 
         Ok(CopcReader {
             inner,
             header,
+            vlrs,
             laszip_info,
             info,
             hierarchy,
@@ -153,14 +163,21 @@ impl<R: Read + Seek + ByteRangeSource> CopcReader<R> {
     /// Read all points in a given voxel node into `out`.  Returns the number
     /// of points read.
     pub fn read_node(&mut self, key: VoxelKey, out: &mut Vec<PointRecord>) -> Result<usize> {
-        let entry = self.hierarchy.find(key)
+        let entry = self
+            .hierarchy
+            .find(key)
             .ok_or_else(|| Error::InvalidValue {
                 field: "voxel_key",
-                detail: format!("key ({},{},{},{}) not found", key.level, key.x, key.y, key.z),
+                detail: format!(
+                    "key ({},{},{},{}) not found",
+                    key.level, key.x, key.y, key.z
+                ),
             })?
             .clone();
 
-        if entry.point_count <= 0 || entry.byte_size <= 0 { return Ok(0); }
+        if entry.point_count <= 0 || entry.byte_size <= 0 {
+            return Ok(0);
+        }
 
         if let Ok(file_end) = self.inner.len() {
             let expected_end = entry.offset.saturating_add(entry.byte_size as u64);
@@ -198,11 +215,20 @@ impl<R: Read + Seek + ByteRangeSource> CopcReader<R> {
             ),
         })?;
 
-        let (points, already_scaled) = self.decode_node_points(&compressed, entry.point_count as usize)?;
+        let (points, already_scaled) =
+            self.decode_node_points(&compressed, entry.point_count as usize)?;
 
         // Apply scale/offset
-        let (sx, sy, sz) = (self.header.x_scale, self.header.y_scale, self.header.z_scale);
-        let (ox, oy, oz) = (self.header.x_offset, self.header.y_offset, self.header.z_offset);
+        let (sx, sy, sz) = (
+            self.header.x_scale,
+            self.header.y_scale,
+            self.header.z_scale,
+        );
+        let (ox, oy, oz) = (
+            self.header.x_offset,
+            self.header.y_offset,
+            self.header.z_offset,
+        );
 
         let start = out.len();
         if already_scaled {
@@ -225,8 +251,16 @@ impl<R: Read + Seek + ByteRangeSource> CopcReader<R> {
     ) -> Result<(Vec<PointRecord>, bool)> {
         let _has_gps = self.header.point_data_format.has_gps_time();
         let _has_rgb = self.header.point_data_format.has_rgb();
-        let scales = [self.header.x_scale, self.header.y_scale, self.header.z_scale];
-        let offsets = [self.header.x_offset, self.header.y_offset, self.header.z_offset];
+        let scales = [
+            self.header.x_scale,
+            self.header.y_scale,
+            self.header.z_scale,
+        ];
+        let offsets = [
+            self.header.x_offset,
+            self.header.y_offset,
+            self.header.z_offset,
+        ];
 
         if let Some(info) = self.laszip_info.as_ref() {
             let declared_standard = info.uses_arithmetic_coder()
@@ -289,9 +323,30 @@ impl<R: Read + Seek + ByteRangeSource> CopcReader<R> {
     }
 
     /// Read all points from the root node and recurse to all children.
+    ///
+    /// When the `copc-parallel` feature is enabled, compressed chunks are read
+    /// from disk in a single sequential pass (entries sorted by file offset) and
+    /// then decompressed in parallel using rayon.  Without the feature the
+    /// implementation falls back to sequential I/O + decode.
     pub fn read_all_nodes(&mut self) -> Result<Vec<PointRecord>> {
+        #[cfg(feature = "copc-parallel")]
+        {
+            self.read_all_nodes_parallel()
+        }
+        #[cfg(not(feature = "copc-parallel"))]
+        {
+            self.read_all_nodes_sequential()
+        }
+    }
+
+    /// Sequential fallback: read and decode each node one at a time.
+    #[cfg_attr(feature = "copc-parallel", allow(dead_code))]
+    fn read_all_nodes_sequential(&mut self) -> Result<Vec<PointRecord>> {
         let keys = self.data_node_keys();
-        let total: usize = self.hierarchy.entries.iter()
+        let total: usize = self
+            .hierarchy
+            .entries
+            .iter()
             .filter(|e| e.point_count > 0)
             .map(|e| e.point_count as usize)
             .sum();
@@ -302,8 +357,113 @@ impl<R: Read + Seek + ByteRangeSource> CopcReader<R> {
         Ok(out)
     }
 
+    /// Parallel implementation: sequential I/O pass then parallel decompression.
+    ///
+    /// Sorting entries by their file offset before reading ensures that the
+    /// single-threaded I/O pass proceeds in forward-only order (minimising
+    /// seek overhead on rotational or buffered storage), while the CPU-bound
+    /// LASzip decompression runs in parallel across all available cores.
+    #[cfg(feature = "copc-parallel")]
+    fn read_all_nodes_parallel(&mut self) -> Result<Vec<PointRecord>> {
+        // Collect all data-carrying entries and sort by file offset for
+        // sequential I/O.
+        let mut entries: Vec<CopcEntry> = self
+            .hierarchy
+            .entries
+            .iter()
+            .filter(|e| e.point_count > 0 && e.byte_size > 0)
+            .cloned()
+            .collect();
+        entries.sort_unstable_by_key(|e| e.offset);
+
+        let total: usize = entries.iter().map(|e| e.point_count as usize).sum();
+
+        if entries.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let file_len = self.inner.len()?;
+
+        // ── Phase 1: sequential I/O — read every compressed chunk in offset order ──
+        let mut chunks: Vec<(usize, Vec<u8>)> = Vec::with_capacity(entries.len());
+        for entry in &entries {
+            let expected_end = entry.offset.saturating_add(entry.byte_size as u64);
+            if expected_end > file_len {
+                return Err(Error::InvalidValue {
+                    field: "copc.node.bounds",
+                    detail: format!(
+                        "node key ({},{},{},{}) offset={} byte_size={} exceeds file size {}",
+                        entry.key.level,
+                        entry.key.x,
+                        entry.key.y,
+                        entry.key.z,
+                        entry.offset,
+                        entry.byte_size,
+                        file_len
+                    ),
+                });
+            }
+            let mut buf = vec![0u8; entry.byte_size as usize];
+            self.inner
+                .read_exact_at(entry.offset, &mut buf)
+                .map_err(|e| Error::InvalidValue {
+                    field: "copc.node.read",
+                    detail: format!(
+                        "failed reading node ({},{},{},{}): {}",
+                        entry.key.level, entry.key.x, entry.key.y, entry.key.z, e
+                    ),
+                })?;
+            chunks.push((entry.point_count as usize, buf));
+        }
+
+        // Snapshot the decode parameters (all Clone/Copy) so each rayon thread
+        // can decode independently without accessing self.
+        let header = self.header.clone();
+        let laszip_info = self.laszip_info.clone();
+        let (sx, sy, sz) = (header.x_scale, header.y_scale, header.z_scale);
+        let (ox, oy, oz) = (header.x_offset, header.y_offset, header.z_offset);
+
+        // ── Phase 2: parallel decompression ─────────────────────────────────────
+        let results: Vec<Result<NodeDecodeResult>> = chunks
+            .into_par_iter()
+            .map(|(point_count, compressed)| {
+                decode_chunk(&compressed, point_count, &header, laszip_info.as_ref())
+            })
+            .collect();
+
+        // ── Phase 3: merge results, apply scale/offset, accumulate diagnostics ──
+        let mut out = Vec::with_capacity(total);
+        for result in results {
+            let decoded = result?;
+            if decoded.partial_event {
+                self.point14_partial_events += 1;
+                self.point14_partial_decoded_points += decoded.partial_decoded;
+                self.point14_partial_expected_points += decoded.partial_expected;
+            }
+            if decoded.already_scaled {
+                out.extend(decoded.points);
+            } else {
+                out.extend(decoded.points.into_iter().map(|mut p| {
+                    p.x = p.x * sx + ox;
+                    p.y = p.y * sy + oy;
+                    p.z = p.z * sz + oz;
+                    p
+                }));
+            }
+        }
+
+        Ok(out)
+    }
+
     /// Return the LAS header.
-    pub fn header(&self) -> &LasHeader { &self.header }
+    pub fn header(&self) -> &LasHeader {
+        &self.header
+    }
+
+    /// Return the VLRs (Variable Length Records).
+    pub fn vlrs(&self) -> &[Vlr] {
+        &self.vlrs
+    }
 
     /// Return keys for all hierarchy entries that carry point payloads.
     pub fn data_node_keys(&self) -> Vec<VoxelKey> {
@@ -421,6 +581,109 @@ impl CopcReader<crate::copc::range_io::CachedRangeSource<crate::copc::range_io::
     }
 }
 
+// ── Parallel decode support ──────────────────────────────────────────────────
+
+/// Result returned by [`decode_chunk`], capturing all data needed to merge
+/// back into the caller after parallel decompression.
+#[cfg(feature = "copc-parallel")]
+struct NodeDecodeResult {
+    points: Vec<PointRecord>,
+    /// When true, XYZ coordinates are already in world-space (scale+offset
+    /// applied by the decoder); when false the caller must apply them.
+    already_scaled: bool,
+    /// Whether a partial Point14 decode event occurred for this chunk.
+    partial_event: bool,
+    partial_decoded: u64,
+    partial_expected: u64,
+}
+
+/// Decompress a single COPC chunk without holding a reference to the reader.
+///
+/// This free function contains the same logic as `CopcReader::decode_node_points`
+/// but accepts the required parameters by value/reference so it can be called
+/// from multiple rayon threads simultaneously.
+#[cfg(feature = "copc-parallel")]
+fn decode_chunk(
+    compressed: &[u8],
+    point_count: usize,
+    header: &LasHeader,
+    laszip_info: Option<&LaszipVlrInfo>,
+) -> Result<NodeDecodeResult> {
+    let scales = [header.x_scale, header.y_scale, header.z_scale];
+    let offsets = [header.x_offset, header.y_offset, header.z_offset];
+
+    if let Some(info) = laszip_info {
+        let declared_standard = info.uses_arithmetic_coder()
+            && matches!(
+                info.compressor,
+                LaszipCompressorType::PointWise
+                    | LaszipCompressorType::PointWiseChunked
+                    | LaszipCompressorType::LayeredChunked
+            );
+
+        if declared_standard && info.has_point10_item() && !info.has_point14_item() {
+            if let Ok(points) = decode_standard_pointwise_chunk_point10_v2(
+                compressed,
+                point_count,
+                &info.items,
+                header.point_data_format,
+                header.extra_bytes_count as usize,
+                scales,
+                offsets,
+            ) {
+                return Ok(NodeDecodeResult {
+                    points,
+                    already_scaled: true,
+                    partial_event: false,
+                    partial_decoded: 0,
+                    partial_expected: 0,
+                });
+            }
+        }
+
+        if declared_standard && info.has_point14_item() {
+            return decode_standard_layered_chunk_point14_v3_with_status(
+                compressed,
+                point_count,
+                &info.items,
+                header.point_data_format,
+                scales,
+                offsets,
+            )
+            .and_then(|(points, status)| {
+                if status.partial && fail_on_partial_point14() {
+                    return Err(Error::InvalidValue {
+                        field: "copc.point14.partial",
+                        detail: format!(
+                            "decoded {} of {} points in strict partial-check mode",
+                            status.decoded_points, status.expected_points
+                        ),
+                    });
+                }
+                Ok(NodeDecodeResult {
+                    points,
+                    already_scaled: true,
+                    partial_event: status.partial,
+                    partial_decoded: if status.partial {
+                        status.decoded_points as u64
+                    } else {
+                        0
+                    },
+                    partial_expected: if status.partial {
+                        status.expected_points as u64
+                    } else {
+                        0
+                    },
+                })
+            });
+        }
+    }
+
+    Err(Error::Unimplemented(
+        "only standards-compliant LASzip v2/v3 Point10/Point14 encoding is supported",
+    ))
+}
+
 fn validate_copc_header_strict<R: Read + Seek + ByteRangeSource>(
     inner: &mut R,
     header: &LasHeader,
@@ -448,7 +711,10 @@ fn validate_copc_header_strict<R: Read + Seek + ByteRangeSource>(
         });
     }
 
-    if !matches!(header.point_data_format, PointDataFormat::Pdrf6 | PointDataFormat::Pdrf7 | PointDataFormat::Pdrf8) {
+    if !matches!(
+        header.point_data_format,
+        PointDataFormat::Pdrf6 | PointDataFormat::Pdrf7 | PointDataFormat::Pdrf8
+    ) {
         return Err(Error::InvalidValue {
             field: "copc.point_data_format",
             detail: format!(
@@ -461,7 +727,8 @@ fn validate_copc_header_strict<R: Read + Seek + ByteRangeSource>(
     if header.number_of_vlrs == 0 || vlrs.is_empty() {
         return Err(Error::InvalidValue {
             field: "copc.vlrs",
-            detail: "strict mode requires at least one VLR and the first VLR must be COPC info".to_string(),
+            detail: "strict mode requires at least one VLR and the first VLR must be COPC info"
+                .to_string(),
         });
     }
 
@@ -484,7 +751,11 @@ fn validate_copc_header_strict<R: Read + Seek + ByteRangeSource>(
         });
     }
 
-    if laszip_info.is_none() || !vlrs.iter().any(|v| v.key.user_id == LASZIP_USER_ID && v.key.record_id == LASZIP_RECORD_ID) {
+    if laszip_info.is_none()
+        || !vlrs
+            .iter()
+            .any(|v| v.key.user_id == LASZIP_USER_ID && v.key.record_id == LASZIP_RECORD_ID)
+    {
         return Err(Error::InvalidValue {
             field: "copc.laszip_vlr",
             detail: "strict mode requires a valid LASzip VLR for LAZ payload metadata".to_string(),
@@ -597,7 +868,11 @@ fn hierarchy_entries_plausible(entries: &[CopcEntry], file_end: u64, require_roo
     true
 }
 
-fn validate_hierarchy_entries_strict(entries: &[CopcEntry], file_end: u64, require_root: bool) -> Result<()> {
+fn validate_hierarchy_entries_strict(
+    entries: &[CopcEntry],
+    file_end: u64,
+    require_root: bool,
+) -> Result<()> {
     if entries.is_empty() {
         return Err(Error::InvalidValue {
             field: "copc.hierarchy.entries",
@@ -836,7 +1111,10 @@ impl<R: Read + Seek + ByteRangeSource> PointReader for CopcReader<R> {
             self.sequential_pos = 0;
         }
 
-        let points = self.sequential_points.as_ref().expect("sequential cache initialized");
+        let points = self
+            .sequential_points
+            .as_ref()
+            .expect("sequential cache initialized");
         if self.sequential_pos >= points.len() {
             return Ok(false);
         }
@@ -845,9 +1123,10 @@ impl<R: Read + Seek + ByteRangeSource> PointReader for CopcReader<R> {
         self.sequential_pos += 1;
         Ok(true)
     }
-    fn point_count(&self) -> Option<u64> { Some(self.header.point_count()) }
+    fn point_count(&self) -> Option<u64> {
+        Some(self.header.point_count())
+    }
 }
-
 
 fn is_descendant_key(key: VoxelKey, root: VoxelKey) -> bool {
     if key.level < root.level {
@@ -889,16 +1168,16 @@ fn voxel_key_intersects_bbox(info: &CopcInfo, key: VoxelKey, bbox: CopcBoundingB
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::copc::writer::{CopcWriter, CopcWriterConfig};
+    use crate::io::{PointReader, PointWriter};
+    use crate::las::vlr::{Vlr, VlrKey};
+    use crate::point::PointRecord;
     use std::fs::remove_file;
     use std::io::Cursor;
-    use crate::las::vlr::{Vlr, VlrKey};
-    use crate::io::{PointReader, PointWriter};
-    use crate::copc::writer::{CopcWriter, CopcWriterConfig};
-    use crate::point::PointRecord;
-    #[cfg(feature = "copc-http")]
-    use std::sync::{Arc, Mutex};
     #[cfg(feature = "copc-http")]
     use std::sync::mpsc;
+    #[cfg(feature = "copc-http")]
+    use std::sync::{Arc, Mutex};
     #[cfg(feature = "copc-http")]
     use std::thread;
     #[cfg(feature = "copc-http")]
@@ -923,7 +1202,12 @@ mod tests {
     #[cfg(feature = "copc-http")]
     fn spawn_http_range_server(
         bytes: Vec<u8>,
-    ) -> Result<(String, Arc<Mutex<Vec<String>>>, mpsc::Sender<()>, thread::JoinHandle<()>)> {
+    ) -> Result<(
+        String,
+        Arc<Mutex<Vec<String>>>,
+        mpsc::Sender<()>,
+        thread::JoinHandle<()>,
+    )> {
         use tiny_http::{Header, Method, Response, Server, StatusCode};
 
         let server = Server::http("127.0.0.1:0").map_err(|e| Error::InvalidValue {
@@ -946,7 +1230,9 @@ mod tests {
                     Ok(v) => v,
                     Err(_) => break,
                 };
-                let Some(req) = req_opt else { continue; };
+                let Some(req) = req_opt else {
+                    continue;
+                };
 
                 let method = req.method().clone();
                 let range_header = req
@@ -968,12 +1254,8 @@ mod tests {
                             if let Some((start, end)) = parse_range_spec(spec, total_len) {
                                 body.extend_from_slice(&bytes[start..=end]);
                                 status = StatusCode(206);
-                                content_range = Some(format!(
-                                    "bytes {}-{}/{}",
-                                    start,
-                                    end,
-                                    total_len
-                                ));
+                                content_range =
+                                    Some(format!("bytes {}-{}/{}", start, end, total_len));
                                 if let Ok(mut l) = log_clone.lock() {
                                     l.push(spec.to_string());
                                 }
@@ -994,10 +1276,9 @@ mod tests {
 
                 let body_len = body.len();
                 let mut response = Response::from_data(body).with_status_code(status);
-                if let Ok(h) = Header::from_bytes(
-                    &b"Content-Length"[..],
-                    body_len.to_string().as_bytes(),
-                ) {
+                if let Ok(h) =
+                    Header::from_bytes(&b"Content-Length"[..], body_len.to_string().as_bytes())
+                {
                     response = response.with_header(h);
                 }
                 if let Some(cr) = content_range {
@@ -1014,21 +1295,31 @@ mod tests {
 
     #[cfg(feature = "copc-http")]
     fn point_xyz_signature(points: &[PointRecord]) -> (usize, f64, f64, f64) {
-        points.iter().fold((0usize, 0.0f64, 0.0f64, 0.0f64), |acc, p| {
-            (acc.0 + 1, acc.1 + p.x, acc.2 + p.y, acc.3 + p.z)
-        })
+        points
+            .iter()
+            .fold((0usize, 0.0f64, 0.0f64, 0.0f64), |acc, p| {
+                (acc.0 + 1, acc.1 + p.x, acc.2 + p.y, acc.3 + p.z)
+            })
     }
 
     #[test]
     fn expands_hierarchy_subpages() -> Result<()> {
         let subpage_entry = CopcEntry {
-            key: VoxelKey { level: 1, x: 1, y: 0, z: 0 },
+            key: VoxelKey {
+                level: 1,
+                x: 1,
+                y: 0,
+                z: 0,
+            },
             offset: 200,
             byte_size: 20,
             point_count: 42,
         };
 
-        let subpage_bytes = CopcHierarchy { entries: vec![subpage_entry] }.to_bytes()?;
+        let subpage_bytes = CopcHierarchy {
+            entries: vec![subpage_entry],
+        }
+        .to_bytes()?;
         let subpage_offset = 64u64;
         let mut file = vec![0u8; 512];
         file[subpage_offset as usize..subpage_offset as usize + subpage_bytes.len()]
@@ -1043,7 +1334,12 @@ mod tests {
                     point_count: 0,
                 },
                 CopcEntry {
-                    key: VoxelKey { level: 1, x: 0, y: 0, z: 0 },
+                    key: VoxelKey {
+                        level: 1,
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                    },
                     offset: subpage_offset,
                     byte_size: subpage_bytes.len() as i32,
                     point_count: -1,
@@ -1054,28 +1350,42 @@ mod tests {
         let mut cur = Cursor::new(file);
         expand_hierarchy_subpages(&mut cur, &mut hierarchy, 512, CopcReaderMode::Tolerant)?;
 
-        assert!(hierarchy.entries.iter().any(|e| {
-            e.key == subpage_entry.key && e.point_count == subpage_entry.point_count
-        }));
+        assert!(hierarchy
+            .entries
+            .iter()
+            .any(|e| { e.key == subpage_entry.key && e.point_count == subpage_entry.point_count }));
         Ok(())
     }
 
     #[test]
     fn expands_mixed_root_entries_and_subpages() -> Result<()> {
         let direct_entry = CopcEntry {
-            key: VoxelKey { level: 1, x: 2, y: 0, z: 0 },
+            key: VoxelKey {
+                level: 1,
+                x: 2,
+                y: 0,
+                z: 0,
+            },
             offset: 300,
             byte_size: 32,
             point_count: 7,
         };
         let subpage_data_entry = CopcEntry {
-            key: VoxelKey { level: 1, x: 3, y: 0, z: 0 },
+            key: VoxelKey {
+                level: 1,
+                x: 3,
+                y: 0,
+                z: 0,
+            },
             offset: 400,
             byte_size: 48,
             point_count: 9,
         };
 
-        let subpage_bytes = CopcHierarchy { entries: vec![subpage_data_entry] }.to_bytes()?;
+        let subpage_bytes = CopcHierarchy {
+            entries: vec![subpage_data_entry],
+        }
+        .to_bytes()?;
         let subpage_offset = 80u64;
         let mut file = vec![0u8; 512];
         file[subpage_offset as usize..subpage_offset as usize + subpage_bytes.len()]
@@ -1091,7 +1401,12 @@ mod tests {
                 },
                 direct_entry,
                 CopcEntry {
-                    key: VoxelKey { level: 1, x: 0, y: 0, z: 0 },
+                    key: VoxelKey {
+                        level: 1,
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                    },
                     offset: subpage_offset,
                     byte_size: subpage_bytes.len() as i32,
                     point_count: -1,
@@ -1102,9 +1417,10 @@ mod tests {
         let mut cur = Cursor::new(file);
         expand_hierarchy_subpages(&mut cur, &mut hierarchy, 512, CopcReaderMode::Tolerant)?;
 
-        assert!(hierarchy.entries.iter().any(|e| {
-            e.key == direct_entry.key && e.point_count == direct_entry.point_count
-        }));
+        assert!(hierarchy
+            .entries
+            .iter()
+            .any(|e| { e.key == direct_entry.key && e.point_count == direct_entry.point_count }));
         assert!(hierarchy.entries.iter().any(|e| {
             e.key == subpage_data_entry.key && e.point_count == subpage_data_entry.point_count
         }));
@@ -1200,7 +1516,11 @@ mod tests {
 
         cursor.set_position(0);
         let reader = CopcReader::new(&mut cursor)?;
-        assert!(reader.hierarchy.entries.iter().any(|e| e.key == VoxelKey::ROOT));
+        assert!(reader
+            .hierarchy
+            .entries
+            .iter()
+            .any(|e| e.key == VoxelKey::ROOT));
         Ok(())
     }
 
@@ -1215,7 +1535,12 @@ mod tests {
                     point_count: 0,
                 },
                 CopcEntry {
-                    key: VoxelKey { level: 1, x: 1, y: 0, z: 0 },
+                    key: VoxelKey {
+                        level: 1,
+                        x: 1,
+                        y: 0,
+                        z: 0,
+                    },
                     offset: 256,
                     byte_size: 32,
                     point_count: 4,
@@ -1247,7 +1572,14 @@ mod tests {
         assert_eq!(mode, CopcHierarchyParseMode::EvlrHeaderOffset);
         assert!(parsed.entries.iter().any(|e| e.key == VoxelKey::ROOT));
         assert!(parsed.entries.iter().any(|e| {
-            e.key == VoxelKey { level: 1, x: 1, y: 0, z: 0 } && e.point_count == 4
+            e.key
+                == VoxelKey {
+                    level: 1,
+                    x: 1,
+                    y: 0,
+                    z: 0,
+                }
+                && e.point_count == 4
         }));
         Ok(())
     }
@@ -1270,7 +1602,10 @@ mod tests {
 
         cursor.set_position(0);
         let mut reader = CopcReader::new_with_mode(&mut cursor, CopcReaderMode::Strict)?;
-        assert_eq!(reader.hierarchy_parse_mode, CopcHierarchyParseMode::DataOffset);
+        assert_eq!(
+            reader.hierarchy_parse_mode,
+            CopcHierarchyParseMode::DataOffset
+        );
         let points = reader.read_all_nodes()?;
         assert_eq!(points.len(), 1);
         Ok(())
@@ -1303,7 +1638,10 @@ mod tests {
 
         cursor.set_position(0);
         let mut reader = CopcReader::new_with_mode(&mut cursor, CopcReaderMode::Strict)?;
-        assert_eq!(reader.hierarchy_parse_mode, CopcHierarchyParseMode::DataOffset);
+        assert_eq!(
+            reader.hierarchy_parse_mode,
+            CopcHierarchyParseMode::DataOffset
+        );
         let points = reader.read_all_nodes()?;
         assert_eq!(points.len(), 1);
         assert_eq!(points[0].gps_time.map(|g| g.0), Some(1234.5));
@@ -1342,7 +1680,10 @@ mod tests {
 
         cursor.set_position(0);
         let mut reader = CopcReader::new_with_mode(&mut cursor, CopcReaderMode::Strict)?;
-        assert_eq!(reader.hierarchy_parse_mode, CopcHierarchyParseMode::DataOffset);
+        assert_eq!(
+            reader.hierarchy_parse_mode,
+            CopcHierarchyParseMode::DataOffset
+        );
         let points = reader.read_all_nodes()?;
         assert_eq!(points.len(), 1);
         assert_eq!(points[0].gps_time.map(|g| g.0), Some(9876.25));
@@ -1364,8 +1705,22 @@ mod tests {
 
         {
             let mut writer = CopcWriter::new(&mut cursor, cfg);
-            writer.write_point(&PointRecord { x: -10.0, y: -10.0, z: -10.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
-            writer.write_point(&PointRecord { x: 10.0, y: 10.0, z: 10.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
+            writer.write_point(&PointRecord {
+                x: -10.0,
+                y: -10.0,
+                z: -10.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
+            writer.write_point(&PointRecord {
+                x: 10.0,
+                y: 10.0,
+                z: 10.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
             writer.finish()?;
         }
 
@@ -1386,14 +1741,33 @@ mod tests {
 
         {
             let mut writer = CopcWriter::new(&mut cursor, cfg);
-            writer.write_point(&PointRecord { x: -10.0, y: -10.0, z: -10.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
-            writer.write_point(&PointRecord { x: 10.0, y: 10.0, z: 10.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
+            writer.write_point(&PointRecord {
+                x: -10.0,
+                y: -10.0,
+                z: -10.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
+            writer.write_point(&PointRecord {
+                x: 10.0,
+                y: 10.0,
+                z: 10.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
             writer.finish()?;
         }
 
         cursor.set_position(0);
         let reader = CopcReader::new(&mut cursor)?;
-        let root_child = VoxelKey { level: 1, x: 1, y: 1, z: 1 };
+        let root_child = VoxelKey {
+            level: 1,
+            x: 1,
+            y: 1,
+            z: 1,
+        };
         let keys = reader.data_node_keys_subtree(root_child);
         assert!(!keys.is_empty());
         assert!(keys.iter().all(|k| is_descendant_key(*k, root_child)));
@@ -1410,8 +1784,22 @@ mod tests {
 
         {
             let mut writer = CopcWriter::new(&mut cursor, cfg);
-            writer.write_point(&PointRecord { x: 100.0, y: 100.0, z: 100.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
-            writer.write_point(&PointRecord { x: -100.0, y: -100.0, z: -100.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
+            writer.write_point(&PointRecord {
+                x: 100.0,
+                y: 100.0,
+                z: 100.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
+            writer.write_point(&PointRecord {
+                x: -100.0,
+                y: -100.0,
+                z: -100.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
             writer.finish()?;
         }
 
@@ -1441,9 +1829,30 @@ mod tests {
 
         {
             let mut writer = CopcWriter::new(&mut cursor, cfg);
-            writer.write_point(&PointRecord { x: -100.0, y: -50.0, z: -20.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
-            writer.write_point(&PointRecord { x: 50.0, y: 75.0, z: 20.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
-            writer.write_point(&PointRecord { x: 120.0, y: -120.0, z: 60.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
+            writer.write_point(&PointRecord {
+                x: -100.0,
+                y: -50.0,
+                z: -20.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
+            writer.write_point(&PointRecord {
+                x: 50.0,
+                y: 75.0,
+                z: 20.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
+            writer.write_point(&PointRecord {
+                x: 120.0,
+                y: -120.0,
+                z: 60.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
             writer.finish()?;
         }
 
@@ -1499,8 +1908,22 @@ mod tests {
 
         {
             let mut writer = CopcWriter::new(&mut cursor, cfg);
-            writer.write_point(&PointRecord { x: -10.0, y: -20.0, z: -30.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
-            writer.write_point(&PointRecord { x: 10.0, y: 20.0, z: 30.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
+            writer.write_point(&PointRecord {
+                x: -10.0,
+                y: -20.0,
+                z: -30.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
+            writer.write_point(&PointRecord {
+                x: 10.0,
+                y: 20.0,
+                z: 30.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
             writer.finish()?;
         }
 
@@ -1549,10 +1972,38 @@ mod tests {
 
         {
             let mut writer = CopcWriter::new(&mut cursor, cfg);
-            writer.write_point(&PointRecord { x: -100.0, y: -100.0, z: -100.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
-            writer.write_point(&PointRecord { x: -50.0, y: -50.0, z: -50.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
-            writer.write_point(&PointRecord { x: 50.0, y: 50.0, z: 50.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
-            writer.write_point(&PointRecord { x: 100.0, y: 100.0, z: 100.0, return_number: 1, number_of_returns: 1, ..PointRecord::default() })?;
+            writer.write_point(&PointRecord {
+                x: -100.0,
+                y: -100.0,
+                z: -100.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
+            writer.write_point(&PointRecord {
+                x: -50.0,
+                y: -50.0,
+                z: -50.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
+            writer.write_point(&PointRecord {
+                x: 50.0,
+                y: 50.0,
+                z: 50.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
+            writer.write_point(&PointRecord {
+                x: 100.0,
+                y: 100.0,
+                z: 100.0,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            })?;
             writer.finish()?;
         }
 
@@ -1587,7 +2038,10 @@ mod tests {
                 let _ = remote.read_node(*key, &mut remote_pts)?;
             }
 
-            assert_eq!(point_xyz_signature(&local_pts), point_xyz_signature(&remote_pts));
+            assert_eq!(
+                point_xyz_signature(&local_pts),
+                point_xyz_signature(&remote_pts)
+            );
             Ok(())
         })();
 
@@ -1607,7 +2061,12 @@ mod tests {
                     point_count: 0,
                 },
                 CopcEntry {
-                    key: VoxelKey { level: 1, x: 1, y: 0, z: 0 },
+                    key: VoxelKey {
+                        level: 1,
+                        x: 1,
+                        y: 0,
+                        z: 0,
+                    },
                     offset: 256,
                     byte_size: 32,
                     point_count: 4,
@@ -1634,8 +2093,10 @@ mod tests {
             CopcReaderMode::Strict,
         )
         .expect_err("strict mode should reject EVLR-header-offset interpretation");
-        assert!(format!("{err}").contains("failed to parse plausible hierarchy")
-            || format!("{err}").contains("strict mode requires"));
+        assert!(
+            format!("{err}").contains("failed to parse plausible hierarchy")
+                || format!("{err}").contains("strict mode requires")
+        );
         Ok(())
     }
 
@@ -1752,7 +2213,8 @@ mod tests {
                     hierarchy_root_offset: 128,
                     hierarchy_root_size: 32,
                     ..CopcInfo::default()
-                }.to_bytes(),
+                }
+                .to_bytes(),
                 extended: false,
             },
         )?;
@@ -1858,7 +2320,8 @@ mod tests {
                     hierarchy_root_offset: 128,
                     hierarchy_root_size: 32,
                     ..CopcInfo::default()
-                }.to_bytes(),
+                }
+                .to_bytes(),
                 extended: false,
             },
         )
@@ -1965,7 +2428,8 @@ mod tests {
                     hierarchy_root_offset: 128,
                     hierarchy_root_size: 32,
                     ..CopcInfo::default()
-                }.to_bytes(),
+                }
+                .to_bytes(),
                 extended: false,
             },
         )
@@ -2072,7 +2536,8 @@ mod tests {
                     hierarchy_root_offset: 128,
                     hierarchy_root_size: 32,
                     ..CopcInfo::default()
-                }.to_bytes(),
+                }
+                .to_bytes(),
                 extended: false,
             },
         )
@@ -2164,7 +2629,8 @@ mod tests {
                     hierarchy_root_offset: 128,
                     hierarchy_root_size: 32,
                     ..CopcInfo::default()
-                }.to_bytes(),
+                }
+                .to_bytes(),
                 extended: false,
             },
         )

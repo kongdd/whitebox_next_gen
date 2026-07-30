@@ -64,7 +64,8 @@ impl IntegerDecompressor {
     fn init(&mut self) {
         if self.models_k.is_empty() {
             for _ in 0..self.contexts {
-                self.models_k.push(ArithmeticSymbolModel::new(self.corr_bits + 1));
+                self.models_k
+                    .push(ArithmeticSymbolModel::new(self.corr_bits + 1));
             }
             for i in 1..=self.corr_bits {
                 let symbols = if i <= self.bits_high {
@@ -72,7 +73,8 @@ impl IntegerDecompressor {
                 } else {
                     1 << self.bits_high
                 };
-                self.models_corrector.push(ArithmeticSymbolModel::new(symbols));
+                self.models_corrector
+                    .push(ArithmeticSymbolModel::new(symbols));
             }
         }
     }
@@ -157,7 +159,12 @@ impl IntegerCompressor {
         } else if bits > 0 && bits < 32 {
             let corr_range = 1u32 << bits;
             let corr_min = -((corr_range as i32) / 2);
-            (bits, corr_range, corr_min, corr_min + (corr_range - 1) as i32)
+            (
+                bits,
+                corr_range,
+                corr_min,
+                corr_min + (corr_range - 1) as i32,
+            )
         } else {
             (32, 0, i32::MIN, i32::MAX)
         };
@@ -186,7 +193,8 @@ impl IntegerCompressor {
     fn init(&mut self) {
         if self.models_k.is_empty() {
             for _ in 0..self.contexts {
-                self.models_k.push(ArithmeticSymbolModel::new(self.corr_bits + 1));
+                self.models_k
+                    .push(ArithmeticSymbolModel::new(self.corr_bits + 1));
             }
             for i in 1..=self.corr_bits {
                 let symbols = if i <= self.bits_high {
@@ -194,7 +202,8 @@ impl IntegerCompressor {
                 } else {
                     1 << self.bits_high
                 };
-                self.models_corrector.push(ArithmeticSymbolModel::new(symbols));
+                self.models_corrector
+                    .push(ArithmeticSymbolModel::new(symbols));
             }
         }
     }
@@ -214,7 +223,11 @@ impl IntegerCompressor {
             corr -= self.corr_range as i32;
         }
 
-        let mut c1 = if corr <= 0 { corr.wrapping_neg() } else { corr - 1 } as u32;
+        let mut c1 = if corr <= 0 {
+            corr.wrapping_neg()
+        } else {
+            corr - 1
+        } as u32;
         self.k = 0;
         while c1 != 0 {
             c1 >>= 1;

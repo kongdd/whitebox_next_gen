@@ -1,8 +1,8 @@
 //! COPC spatial hierarchy types.
 
-use std::io::{Read, Write};
 use crate::io::le;
 use crate::Result;
+use std::io::{Read, Write};
 
 /// Octree voxel key (level, x, y, z).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -19,15 +19,20 @@ pub struct VoxelKey {
 
 impl VoxelKey {
     /// The root key.
-    pub const ROOT: VoxelKey = VoxelKey { level: 0, x: 0, y: 0, z: 0 };
+    pub const ROOT: VoxelKey = VoxelKey {
+        level: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+    };
 
     /// Read from a little-endian stream.
     pub fn read<R: Read>(r: &mut R) -> Result<Self> {
         Ok(VoxelKey {
             level: le::read_i32(r)?,
-            x:     le::read_i32(r)?,
-            y:     le::read_i32(r)?,
-            z:     le::read_i32(r)?,
+            x: le::read_i32(r)?,
+            y: le::read_i32(r)?,
+            z: le::read_i32(r)?,
         })
     }
 
@@ -45,14 +50,49 @@ impl VoxelKey {
         let l = self.level + 1;
         let (x, y, z) = (self.x * 2, self.y * 2, self.z * 2);
         [
-            VoxelKey { level: l, x,   y,   z   },
-            VoxelKey { level: l, x:x+1, y,   z   },
-            VoxelKey { level: l, x,   y:y+1, z   },
-            VoxelKey { level: l, x:x+1, y:y+1, z   },
-            VoxelKey { level: l, x,   y,   z:z+1 },
-            VoxelKey { level: l, x:x+1, y,   z:z+1 },
-            VoxelKey { level: l, x,   y:y+1, z:z+1 },
-            VoxelKey { level: l, x:x+1, y:y+1, z:z+1 },
+            VoxelKey { level: l, x, y, z },
+            VoxelKey {
+                level: l,
+                x: x + 1,
+                y,
+                z,
+            },
+            VoxelKey {
+                level: l,
+                x,
+                y: y + 1,
+                z,
+            },
+            VoxelKey {
+                level: l,
+                x: x + 1,
+                y: y + 1,
+                z,
+            },
+            VoxelKey {
+                level: l,
+                x,
+                y,
+                z: z + 1,
+            },
+            VoxelKey {
+                level: l,
+                x: x + 1,
+                y,
+                z: z + 1,
+            },
+            VoxelKey {
+                level: l,
+                x,
+                y: y + 1,
+                z: z + 1,
+            },
+            VoxelKey {
+                level: l,
+                x: x + 1,
+                y: y + 1,
+                z: z + 1,
+            },
         ]
     }
 }
@@ -76,11 +116,16 @@ impl CopcEntry {
 
     /// Read a single entry.
     pub fn read<R: Read>(r: &mut R) -> Result<Self> {
-        let key       = VoxelKey::read(r)?;
-        let offset    = le::read_u64(r)?;
+        let key = VoxelKey::read(r)?;
+        let offset = le::read_u64(r)?;
         let byte_size = le::read_i32(r)?;
         let point_count = le::read_i32(r)?;
-        Ok(CopcEntry { key, offset, byte_size, point_count })
+        Ok(CopcEntry {
+            key,
+            offset,
+            byte_size,
+            point_count,
+        })
     }
 
     /// Write a single entry.
@@ -115,7 +160,9 @@ impl CopcHierarchy {
     /// Serialise all entries to bytes.
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let mut buf = Vec::with_capacity(self.entries.len() * CopcEntry::SIZE);
-        for e in &self.entries { e.write(&mut buf)?; }
+        for e in &self.entries {
+            e.write(&mut buf)?;
+        }
         Ok(buf)
     }
 
@@ -159,10 +206,10 @@ impl CopcInfo {
             center_x: le::read_f64(&mut cur)?,
             center_y: le::read_f64(&mut cur)?,
             center_z: le::read_f64(&mut cur)?,
-            halfsize:  le::read_f64(&mut cur)?,
-            spacing:   le::read_f64(&mut cur)?,
+            halfsize: le::read_f64(&mut cur)?,
+            spacing: le::read_f64(&mut cur)?,
             hierarchy_root_offset: le::read_u64(&mut cur)?,
-            hierarchy_root_size:   le::read_u64(&mut cur)?,
+            hierarchy_root_size: le::read_u64(&mut cur)?,
             gps_time_minimum: le::read_f64(&mut cur)?,
             gps_time_maximum: le::read_f64(&mut cur)?,
         })

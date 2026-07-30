@@ -7,22 +7,17 @@ use std::sync::OnceLock;
 
 use crate::crs::Crs;
 use crate::io::{le, PointReader};
-use crate::las::PointDataFormat;
 use crate::las::LasReader;
+use crate::las::PointDataFormat;
 use crate::laz::chunk::{read_compressed_chunk, ChunkTable, CHUNK_TABLE_VERSION};
 use crate::laz::laszip_chunk_table::{
-    LaszipChunkTableEntry,
-    read_laszip_chunk_table_entries,
-    read_laszip_chunk_table_header,
-    read_laszip_chunk_table_pointer,
+    read_laszip_chunk_table_entries, read_laszip_chunk_table_header,
+    read_laszip_chunk_table_pointer, LaszipChunkTableEntry,
 };
 use crate::laz::standard_point10::decode_standard_pointwise_chunk_point10_v2;
 use crate::laz::standard_point14::decode_standard_layered_chunk_point14_v3_with_status;
 use crate::laz::{
-    parse_laszip_vlr,
-    LaszipItemSpec,
-    parse_vlr_chunk_size,
-    LaszipCompressorType,
+    parse_laszip_vlr, parse_vlr_chunk_size, LaszipCompressorType, LaszipItemSpec,
     DEFAULT_CHUNK_SIZE,
 };
 use crate::point::PointRecord;
@@ -142,11 +137,14 @@ fn read_standard_chunk_table_entries_with_recovery<R: Read + Seek>(
     preferred_contains_point_count: bool,
     ctx: StandardChunkTableContext,
 ) -> Option<Vec<LaszipChunkTableEntry>> {
-    let decode = |reader: &mut R, contains_point_count: bool| -> Option<Vec<LaszipChunkTableEntry>> {
-        reader.seek(SeekFrom::Start(chunk_table_offset + 8)).ok()?;
-        let entries = read_laszip_chunk_table_entries(reader, chunk_count, contains_point_count).ok()?;
-        validate_standard_chunk_table_entries(&entries, contains_point_count, ctx).then_some(entries)
-    };
+    let decode =
+        |reader: &mut R, contains_point_count: bool| -> Option<Vec<LaszipChunkTableEntry>> {
+            reader.seek(SeekFrom::Start(chunk_table_offset + 8)).ok()?;
+            let entries =
+                read_laszip_chunk_table_entries(reader, chunk_count, contains_point_count).ok()?;
+            validate_standard_chunk_table_entries(&entries, contains_point_count, ctx)
+                .then_some(entries)
+        };
 
     decode(reader, preferred_contains_point_count)
         .or_else(|| decode(reader, !preferred_contains_point_count))
@@ -209,8 +207,16 @@ impl<R: Read + Seek> LazReader<R> {
         let total_points = las.header().point_count();
         let point_data_format = las.header().point_data_format;
         let expected_extra_bytes_count = las.header().extra_bytes_count as usize;
-        let scales = [las.header().x_scale, las.header().y_scale, las.header().z_scale];
-        let offsets = [las.header().x_offset, las.header().y_offset, las.header().z_offset];
+        let scales = [
+            las.header().x_scale,
+            las.header().y_scale,
+            las.header().z_scale,
+        ];
+        let offsets = [
+            las.header().x_offset,
+            las.header().y_offset,
+            las.header().z_offset,
+        ];
 
         // After LasReader::new the inner stream is positioned at offset_to_point_data.
         let chunk_table_pos = las.offset_to_point_data();
@@ -237,7 +243,7 @@ impl<R: Read + Seek> LazReader<R> {
                     u64::MAX
                 }
             };
-            
+
             let (version, chunk_count) = (
                 ((first_word & 0xFFFF_FFFF) as u32),
                 ((first_word >> 32) as u32) as u64,
@@ -253,7 +259,9 @@ impl<R: Read + Seek> LazReader<R> {
             } else {
                 // Attempt standard LASzip chunk-table pointer + chunk table parse.
                 let standard_pointer =
-                    read_laszip_chunk_table_pointer(inner, chunk_table_pos, file_len).ok().flatten();
+                    read_laszip_chunk_table_pointer(inner, chunk_table_pos, file_len)
+                        .ok()
+                        .flatten();
                 let parsed_standard_table = if let Some(ptr) = standard_pointer {
                     if let Ok(header) =
                         read_laszip_chunk_table_header(inner, ptr.chunk_table_offset, file_len)
@@ -348,44 +356,51 @@ impl<R: Read + Seek> LazReader<R> {
                                     break;
                                 }
 
-                                let chunk_byte_count = usize::try_from(entry.byte_count).map_err(|_| {
-                                    crate::Error::InvalidValue {
-                                        field: "laz.standard_chunk_byte_count",
-                                        detail: format!("chunk byte_count {} does not fit into usize", entry.byte_count),
-                                    }
-                                })?;
+                                let chunk_byte_count =
+                                    usize::try_from(entry.byte_count).map_err(|_| {
+                                        crate::Error::InvalidValue {
+                                            field: "laz.standard_chunk_byte_count",
+                                            detail: format!(
+                                                "chunk byte_count {} does not fit into usize",
+                                                entry.byte_count
+                                            ),
+                                        }
+                                    })?;
 
                                 let mut chunk_bytes = vec![0u8; chunk_byte_count];
                                 inner.seek(SeekFrom::Start(chunk_data_offset))?;
                                 inner.read_exact(&mut chunk_bytes)?;
 
-                                let (mut chunk_points, already_scaled) = match decode_standard_layered_chunk_point14_v3_with_status(
-                                    &chunk_bytes,
-                                    points_in_chunk,
-                                    &info.items,
-                                    point_data_format,
-                                    scales,
-                                    offsets,
-                                ) {
-                                    Ok((points, status)) => {
-                                        if status.partial && fail_on_partial_point14() {
-                                            return Err(crate::Error::InvalidValue {
+                                let (mut chunk_points, already_scaled) =
+                                    match decode_standard_layered_chunk_point14_v3_with_status(
+                                        &chunk_bytes,
+                                        points_in_chunk,
+                                        &info.items,
+                                        point_data_format,
+                                        scales,
+                                        offsets,
+                                    ) {
+                                        Ok((points, status)) => {
+                                            if status.partial && fail_on_partial_point14() {
+                                                return Err(crate::Error::InvalidValue {
                                                 field: "laz.point14.partial",
                                                 detail: format!(
                                                     "decoded {} of {} points in strict partial-check mode",
                                                     status.decoded_points, status.expected_points
                                                 ),
                                             });
+                                            }
+                                            if status.partial {
+                                                point14_partial_events += 1;
+                                                point14_partial_decoded_points +=
+                                                    status.decoded_points as u64;
+                                                point14_partial_expected_points +=
+                                                    status.expected_points as u64;
+                                            }
+                                            (points, true)
                                         }
-                                        if status.partial {
-                                            point14_partial_events += 1;
-                                            point14_partial_decoded_points += status.decoded_points as u64;
-                                            point14_partial_expected_points += status.expected_points as u64;
-                                        }
-                                        (points, true)
-                                    }
-                                    Err(e) => return Err(e),
-                                };
+                                        Err(e) => return Err(e),
+                                    };
 
                                 if !already_scaled {
                                     for pt in &mut chunk_points {
@@ -396,7 +411,8 @@ impl<R: Read + Seek> LazReader<R> {
                                 }
 
                                 decoded.append(&mut chunk_points);
-                                chunk_data_offset = chunk_data_offset.saturating_add(entry.byte_count);
+                                chunk_data_offset =
+                                    chunk_data_offset.saturating_add(entry.byte_count);
                             }
 
                             standard_points = Some(decoded);
@@ -413,7 +429,12 @@ impl<R: Read + Seek> LazReader<R> {
 
                     // Successfully parsed and decoded: return default table with data start offset
                     (ChunkTable::default(), ptr.data_start)
-                } else if declared_standard_laszip && laszip_info.as_ref().map(|i| i.has_point14_item()).unwrap_or(false) {
+                } else if declared_standard_laszip
+                    && laszip_info
+                        .as_ref()
+                        .map(|i| i.has_point14_item())
+                        .unwrap_or(false)
+                {
                     // For LayeredChunked Point14 streams, even if we can't parse the chunk table,
                     // report the actual limitation (arithmetic decoding not implemented) rather than chunk-table error.
                     return Err(crate::Error::Unimplemented(
@@ -481,16 +502,17 @@ impl<R: Read + Seek> LazReader<R> {
     #[cfg(feature = "laz-parallel")]
     pub fn read_all_points_parallel(&mut self) -> Result<Vec<PointRecord>> {
         // Only implemented for Point10 lazy streaming mode (standard LASzip).
-        let state = self.standard_point10_lazy.as_ref()
-            .ok_or_else(|| crate::Error::Unimplemented(
-                "read_all_points_parallel only supports Point10 lazy (standard LASzip) streams"
-            ))?;
+        let state = self.standard_point10_lazy.as_ref().ok_or_else(|| {
+            crate::Error::Unimplemented(
+                "read_all_points_parallel only supports Point10 lazy (standard LASzip) streams",
+            )
+        })?;
 
         // Decide whether parallelization is worthwhile.
         let nonzero_chunks = state.entries.iter().filter(|e| e.byte_count > 0).count();
         let total_points: u64 = state.entries.iter().map(|e| e.point_count).sum();
 
-        if nonzero_chunks < parallel_chunk_decode_min_chunks() 
+        if nonzero_chunks < parallel_chunk_decode_min_chunks()
             || total_points < parallel_chunk_decode_min_points() as u64
         {
             // Fall back to serial decoding.
@@ -507,12 +529,16 @@ impl<R: Read + Seek> LazReader<R> {
                     let chunk_byte_count = usize::try_from(entry.byte_count).map_err(|_| {
                         crate::Error::InvalidValue {
                             field: "laz.parallel_chunk_byte_count",
-                            detail: format!("chunk byte_count {} does not fit into usize", entry.byte_count),
+                            detail: format!(
+                                "chunk byte_count {} does not fit into usize",
+                                entry.byte_count
+                            ),
                         }
                     })?;
                     let mut chunk_bytes = vec![0u8; chunk_byte_count];
                     self.las.inner_mut().seek(SeekFrom::Start(
-                        state.chunk_data_offset + chunk_bytes_list.iter().map(|c| c.len() as u64).sum::<u64>()
+                        state.chunk_data_offset
+                            + chunk_bytes_list.iter().map(|c| c.len() as u64).sum::<u64>(),
                     ))?;
                     self.las.inner_mut().read_exact(&mut chunk_bytes)?;
                     chunk_bytes_list.push(chunk_bytes);
@@ -593,10 +619,9 @@ impl<R: Read + Seek> LazReader<R> {
     /// Serial fallback for read_all_points_parallel(). Decodes all chunks sequentially.
     #[cfg(feature = "laz-parallel")]
     fn read_all_points_serial(&mut self) -> Result<Vec<PointRecord>> {
-        let state = self.standard_point10_lazy.as_ref()
-            .ok_or_else(|| crate::Error::Unimplemented(
-                "read_all_points_serial only supports Point10 lazy streams"
-            ))?;
+        let state = self.standard_point10_lazy.as_ref().ok_or_else(|| {
+            crate::Error::Unimplemented("read_all_points_serial only supports Point10 lazy streams")
+        })?;
 
         let mut all_points = Vec::new();
         let mut chunk_data_offset = state.chunk_data_offset;
@@ -608,15 +633,19 @@ impl<R: Read + Seek> LazReader<R> {
                 continue;
             }
 
-            let chunk_byte_count = usize::try_from(entry.byte_count).map_err(|_| {
-                crate::Error::InvalidValue {
+            let chunk_byte_count =
+                usize::try_from(entry.byte_count).map_err(|_| crate::Error::InvalidValue {
                     field: "laz.serial_chunk_byte_count",
-                    detail: format!("chunk byte_count {} does not fit into usize", entry.byte_count),
-                }
-            })?;
+                    detail: format!(
+                        "chunk byte_count {} does not fit into usize",
+                        entry.byte_count
+                    ),
+                })?;
 
             let mut chunk_bytes = vec![0u8; chunk_byte_count];
-            self.las.inner_mut().seek(SeekFrom::Start(chunk_data_offset))?;
+            self.las
+                .inner_mut()
+                .seek(SeekFrom::Start(chunk_data_offset))?;
             self.las.inner_mut().read_exact(&mut chunk_bytes)?;
 
             let remaining = if total_points_for_header > 0 {
@@ -648,7 +677,6 @@ impl<R: Read + Seek> LazReader<R> {
     }
 }
 
-
 impl<R: Read + Seek> PointReader for LazReader<R> {
     fn read_point(&mut self, out: &mut PointRecord) -> Result<bool> {
         if let Some(points) = self.standard_points.as_ref() {
@@ -669,8 +697,19 @@ impl<R: Read + Seek> PointReader for LazReader<R> {
                 }
 
                 loop {
-                    let (entry, point_data_format, expected_extra_bytes_count, scales, offsets, item_specs, chunk_data_offset) = {
-                        let state = self.standard_point10_lazy.as_mut().expect("state checked above");
+                    let (
+                        entry,
+                        point_data_format,
+                        expected_extra_bytes_count,
+                        scales,
+                        offsets,
+                        item_specs,
+                        chunk_data_offset,
+                    ) = {
+                        let state = self
+                            .standard_point10_lazy
+                            .as_mut()
+                            .expect("state checked above");
 
                         while state.entry_index < state.entries.len()
                             && state.entries[state.entry_index].byte_count == 0
@@ -738,7 +777,8 @@ impl<R: Read + Seek> PointReader for LazReader<R> {
                     )?;
 
                     if let Some(state) = self.standard_point10_lazy.as_mut() {
-                        state.chunk_data_offset = state.chunk_data_offset.saturating_add(entry.byte_count);
+                        state.chunk_data_offset =
+                            state.chunk_data_offset.saturating_add(entry.byte_count);
                     }
 
                     self.buf_pos = 0;
@@ -784,12 +824,13 @@ impl<R: Read + Seek> PointReader for LazReader<R> {
             };
 
             // Seek, read the u64-prefixed compressed block, then inflate.
-            self.las.inner_mut().seek(SeekFrom::Start(chunk_byte_offset))?;
+            self.las
+                .inner_mut()
+                .seek(SeekFrom::Start(chunk_byte_offset))?;
             let _compressed = match read_compressed_chunk(self.las.inner_mut()) {
                 Ok(v) => v,
                 Err(crate::Error::Io(e))
-                    if self.declared_point14_standard
-                        && e.kind() == ErrorKind::UnexpectedEof =>
+                    if self.declared_point14_standard && e.kind() == ErrorKind::UnexpectedEof =>
                 {
                     return Err(crate::Error::Unimplemented(
                         "standard LASzip Point14 layered stream detected, but arithmetic layered decoding is not yet implemented in wblidar standard backend",
@@ -833,7 +874,7 @@ fn fail_on_partial_point14() -> bool {
         Ok(v) => {
             let v = v.trim().to_ascii_lowercase();
             v == "1" || v == "true" || v == "yes" || v == "on"
-   }
+        }
         Err(_) => false,
     }
 }
@@ -920,4 +961,3 @@ mod tests {
         Ok(())
     }
 }
-

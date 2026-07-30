@@ -140,7 +140,9 @@ impl RawPoint10 {
             rgb: p.color,
         };
 
-        if matches!(format, PointDataFormat::Pdrf1 | PointDataFormat::Pdrf3) && out.gps_time.is_none() {
+        if matches!(format, PointDataFormat::Pdrf1 | PointDataFormat::Pdrf3)
+            && out.gps_time.is_none()
+        {
             return None;
         }
         if matches!(format, PointDataFormat::Pdrf2 | PointDataFormat::Pdrf3) && out.rgb.is_none() {
@@ -165,7 +167,11 @@ mod tests {
             y: 100.0,
             z: 12.0,
             intensity: 512,
-            color: Some(Rgb16 { red: 12, green: 34, blue: 56 }),
+            color: Some(Rgb16 {
+                red: 12,
+                green: 34,
+                blue: 56,
+            }),
             classification: 2,
             user_data: 7,
             point_source_id: 9,
@@ -204,8 +210,8 @@ mod tests {
             b
         };
 
-        let decoded_raw = RawPoint10::from_bytes(&bytes, PointDataFormat::Pdrf3)
-            .expect("raw bytes should parse");
+        let decoded_raw =
+            RawPoint10::from_bytes(&bytes, PointDataFormat::Pdrf3).expect("raw bytes should parse");
         let decoded = decoded_raw.to_point_record(scales, offsets);
 
         assert_eq!(decoded.intensity, p.intensity);

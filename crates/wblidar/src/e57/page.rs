@@ -1,9 +1,9 @@
 //! E57 binary page I/O with CRC-32 validation.
 
-use std::io::{Read, Write};
 use crate::e57::crc::crc32;
 use crate::e57::{PAGE_PAYLOAD, PAGE_SIZE};
 use crate::{Error, Result};
+use std::io::{Read, Write};
 
 /// Read one E57 binary page (1024 bytes), validate its CRC-32, and return
 /// the 1020 payload bytes.
@@ -14,7 +14,10 @@ pub fn read_page<R: Read>(r: &mut R) -> Result<[u8; PAGE_PAYLOAD]> {
     let stored = u32::from_le_bytes(page[PAGE_PAYLOAD..PAGE_SIZE].try_into().unwrap());
     let computed = crc32(&page[..PAGE_PAYLOAD]);
     if stored != computed {
-        return Err(Error::CrcMismatch { expected: stored, computed });
+        return Err(Error::CrcMismatch {
+            expected: stored,
+            computed,
+        });
     }
     let mut out = [0u8; PAGE_PAYLOAD];
     out.copy_from_slice(&page[..PAGE_PAYLOAD]);
@@ -39,7 +42,11 @@ pub struct PageReader<R: Read> {
 impl<R: Read> PageReader<R> {
     /// Create a new page reader.
     pub fn new(inner: R) -> Self {
-        PageReader { inner, buf: Vec::new(), pos: 0 }
+        PageReader {
+            inner,
+            buf: Vec::new(),
+            pos: 0,
+        }
     }
 
     /// Read `n` bytes from the paged stream.
@@ -62,7 +69,12 @@ pub struct PageWriter<W: Write> {
 
 impl<W: Write> PageWriter<W> {
     /// Create a new page writer.
-    pub fn new(inner: W) -> Self { PageWriter { inner, buf: Vec::with_capacity(PAGE_SIZE) } }
+    pub fn new(inner: W) -> Self {
+        PageWriter {
+            inner,
+            buf: Vec::with_capacity(PAGE_SIZE),
+        }
+    }
 
     /// Write bytes to the paged stream.
     pub fn write_bytes(&mut self, data: &[u8]) -> Result<()> {

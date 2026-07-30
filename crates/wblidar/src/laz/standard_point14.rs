@@ -225,7 +225,10 @@ fn encode_waveform_bytes(point: &PointRecord) -> [u8; 29] {
     out
 }
 
-fn collect_point14_payload_bytes(points: &[PointRecord], point_data_format: PointDataFormat) -> Result<Option<Vec<Vec<u8>>>> {
+fn collect_point14_payload_bytes(
+    points: &[PointRecord],
+    point_data_format: PointDataFormat,
+) -> Result<Option<Vec<Vec<u8>>>> {
     if points.is_empty() {
         return Ok(None);
     }
@@ -244,7 +247,14 @@ fn collect_point14_payload_bytes(points: &[PointRecord], point_data_format: Poin
             });
         }
 
-        let mut bytes = Vec::with_capacity(expected_extra_len + if point_data_format.has_waveform() { 29 } else { 0 });
+        let mut bytes = Vec::with_capacity(
+            expected_extra_len
+                + if point_data_format.has_waveform() {
+                    29
+                } else {
+                    0
+                },
+        );
         if point_data_format.has_waveform() {
             bytes.extend_from_slice(&encode_waveform_bytes(point));
         }
@@ -266,10 +276,12 @@ fn serialize_point14_seed_item_set(
     point_data_format: PointDataFormat,
     seed_extra_bytes: Option<&[u8]>,
 ) -> Result<Vec<u8>> {
-    let mut out = seed.to_bytes(PointDataFormat::Pdrf6).ok_or_else(|| Error::InvalidValue {
-        field: "laz.standard_point14_writer.serialize",
-        detail: "failed to serialize Point14 core seed point".to_string(),
-    })?;
+    let mut out = seed
+        .to_bytes(PointDataFormat::Pdrf6)
+        .ok_or_else(|| Error::InvalidValue {
+            field: "laz.standard_point14_writer.serialize",
+            detail: "failed to serialize Point14 core seed point".to_string(),
+        })?;
 
     match point_data_format {
         PointDataFormat::Pdrf6 | PointDataFormat::Pdrf11 => {}
@@ -362,8 +374,7 @@ fn encode_point14_byte14_layers(
                         .as_ref()
                         .ok_or_else(|| Error::InvalidValue {
                             field: "laz.standard_point14_writer.extra_bytes",
-                            detail: "missing source BYTE14 scanner-channel context"
-                                .to_string(),
+                            detail: "missing source BYTE14 scanner-channel context".to_string(),
                         })?
                         .last_item
                         .clone();
@@ -377,13 +388,13 @@ fn encode_point14_byte14_layers(
                 current_channel = target_channel;
             }
 
-            let state = channel_states[current_channel]
-                .as_mut()
-                .ok_or_else(|| Error::InvalidValue {
-                    field: "laz.standard_point14_writer.extra_bytes",
-                    detail: "missing destination BYTE14 scanner-channel context"
-                        .to_string(),
-                })?;
+            let state =
+                channel_states[current_channel]
+                    .as_mut()
+                    .ok_or_else(|| Error::InvalidValue {
+                        field: "laz.standard_point14_writer.extra_bytes",
+                        detail: "missing destination BYTE14 scanner-channel context".to_string(),
+                    })?;
             let last = state.last_item[byte_idx];
             let value = point_extra[byte_idx];
             let diff = value.wrapping_sub(last) as u32;
@@ -396,7 +407,11 @@ fn encode_point14_byte14_layers(
         }
 
         let _ = enc.done().map_err(Error::Io)?;
-        out.push(if changed { writer.into_inner() } else { Vec::new() });
+        out.push(if changed {
+            writer.into_inner()
+        } else {
+            Vec::new()
+        });
     }
 
     Ok(out)
@@ -430,7 +445,11 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
     let mut channel_last_point_source = [seed.point_source_id; 4];
     let mut channel_last_gps_bits = [seed.gps_time.to_bits() as i64; 4];
     let mut channel_last_gps_time_change = [false; 4];
-    let mut channel_last_rgb = [seed.rgb.unwrap_or(Rgb16 { red: 0, green: 0, blue: 0 }); 4];
+    let mut channel_last_rgb = [seed.rgb.unwrap_or(Rgb16 {
+        red: 0,
+        green: 0,
+        blue: 0,
+    }); 4];
     let mut channel_last_nir = [seed.nir.unwrap_or(0); 4];
 
     let mut xy_writer = std::io::Cursor::new(Vec::<u8>::new());
@@ -453,13 +472,29 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
             let switch_channels = target_channel != current_channel;
             let target_has_context = contexts[target_channel].is_some();
 
-            let (seed_x_for_new, seed_y_for_new, seed_z_for_new, seed_intensity_for_new, seed_n_for_new, seed_r_for_new, seed_classification_for_new, seed_flags_symbol_for_new, seed_user_data_for_new, seed_scan_angle_for_new, seed_point_source_for_new, seed_gps_bits_for_new, seed_rgb_for_new, seed_nir_for_new) = {
-                let src_ctx = contexts[current_channel].as_ref().ok_or_else(|| {
-                    Error::InvalidValue {
-                        field: "laz.standard_point14_writer.scanner_channel",
-                        detail: "missing source scanner channel context".to_string(),
-                    }
-                })?;
+            let (
+                seed_x_for_new,
+                seed_y_for_new,
+                seed_z_for_new,
+                seed_intensity_for_new,
+                seed_n_for_new,
+                seed_r_for_new,
+                seed_classification_for_new,
+                seed_flags_symbol_for_new,
+                seed_user_data_for_new,
+                seed_scan_angle_for_new,
+                seed_point_source_for_new,
+                seed_gps_bits_for_new,
+                seed_rgb_for_new,
+                seed_nir_for_new,
+            ) = {
+                let src_ctx =
+                    contexts[current_channel]
+                        .as_ref()
+                        .ok_or_else(|| Error::InvalidValue {
+                            field: "laz.standard_point14_writer.scanner_channel",
+                            detail: "missing source scanner channel context".to_string(),
+                        })?;
                 let src_n = channel_last_n[current_channel];
                 let src_r = channel_last_r[current_channel];
                 let src_l = NUMBER_RETURN_LEVEL_8CTX[src_n][src_r] as usize;
@@ -482,12 +517,13 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
             };
 
             {
-                let src_ctx = contexts[current_channel].as_mut().ok_or_else(|| {
-                    Error::InvalidValue {
-                        field: "laz.standard_point14_writer.scanner_channel",
-                        detail: "missing source scanner channel context".to_string(),
-                    }
-                })?;
+                let src_ctx =
+                    contexts[current_channel]
+                        .as_mut()
+                        .ok_or_else(|| Error::InvalidValue {
+                            field: "laz.standard_point14_writer.scanner_channel",
+                            detail: "missing source scanner channel context".to_string(),
+                        })?;
                 let target_last_scan_angle = if switch_channels {
                     if target_has_context {
                         channel_last_scan_angle[target_channel]
@@ -567,7 +603,12 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                 let src_n = channel_last_n[current_channel];
                 let src_r = channel_last_r[current_channel];
                 let src_lpr = (if src_r == 1 { 1 } else { 0 }) + if src_r >= src_n { 2 } else { 0 };
-                let lpr_idx = src_lpr + if channel_last_gps_time_change[current_channel] { 4 } else { 0 };
+                let lpr_idx = src_lpr
+                    + if channel_last_gps_time_change[current_channel] {
+                        4
+                    } else {
+                        0
+                    };
                 enc.encode_symbol(&mut src_ctx.m_changed_values[lpr_idx], changed_values)
                     .map_err(Error::Io)?;
 
@@ -610,11 +651,13 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
             let r = (raw.return_byte & 0x0F) as usize;
             let last_n = channel_last_n[current_channel];
             let last_r = channel_last_r[current_channel];
-            let gps_time_change = (raw.gps_time.to_bits() as i64) != channel_last_gps_bits[current_channel];
+            let gps_time_change =
+                (raw.gps_time.to_bits() as i64) != channel_last_gps_bits[current_channel];
 
             if n != last_n {
                 if number_of_returns_models[current_channel][last_n].is_none() {
-                    number_of_returns_models[current_channel][last_n] = Some(ArithmeticSymbolModel::new(16));
+                    number_of_returns_models[current_channel][last_n] =
+                        Some(ArithmeticSymbolModel::new(16));
                 }
                 enc.encode_symbol(
                     number_of_returns_models[current_channel][last_n]
@@ -625,13 +668,11 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                 .map_err(Error::Io)?;
             }
 
-            if (r != last_r)
-                && (r != ((last_r + 1) & 0x0F))
-                && (r != ((last_r + 15) & 0x0F))
-            {
+            if (r != last_r) && (r != ((last_r + 1) & 0x0F)) && (r != ((last_r + 15) & 0x0F)) {
                 if gps_time_change {
                     if return_number_models[current_channel][last_r].is_none() {
-                        return_number_models[current_channel][last_r] = Some(ArithmeticSymbolModel::new(16));
+                        return_number_models[current_channel][last_r] =
+                            Some(ArithmeticSymbolModel::new(16));
                     }
                     enc.encode_symbol(
                         return_number_models[current_channel][last_r]
@@ -648,14 +689,17 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                 }
             }
 
-            let dst_ctx = contexts[current_channel].as_mut().ok_or_else(|| Error::InvalidValue {
-                field: "laz.standard_point14_writer.scanner_channel",
-                detail: "missing destination scanner channel context".to_string(),
-            })?;
+            let dst_ctx =
+                contexts[current_channel]
+                    .as_mut()
+                    .ok_or_else(|| Error::InvalidValue {
+                        field: "laz.standard_point14_writer.scanner_channel",
+                        detail: "missing destination scanner channel context".to_string(),
+                    })?;
             let m = NUMBER_RETURN_MAP_6CTX[n][r] as usize;
             let l = NUMBER_RETURN_LEVEL_8CTX[n][r] as usize;
             let cpr = (if r == 1 { 2 } else { 0 }) + if r >= n { 1 } else { 0 };
-                let idx = (m << 1) | if gps_time_change { 1 } else { 0 };
+            let idx = (m << 1) | if gps_time_change { 1 } else { 0 };
 
             let diff_x = raw.xi.wrapping_sub(dst_ctx.x);
             let median_x = dst_ctx.last_x_diff_median[idx].get();
@@ -667,7 +711,12 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
             dst_ctx.x = raw.xi;
 
             let k_bits = dst_ctx.ic_dx.k();
-            let context_y = (n == 1) as u32 + if k_bits < 20 { u32_zero_bit(k_bits) } else { 20 };
+            let context_y = (n == 1) as u32
+                + if k_bits < 20 {
+                    u32_zero_bit(k_bits)
+                } else {
+                    20
+                };
             let diff_y = raw.yi.wrapping_sub(dst_ctx.y);
             let median_y = dst_ctx.last_y_diff_median[idx].get();
             dst_ctx
@@ -694,7 +743,11 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
             let gps_time_change = gps_bits != channel_last_gps_bits[current_channel];
             channel_last_gps_bits[current_channel] = gps_bits;
             channel_last_gps_time_change[current_channel] = gps_time_change;
-            channel_last_rgb[current_channel] = raw.rgb.unwrap_or(Rgb16 { red: 0, green: 0, blue: 0 });
+            channel_last_rgb[current_channel] = raw.rgb.unwrap_or(Rgb16 {
+                red: 0,
+                green: 0,
+                blue: 0,
+            });
             channel_last_nir[current_channel] = raw.nir.unwrap_or(0);
             gps_time_change_per_point.push(gps_time_change);
         }
@@ -709,14 +762,21 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
             let mut enc = ArithmeticEncoder::new(&mut z_writer);
             for (i, raw) in raws.iter().skip(1).enumerate() {
                 let channel = point_channel_per_point[i];
-                let ctx = contexts[channel].as_mut().ok_or_else(|| Error::InvalidValue {
-                    field: "laz.standard_point14_writer.scanner_channel",
-                    detail: "missing z scanner channel context".to_string(),
-                })?;
+                let ctx = contexts[channel]
+                    .as_mut()
+                    .ok_or_else(|| Error::InvalidValue {
+                        field: "laz.standard_point14_writer.scanner_channel",
+                        detail: "missing z scanner channel context".to_string(),
+                    })?;
                 let l = l_per_point[i];
                 let k_bits = k_bits_per_point[i];
                 let n = n_per_point[i];
-                let context_z = (n == 1) as u32 + if k_bits < 18 { u32_zero_bit(k_bits) } else { 18 };
+                let context_z = (n == 1) as u32
+                    + if k_bits < 18 {
+                        u32_zero_bit(k_bits)
+                    } else {
+                        18
+                    };
                 ctx.ic_z
                     .compress(&mut enc, ctx.last_z[l], raw.zi, context_z)
                     .map_err(Error::Io)?;
@@ -768,18 +828,18 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                 }
 
                 active_channel = channel;
-                let cls = classification_state[channel].as_mut().ok_or_else(|| {
-                    Error::InvalidValue {
-                        field: "laz.standard_point14_writer.scanner_channel",
-                        detail: "missing destination classification scanner channel context"
-                            .to_string(),
-                    }
-                })?;
+                let cls =
+                    classification_state[channel]
+                        .as_mut()
+                        .ok_or_else(|| Error::InvalidValue {
+                            field: "laz.standard_point14_writer.scanner_channel",
+                            detail: "missing destination classification scanner channel context"
+                                .to_string(),
+                        })?;
 
                 let cpr = cpr_per_point[i];
-                let ccc =
-                    (((cls.last_classification & 0x1F) << 1) + if cpr == 3 { 1 } else { 0 })
-                        as usize;
+                let ccc = (((cls.last_classification & 0x1F) << 1) + if cpr == 3 { 1 } else { 0 })
+                    as usize;
                 if cls.models[ccc].is_none() {
                     cls.models[ccc] = Some(ArithmeticSymbolModel::new(256));
                 }
@@ -832,10 +892,12 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                 }
 
                 active_channel = channel;
-                let fs = flags_state[channel].as_mut().ok_or_else(|| Error::InvalidValue {
-                    field: "laz.standard_point14_writer.scanner_channel",
-                    detail: "missing destination flags scanner channel context".to_string(),
-                })?;
+                let fs = flags_state[channel]
+                    .as_mut()
+                    .ok_or_else(|| Error::InvalidValue {
+                        field: "laz.standard_point14_writer.scanner_channel",
+                        detail: "missing destination flags scanner channel context".to_string(),
+                    })?;
 
                 let idx = fs.last_flags_symbol as usize;
                 if fs.models[idx].is_none() {
@@ -852,16 +914,22 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
     }
 
     let mut intensity_bytes = Vec::<u8>::new();
-    if raws.iter().skip(1).any(|raw| raw.intensity != seed.intensity) {
+    if raws
+        .iter()
+        .skip(1)
+        .any(|raw| raw.intensity != seed.intensity)
+    {
         let mut intensity_writer = std::io::Cursor::new(Vec::<u8>::new());
         {
             let mut enc = ArithmeticEncoder::new(&mut intensity_writer);
             for (i, raw) in raws.iter().skip(1).enumerate() {
                 let channel = point_channel_per_point[i];
-                let ctx = contexts[channel].as_mut().ok_or_else(|| Error::InvalidValue {
-                    field: "laz.standard_point14_writer.scanner_channel",
-                    detail: "missing intensity scanner channel context".to_string(),
-                })?;
+                let ctx = contexts[channel]
+                    .as_mut()
+                    .ok_or_else(|| Error::InvalidValue {
+                        field: "laz.standard_point14_writer.scanner_channel",
+                        detail: "missing intensity scanner channel context".to_string(),
+                    })?;
                 let cpr = cpr_per_point[i];
                 let intensity_idx = (cpr << 1) | if gps_time_change_per_point[i] { 1 } else { 0 };
                 ctx.ic_intensity
@@ -880,15 +948,18 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
     }
 
     let mut user_data_bytes = Vec::<u8>::new();
-    if raws.iter().skip(1).any(|raw| raw.user_data != seed.user_data) {
+    if raws
+        .iter()
+        .skip(1)
+        .any(|raw| raw.user_data != seed.user_data)
+    {
         #[derive(Clone)]
         struct ScannerUserDataState {
             last_user_data: u8,
             models: [Option<ArithmeticSymbolModel>; 64],
         }
 
-        let mut user_data_state: [Option<ScannerUserDataState>; 4] =
-            std::array::from_fn(|_| None);
+        let mut user_data_state: [Option<ScannerUserDataState>; 4] = std::array::from_fn(|_| None);
         user_data_state[seed_channel] = Some(ScannerUserDataState {
             last_user_data: seed.user_data,
             models: std::array::from_fn(|_| None),
@@ -905,8 +976,7 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                         .as_ref()
                         .ok_or_else(|| Error::InvalidValue {
                             field: "laz.standard_point14_writer.scanner_channel",
-                            detail: "missing source user-data scanner channel context"
-                                .to_string(),
+                            detail: "missing source user-data scanner channel context".to_string(),
                         })?
                         .last_user_data;
                     user_data_state[channel] = Some(ScannerUserDataState {
@@ -916,13 +986,12 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                 }
 
                 active_channel = channel;
-                let ud = user_data_state[channel].as_mut().ok_or_else(|| {
-                    Error::InvalidValue {
+                let ud = user_data_state[channel]
+                    .as_mut()
+                    .ok_or_else(|| Error::InvalidValue {
                         field: "laz.standard_point14_writer.scanner_channel",
-                        detail: "missing destination user-data scanner channel context"
-                            .to_string(),
-                    }
-                })?;
+                        detail: "missing destination user-data scanner channel context".to_string(),
+                    })?;
 
                 let idx = (ud.last_user_data / 4) as usize;
                 if ud.models[idx].is_none() {
@@ -938,7 +1007,11 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
     }
 
     let mut scan_angle_bytes = Vec::<u8>::new();
-    if raws.iter().skip(1).any(|raw| raw.scan_angle != seed.scan_angle) {
+    if raws
+        .iter()
+        .skip(1)
+        .any(|raw| raw.scan_angle != seed.scan_angle)
+    {
         struct ScannerScanAngleState {
             last_scan_angle: i16,
             ic_scan_angle: IntegerCompressor,
@@ -962,8 +1035,7 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                         .as_ref()
                         .ok_or_else(|| Error::InvalidValue {
                             field: "laz.standard_point14_writer.scanner_channel",
-                            detail: "missing source scan-angle scanner channel context"
-                                .to_string(),
+                            detail: "missing source scan-angle scanner channel context".to_string(),
                         })?
                         .last_scan_angle;
                     scan_angle_state[channel] = Some(ScannerScanAngleState {
@@ -973,13 +1045,13 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                 }
 
                 active_channel = channel;
-                let sa = scan_angle_state[channel].as_mut().ok_or_else(|| {
-                    Error::InvalidValue {
+                let sa = scan_angle_state[channel]
+                    .as_mut()
+                    .ok_or_else(|| Error::InvalidValue {
                         field: "laz.standard_point14_writer.scanner_channel",
                         detail: "missing destination scan-angle scanner channel context"
                             .to_string(),
-                    }
-                })?;
+                    })?;
 
                 sa.ic_scan_angle
                     .compress(
@@ -997,7 +1069,11 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
     }
 
     let mut point_source_bytes = Vec::<u8>::new();
-    if raws.iter().skip(1).any(|raw| raw.point_source_id != seed.point_source_id) {
+    if raws
+        .iter()
+        .skip(1)
+        .any(|raw| raw.point_source_id != seed.point_source_id)
+    {
         struct ScannerPointSourceState {
             last_point_source: u16,
             ic_point_source: IntegerCompressor,
@@ -1032,13 +1108,14 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                 }
 
                 active_channel = channel;
-                let ps = point_source_state[channel].as_mut().ok_or_else(|| {
-                    Error::InvalidValue {
-                        field: "laz.standard_point14_writer.scanner_channel",
-                        detail: "missing destination point-source scanner channel context"
-                            .to_string(),
-                    }
-                })?;
+                let ps =
+                    point_source_state[channel]
+                        .as_mut()
+                        .ok_or_else(|| Error::InvalidValue {
+                            field: "laz.standard_point14_writer.scanner_channel",
+                            detail: "missing destination point-source scanner channel context"
+                                .to_string(),
+                        })?;
 
                 if raw.point_source_id == ps.last_point_source {
                     continue;
@@ -1107,7 +1184,9 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                         multi_extreme_counter: [0, 0, 0, 0],
                         gps_last: 0,
                         gps_next: 0,
-                        m_gpstime_multi: ArithmeticSymbolModel::new(LASZIP_GPS_TIME_MULTI_TOTAL as u32),
+                        m_gpstime_multi: ArithmeticSymbolModel::new(
+                            LASZIP_GPS_TIME_MULTI_TOTAL as u32,
+                        ),
                         m_gpstime_0diff: ArithmeticSymbolModel::new(5),
                         ic_gpstime: IntegerCompressor::new(32, 9, 8, 0),
                     });
@@ -1135,8 +1214,19 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
         gps_time_bytes = gps_time_writer.into_inner();
     }
 
-    let has_rgb = matches!(point_data_format, PointDataFormat::Pdrf7 | PointDataFormat::Pdrf8 | PointDataFormat::Pdrf12 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf14 | PointDataFormat::Pdrf15);
-    let has_nir = matches!(point_data_format, PointDataFormat::Pdrf8 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf15);
+    let has_rgb = matches!(
+        point_data_format,
+        PointDataFormat::Pdrf7
+            | PointDataFormat::Pdrf8
+            | PointDataFormat::Pdrf12
+            | PointDataFormat::Pdrf13
+            | PointDataFormat::Pdrf14
+            | PointDataFormat::Pdrf15
+    );
+    let has_nir = matches!(
+        point_data_format,
+        PointDataFormat::Pdrf8 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf15
+    );
 
     let mut nir_bytes = Vec::<u8>::new();
     if has_nir && raws.iter().skip(1).any(|raw| raw.nir != seed.nir) {
@@ -1175,10 +1265,12 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                 }
 
                 active_channel = channel;
-                let ns = nir_state[channel].as_mut().ok_or_else(|| Error::InvalidValue {
-                    field: "laz.standard_point14_writer.scanner_channel",
-                    detail: "missing destination nir scanner channel context".to_string(),
-                })?;
+                let ns = nir_state[channel]
+                    .as_mut()
+                    .ok_or_else(|| Error::InvalidValue {
+                        field: "laz.standard_point14_writer.scanner_channel",
+                        detail: "missing destination nir scanner channel context".to_string(),
+                    })?;
 
                 write_nir(
                     ns.last_nir,
@@ -1239,10 +1331,12 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
                 }
 
                 active_channel = channel;
-                let rs = rgb_state[channel].as_mut().ok_or_else(|| Error::InvalidValue {
-                    field: "laz.standard_point14_writer.scanner_channel",
-                    detail: "missing destination rgb scanner channel context".to_string(),
-                })?;
+                let rs = rgb_state[channel]
+                    .as_mut()
+                    .ok_or_else(|| Error::InvalidValue {
+                        field: "laz.standard_point14_writer.scanner_channel",
+                        detail: "missing destination rgb scanner channel context".to_string(),
+                    })?;
 
                 let rgb = raw.rgb.unwrap_or(Rgb16 {
                     red: 0,
@@ -1267,15 +1361,21 @@ fn encode_standard_layered_chunk_point14_v3_scanner_channel_subset(
     }
 
     let extra_layer_bytes = if let Some(extra_bytes_per_point) = extra_bytes_per_point {
-        encode_point14_byte14_layers(extra_bytes_per_point, &point_channel_per_point, seed_channel)?
+        encode_point14_byte14_layers(
+            extra_bytes_per_point,
+            &point_channel_per_point,
+            seed_channel,
+        )?
     } else {
         Vec::new()
     };
 
-    let mut out = seed.to_bytes(point_data_format).ok_or_else(|| Error::InvalidValue {
-        field: "laz.standard_point14_writer.serialize",
-        detail: "failed to serialize Point14 seed point".to_string(),
-    })?;
+    let mut out = seed
+        .to_bytes(point_data_format)
+        .ok_or_else(|| Error::InvalidValue {
+            field: "laz.standard_point14_writer.serialize",
+            detail: "failed to serialize Point14 seed point".to_string(),
+        })?;
     if let Some(seed_extra) = extra_bytes_per_point.and_then(|bytes| bytes.first()) {
         out.extend_from_slice(seed_extra);
     }
@@ -1422,10 +1522,10 @@ struct Point14ContinuationContext {
     m_gpstime_0diff: ArithmeticSymbolModel,
     ic_gpstime: IntegerDecompressor,
     // RGB14 per-context state (only used when has_rgb is true)
-    last_rgb: [u16; 3],  // [R, G, B] as u16 (only low byte significant per LASzip)
-    m_rgb_byte_used: ArithmeticSymbolModel,   // 128-symbol model for RGB14
+    last_rgb: [u16; 3], // [R, G, B] as u16 (only low byte significant per LASzip)
+    m_rgb_byte_used: ArithmeticSymbolModel, // 128-symbol model for RGB14
     m_rgb_byte_used_rgbnir: ArithmeticSymbolModel, // 128-symbol model for RGBNIR14
-    m_rgb_diff: [ArithmeticSymbolModel; 6],   // 256-symbol models, diff_0..5
+    m_rgb_diff: [ArithmeticSymbolModel; 6], // 256-symbol models, diff_0..5
     // NIR14 per-context state (only used when has_nir is true)
     last_nir: u16,
     m_nir_byte_used: ArithmeticSymbolModel,
@@ -1464,7 +1564,11 @@ impl Point14ContinuationContext {
             m_gpstime_0diff: ArithmeticSymbolModel::new(5),
             ic_gpstime: IntegerDecompressor::new(32, 9, 8, 0),
             last_rgb: {
-                let rgb = seed.rgb.unwrap_or(Rgb16 { red: 0, green: 0, blue: 0 });
+                let rgb = seed.rgb.unwrap_or(Rgb16 {
+                    red: 0,
+                    green: 0,
+                    blue: 0,
+                });
                 [rgb.red, rgb.green, rgb.blue]
             },
             m_rgb_byte_used: ArithmeticSymbolModel::new(128),
@@ -1542,11 +1646,12 @@ pub fn encode_standard_layered_chunk_point14_v3_singleton(
 
     let base_format = normalize_point14_base_format(point_data_format)?;
 
-    let raw = RawPoint14::from_point_record(points[0], base_format, scales, offsets)
-        .ok_or_else(|| Error::InvalidValue {
+    let raw = RawPoint14::from_point_record(points[0], base_format, scales, offsets).ok_or_else(
+        || Error::InvalidValue {
             field: "laz.standard_point14_writer.point",
             detail: "point cannot be represented in requested Point14 format".to_string(),
-        })?;
+        },
+    )?;
 
     let payload_bytes = collect_point14_payload_bytes(points, point_data_format)?;
     let seed_extra = payload_bytes
@@ -1560,8 +1665,19 @@ pub fn encode_standard_layered_chunk_point14_v3_singleton(
     // optional attribute layers.
     let empty_xy = empty_arithmetic_stream()?;
     let empty_z = empty_arithmetic_stream()?;
-    let has_rgb = matches!(base_format, PointDataFormat::Pdrf7 | PointDataFormat::Pdrf8 | PointDataFormat::Pdrf12 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf14 | PointDataFormat::Pdrf15);
-    let has_nir = matches!(base_format, PointDataFormat::Pdrf8 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf15);
+    let has_rgb = matches!(
+        base_format,
+        PointDataFormat::Pdrf7
+            | PointDataFormat::Pdrf8
+            | PointDataFormat::Pdrf12
+            | PointDataFormat::Pdrf13
+            | PointDataFormat::Pdrf14
+            | PointDataFormat::Pdrf15
+    );
+    let has_nir = matches!(
+        base_format,
+        PointDataFormat::Pdrf8 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf15
+    );
     let extra_len = seed_extra.map_or(0, |b| b.len());
 
     out.extend_from_slice(&1u32.to_le_bytes());
@@ -1634,10 +1750,12 @@ pub fn encode_standard_layered_chunk_point14_v3_constant_attributes(
 
     let mut raws = Vec::with_capacity(points.len());
     for &p in points {
-        let raw = RawPoint14::from_point_record(p, base_format, scales, offsets)
-            .ok_or_else(|| Error::InvalidValue {
-                field: "laz.standard_point14_writer.point",
-                detail: "point cannot be represented in requested Point14 format".to_string(),
+        let raw =
+            RawPoint14::from_point_record(p, base_format, scales, offsets).ok_or_else(|| {
+                Error::InvalidValue {
+                    field: "laz.standard_point14_writer.point",
+                    detail: "point cannot be represented in requested Point14 format".to_string(),
+                }
             })?;
         raws.push(raw);
     }
@@ -1649,8 +1767,19 @@ pub fn encode_standard_layered_chunk_point14_v3_constant_attributes(
         .cloned();
 
     let seed = raws[0];
-    let has_rgb = matches!(base_format, PointDataFormat::Pdrf7 | PointDataFormat::Pdrf8 | PointDataFormat::Pdrf12 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf14 | PointDataFormat::Pdrf15);
-    let has_nir = matches!(base_format, PointDataFormat::Pdrf8 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf15);
+    let has_rgb = matches!(
+        base_format,
+        PointDataFormat::Pdrf7
+            | PointDataFormat::Pdrf8
+            | PointDataFormat::Pdrf12
+            | PointDataFormat::Pdrf13
+            | PointDataFormat::Pdrf14
+            | PointDataFormat::Pdrf15
+    );
+    let has_nir = matches!(
+        base_format,
+        PointDataFormat::Pdrf8 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf15
+    );
     let seed_scanner_channel = point14_scanner_channel_bits(seed.flags_byte);
     let scanner_channel_varies = raws
         .iter()
@@ -1758,11 +1887,8 @@ pub fn encode_standard_layered_chunk_point14_v3_constant_attributes(
                 if number_of_returns_models[last_n].is_none() {
                     number_of_returns_models[last_n] = Some(ArithmeticSymbolModel::new(16));
                 }
-                enc.encode_symbol(
-                    number_of_returns_models[last_n].as_mut().unwrap(),
-                    n as u32,
-                )
-                .map_err(Error::Io)?;
+                enc.encode_symbol(number_of_returns_models[last_n].as_mut().unwrap(), n as u32)
+                    .map_err(Error::Io)?;
             }
 
             if (changed_values & 0x03) == 3 {
@@ -1795,7 +1921,12 @@ pub fn encode_standard_layered_chunk_point14_v3_constant_attributes(
             last_x = raw.xi;
 
             let k_bits = ic_dx.k();
-            let context_y = (n == 1) as u32 + if k_bits < 20 { u32_zero_bit(k_bits) } else { 20 };
+            let context_y = (n == 1) as u32
+                + if k_bits < 20 {
+                    u32_zero_bit(k_bits)
+                } else {
+                    20
+                };
             let diff_y = raw.yi.wrapping_sub(last_y);
             let median_y = last_y_diff_median[idx].get();
             ic_dy
@@ -1831,9 +1962,13 @@ pub fn encode_standard_layered_chunk_point14_v3_constant_attributes(
                 let l = l_per_point[i];
                 let k_bits = k_bits_per_point[i];
                 let n = ((raw.return_byte >> 4) & 0x0F) as usize;
-                let context_z = (n == 1) as u32 + if k_bits < 18 { u32_zero_bit(k_bits) } else { 18 };
-                ic_z
-                    .compress(&mut enc, last_z[l], raw.zi, context_z)
+                let context_z = (n == 1) as u32
+                    + if k_bits < 18 {
+                        u32_zero_bit(k_bits)
+                    } else {
+                        18
+                    };
+                ic_z.compress(&mut enc, last_z[l], raw.zi, context_z)
                     .map_err(Error::Io)?;
                 last_z[l] = raw.zi;
             }
@@ -1843,7 +1978,11 @@ pub fn encode_standard_layered_chunk_point14_v3_constant_attributes(
     }
 
     let mut intensity_bytes = Vec::<u8>::new();
-    if raws.iter().skip(1).any(|raw| raw.intensity != seed.intensity) {
+    if raws
+        .iter()
+        .skip(1)
+        .any(|raw| raw.intensity != seed.intensity)
+    {
         let mut last_intensity = [seed.intensity; 8];
         let mut intensity_writer = std::io::Cursor::new(Vec::<u8>::new());
         {
@@ -1878,12 +2017,11 @@ pub fn encode_standard_layered_chunk_point14_v3_constant_attributes(
         let mut classification_writer = std::io::Cursor::new(Vec::<u8>::new());
         {
             let mut enc = ArithmeticEncoder::new(&mut classification_writer);
-            let mut models: [Option<ArithmeticSymbolModel>; 64] =
-                std::array::from_fn(|_| None);
+            let mut models: [Option<ArithmeticSymbolModel>; 64] = std::array::from_fn(|_| None);
             for (i, raw) in raws.iter().skip(1).enumerate() {
                 let cpr = cpr_per_point[i];
-                let ccc = (((last_classification & 0x1F) << 1) + if cpr == 3 { 1 } else { 0 })
-                    as usize;
+                let ccc =
+                    (((last_classification & 0x1F) << 1) + if cpr == 3 { 1 } else { 0 }) as usize;
                 if models[ccc].is_none() {
                     models[ccc] = Some(ArithmeticSymbolModel::new(256));
                 }
@@ -1924,7 +2062,11 @@ pub fn encode_standard_layered_chunk_point14_v3_constant_attributes(
     }
 
     let mut user_data_bytes = Vec::<u8>::new();
-    if raws.iter().skip(1).any(|raw| raw.user_data != seed.user_data) {
+    if raws
+        .iter()
+        .skip(1)
+        .any(|raw| raw.user_data != seed.user_data)
+    {
         let mut last_user_data = seed.user_data;
         let mut user_data_writer = std::io::Cursor::new(Vec::<u8>::new());
         {
@@ -2000,9 +2142,12 @@ pub fn encode_standard_layered_chunk_point14_v3_constant_attributes(
             .iter()
             .skip(1)
             .enumerate()
-            .filter_map(|(i, raw)| gps_time_change_per_point[i].then_some(raw.gps_time.to_bits() as i64))
+            .filter_map(|(i, raw)| {
+                gps_time_change_per_point[i].then_some(raw.gps_time.to_bits() as i64)
+            })
             .collect();
-        gps_time_bytes = encode_gps_time_sequence(&changed_gps_values, seed.gps_time.to_bits() as i64)?;
+        gps_time_bytes =
+            encode_gps_time_sequence(&changed_gps_values, seed.gps_time.to_bits() as i64)?;
     }
 
     let mut rgb_bytes = Vec::<u8>::new();
@@ -2076,11 +2221,8 @@ pub fn encode_standard_layered_chunk_point14_v3_constant_attributes(
         Vec::new()
     };
 
-    let mut out = serialize_point14_seed_item_set(
-        seed,
-        point_data_format,
-        seed_extra_bytes.as_deref(),
-    )?;
+    let mut out =
+        serialize_point14_seed_item_set(seed, point_data_format, seed_extra_bytes.as_deref())?;
 
     let chunk_point_count = points.len() as u32;
     out.extend_from_slice(&chunk_point_count.to_le_bytes());
@@ -2425,7 +2567,9 @@ fn point14_layered_has_rgb(item_specs: &[LaszipItemSpec]) -> Option<usize> {
     }
     let mut extra_byte_count = 0usize;
     for item in &item_specs[2..] {
-        if item.item_type != LASZIP_ITEM_BYTE14 || (item.item_version != 2 && item.item_version != 3) {
+        if item.item_type != LASZIP_ITEM_BYTE14
+            || (item.item_version != 2 && item.item_version != 3)
+        {
             return None;
         }
         extra_byte_count += item.item_size as usize;
@@ -2464,7 +2608,9 @@ fn point14_layered_has_rgb_nir(item_specs: &[LaszipItemSpec]) -> Option<usize> {
 
     let mut extra_byte_count = 0usize;
     for item in extras {
-        if item.item_type != LASZIP_ITEM_BYTE14 || (item.item_version != 2 && item.item_version != 3) {
+        if item.item_type != LASZIP_ITEM_BYTE14
+            || (item.item_version != 2 && item.item_version != 3)
+        {
             return None;
         }
         extra_byte_count += item.item_size as usize;
@@ -2537,7 +2683,13 @@ fn decode_layered_point14_item10_continuation(
     //   [layer data bytes ...]
     // Total header = 4 (count) + 9 × 4 (layer sizes) = 40 bytes.
 
-    let min_header = (if has_nir { 48 } else if has_rgb { 44 } else { 40 }) + extra_byte_count * 4;
+    let min_header = (if has_nir {
+        48
+    } else if has_rgb {
+        44
+    } else {
+        40
+    }) + extra_byte_count * 4;
     if tail_bytes.len() < min_header {
         return Err(Error::InvalidValue {
             field: "laz.point14.layered_header",
@@ -2572,7 +2724,13 @@ fn decode_layered_point14_item10_continuation(
     } else {
         0
     };
-    let extra_sizes_base = if has_nir { 48 } else if has_rgb { 44 } else { 40 };
+    let extra_sizes_base = if has_nir {
+        48
+    } else if has_rgb {
+        44
+    } else {
+        40
+    };
     let mut num_bytes_extra = Vec::with_capacity(extra_byte_count);
     for idx in 0..extra_byte_count {
         num_bytes_extra.push(read_u32_le_at(tail_bytes, extra_sizes_base + idx * 4)? as usize);
@@ -2750,12 +2908,13 @@ fn decode_layered_point14_item10_continuation(
 
     for point_index in 0..count {
         let lpr = {
-            let ctx = channel_contexts[current_channel]
-                .as_ref()
-                .ok_or_else(|| Error::InvalidValue {
-                    field: "laz.point14.context",
-                    detail: "missing Point14 continuation context".to_string(),
-                })?;
+            let ctx =
+                channel_contexts[current_channel]
+                    .as_ref()
+                    .ok_or_else(|| Error::InvalidValue {
+                        field: "laz.point14.context",
+                        detail: "missing Point14 continuation context".to_string(),
+                    })?;
             let mut v = if ctx.state.return_number == 1 { 1 } else { 0 };
             v += if ctx.state.return_number >= ctx.state.number_of_returns {
                 2
@@ -2766,12 +2925,13 @@ fn decode_layered_point14_item10_continuation(
         };
 
         let changed_values = {
-            let ctx = channel_contexts[current_channel]
-                .as_mut()
-                .ok_or_else(|| Error::InvalidValue {
-                    field: "laz.point14.context",
-                    detail: "missing Point14 continuation context".to_string(),
-                })?;
+            let ctx =
+                channel_contexts[current_channel]
+                    .as_mut()
+                    .ok_or_else(|| Error::InvalidValue {
+                        field: "laz.point14.context",
+                        detail: "missing Point14 continuation context".to_string(),
+                    })?;
             match dec_xy.decode_symbol(&mut ctx.m_changed_values[lpr as usize]) {
                 Ok(v) => v as u8,
                 Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
@@ -2798,12 +2958,12 @@ fn decode_layered_point14_item10_continuation(
         // LASzip encodes channel as a forward delta in [1, 3].
         if (changed_values & (1 << 6)) != 0 {
             let diff = {
-                let ctx = channel_contexts[current_channel]
-                    .as_mut()
-                    .ok_or_else(|| Error::InvalidValue {
+                let ctx = channel_contexts[current_channel].as_mut().ok_or_else(|| {
+                    Error::InvalidValue {
                         field: "laz.point14.context",
                         detail: "missing Point14 continuation context".to_string(),
-                    })?;
+                    }
+                })?;
                 match dec_xy.decode_symbol(&mut ctx.m_scanner_channel) {
                     Ok(v) => v as usize,
                     Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
@@ -2843,12 +3003,13 @@ fn decode_layered_point14_item10_continuation(
             current_channel = next_channel;
         }
 
-        let ctx = channel_contexts[current_channel]
-            .as_mut()
-            .ok_or_else(|| Error::InvalidValue {
-                field: "laz.point14.context",
-                detail: "missing Point14 continuation context".to_string(),
-            })?;
+        let ctx =
+            channel_contexts[current_channel]
+                .as_mut()
+                .ok_or_else(|| Error::InvalidValue {
+                    field: "laz.point14.context",
+                    detail: "missing Point14 continuation context".to_string(),
+                })?;
 
         let point_source_change = (changed_values & (1 << 5)) != 0;
         let mut gps_time_change = (changed_values & (1 << 4)) != 0;
@@ -2973,7 +3134,12 @@ fn decode_layered_point14_item10_continuation(
 
         let k_bits = ctx.ic_dx.k();
         let median_y = ctx.last_y_diff_median[idx].get();
-        let context_y = (n == 1) as u32 + if k_bits < 20 { u32_zero_bit(k_bits) } else { 20 };
+        let context_y = (n == 1) as u32
+            + if k_bits < 20 {
+                u32_zero_bit(k_bits)
+            } else {
+                20
+            };
         let diff_y = match ctx.ic_dy.decompress(&mut dec_xy, median_y, context_y) {
             Ok(v) => v,
             Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
@@ -2999,7 +3165,12 @@ fn decode_layered_point14_item10_continuation(
 
         if let Some(dec) = dec_z.as_mut() {
             let k_bits = (ctx.ic_dx.k() + ctx.ic_dy.k()) / 2;
-            let context_z = (n == 1) as u32 + if k_bits < 18 { u32_zero_bit(k_bits) } else { 18 };
+            let context_z = (n == 1) as u32
+                + if k_bits < 18 {
+                    u32_zero_bit(k_bits)
+                } else {
+                    18
+                };
             match ctx.ic_z.decompress(dec, ctx.last_z[l], context_z) {
                 Ok(z) => {
                     ctx.state.z = z;
@@ -3009,11 +3180,19 @@ fn decode_layered_point14_item10_continuation(
                     if tolerant_mode {
                         dec_z = None;
                     } else {
-                        return Err(map_point14_layer_error(Error::Io(e), "z", Some(point_index)));
+                        return Err(map_point14_layer_error(
+                            Error::Io(e),
+                            "z",
+                            Some(point_index),
+                        ));
                     }
                 }
                 Err(e) => {
-                    return Err(map_point14_layer_error(Error::Io(e), "z", Some(point_index)));
+                    return Err(map_point14_layer_error(
+                        Error::Io(e),
+                        "z",
+                        Some(point_index),
+                    ));
                 }
             }
         }
@@ -3032,11 +3211,19 @@ fn decode_layered_point14_item10_continuation(
                     if tolerant_mode {
                         dec_classification = None;
                     } else {
-                        return Err(map_point14_layer_error(Error::Io(e), "classification", Some(point_index)));
+                        return Err(map_point14_layer_error(
+                            Error::Io(e),
+                            "classification",
+                            Some(point_index),
+                        ));
                     }
                 }
                 Err(e) => {
-                    return Err(map_point14_layer_error(Error::Io(e), "classification", Some(point_index)));
+                    return Err(map_point14_layer_error(
+                        Error::Io(e),
+                        "classification",
+                        Some(point_index),
+                    ));
                 }
             }
         }
@@ -3060,11 +3247,19 @@ fn decode_layered_point14_item10_continuation(
                     if tolerant_mode {
                         dec_flags = None;
                     } else {
-                        return Err(map_point14_layer_error(Error::Io(e), "flags", Some(point_index)));
+                        return Err(map_point14_layer_error(
+                            Error::Io(e),
+                            "flags",
+                            Some(point_index),
+                        ));
                     }
                 }
                 Err(e) => {
-                    return Err(map_point14_layer_error(Error::Io(e), "flags", Some(point_index)));
+                    return Err(map_point14_layer_error(
+                        Error::Io(e),
+                        "flags",
+                        Some(point_index),
+                    ));
                 }
             }
         }
@@ -3084,21 +3279,30 @@ fn decode_layered_point14_item10_continuation(
                     if tolerant_mode {
                         dec_intensity = None;
                     } else {
-                        return Err(map_point14_layer_error(Error::Io(e), "intensity", Some(point_index)));
+                        return Err(map_point14_layer_error(
+                            Error::Io(e),
+                            "intensity",
+                            Some(point_index),
+                        ));
                     }
                 }
                 Err(e) => {
-                    return Err(map_point14_layer_error(Error::Io(e), "intensity", Some(point_index)));
+                    return Err(map_point14_layer_error(
+                        Error::Io(e),
+                        "intensity",
+                        Some(point_index),
+                    ));
                 }
             }
         }
 
         if let Some(dec) = dec_scan_angle.as_mut() {
             if scan_angle_change {
-                match ctx
-                    .ic_scan_angle
-                    .decompress(dec, ctx.state.scan_angle as i32, gps_time_change as u32)
-                {
+                match ctx.ic_scan_angle.decompress(
+                    dec,
+                    ctx.state.scan_angle as i32,
+                    gps_time_change as u32,
+                ) {
                     Ok(v) => {
                         ctx.state.scan_angle = v as i16;
                     }
@@ -3106,11 +3310,19 @@ fn decode_layered_point14_item10_continuation(
                         if tolerant_mode {
                             dec_scan_angle = None;
                         } else {
-                            return Err(map_point14_layer_error(Error::Io(e), "scan_angle", Some(point_index)));
+                            return Err(map_point14_layer_error(
+                                Error::Io(e),
+                                "scan_angle",
+                                Some(point_index),
+                            ));
                         }
                     }
                     Err(e) => {
-                        return Err(map_point14_layer_error(Error::Io(e), "scan_angle", Some(point_index)));
+                        return Err(map_point14_layer_error(
+                            Error::Io(e),
+                            "scan_angle",
+                            Some(point_index),
+                        ));
                     }
                 }
             }
@@ -3129,11 +3341,19 @@ fn decode_layered_point14_item10_continuation(
                     if tolerant_mode {
                         dec_user_data = None;
                     } else {
-                        return Err(map_point14_layer_error(Error::Io(e), "user_data", Some(point_index)));
+                        return Err(map_point14_layer_error(
+                            Error::Io(e),
+                            "user_data",
+                            Some(point_index),
+                        ));
                     }
                 }
                 Err(e) => {
-                    return Err(map_point14_layer_error(Error::Io(e), "user_data", Some(point_index)));
+                    return Err(map_point14_layer_error(
+                        Error::Io(e),
+                        "user_data",
+                        Some(point_index),
+                    ));
                 }
             }
         }
@@ -3151,11 +3371,19 @@ fn decode_layered_point14_item10_continuation(
                         if tolerant_mode {
                             dec_point_source = None;
                         } else {
-                            return Err(map_point14_layer_error(Error::Io(e), "point_source", Some(point_index)));
+                            return Err(map_point14_layer_error(
+                                Error::Io(e),
+                                "point_source",
+                                Some(point_index),
+                            ));
                         }
                     }
                     Err(e) => {
-                        return Err(map_point14_layer_error(Error::Io(e), "point_source", Some(point_index)));
+                        return Err(map_point14_layer_error(
+                            Error::Io(e),
+                            "point_source",
+                            Some(point_index),
+                        ));
                     }
                 }
             }
@@ -3172,7 +3400,11 @@ fn decode_layered_point14_item10_continuation(
                             dec_gps_time = None;
                             gps_time_change = false;
                         } else {
-                            return Err(map_point14_layer_error(Error::Io(e), "gps_time", Some(point_index)));
+                            return Err(map_point14_layer_error(
+                                Error::Io(e),
+                                "gps_time",
+                                Some(point_index),
+                            ));
                         }
                     }
                     Err(e) => {
@@ -3192,7 +3424,11 @@ fn decode_layered_point14_item10_continuation(
                         if tolerant_mode {
                             dec_rgb = None;
                         } else {
-                            return Err(map_point14_layer_error(Error::Io(e), "rgb", Some(point_index)));
+                            return Err(map_point14_layer_error(
+                                Error::Io(e),
+                                "rgb",
+                                Some(point_index),
+                            ));
                         }
                     }
                     Err(e) => {
@@ -3210,7 +3446,11 @@ fn decode_layered_point14_item10_continuation(
                         if tolerant_mode {
                             dec_nir = None;
                         } else {
-                            return Err(map_point14_layer_error(Error::Io(e), "nir", Some(point_index)));
+                            return Err(map_point14_layer_error(
+                                Error::Io(e),
+                                "nir",
+                                Some(point_index),
+                            ));
                         }
                     }
                     Err(e) => {
@@ -3276,13 +3516,25 @@ fn decode_layered_point14_item10_continuation(
 /// Wrapping folded byte: mirrors C++ `U8_FOLD(x)`.
 #[inline]
 fn u8_fold(x: i32) -> u8 {
-    if x > 255 { (x - 256) as u8 } else if x < 0 { (x + 256) as u8 } else { x as u8 }
+    if x > 255 {
+        (x - 256) as u8
+    } else if x < 0 {
+        (x + 256) as u8
+    } else {
+        x as u8
+    }
 }
 
 /// Clamped byte: mirrors C++ `U8_CLAMP(n)`.
 #[inline]
 fn u8_clamp(n: i32) -> i32 {
-    if n <= 0 { 0 } else if n >= 255 { 255 } else { n }
+    if n <= 0 {
+        0
+    } else if n >= 255 {
+        255
+    } else {
+        n
+    }
 }
 
 fn write_nir<W: Write>(
@@ -3354,44 +3606,70 @@ fn write_rgb<W: Write>(
         // C++ reference: LASwriteItemCompressed_RGB14_v3::write(), m_byte_used=128.
         let gb_copy_from_red = rgb[1] == rgb[0] && rgb[2] == rgb[0];
         let mut sym = 0u32;
-        if r_lo != last_r_lo { sym |= 1 << 0; }
-        if r_hi != last_r_hi { sym |= 1 << 1; }
+        if r_lo != last_r_lo {
+            sym |= 1 << 0;
+        }
+        if r_hi != last_r_hi {
+            sym |= 1 << 1;
+        }
         if !gb_copy_from_red {
             sym |= 1 << 6;
-            if g_lo != last_g_lo { sym |= 1 << 2; }
-            if g_hi != last_g_hi { sym |= 1 << 3; }
-            if b_lo != last_b_lo { sym |= 1 << 4; }
-            if b_hi != last_b_hi { sym |= 1 << 5; }
+            if g_lo != last_g_lo {
+                sym |= 1 << 2;
+            }
+            if g_hi != last_g_hi {
+                sym |= 1 << 3;
+            }
+            if b_lo != last_b_lo {
+                sym |= 1 << 4;
+            }
+            if b_hi != last_b_hi {
+                sym |= 1 << 5;
+            }
         }
-        enc_rgb.encode_symbol(m_rgb_byte_used, sym).map_err(Error::Io)?;
+        enc_rgb
+            .encode_symbol(m_rgb_byte_used, sym)
+            .map_err(Error::Io)?;
         if (sym & (1 << 0)) != 0 {
-            enc_rgb.encode_symbol(&mut m_rgb_diff[0], r_lo.wrapping_sub(last_r_lo) as u32).map_err(Error::Io)?;
+            enc_rgb
+                .encode_symbol(&mut m_rgb_diff[0], r_lo.wrapping_sub(last_r_lo) as u32)
+                .map_err(Error::Io)?;
         }
         if (sym & (1 << 1)) != 0 {
-            enc_rgb.encode_symbol(&mut m_rgb_diff[1], r_hi.wrapping_sub(last_r_hi) as u32).map_err(Error::Io)?;
+            enc_rgb
+                .encode_symbol(&mut m_rgb_diff[1], r_hi.wrapping_sub(last_r_hi) as u32)
+                .map_err(Error::Io)?;
         }
         if (sym & (1 << 6)) != 0 {
             let diff_l = r_lo as i32 - last_r_lo as i32;
             if (sym & (1 << 2)) != 0 {
                 let pred_g_lo = u8_clamp(diff_l + last_g_lo as i32) as u8;
-                enc_rgb.encode_symbol(&mut m_rgb_diff[2], g_lo.wrapping_sub(pred_g_lo) as u32).map_err(Error::Io)?;
+                enc_rgb
+                    .encode_symbol(&mut m_rgb_diff[2], g_lo.wrapping_sub(pred_g_lo) as u32)
+                    .map_err(Error::Io)?;
             }
             if (sym & (1 << 4)) != 0 {
                 let diff_g_lo = g_lo as i32 - last_g_lo as i32;
                 let diff_bl = (diff_l + diff_g_lo) / 2;
                 let pred_b_lo = u8_clamp(diff_bl + last_b_lo as i32) as u8;
-                enc_rgb.encode_symbol(&mut m_rgb_diff[4], b_lo.wrapping_sub(pred_b_lo) as u32).map_err(Error::Io)?;
+                enc_rgb
+                    .encode_symbol(&mut m_rgb_diff[4], b_lo.wrapping_sub(pred_b_lo) as u32)
+                    .map_err(Error::Io)?;
             }
             let diff_h = r_hi as i32 - last_r_hi as i32;
             if (sym & (1 << 3)) != 0 {
                 let pred_g_hi = u8_clamp(diff_h + last_g_hi as i32) as u8;
-                enc_rgb.encode_symbol(&mut m_rgb_diff[3], g_hi.wrapping_sub(pred_g_hi) as u32).map_err(Error::Io)?;
+                enc_rgb
+                    .encode_symbol(&mut m_rgb_diff[3], g_hi.wrapping_sub(pred_g_hi) as u32)
+                    .map_err(Error::Io)?;
             }
             if (sym & (1 << 5)) != 0 {
                 let diff_g_hi = g_hi as i32 - last_g_hi as i32;
                 let diff_bh = (diff_h + diff_g_hi) / 2;
                 let pred_b_hi = u8_clamp(diff_bh + last_b_hi as i32) as u8;
-                enc_rgb.encode_symbol(&mut m_rgb_diff[5], b_hi.wrapping_sub(pred_b_hi) as u32).map_err(Error::Io)?;
+                enc_rgb
+                    .encode_symbol(&mut m_rgb_diff[5], b_hi.wrapping_sub(pred_b_hi) as u32)
+                    .map_err(Error::Io)?;
             }
         }
         return Ok(());
@@ -3900,12 +4178,16 @@ fn read_gps_time<R: Read>(
         let multi = dec_gps_time.decode_symbol(&mut ctx.m_gpstime_0diff)? as i32;
         if multi == 0 {
             ctx.last_gps_diff[ctx.gps_last] = ctx.ic_gpstime.decompress(dec_gps_time, 0, 0)?;
-            ctx.last_gps[ctx.gps_last] = ctx.last_gps[ctx.gps_last]
-                .wrapping_add(i64::from(ctx.last_gps_diff[ctx.gps_last]));
+            ctx.last_gps[ctx.gps_last] =
+                ctx.last_gps[ctx.gps_last].wrapping_add(i64::from(ctx.last_gps_diff[ctx.gps_last]));
             ctx.multi_extreme_counter[ctx.gps_last] = 0;
         } else if multi == 1 {
             ctx.gps_next = (ctx.gps_next + 1) & 3;
-            let hi = ctx.ic_gpstime.decompress(dec_gps_time, (ctx.last_gps[ctx.gps_last] >> 32) as i32, 8)?;
+            let hi = ctx.ic_gpstime.decompress(
+                dec_gps_time,
+                (ctx.last_gps[ctx.gps_last] >> 32) as i32,
+                8,
+            )?;
             let lo = dec_gps_time.read_int()?;
             ctx.last_gps[ctx.gps_next] = ((hi as i64) << 32) | i64::from(lo);
             ctx.gps_last = ctx.gps_next;
@@ -3982,7 +4264,11 @@ fn read_gps_time<R: Read>(
                 ctx.last_gps[ctx.gps_last].wrapping_add(i64::from(gps_time_diff));
         } else if multi == LASZIP_GPS_TIME_MULTI_CODE_FULL {
             ctx.gps_next = (ctx.gps_next + 1) & 3;
-            let hi = ctx.ic_gpstime.decompress(dec_gps_time, (ctx.last_gps[ctx.gps_last] >> 32) as i32, 8)?;
+            let hi = ctx.ic_gpstime.decompress(
+                dec_gps_time,
+                (ctx.last_gps[ctx.gps_last] >> 32) as i32,
+                8,
+            )?;
             let lo = dec_gps_time.read_int()?;
             ctx.last_gps[ctx.gps_next] = ((hi as i64) << 32) | i64::from(lo);
             ctx.gps_last = ctx.gps_next;

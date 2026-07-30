@@ -4,10 +4,10 @@
 //! geographically close, so field deltas are very small integers that arithmetic
 //! coding (used by LASzip v2/v3) can represent very efficiently.
 
+use crate::io::le;
+use crate::point::{GpsTime, PointRecord, Rgb16};
 use std::io::{Cursor, Read};
 use wide::f64x4;
-use crate::point::{GpsTime, PointRecord, Rgb16};
-use crate::io::le;
 
 /// Encode a slice of points into a raw byte buffer using the delta predictor scheme.
 /// (Internal use only; not called by current code.)
@@ -25,7 +25,7 @@ pub fn encode_chunk(points: &[PointRecord], has_gps: bool, has_rgb: bool) -> Vec
 
     for p in points {
         // Round all three coordinates in one SIMD op, then compute deltas.
-        let xyz    = f64x4::new([p.x, p.y, p.z, 0.0]);
+        let xyz = f64x4::new([p.x, p.y, p.z, 0.0]);
         let rounded: [f64; 4] = xyz.round().into();
         let xi = rounded[0] as i32;
         let yi = rounded[1] as i32;
@@ -34,7 +34,9 @@ pub fn encode_chunk(points: &[PointRecord], has_gps: bool, has_rgb: bool) -> Vec
         let dx = xi.wrapping_sub(prev_xi);
         let dy = yi.wrapping_sub(prev_yi);
         let dz = zi.wrapping_sub(prev_zi);
-        prev_xi = xi; prev_yi = yi; prev_zi = zi;
+        prev_xi = xi;
+        prev_yi = yi;
+        prev_zi = zi;
 
         le::write_i32(&mut buf, dx).unwrap();
         le::write_i32(&mut buf, dy).unwrap();
@@ -64,7 +66,9 @@ pub fn encode_chunk(points: &[PointRecord], has_gps: bool, has_rgb: bool) -> Vec
             let dr = c.red.wrapping_sub(prev_r) as i16;
             let dg = c.green.wrapping_sub(prev_g) as i16;
             let db = c.blue.wrapping_sub(prev_b) as i16;
-            prev_r = c.red; prev_g = c.green; prev_b = c.blue;
+            prev_r = c.red;
+            prev_g = c.green;
+            prev_b = c.blue;
             le::write_i16(&mut buf, dr).unwrap();
             le::write_i16(&mut buf, dg).unwrap();
             le::write_i16(&mut buf, db).unwrap();
@@ -108,13 +112,13 @@ pub fn decode_chunk(
         prev_intensity = prev_intensity.wrapping_add(di as u16);
         p.intensity = prev_intensity;
 
-        p.return_number     = le::read_u8(&mut cur)?;
+        p.return_number = le::read_u8(&mut cur)?;
         p.number_of_returns = le::read_u8(&mut cur)?;
-        p.classification    = le::read_u8(&mut cur)?;
-        p.user_data         = le::read_u8(&mut cur)?;
-        p.flags             = le::read_u8(&mut cur)?;
-        p.scan_angle        = le::read_i16(&mut cur)?;
-        p.point_source_id   = le::read_u16(&mut cur)?;
+        p.classification = le::read_u8(&mut cur)?;
+        p.user_data = le::read_u8(&mut cur)?;
+        p.flags = le::read_u8(&mut cur)?;
+        p.scan_angle = le::read_i16(&mut cur)?;
+        p.point_source_id = le::read_u16(&mut cur)?;
 
         if has_gps {
             let mut b8 = [0u8; 8];
@@ -131,10 +135,13 @@ pub fn decode_chunk(
             prev_r = prev_r.wrapping_add(dr as u16);
             prev_g = prev_g.wrapping_add(dg as u16);
             prev_b = prev_b.wrapping_add(db as u16);
-            p.color = Some(Rgb16 { red: prev_r, green: prev_g, blue: prev_b });
+            p.color = Some(Rgb16 {
+                red: prev_r,
+                green: prev_g,
+                blue: prev_b,
+            });
         }
     }
 
     Ok(points)
 }
-

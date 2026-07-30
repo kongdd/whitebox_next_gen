@@ -1,19 +1,19 @@
 //! E57 reader.
 
-use std::io::{Read, Seek, SeekFrom};
 use crate::e57::page::PageReader;
 use crate::e57::xml::{parse_point_clouds, E57FieldType, PointCloudMeta};
 use crate::e57::E57_SIGNATURE;
 use crate::io::{le, PointReader};
 use crate::point::{PointRecord, Rgb16};
 use crate::{Error, Result};
+use std::io::{Read, Seek, SeekFrom};
 
 /// File header (48 bytes) at offset 0 of every E57 file.
 #[derive(Debug)]
 struct E57FileHeader {
     xml_offset: u64,
-    xml_length:  u64,
-    _page_width:  u64,
+    xml_length: u64,
+    _page_width: u64,
     _page_length: u64,
 }
 
@@ -22,16 +22,24 @@ impl E57FileHeader {
         let mut sig = [0u8; 8];
         r.read_exact(&mut sig)?;
         if &sig != E57_SIGNATURE {
-            return Err(Error::InvalidSignature { format: "E57", found: sig.to_vec() });
+            return Err(Error::InvalidSignature {
+                format: "E57",
+                found: sig.to_vec(),
+            });
         }
-        let _major      = le::read_u32(r)?;
-        let _minor      = le::read_u32(r)?;
-        let _file_len   = le::read_u64(r)?;
-        let xml_offset  = le::read_u64(r)?;
-        let xml_length  = le::read_u64(r)?;
-        let page_width  = le::read_u64(r)?;
+        let _major = le::read_u32(r)?;
+        let _minor = le::read_u32(r)?;
+        let _file_len = le::read_u64(r)?;
+        let xml_offset = le::read_u64(r)?;
+        let xml_length = le::read_u64(r)?;
+        let page_width = le::read_u64(r)?;
         let page_length = le::read_u64(r)?;
-        Ok(E57FileHeader { xml_offset, xml_length, _page_width: page_width, _page_length: page_length })
+        Ok(E57FileHeader {
+            xml_offset,
+            xml_length,
+            _page_width: page_width,
+            _page_length: page_length,
+        })
     }
 }
 
@@ -60,10 +68,13 @@ impl<R: Read + Seek> E57Reader<R> {
 
         // Parse point clouds from XML
         let clouds = parse_point_clouds(&xml);
-        let meta = clouds.into_iter().next().ok_or_else(|| Error::InvalidValue {
-            field: "e57_data3D",
-            detail: "no data3D point clouds found in E57 XML".to_owned(),
-        })?;
+        let meta = clouds
+            .into_iter()
+            .next()
+            .ok_or_else(|| Error::InvalidValue {
+                field: "e57_data3D",
+                detail: "no data3D point clouds found in E57 XML".to_owned(),
+            })?;
 
         // Pre-load the binary section into memory for paged reading.
         inner.seek(SeekFrom::Start(meta.file_offset))?;
@@ -81,23 +92,32 @@ impl<R: Read + Seek> E57Reader<R> {
         let record_size = record_byte_size(&meta);
 
         Ok(E57Reader {
-            _inner: inner, meta, points_read: 0,
+            _inner: inner,
+            meta,
+            points_read: 0,
             _page_reader: None,
-            raw_data, raw_pos: 0,
+            raw_data,
+            raw_pos: 0,
             record_size,
         })
     }
 
     /// Return the point cloud metadata (fields, name, etc.).
-    pub fn meta(&self) -> &PointCloudMeta { &self.meta }
+    pub fn meta(&self) -> &PointCloudMeta {
+        &self.meta
+    }
 }
 
 impl<R: Read + Seek> PointReader for E57Reader<R> {
     fn read_point(&mut self, out: &mut PointRecord) -> Result<bool> {
-        if self.points_read >= self.meta.record_count { return Ok(false); }
+        if self.points_read >= self.meta.record_count {
+            return Ok(false);
+        }
 
         let end = self.raw_pos + self.record_size;
-        if end > self.raw_data.len() { return Ok(false); }
+        if end > self.raw_data.len() {
+            return Ok(false);
+        }
 
         let record = &self.raw_data[self.raw_pos..end];
         self.raw_pos = end;
@@ -107,24 +127,24 @@ impl<R: Read + Seek> PointReader for E57Reader<R> {
 
         for field in &self.meta.fields {
             let bw = field.dtype.byte_width(field.minimum, field.maximum);
-            if offset + bw > record.len() { break; }
+            if offset + bw > record.len() {
+                break;
+            }
             let raw_val = read_raw_int(&record[offset..offset + bw], bw);
             offset += bw;
 
             let physical = match field.dtype {
-                E57FieldType::Float   => {
+                E57FieldType::Float => {
                     let mut b = [0u8; 8];
-                    b.copy_from_slice(&record[offset-bw..offset]);
+                    b.copy_from_slice(&record[offset - bw..offset]);
                     f64::from_le_bytes(b)
                 }
                 E57FieldType::Float32 => {
                     let mut b = [0u8; 4];
-                    b.copy_from_slice(&record[offset-bw..offset]);
+                    b.copy_from_slice(&record[offset - bw..offset]);
                     f64::from(f32::from_le_bytes(b))
                 }
-                E57FieldType::ScaledInteger => {
-                    raw_val as f64 * field.scale + field.offset
-                }
+                E57FieldType::ScaledInteger => raw_val as f64 * field.scale + field.offset,
                 E57FieldType::Integer => raw_val as f64,
             };
 
@@ -132,8 +152,8 @@ impl<R: Read + Seek> PointReader for E57Reader<R> {
                 "cartesianX" => out.x = physical,
                 "cartesianY" => out.y = physical,
                 "cartesianZ" => out.z = physical,
-                "intensity"  => out.intensity = (physical * 65535.0).clamp(0.0, 65535.0) as u16,
-                "colorRed"   => {
+                "intensity" => out.intensity = (physical * 65535.0).clamp(0.0, 65535.0) as u16,
+                "colorRed" => {
                     let c = out.color.get_or_insert(Rgb16::default());
                     c.red = (physical as u8 as u16) << 8;
                 }
@@ -141,7 +161,7 @@ impl<R: Read + Seek> PointReader for E57Reader<R> {
                     let c = out.color.get_or_insert(Rgb16::default());
                     c.green = (physical as u8 as u16) << 8;
                 }
-                "colorBlue"  => {
+                "colorBlue" => {
                     let c = out.color.get_or_insert(Rgb16::default());
                     c.blue = (physical as u8 as u16) << 8;
                 }
@@ -156,7 +176,9 @@ impl<R: Read + Seek> PointReader for E57Reader<R> {
         Ok(true)
     }
 
-    fn point_count(&self) -> Option<u64> { Some(self.meta.record_count) }
+    fn point_count(&self) -> Option<u64> {
+        Some(self.meta.record_count)
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -173,7 +195,8 @@ fn read_paged_xml<R: Read>(r: &mut R, xml_len: usize) -> Result<String> {
 }
 
 fn record_byte_size(meta: &PointCloudMeta) -> usize {
-    meta.fields.iter()
+    meta.fields
+        .iter()
         .map(|f| f.dtype.byte_width(f.minimum, f.maximum))
         .sum()
 }

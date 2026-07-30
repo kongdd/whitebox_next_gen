@@ -13,16 +13,11 @@ use wblidar::Result;
 
 fn main() -> Result<()> {
     let mut args = env::args().skip(1);
-    let input = args.next().ok_or_else(|| {
-        wblidar::Error::InvalidValue {
-            field: "args",
-            detail: "usage: copc_query_demo <input.copc.laz> [max_depth]".to_string(),
-        }
+    let input = args.next().ok_or_else(|| wblidar::Error::InvalidValue {
+        field: "args",
+        detail: "usage: copc_query_demo <input.copc.laz> [max_depth]".to_string(),
     })?;
-    let max_depth = args
-        .next()
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(2);
+    let max_depth = args.next().and_then(|s| s.parse::<i32>().ok()).unwrap_or(2);
 
     let file = BufReader::new(File::open(&input).map_err(wblidar::Error::Io)?);
     let mut reader = CopcReader::new(file)?;

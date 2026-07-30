@@ -4,10 +4,9 @@
 //! helper parsers used by LAS/COPC metadata adapters.
 
 use wbprojection::{
-    EpsgIdentifyPolicy,
     epsg_from_srs_reference as wb_epsg_from_srs_reference,
-    identify_epsg_from_wkt_with_policy as wb_identify_epsg_from_wkt_with_policy,
-    to_ogc_wkt,
+    identify_epsg_from_wkt_with_policy as wb_identify_epsg_from_wkt_with_policy, to_ogc_wkt,
+    EpsgIdentifyPolicy,
 };
 
 /// Coordinate reference system metadata attached to a LiDAR source.
@@ -27,7 +26,10 @@ impl Crs {
 
     /// Create CRS metadata from an EPSG code.
     pub fn from_epsg(epsg: u32) -> Self {
-        Self { epsg: Some(epsg), wkt: ogc_wkt_from_epsg(epsg) }
+        Self {
+            epsg: Some(epsg),
+            wkt: ogc_wkt_from_epsg(epsg),
+        }
     }
 
     /// Add/override EPSG code.

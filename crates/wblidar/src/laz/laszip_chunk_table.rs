@@ -7,8 +7,8 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::io::le;
-use crate::laz::arithmetic_encoder::ArithmeticEncoder;
 use crate::laz::arithmetic_decoder::ArithmeticDecoder;
+use crate::laz::arithmetic_encoder::ArithmeticEncoder;
 use crate::laz::integer_codec::{IntegerCompressor, IntegerDecompressor};
 use crate::Result;
 
@@ -190,13 +190,11 @@ pub fn read_laszip_chunk_table_entries<R: Read>(
         return Ok(Vec::new());
     }
 
-    // Check if chunk_count is unreasonably large  
+    // Check if chunk_count is unreasonably large
     if chunk_count > 1_000_000 {
         return Err(crate::Error::InvalidValue {
             field: "laz.chunk_count",
-            detail: format!(
-                "chunk_count {chunk_count} is unreasonably large"
-            ),
+            detail: format!("chunk_count {chunk_count} is unreasonably large"),
         });
     }
 
@@ -238,16 +236,13 @@ pub fn read_laszip_chunk_table_entries<R: Read>(
 mod tests {
     use std::io::Cursor;
 
-    use crate::laz::arithmetic_encoder::ArithmeticEncoder;
-    use crate::laz::integer_codec::IntegerCompressor;
     use super::{
-        read_laszip_chunk_table_entries,
-        read_laszip_chunk_table_header,
-        read_laszip_chunk_table_pointer,
-        LaszipChunkTableEntry,
-        LaszipChunkTableHeader,
+        read_laszip_chunk_table_entries, read_laszip_chunk_table_header,
+        read_laszip_chunk_table_pointer, LaszipChunkTableEntry, LaszipChunkTableHeader,
         LaszipChunkTablePointer,
     };
+    use crate::laz::arithmetic_encoder::ArithmeticEncoder;
+    use crate::laz::integer_codec::IntegerCompressor;
 
     #[test]
     fn parses_valid_pointer() {
@@ -272,8 +267,8 @@ mod tests {
         let mut bytes = vec![0u8; 64];
         bytes[8..16].copy_from_slice(&(8i64).to_le_bytes());
         let mut cur = Cursor::new(bytes);
-        let ptr = read_laszip_chunk_table_pointer(&mut cur, 8, 64)
-            .expect("pointer parse should succeed");
+        let ptr =
+            read_laszip_chunk_table_pointer(&mut cur, 8, 64).expect("pointer parse should succeed");
         assert!(ptr.is_none());
     }
 
@@ -352,12 +347,8 @@ mod tests {
         }
 
         encoded.set_position(0);
-        let decoded = read_laszip_chunk_table_entries(
-            &mut encoded,
-            entries.len() as u32,
-            true,
-        )
-        .expect("decode chunk table entries");
+        let decoded = read_laszip_chunk_table_entries(&mut encoded, entries.len() as u32, true)
+            .expect("decode chunk table entries");
 
         assert_eq!(decoded, entries);
     }
@@ -381,12 +372,9 @@ mod tests {
         }
 
         encoded.set_position(0);
-        let decoded = read_laszip_chunk_table_entries(
-            &mut encoded,
-            byte_counts.len() as u32,
-            false,
-        )
-        .expect("decode chunk table entries");
+        let decoded =
+            read_laszip_chunk_table_entries(&mut encoded, byte_counts.len() as u32, false)
+                .expect("decode chunk table entries");
 
         let got: Vec<u64> = decoded.iter().map(|e| e.byte_count).collect();
         assert_eq!(got, byte_counts);

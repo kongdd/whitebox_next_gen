@@ -4,9 +4,9 @@
 //! byte offset of each chunk relative to the start of the first chunk.  This
 //! enables O(1) random access to any chunk by index.
 
-use std::io::{Read, Write};
 use crate::io::le;
 use crate::Result;
+use std::io::{Read, Write};
 
 /// Upper bound for parsed chunk-table entries to avoid pathological allocations.
 const MAX_CHUNK_COUNT: usize = 10_000_000;
@@ -26,14 +26,12 @@ pub struct ChunkTable {
 impl ChunkTable {
     /// Read the chunk table from the current position.
     pub fn read<R: Read>(r: &mut R) -> Result<Self> {
-        let _version    = le::read_u32(r)?;
+        let _version = le::read_u32(r)?;
         let chunk_count = le::read_u32(r)? as usize;
         if chunk_count > MAX_CHUNK_COUNT {
             return Err(crate::Error::InvalidValue {
                 field: "laz_chunk_table.chunk_count",
-                detail: format!(
-                    "chunk_count {chunk_count} exceeds safety limit {MAX_CHUNK_COUNT}"
-                ),
+                detail: format!("chunk_count {chunk_count} exceeds safety limit {MAX_CHUNK_COUNT}"),
             });
         }
 
@@ -54,12 +52,16 @@ impl ChunkTable {
     pub fn write<W: Write>(&self, w: &mut W) -> Result<()> {
         le::write_u32(w, CHUNK_TABLE_VERSION)?;
         le::write_u32(w, self.offsets.len() as u32)?;
-        for &off in &self.offsets { le::write_u64(w, off)?; }
+        for &off in &self.offsets {
+            le::write_u64(w, off)?;
+        }
         Ok(())
     }
 
     /// Byte size of this chunk table when serialised.
-    pub fn serialised_size(&self) -> usize { 8 + self.offsets.len() * 8 }
+    pub fn serialised_size(&self) -> usize {
+        8 + self.offsets.len() * 8
+    }
 }
 
 /// Serialise a single compressed chunk: write a u64 chunk-body size prefix

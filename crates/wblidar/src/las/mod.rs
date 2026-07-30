@@ -5,6 +5,6 @@ pub mod vlr;
 pub mod writer;
 
 pub use header::{GlobalEncoding, LasHeader, PointDataFormat};
-pub use reader::LasReader;
+pub use reader::{infer_crs, LasReader};
 pub use vlr::{Vlr, VlrKey};
 pub use writer::{LasWriter, WriterConfig};

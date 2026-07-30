@@ -44,13 +44,18 @@ impl E57FieldType {
     pub fn byte_width(self, minimum: i64, maximum: i64) -> usize {
         let range = (maximum - minimum) as u64;
         match self {
-            E57FieldType::Float    => 8,
-            E57FieldType::Float32  => 4,
+            E57FieldType::Float => 8,
+            E57FieldType::Float32 => 4,
             E57FieldType::ScaledInteger | E57FieldType::Integer => {
-                if range <= 0xFF       { 1 }
-                else if range <= 0xFFFF     { 2 }
-                else if range <= 0xFFFF_FFFF { 4 }
-                else { 8 }
+                if range <= 0xFF {
+                    1
+                } else if range <= 0xFFFF {
+                    2
+                } else if range <= 0xFFFF_FFFF {
+                    4
+                } else {
+                    8
+                }
             }
         }
     }
@@ -101,7 +106,7 @@ fn parse_data3d(s: &str) -> PointCloudMeta {
     if let Some(pts_start) = find_tag(s, "<points", 0) {
         if let Some(pts_end) = find_closing(s, "points", pts_start) {
             let pts_section = &s[pts_start..pts_end];
-            meta.file_offset  = attr_u64(pts_section, "fileOffset").unwrap_or(0);
+            meta.file_offset = attr_u64(pts_section, "fileOffset").unwrap_or(0);
             meta.record_count = attr_u64(pts_section, "recordCount").unwrap_or(0);
 
             // Parse prototype fields
@@ -110,7 +115,9 @@ fn parse_data3d(s: &str) -> PointCloudMeta {
                 let mut fp = 0;
                 while let Some(fstart) = find_tag(pts_section, &open, fp) {
                     let field = parse_field_element(pts_section, fstart, tag);
-                    if let Some(f) = field { meta.fields.push(f); }
+                    if let Some(f) = field {
+                        meta.fields.push(f);
+                    }
                     fp = fstart + 1;
                 }
             }
@@ -124,16 +131,16 @@ fn parse_field_element(s: &str, start: usize, tag: &str) -> Option<E57Field> {
     let elem = &s[start..end];
     let name = attr_str(elem, "name")?;
     let dtype = match tag {
-        "Float"          => E57FieldType::Float,
-        "ScaledInteger"  => E57FieldType::ScaledInteger,
-        "Integer"        => E57FieldType::Integer,
-        _                => return None,
+        "Float" => E57FieldType::Float,
+        "ScaledInteger" => E57FieldType::ScaledInteger,
+        "Integer" => E57FieldType::Integer,
+        _ => return None,
     };
     Some(E57Field {
         name,
         dtype,
-        scale:   attr_f64(elem, "scale").unwrap_or(1.0),
-        offset:  attr_f64(elem, "offset").unwrap_or(0.0),
+        scale: attr_f64(elem, "scale").unwrap_or(1.0),
+        offset: attr_f64(elem, "offset").unwrap_or(0.0),
         minimum: attr_i64(elem, "minimum").unwrap_or(i64::MIN),
         maximum: attr_i64(elem, "maximum").unwrap_or(i64::MAX),
     })
@@ -158,11 +165,17 @@ pub fn build_xml(
     let mut xml = String::with_capacity(2048);
     xml.push_str(r#"<?xml version="1.0" encoding="UTF-8"?>"#);
     xml.push('\n');
-    xml.push_str(r#"<e57Root type="Structure" xmlns="http://www.astm.org/COMMIT/E57/2010-e57-v1.0">"#);
+    xml.push_str(
+        r#"<e57Root type="Structure" xmlns="http://www.astm.org/COMMIT/E57/2010-e57-v1.0">"#,
+    );
     xml.push('\n');
-    xml.push_str(r#"  <formatName type="String"><![CDATA[ASTM E57 3D Imaging Data File]]></formatName>"#);
+    xml.push_str(
+        r#"  <formatName type="String"><![CDATA[ASTM E57 3D Imaging Data File]]></formatName>"#,
+    );
     xml.push('\n');
-    xml.push_str(&format!(r#"  <guid type="String"><![CDATA[{guid}]]></guid>"#));
+    xml.push_str(&format!(
+        r#"  <guid type="String"><![CDATA[{guid}]]></guid>"#
+    ));
     xml.push('\n');
     xml.push_str(r#"  <versionMajor type="Integer">1</versionMajor>"#);
     xml.push('\n');
@@ -172,7 +185,9 @@ pub fn build_xml(
     xml.push('\n');
     xml.push_str(r#"    <vectorChild type="Structure">"#);
     xml.push('\n');
-    xml.push_str(&format!(r#"      <name type="String"><![CDATA[{name}]]></name>"#));
+    xml.push_str(&format!(
+        r#"      <name type="String"><![CDATA[{name}]]></name>"#
+    ));
     xml.push('\n');
     if let Some(crs) = coordinate_metadata {
         // Escape the CRS string inside a CDATA section so arbitrary WKT2
@@ -206,12 +221,18 @@ pub fn build_xml(
             xml.push('\n');
         }
     }
-    xml.push_str(r#"        </prototype>"#); xml.push('\n');
-    xml.push_str(r#"        <codecs type="Vector"/>"#); xml.push('\n');
-    xml.push_str(r#"      </points>"#); xml.push('\n');
-    xml.push_str(r#"    </vectorChild>"#); xml.push('\n');
-    xml.push_str(r#"  </data3D>"#); xml.push('\n');
-    xml.push_str(r#"</e57Root>"#); xml.push('\n');
+    xml.push_str(r#"        </prototype>"#);
+    xml.push('\n');
+    xml.push_str(r#"        <codecs type="Vector"/>"#);
+    xml.push('\n');
+    xml.push_str(r#"      </points>"#);
+    xml.push('\n');
+    xml.push_str(r#"    </vectorChild>"#);
+    xml.push('\n');
+    xml.push_str(r#"  </data3D>"#);
+    xml.push('\n');
+    xml.push_str(r#"</e57Root>"#);
+    xml.push('\n');
     xml
 }
 
@@ -235,7 +256,7 @@ fn extract_text(s: &str, tag: &str) -> Option<String> {
     // Strip CDATA wrapper if present
     let inner = s[gt..end].trim();
     if inner.starts_with("<![CDATA[") && inner.ends_with("]]>") {
-        Some(inner[9..inner.len()-3].to_owned())
+        Some(inner[9..inner.len() - 3].to_owned())
     } else {
         Some(inner.to_owned())
     }

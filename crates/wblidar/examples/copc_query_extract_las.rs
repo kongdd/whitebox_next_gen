@@ -19,10 +19,7 @@ fn main() -> Result<()> {
     let mut args = env::args().skip(1);
     let in_path = args.next().ok_or_else(usage_error)?;
     let out_path = args.next().ok_or_else(usage_error)?;
-    let max_depth = args
-        .next()
-        .and_then(|s| s.parse::<i32>().ok())
-        .unwrap_or(3);
+    let max_depth = args.next().and_then(|s| s.parse::<i32>().ok()).unwrap_or(3);
 
     let crs = {
         let las_reader = LasReader::new(BufReader::new(File::open(&in_path).map_err(Error::Io)?))?;

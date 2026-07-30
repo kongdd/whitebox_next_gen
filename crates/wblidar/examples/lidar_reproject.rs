@@ -18,7 +18,11 @@ fn main() -> Result<()> {
         .parse()
         .map_err(|_| usage_error())?;
     let output_copc = args.next();
-    let src_epsg_override = args.next().map(|s| s.parse::<u32>()).transpose().map_err(|_| usage_error())?;
+    let src_epsg_override = args
+        .next()
+        .map(|s| s.parse::<u32>())
+        .transpose()
+        .map_err(|_| usage_error())?;
 
     let input = BufReader::new(File::open(&input_las)?);
     let mut reader = LasReader::new(input)?;

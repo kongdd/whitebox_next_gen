@@ -33,7 +33,10 @@ fn temp_workspace() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    std::env::temp_dir().join(format!("wblidar-standards-interop-{}-{nanos}", std::process::id()))
+    std::env::temp_dir().join(format!(
+        "wblidar-standards-interop-{}-{nanos}",
+        std::process::id()
+    ))
 }
 
 fn command_available(program: &str) -> bool {
@@ -61,8 +64,9 @@ fn write_json_report(root: &Path, report: &Value) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
 
-    let bytes = serde_json::to_vec_pretty(report)
-        .map_err(|err| wblidar::Error::Projection(format!("failed to serialize interop report: {err}")))?;
+    let bytes = serde_json::to_vec_pretty(report).map_err(|err| {
+        wblidar::Error::Projection(format!("failed to serialize interop report: {err}"))
+    })?;
     fs::write(&out_path, bytes)?;
     eprintln!("wrote interoperability report: {}", out_path.display());
     Ok(())
@@ -100,7 +104,8 @@ fn build_point(pdrf: PointDataFormat, idx: u16, extra_bytes: u16) -> PointRecord
 
     if extra_bytes > 0 {
         for i in 0..usize::from(extra_bytes) {
-            point.extra_bytes.data[i] = (u16::try_from(i).unwrap_or(0) as u8).wrapping_add(idx as u8);
+            point.extra_bytes.data[i] =
+                (u16::try_from(i).unwrap_or(0) as u8).wrapping_add(idx as u8);
         }
         point.extra_bytes.len = extra_bytes as u8;
     }
@@ -109,7 +114,10 @@ fn build_point(pdrf: PointDataFormat, idx: u16, extra_bytes: u16) -> PointRecord
 }
 
 fn write_profile_file(root: &Path, profile: StandardsProfile) -> Result<PathBuf> {
-    let path = root.join(format!("standards_pdrf{}_eb{}.laz", profile.pdrf as u8, profile.extra_bytes));
+    let path = root.join(format!(
+        "standards_pdrf{}_eb{}.laz",
+        profile.pdrf as u8, profile.extra_bytes
+    ));
     let mut cfg = LazWriterConfig::default();
     cfg.standards_compliant = true;
     cfg.chunk_size = 2;
@@ -297,9 +305,7 @@ fn run_external_validation(require_external_tools: bool) -> Result<()> {
         });
         let _ = write_json_report(&root, &report);
         if require_external_tools {
-            panic!(
-                "strict external interoperability validation requires lasinfo or pdal on PATH"
-            );
+            panic!("strict external interoperability validation requires lasinfo or pdal on PATH");
         }
         eprintln!("skipping: neither lasinfo nor pdal found on PATH");
         let _ = fs::remove_dir_all(&root);

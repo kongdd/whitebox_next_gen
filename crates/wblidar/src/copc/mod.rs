@@ -12,9 +12,9 @@ pub mod reader;
 pub mod writer;
 
 pub use hierarchy::{CopcEntry, CopcHierarchy, VoxelKey};
-pub use range_io::{ByteRangeSource, CachedRangeSource, LocalFileRangeSource};
 #[cfg(feature = "copc-http")]
 pub use range_io::HttpRangeSource;
+pub use range_io::{ByteRangeSource, CachedRangeSource, LocalFileRangeSource};
 pub use reader::{CopcHierarchyParseMode, CopcReader};
 pub use writer::{CopcNodePointOrdering, CopcWriter, CopcWriterConfig};
 

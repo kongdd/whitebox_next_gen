@@ -187,7 +187,10 @@ impl Point10Common {
             last_y_diff_median: [StreamingMedianI32::new(); 16],
             last_height: [0; 8],
             changed_values: ArithmeticSymbolModel::new(64),
-            scan_angle_rank: [ArithmeticSymbolModel::new(256), ArithmeticSymbolModel::new(256)],
+            scan_angle_rank: [
+                ArithmeticSymbolModel::new(256),
+                ArithmeticSymbolModel::new(256),
+            ],
             bit_byte: (0..256).map(|_| ArithmeticSymbolModel::new(256)).collect(),
             classification: (0..256).map(|_| ArithmeticSymbolModel::new(256)).collect(),
             user_data: (0..256).map(|_| ArithmeticSymbolModel::new(256)).collect(),
@@ -237,9 +240,9 @@ impl Point10V2Decompressor {
 
         if changed_value != 0 {
             if (changed_value & (1 << 5)) != 0 {
-                let next = dec.decode_symbol(
-                    &mut self.common.bit_byte[self.last_point.bit_fields as usize],
-                )? as u8;
+                let next = dec
+                    .decode_symbol(&mut self.common.bit_byte[self.last_point.bit_fields as usize])?
+                    as u8;
                 self.last_point.bit_fields = next;
             }
 
@@ -267,15 +270,17 @@ impl Point10V2Decompressor {
 
             if (changed_value & (1 << 2)) != 0 {
                 let delta = dec.decode_symbol(
-                    &mut self.common.scan_angle_rank[self.last_point.scan_direction_flag() as usize],
+                    &mut self.common.scan_angle_rank
+                        [self.last_point.scan_direction_flag() as usize],
                 )? as u8;
-                self.last_point.scan_angle_rank = self.last_point.scan_angle_rank.wrapping_add(delta as i8);
+                self.last_point.scan_angle_rank =
+                    self.last_point.scan_angle_rank.wrapping_add(delta as i8);
             }
 
             if (changed_value & (1 << 1)) != 0 {
-                self.last_point.user_data = dec.decode_symbol(
-                    &mut self.common.user_data[self.last_point.user_data as usize],
-                )? as u8;
+                self.last_point.user_data = dec
+                    .decode_symbol(&mut self.common.user_data[self.last_point.user_data as usize])?
+                    as u8;
             }
 
             if (changed_value & 1) != 0 {
@@ -299,16 +304,26 @@ impl Point10V2Decompressor {
 
         let median_y = self.common.last_y_diff_median[m as usize].get();
         let k_bits = self.ic_dx.k();
-        let context_y = (n == 1) as u32 + if k_bits < 20 { u32_zero_bit(k_bits) } else { 20 };
+        let context_y = (n == 1) as u32
+            + if k_bits < 20 {
+                u32_zero_bit(k_bits)
+            } else {
+                20
+            };
         let diff_y = self.ic_dy.decompress(dec, median_y, context_y)?;
         self.last_point.y = self.last_point.y.wrapping_add(diff_y);
         self.common.last_y_diff_median[m as usize].add(diff_y);
 
         let k_bits = (self.ic_dx.k() + self.ic_dy.k()) / 2;
-        let context_z = (n == 1) as u32 + if k_bits < 18 { u32_zero_bit(k_bits) } else { 18 };
-        self.last_point.z = self
-            .ic_z
-            .decompress(dec, self.common.last_height[l as usize], context_z)?;
+        let context_z = (n == 1) as u32
+            + if k_bits < 18 {
+                u32_zero_bit(k_bits)
+            } else {
+                18
+            };
+        self.last_point.z =
+            self.ic_z
+                .decompress(dec, self.common.last_height[l as usize], context_z)?;
         self.common.last_height[l as usize] = self.last_point.z;
 
         Ok(self.last_point)
@@ -380,7 +395,8 @@ impl GpsTimeV2Decompressor {
                         8,
                     )?;
                     let lo = dec.read_int()?;
-                    self.common.last_gps_times[self.common.next] = ((hi as i64) << 32) | i64::from(lo);
+                    self.common.last_gps_times[self.common.next] =
+                        ((hi as i64) << 32) | i64::from(lo);
                     self.common.last = self.common.next;
                     self.common.last_gps_time_diffs[self.common.last] = 0;
                     self.common.multi_extreme_counters[self.common.last] = 0;
@@ -394,13 +410,11 @@ impl GpsTimeV2Decompressor {
                 if multi == 1 {
                     self.common.last_gps_times[self.common.last] = self.common.last_gps_times
                         [self.common.last]
-                        .wrapping_add(i64::from(
-                            self.ic_gps_time.decompress(
-                                dec,
-                                self.common.last_gps_time_diffs[self.common.last],
-                                1,
-                            )?,
-                        ));
+                        .wrapping_add(i64::from(self.ic_gps_time.decompress(
+                            dec,
+                            self.common.last_gps_time_diffs[self.common.last],
+                            1,
+                        )?));
                     self.common.multi_extreme_counters[self.common.last] = 0;
                 } else if multi < LASZIP_GPS_TIME_MULTI_UNCHANGED {
                     let gps_time_diff: i32;
@@ -415,13 +429,17 @@ impl GpsTimeV2Decompressor {
                         if multi < 10 {
                             gps_time_diff = self.ic_gps_time.decompress(
                                 dec,
-                                multi.wrapping_mul(self.common.last_gps_time_diffs[self.common.last]),
+                                multi.wrapping_mul(
+                                    self.common.last_gps_time_diffs[self.common.last],
+                                ),
                                 2,
                             )?;
                         } else {
                             gps_time_diff = self.ic_gps_time.decompress(
                                 dec,
-                                multi.wrapping_mul(self.common.last_gps_time_diffs[self.common.last]),
+                                multi.wrapping_mul(
+                                    self.common.last_gps_time_diffs[self.common.last],
+                                ),
                                 3,
                             )?;
                         }
@@ -441,14 +459,17 @@ impl GpsTimeV2Decompressor {
                         if multi > LASZIP_GPS_TIME_MULTI_MINUS {
                             gps_time_diff = self.ic_gps_time.decompress(
                                 dec,
-                                multi.wrapping_mul(self.common.last_gps_time_diffs[self.common.last]),
+                                multi.wrapping_mul(
+                                    self.common.last_gps_time_diffs[self.common.last],
+                                ),
                                 5,
                             )?;
                         } else {
                             gps_time_diff = self.ic_gps_time.decompress(
                                 dec,
-                                LASZIP_GPS_TIME_MULTI_MINUS
-                                    .wrapping_mul(self.common.last_gps_time_diffs[self.common.last]),
+                                LASZIP_GPS_TIME_MULTI_MINUS.wrapping_mul(
+                                    self.common.last_gps_time_diffs[self.common.last],
+                                ),
                                 6,
                             )?;
                             self.common.multi_extreme_counters[self.common.last] += 1;
@@ -469,14 +490,15 @@ impl GpsTimeV2Decompressor {
                         8,
                     )?;
                     let lo = dec.read_int()?;
-                    self.common.last_gps_times[self.common.next] = ((hi as i64) << 32) | i64::from(lo);
+                    self.common.last_gps_times[self.common.next] =
+                        ((hi as i64) << 32) | i64::from(lo);
                     self.common.last = self.common.next;
                     self.common.last_gps_time_diffs[self.common.last] = 0;
                     self.common.multi_extreme_counters[self.common.last] = 0;
                 } else if multi > LASZIP_GPS_TIME_MULTI_CODE_FULL {
-                    self.common.last =
-                        (self.common.last + multi as usize - LASZIP_GPS_TIME_MULTI_CODE_FULL as usize)
-                            & 3;
+                    self.common.last = (self.common.last + multi as usize
+                        - LASZIP_GPS_TIME_MULTI_CODE_FULL as usize)
+                        & 3;
                     continue;
                 }
             }
@@ -497,7 +519,9 @@ impl ExtraBytesV2Decompressor {
         Self {
             last_bytes: vec![0; count],
             diffs: vec![0; count],
-            models: (0..count).map(|_| ArithmeticSymbolModel::new(256)).collect(),
+            models: (0..count)
+                .map(|_| ArithmeticSymbolModel::new(256))
+                .collect(),
         }
     }
 
@@ -768,7 +792,8 @@ pub fn decode_standard_pointwise_chunk_point10_v2(
     } else {
         0usize
     };
-    let expected_payload_extra_count = expected_extra_bytes_count.saturating_add(waveform_bytes_count);
+    let expected_payload_extra_count =
+        expected_extra_bytes_count.saturating_add(waveform_bytes_count);
     let mut remaining_expected_extra = expected_payload_extra_count;
 
     for item in item_specs {

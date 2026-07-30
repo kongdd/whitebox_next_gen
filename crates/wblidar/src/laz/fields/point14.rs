@@ -63,14 +63,25 @@ impl RawPoint14 {
             nir: None,
         };
 
-        if matches!(format, PointDataFormat::Pdrf7 | PointDataFormat::Pdrf8 | PointDataFormat::Pdrf12 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf14 | PointDataFormat::Pdrf15) {
+        if matches!(
+            format,
+            PointDataFormat::Pdrf7
+                | PointDataFormat::Pdrf8
+                | PointDataFormat::Pdrf12
+                | PointDataFormat::Pdrf13
+                | PointDataFormat::Pdrf14
+                | PointDataFormat::Pdrf15
+        ) {
             out.rgb = Some(Rgb16 {
                 red: u16::from_le_bytes(raw[30..32].try_into().ok()?),
                 green: u16::from_le_bytes(raw[32..34].try_into().ok()?),
                 blue: u16::from_le_bytes(raw[34..36].try_into().ok()?),
             });
         }
-        if matches!(format, PointDataFormat::Pdrf8 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf15) {
+        if matches!(
+            format,
+            PointDataFormat::Pdrf8 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf15
+        ) {
             out.nir = Some(u16::from_le_bytes(raw[36..38].try_into().ok()?));
         }
 
@@ -99,13 +110,24 @@ impl RawPoint14 {
         out[20..22].copy_from_slice(&self.point_source_id.to_le_bytes());
         out[22..30].copy_from_slice(&self.gps_time.to_le_bytes());
 
-        if matches!(format, PointDataFormat::Pdrf7 | PointDataFormat::Pdrf8 | PointDataFormat::Pdrf12 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf14 | PointDataFormat::Pdrf15) {
+        if matches!(
+            format,
+            PointDataFormat::Pdrf7
+                | PointDataFormat::Pdrf8
+                | PointDataFormat::Pdrf12
+                | PointDataFormat::Pdrf13
+                | PointDataFormat::Pdrf14
+                | PointDataFormat::Pdrf15
+        ) {
             let rgb = self.rgb?;
             out[30..32].copy_from_slice(&rgb.red.to_le_bytes());
             out[32..34].copy_from_slice(&rgb.green.to_le_bytes());
             out[34..36].copy_from_slice(&rgb.blue.to_le_bytes());
         }
-        if matches!(format, PointDataFormat::Pdrf8 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf15) {
+        if matches!(
+            format,
+            PointDataFormat::Pdrf8 | PointDataFormat::Pdrf13 | PointDataFormat::Pdrf15
+        ) {
             out[36..38].copy_from_slice(&self.nir?.to_le_bytes());
         }
 
@@ -139,7 +161,12 @@ impl RawPoint14 {
     }
 
     /// Build raw representation from a scaled `PointRecord`.
-    pub fn from_point_record(p: PointRecord, format: PointDataFormat, scales: [f64; 3], offsets: [f64; 3]) -> Option<Self> {
+    pub fn from_point_record(
+        p: PointRecord,
+        format: PointDataFormat,
+        scales: [f64; 3],
+        offsets: [f64; 3],
+    ) -> Option<Self> {
         match format {
             PointDataFormat::Pdrf6 | PointDataFormat::Pdrf7 | PointDataFormat::Pdrf8 => {}
             _ => return None,
@@ -210,7 +237,11 @@ mod tests {
             y: -22.75,
             z: 10.5,
             intensity: 1234,
-            color: Some(Rgb16 { red: 1000, green: 2000, blue: 3000 }),
+            color: Some(Rgb16 {
+                red: 1000,
+                green: 2000,
+                blue: 3000,
+            }),
             nir: Some(4096),
             classification: 2,
             user_data: 9,
@@ -230,9 +261,11 @@ mod tests {
 
         let raw = RawPoint14::from_point_record(p, PointDataFormat::Pdrf8, scales, offsets)
             .expect("raw conversion should succeed");
-        let bytes = raw.to_bytes(PointDataFormat::Pdrf8).expect("bytes should serialize");
-        let decoded_raw = RawPoint14::from_bytes(&bytes, PointDataFormat::Pdrf8)
-            .expect("raw bytes should parse");
+        let bytes = raw
+            .to_bytes(PointDataFormat::Pdrf8)
+            .expect("bytes should serialize");
+        let decoded_raw =
+            RawPoint14::from_bytes(&bytes, PointDataFormat::Pdrf8).expect("raw bytes should parse");
         let decoded = decoded_raw.to_point_record(scales, offsets);
 
         assert_eq!(decoded.intensity, p.intensity);

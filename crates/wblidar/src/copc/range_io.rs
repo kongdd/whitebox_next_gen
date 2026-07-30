@@ -5,9 +5,9 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
-use crate::Result;
 #[cfg(feature = "copc-http")]
 use crate::Error;
+use crate::Result;
 
 /// Random-access byte source used by COPC readers.
 pub trait ByteRangeSource {
@@ -193,12 +193,13 @@ pub struct HttpRangeSource {
 impl HttpRangeSource {
     /// Create a new HTTP range source.
     pub fn new(url: &str) -> Result<Self> {
-        let client = reqwest::blocking::Client::builder()
-            .build()
-            .map_err(|e| Error::InvalidValue {
-                field: "copc.http.client",
-                detail: e.to_string(),
-            })?;
+        let client =
+            reqwest::blocking::Client::builder()
+                .build()
+                .map_err(|e| Error::InvalidValue {
+                    field: "copc.http.client",
+                    detail: e.to_string(),
+                })?;
         Ok(Self {
             client,
             url: url.to_string(),
@@ -311,7 +312,10 @@ impl Read for HttpRangeSource {
                 self.cursor = self.cursor.saturating_add(buf.len() as u64);
                 Ok(buf.len())
             }
-            Err(e) => Err(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())),
+            Err(e) => Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e.to_string(),
+            )),
         }
     }
 }

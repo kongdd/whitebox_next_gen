@@ -1,9 +1,5 @@
 //! COPC writer — builds an octree and writes the COPC structure.
 
-use std::collections::HashMap;
-use std::io::{Seek, SeekFrom, Write};
-#[cfg(feature = "copc-parallel")]
-use std::sync::OnceLock;
 use crate::copc::hierarchy::{CopcEntry, CopcHierarchy, CopcInfo, VoxelKey};
 use crate::copc::{COPC_HIERARCHY_RECORD_ID, COPC_INFO_RECORD_ID, COPC_USER_ID};
 use crate::crs::{ogc_wkt_from_epsg, Crs};
@@ -11,15 +7,19 @@ use crate::io::{le, PointWriter};
 use crate::las::header::{GlobalEncoding, LasHeader};
 use crate::las::vlr::{Vlr, VlrKey, LASF_PROJECTION_USER_ID, OGC_WKT_RECORD_ID};
 use crate::las::writer::WriterConfig;
+use crate::laz::build_laszip_vlr_for_format;
 use crate::laz::laszip_chunk_table::{write_laszip_chunk_table, LaszipChunkTableEntry};
 use crate::laz::standard_point14::encode_standard_layered_chunk_point14_v3_constant_attributes;
-use crate::laz::build_laszip_vlr_for_format;
 use crate::point::PointRecord;
 use crate::Error;
 use crate::Result;
-use wide::f64x4;
 #[cfg(feature = "copc-parallel")]
 use rayon::prelude::*;
+use std::collections::HashMap;
+use std::io::{Seek, SeekFrom, Write};
+#[cfg(feature = "copc-parallel")]
+use std::sync::OnceLock;
+use wide::f64x4;
 
 const HIERARCHY_PAGE_MAX_ENTRIES: usize = 512;
 #[cfg(feature = "copc-parallel")]
@@ -115,7 +115,7 @@ pub struct CopcWriterConfig {
     /// when present and otherwise falls back to Morton ordering.
     pub node_point_ordering: CopcNodePointOrdering,
     /// Compression level 0 (store) – 9 (best effort). Default 6.
-    /// 
+    ///
     /// Note: Currently affects only wb-native DEFLATE. Point14 arithmetic
     /// encoding uses fixed model sizes independent of this setting.
     /// Future versions may use this to control arithmetic model aggressiveness.
@@ -126,8 +126,11 @@ impl Default for CopcWriterConfig {
     fn default() -> Self {
         CopcWriterConfig {
             las: WriterConfig::default(),
-            center_x: 0.0, center_y: 0.0, center_z: 0.0,
-            halfsize: 1000.0, spacing: 10.0,
+            center_x: 0.0,
+            center_y: 0.0,
+            center_z: 0.0,
+            halfsize: 1000.0,
+            spacing: 10.0,
             max_depth: 8,
             // Favor larger leaves by default to reduce hierarchy overhead and
             // improve Point14 arithmetic context reuse inside each node.
@@ -153,7 +156,11 @@ impl<W: Write + Seek> CopcWriter<W> {
     /// Create a new COPC writer.  The actual file is not written until
     /// `finish()` is called.
     pub fn new(inner: W, config: CopcWriterConfig) -> Self {
-        CopcWriter { inner, config, points: Vec::new() }
+        CopcWriter {
+            inner,
+            config,
+            points: Vec::new(),
+        }
     }
 }
 
@@ -214,8 +221,7 @@ impl<W: Write + Seek> PointWriter for CopcWriter<W> {
             return_histograms(&self.points);
 
         // Compute bounding box
-        let (min_x, max_x, min_y, max_y, min_z, max_z) =
-            bounding_box(&self.points);
+        let (min_x, max_x, min_y, max_y, min_z, max_z) = bounding_box(&self.points);
 
         // ── Partition points into octree nodes ─────────────────────────────
         let input_points = std::mem::take(&mut self.points);
@@ -232,8 +238,11 @@ impl<W: Write + Seek> PointWriter for CopcWriter<W> {
 
         // COPC info VLR placeholder
         let copc_info_placeholder = CopcInfo {
-            center_x: cx, center_y: cy, center_z: cz,
-            halfsize: hs, spacing: self.config.spacing,
+            center_x: cx,
+            center_y: cy,
+            center_z: cz,
+            halfsize: hs,
+            spacing: self.config.spacing,
             hierarchy_root_offset: 0, // back-patched later
             hierarchy_root_size: 0,
             gps_time_minimum,
@@ -241,7 +250,10 @@ impl<W: Write + Seek> PointWriter for CopcWriter<W> {
         };
 
         let copc_info_vlr = Vlr {
-            key: VlrKey { user_id: COPC_USER_ID.to_owned(), record_id: COPC_INFO_RECORD_ID },
+            key: VlrKey {
+                user_id: COPC_USER_ID.to_owned(),
+                record_id: COPC_INFO_RECORD_ID,
+            },
             description: "COPC info".to_owned(),
             data: copc_info_placeholder.to_bytes(),
             extended: false,
@@ -266,10 +278,12 @@ impl<W: Write + Seek> PointWriter for CopcWriter<W> {
         let record_length = fmt.core_size() + self.config.las.extra_bytes_per_point;
 
         let las_hdr = LasHeader {
-            version_major: 1, version_minor: 4,
+            version_major: 1,
+            version_minor: 4,
             system_identifier: self.config.las.system_identifier.clone(),
             generating_software: self.config.las.generating_software.clone(),
-            file_creation_day: 1, file_creation_year: 2024,
+            file_creation_day: 1,
+            file_creation_year: 2024,
             header_size: 375,
             offset_to_point_data,
             number_of_vlrs,
@@ -283,8 +297,14 @@ impl<W: Write + Seek> PointWriter for CopcWriter<W> {
             x_offset: self.config.las.x_offset,
             y_offset: self.config.las.y_offset,
             z_offset: self.config.las.z_offset,
-            max_x, min_x, max_y, min_y, max_z, min_z,
-            legacy_point_count: u32::try_from(total_points.min(u64::from(u32::MAX))).unwrap_or(u32::MAX),
+            max_x,
+            min_x,
+            max_y,
+            min_y,
+            max_z,
+            min_z,
+            legacy_point_count: u32::try_from(total_points.min(u64::from(u32::MAX)))
+                .unwrap_or(u32::MAX),
             legacy_point_count_by_return,
             waveform_data_packet_offset: Some(0),
             start_of_first_evlr: Some(0), // back-patched
@@ -336,7 +356,8 @@ impl<W: Write + Seek> PointWriter for CopcWriter<W> {
         // (immediately after the 8-byte chunk-table pointer field).
         let first_chunk_pos = self.inner.stream_position()?;
         let mut cumulative_chunk_bytes: u64 = 0;
-        let mut standard_chunk_entries: Vec<LaszipChunkTableEntry> = Vec::with_capacity(sorted_keys.len());
+        let mut standard_chunk_entries: Vec<LaszipChunkTableEntry> =
+            Vec::with_capacity(sorted_keys.len());
 
         for chunk in encoded_chunks {
             let compressed = chunk.compressed;
@@ -382,7 +403,10 @@ impl<W: Write + Seek> PointWriter for CopcWriter<W> {
 
         // Write minimal EVLR header (60 bytes)
         let hierarchy_evlr = Vlr {
-            key: VlrKey { user_id: COPC_USER_ID.to_owned(), record_id: COPC_HIERARCHY_RECORD_ID },
+            key: VlrKey {
+                user_id: COPC_USER_ID.to_owned(),
+                record_id: COPC_HIERARCHY_RECORD_ID,
+            },
             description: "COPC hierarchy".to_owned(),
             data: hier_bytes,
             extended: true,
@@ -397,8 +421,11 @@ impl<W: Write + Seek> PointWriter for CopcWriter<W> {
 
         // ── Back-patch COPC info VLR with hierarchy offset/size ───────────
         let updated_info = CopcInfo {
-            center_x: cx, center_y: cy, center_z: cz,
-            halfsize: hs, spacing: self.config.spacing,
+            center_x: cx,
+            center_y: cy,
+            center_z: cz,
+            halfsize: hs,
+            spacing: self.config.spacing,
             hierarchy_root_offset: hier_data_offset,
             hierarchy_root_size: hier_size,
             gps_time_minimum,
@@ -446,24 +473,9 @@ fn encode_node_chunk(
     let inv_sz4 = f64x4::splat(inv_sz);
 
     while i + 4 <= pts.len() {
-        let px = f64x4::from([
-            pts[i].x,
-            pts[i + 1].x,
-            pts[i + 2].x,
-            pts[i + 3].x,
-        ]);
-        let py = f64x4::from([
-            pts[i].y,
-            pts[i + 1].y,
-            pts[i + 2].y,
-            pts[i + 3].y,
-        ]);
-        let pz = f64x4::from([
-            pts[i].z,
-            pts[i + 1].z,
-            pts[i + 2].z,
-            pts[i + 3].z,
-        ]);
+        let px = f64x4::from([pts[i].x, pts[i + 1].x, pts[i + 2].x, pts[i + 3].x]);
+        let py = f64x4::from([pts[i].y, pts[i + 1].y, pts[i + 2].y, pts[i + 3].y]);
+        let pz = f64x4::from([pts[i].z, pts[i + 1].z, pts[i + 2].z, pts[i + 3].z]);
 
         let qx: [f64; 4] = ((px - ox4) * inv_sx4).round().into();
         let qy: [f64; 4] = ((py - oy4) * inv_sy4).round().into();
@@ -622,7 +634,7 @@ fn morton_code(x: f64, y: f64, scale_x: f64, scale_y: f64, offset_x: f64, offset
     let yi = ((y - offset_y) / scale_y).round() as i32;
     let xu = u64::from(xi.cast_unsigned());
     let yu = u64::from(yi.cast_unsigned());
-    
+
     // Interleave bits: result[2i] = x[i], result[2i+1] = y[i], for i=0..15
     let mut code = 0u64;
     for i in 0..16 {
@@ -635,25 +647,32 @@ fn morton_code(x: f64, y: f64, scale_x: f64, scale_y: f64, offset_x: f64, offset
 /// Compute a Hilbert curve distance for spatial ordering.
 /// Hilbert curves preserve spatial locality better than Morton order (Z-order),
 /// potentially improving compression through better predictor performance.
-fn hilbert_distance(x: f64, y: f64, scale_x: f64, scale_y: f64, offset_x: f64, offset_y: f64) -> u64 {
+fn hilbert_distance(
+    x: f64,
+    y: f64,
+    scale_x: f64,
+    scale_y: f64,
+    offset_x: f64,
+    offset_y: f64,
+) -> u64 {
     // Map quantized coordinates to a 16-bit domain used by the Hilbert walk.
     // This mirrors the Morton ordering path, keeping behavior deterministic
     // for large integer coordinates and avoiding overflow during quadrant flips.
     let xi = (((x - offset_x) / scale_x).round() as i32).cast_unsigned() & 0xFFFF;
     let yi = (((y - offset_y) / scale_y).round() as i32).cast_unsigned() & 0xFFFF;
-    
+
     // Compute Hilbert distance for 16-bit coordinates (up to 2^32 values).
     let mut hd = 0u64;
     let n = 1u32 << 16;
     let mut s = 1u32 << 15; // Start at 2^15
     let mut x_cur = xi;
     let mut y_cur = yi;
-    
+
     while s > 0 {
         let rx = (x_cur & s) > 0;
         let ry = (y_cur & s) > 0;
         hd += ((3 * u64::from(rx)) ^ u64::from(ry)) * (u64::from(s) * u64::from(s));
-        
+
         // Rotate quadrant (standard Hilbert transform step).
         if !ry {
             if rx {
@@ -678,7 +697,12 @@ fn sort_points_by_morton_order(
     let mut codes: Vec<(u64, usize)> = points
         .iter()
         .enumerate()
-        .map(|(idx, p)| (morton_code(p.x, p.y, scale_x, scale_y, offset_x, offset_y), idx))
+        .map(|(idx, p)| {
+            (
+                morton_code(p.x, p.y, scale_x, scale_y, offset_x, offset_y),
+                idx,
+            )
+        })
         .collect();
     #[cfg(feature = "copc-parallel")]
     {
@@ -709,7 +733,12 @@ fn sort_points_by_hilbert_order(
     let mut codes: Vec<(u64, usize)> = points
         .iter()
         .enumerate()
-        .map(|(idx, p)| (hilbert_distance(p.x, p.y, scale_x, scale_y, offset_x, offset_y), idx))
+        .map(|(idx, p)| {
+            (
+                hilbert_distance(p.x, p.y, scale_x, scale_y, offset_x, offset_y),
+                idx,
+            )
+        })
         .collect();
     #[cfg(feature = "copc-parallel")]
     {
@@ -872,10 +901,12 @@ fn build_hierarchy_pages(
         if this_size <= HIERARCHY_PAGE_MAX_ENTRIES {
             let mut page_entries: Vec<CopcEntry> = subtree_keys(root, keys)
                 .into_iter()
-                .map(|k| by_key.get(&k).copied().ok_or(Error::InvalidValue {
-                    field: "copc.hierarchy",
-                    detail: format!("missing entry for key {:?}", k),
-                }))
+                .map(|k| {
+                    by_key.get(&k).copied().ok_or(Error::InvalidValue {
+                        field: "copc.hierarchy",
+                        detail: format!("missing entry for key {:?}", k),
+                    })
+                })
                 .collect::<Result<Vec<_>>>()?;
             page_entries.sort_by_key(|e| (e.key.level, e.key.x, e.key.y, e.key.z));
             let idx = pages.len();
@@ -894,14 +925,8 @@ fn build_hierarchy_pages(
         let child_keys = children.get(&root).cloned().unwrap_or_default();
         let mut refs: Vec<(VoxelKey, usize)> = Vec::new();
         for child in child_keys {
-            let child_page = build_page_for_subtree(
-                child,
-                keys,
-                by_key,
-                children,
-                subtree_size,
-                pages,
-            )?;
+            let child_page =
+                build_page_for_subtree(child, keys, by_key, children, subtree_size, pages)?;
             refs.push((child, child_page));
         }
         refs.sort_by_key(|(k, _)| (k.level, k.x, k.y, k.z));
@@ -943,11 +968,8 @@ fn build_hierarchy_pages(
         return Ok((root.to_bytes()?, Vec::new()));
     }
 
-    let by_key: HashMap<VoxelKey, CopcEntry> = entries
-        .iter()
-        .copied()
-        .map(|e| (e.key, e))
-        .collect();
+    let by_key: HashMap<VoxelKey, CopcEntry> =
+        entries.iter().copied().map(|e| (e.key, e)).collect();
     if !by_key.contains_key(&VoxelKey::ROOT) {
         return Err(Error::InvalidValue {
             field: "copc.hierarchy",
@@ -1049,26 +1071,33 @@ fn build_hierarchy_pages(
     .to_bytes()?;
     let mut subpage_bytes: Vec<Vec<u8>> = Vec::with_capacity(pages.len().saturating_sub(1));
     for page in pages.iter().skip(1) {
-        subpage_bytes.push(CopcHierarchy {
-            entries: page.entries.clone(),
-        }
-        .to_bytes()?);
+        subpage_bytes.push(
+            CopcHierarchy {
+                entries: page.entries.clone(),
+            }
+            .to_bytes()?,
+        );
     }
 
     Ok((root_bytes, subpage_bytes))
 }
 
 fn append_projection_vlrs(vlrs: &mut Vec<Vlr>, crs: Option<&Crs>) {
-    let Some(crs) = crs else { return; };
+    let Some(crs) = crs else {
+        return;
+    };
 
-    let has_wkt = vlrs.iter().any(|v| {
-        v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID
-    });
+    let has_wkt = vlrs
+        .iter()
+        .any(|v| v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID);
 
     if !has_wkt {
-        if let Some(wkt) = crs.wkt.as_deref().map(ToOwned::to_owned).or_else(|| {
-            crs.epsg.and_then(ogc_wkt_from_epsg)
-        }) {
+        if let Some(wkt) = crs
+            .wkt
+            .as_deref()
+            .map(ToOwned::to_owned)
+            .or_else(|| crs.epsg.and_then(ogc_wkt_from_epsg))
+        {
             vlrs.push(Vlr::ogc_wkt(&wkt));
         }
     }
@@ -1080,9 +1109,9 @@ fn append_projection_vlrs(vlrs: &mut Vec<Vlr>, crs: Option<&Crs>) {
 
 fn global_encoding_for_vlrs(vlrs: &[Vlr]) -> GlobalEncoding {
     let mut bits = GlobalEncoding::GPS_TIME_TYPE;
-    let has_wkt = vlrs.iter().any(|v| {
-        v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID
-    });
+    let has_wkt = vlrs
+        .iter()
+        .any(|v| v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID);
     if has_wkt {
         bits |= GlobalEncoding::WKT;
     }
@@ -1146,7 +1175,8 @@ fn partition_points_into_nodes(
         // root/internal nodes are non-empty for LOD-oriented COPC consumers.
         let keep_target = INTERNAL_NODE_KEEP_POINTS.min(points.len().saturating_sub(1));
         let mut keep_here: Vec<PointRecord> = Vec::new();
-        let mut pass_down: Vec<PointRecord> = Vec::with_capacity(points.len().saturating_sub(keep_target));
+        let mut pass_down: Vec<PointRecord> =
+            Vec::with_capacity(points.len().saturating_sub(keep_target));
 
         if keep_target > 0 {
             let stride = (points.len() / keep_target).max(1);
@@ -1199,9 +1229,24 @@ fn partition_points_into_nodes(
                 y: key.y * 2 + ny,
                 z: key.z * 2 + nz,
             };
-            let child_center_x = center_x + if nx == 1 { child_halfsize } else { -child_halfsize };
-            let child_center_y = center_y + if ny == 1 { child_halfsize } else { -child_halfsize };
-            let child_center_z = center_z + if nz == 1 { child_halfsize } else { -child_halfsize };
+            let child_center_x = center_x
+                + if nx == 1 {
+                    child_halfsize
+                } else {
+                    -child_halfsize
+                };
+            let child_center_y = center_y
+                + if ny == 1 {
+                    child_halfsize
+                } else {
+                    -child_halfsize
+                };
+            let child_center_z = center_z
+                + if nz == 1 {
+                    child_halfsize
+                } else {
+                    -child_halfsize
+                };
             recurse(
                 child_points,
                 child_key,
@@ -1238,8 +1283,12 @@ fn partition_points_into_nodes(
 /// Determine the deepest voxel key for a point given the root cube.
 #[cfg(test)]
 fn classify_point(
-    px: f64, py: f64, pz: f64,
-    cx: f64, cy: f64, cz: f64,
+    px: f64,
+    py: f64,
+    pz: f64,
+    cx: f64,
+    cy: f64,
+    cz: f64,
     hs: f64,
     max_depth: u32,
     spacing: f64,
@@ -1251,11 +1300,18 @@ fn classify_point(
     let mut cy_cur = cy;
     let mut cz_cur = cz;
     let mut cur_hs = hs;
-    let mut out = VoxelKey { level: 0, x: 0, y: 0, z: 0 };
+    let mut out = VoxelKey {
+        level: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+    };
 
     for level in 0..max_depth {
         // If the current voxel spacing is fine enough, stop here.
-        if cur_hs * 2.0 <= spacing { break; }
+        if cur_hs * 2.0 <= spacing {
+            break;
+        }
 
         cur_hs *= 0.5;
 
@@ -1271,7 +1327,12 @@ fn classify_point(
         cy_cur += if ny == 1 { cur_hs } else { -cur_hs };
         cz_cur += if nz == 1 { cur_hs } else { -cur_hs };
 
-        out = VoxelKey { level: level as i32 + 1, x: lx, y: ly, z: lz };
+        out = VoxelKey {
+            level: level as i32 + 1,
+            x: lx,
+            y: ly,
+            z: lz,
+        };
     }
     out
 }
@@ -1290,20 +1351,16 @@ fn bounding_box(pts: &[PointRecord]) -> (f64, f64, f64, f64, f64, f64) {
     }
     let min_arr: [f64; 4] = mins.into();
     let max_arr: [f64; 4] = maxs.into();
-    (min_arr[0], max_arr[0], min_arr[1], max_arr[1], min_arr[2], max_arr[2])
+    (
+        min_arr[0], max_arr[0], min_arr[1], max_arr[1], min_arr[2], max_arr[2],
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Cursor, Seek, SeekFrom};
     use super::{
-        classify_point,
-        close_hierarchy_with_ancestors,
-        order_node_points,
-        sort_points_by_gps_time,
-        sort_points_by_hilbert_order,
-        sort_points_by_morton_order,
-        CopcNodePointOrdering,
+        classify_point, close_hierarchy_with_ancestors, order_node_points, sort_points_by_gps_time,
+        sort_points_by_hilbert_order, sort_points_by_morton_order, CopcNodePointOrdering,
     };
     use crate::copc::hierarchy::{CopcEntry, CopcHierarchy, VoxelKey};
     use crate::copc::reader::{CopcReader, CopcReaderMode};
@@ -1313,11 +1370,12 @@ mod tests {
     use crate::las::header::GlobalEncoding;
     use crate::las::reader::LasReader;
     use crate::las::vlr::{
-        find_epsg, find_ogc_wkt, Vlr, GEOKEY_DIRECTORY_RECORD_ID,
-        LASF_PROJECTION_USER_ID, OGC_WKT_RECORD_ID,
+        find_epsg, find_ogc_wkt, Vlr, GEOKEY_DIRECTORY_RECORD_ID, LASF_PROJECTION_USER_ID,
+        OGC_WKT_RECORD_ID,
     };
-    use crate::point::PointRecord;
     use crate::point::GpsTime;
+    use crate::point::PointRecord;
+    use std::io::{Cursor, Seek, SeekFrom};
 
     #[test]
     fn copc_emits_projection_vlrs_from_crs() -> crate::Result<()> {
@@ -1328,7 +1386,12 @@ mod tests {
 
         {
             let mut writer = CopcWriter::new(&mut cursor, cfg);
-            let point = PointRecord { x: -80.0, y: 43.0, z: 300.0, ..PointRecord::default() };
+            let point = PointRecord {
+                x: -80.0,
+                y: 43.0,
+                z: 300.0,
+                ..PointRecord::default()
+            };
             writer.write_point(&point)?;
             writer.finish()?;
         }
@@ -1348,12 +1411,21 @@ mod tests {
 
         let mut cfg = CopcWriterConfig::default();
         cfg.las.crs = Some(Crs::from_epsg(4326));
-        cfg.las.vlrs.push(Vlr::ogc_wkt("GEOGCS[\"WGS 84\",AUTHORITY[\"EPSG\",\"4326\"]]"));
-        cfg.las.vlrs.push(Vlr::geokey_directory_for_epsg(4326).expect("valid epsg for geokey"));
+        cfg.las.vlrs.push(Vlr::ogc_wkt(
+            "GEOGCS[\"WGS 84\",AUTHORITY[\"EPSG\",\"4326\"]]",
+        ));
+        cfg.las
+            .vlrs
+            .push(Vlr::geokey_directory_for_epsg(4326).expect("valid epsg for geokey"));
 
         {
             let mut writer = CopcWriter::new(&mut cursor, cfg);
-            let point = PointRecord { x: -80.0, y: 43.0, z: 300.0, ..PointRecord::default() };
+            let point = PointRecord {
+                x: -80.0,
+                y: 43.0,
+                z: 300.0,
+                ..PointRecord::default()
+            };
             writer.write_point(&point)?;
             writer.finish()?;
         }
@@ -1361,13 +1433,21 @@ mod tests {
         cursor.seek(SeekFrom::Start(0))?;
         let reader = LasReader::new(&mut cursor)?;
 
-        let wkt_count = reader.vlrs().iter().filter(|v| {
-            v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID
-        }).count();
-        let geokey_count = reader.vlrs().iter().filter(|v| {
-            v.key.user_id == LASF_PROJECTION_USER_ID
-                && v.key.record_id == GEOKEY_DIRECTORY_RECORD_ID
-        }).count();
+        let wkt_count = reader
+            .vlrs()
+            .iter()
+            .filter(|v| {
+                v.key.user_id == LASF_PROJECTION_USER_ID && v.key.record_id == OGC_WKT_RECORD_ID
+            })
+            .count();
+        let geokey_count = reader
+            .vlrs()
+            .iter()
+            .filter(|v| {
+                v.key.user_id == LASF_PROJECTION_USER_ID
+                    && v.key.record_id == GEOKEY_DIRECTORY_RECORD_ID
+            })
+            .count();
 
         assert_eq!(wkt_count, 1);
         assert_eq!(geokey_count, 1);
@@ -1385,7 +1465,12 @@ mod tests {
 
         {
             let mut writer = CopcWriter::new(&mut cursor, cfg);
-            let point = PointRecord { x: -80.0, y: 43.0, z: 300.0, ..PointRecord::default() };
+            let point = PointRecord {
+                x: -80.0,
+                y: 43.0,
+                z: 300.0,
+                ..PointRecord::default()
+            };
             writer.write_point(&point)?;
             writer.finish()?;
         }
@@ -1405,9 +1490,24 @@ mod tests {
     #[test]
     fn occupancy_partition_keeps_small_cloud_in_single_node() {
         let points = vec![
-            PointRecord { x: 0.1, y: 0.1, z: 0.1, ..PointRecord::default() },
-            PointRecord { x: 0.2, y: 0.2, z: 0.2, ..PointRecord::default() },
-            PointRecord { x: 0.3, y: 0.3, z: 0.3, ..PointRecord::default() },
+            PointRecord {
+                x: 0.1,
+                y: 0.1,
+                z: 0.1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.2,
+                y: 0.2,
+                z: 0.2,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.3,
+                y: 0.3,
+                z: 0.3,
+                ..PointRecord::default()
+            },
         ];
 
         let mut cfg = CopcWriterConfig::default();
@@ -1463,9 +1563,18 @@ mod tests {
     #[test]
     fn node_points_are_sorted_by_gps_time() {
         let mut pts = vec![
-            PointRecord { gps_time: Some(GpsTime(5.0)), ..PointRecord::default() },
-            PointRecord { gps_time: Some(GpsTime(2.0)), ..PointRecord::default() },
-            PointRecord { gps_time: Some(GpsTime(3.0)), ..PointRecord::default() },
+            PointRecord {
+                gps_time: Some(GpsTime(5.0)),
+                ..PointRecord::default()
+            },
+            PointRecord {
+                gps_time: Some(GpsTime(2.0)),
+                ..PointRecord::default()
+            },
+            PointRecord {
+                gps_time: Some(GpsTime(3.0)),
+                ..PointRecord::default()
+            },
         ];
 
         sort_points_by_gps_time(&mut pts);
@@ -1499,14 +1608,7 @@ mod tests {
             },
         ];
 
-        order_node_points(
-            &mut pts,
-            CopcNodePointOrdering::Auto,
-            0.01,
-            0.01,
-            0.0,
-            0.0,
-        );
+        order_node_points(&mut pts, CopcNodePointOrdering::Auto, 0.01, 0.01, 0.0, 0.0);
 
         let got: Vec<f64> = pts
             .iter()
@@ -1518,21 +1620,29 @@ mod tests {
     #[test]
     fn order_node_points_auto_falls_back_to_morton_without_gps() {
         let mut pts = vec![
-            PointRecord { x: 10.0, y: 1.0, gps_time: None, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 20.0, gps_time: None, ..PointRecord::default() },
-            PointRecord { x: 5.0, y: 6.0, gps_time: None, ..PointRecord::default() },
+            PointRecord {
+                x: 10.0,
+                y: 1.0,
+                gps_time: None,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 20.0,
+                gps_time: None,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 5.0,
+                y: 6.0,
+                gps_time: None,
+                ..PointRecord::default()
+            },
         ];
         let mut expected = pts.clone();
         sort_points_by_morton_order(&mut expected, 0.01, 0.01, 0.0, 0.0);
 
-        order_node_points(
-            &mut pts,
-            CopcNodePointOrdering::Auto,
-            0.01,
-            0.01,
-            0.0,
-            0.0,
-        );
+        order_node_points(&mut pts, CopcNodePointOrdering::Auto, 0.01, 0.01, 0.0, 0.0);
 
         let got_xy: Vec<(f64, f64)> = pts.iter().map(|p| (p.x, p.y)).collect();
         let expected_xy: Vec<(f64, f64)> = expected.iter().map(|p| (p.x, p.y)).collect();
@@ -1542,9 +1652,24 @@ mod tests {
     #[test]
     fn order_node_points_explicit_morton_matches_morton_sort() {
         let mut pts = vec![
-            PointRecord { x: 8.0, y: 1.0, gps_time: Some(GpsTime(30.0)), ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 9.0, gps_time: Some(GpsTime(10.0)), ..PointRecord::default() },
-            PointRecord { x: 4.0, y: 3.0, gps_time: Some(GpsTime(20.0)), ..PointRecord::default() },
+            PointRecord {
+                x: 8.0,
+                y: 1.0,
+                gps_time: Some(GpsTime(30.0)),
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 9.0,
+                gps_time: Some(GpsTime(10.0)),
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 4.0,
+                y: 3.0,
+                gps_time: Some(GpsTime(20.0)),
+                ..PointRecord::default()
+            },
         ];
         let mut expected = pts.clone();
         sort_points_by_morton_order(&mut expected, 0.01, 0.01, 0.0, 0.0);
@@ -1566,9 +1691,24 @@ mod tests {
     #[test]
     fn order_node_points_explicit_hilbert_matches_hilbert_sort() {
         let mut pts = vec![
-            PointRecord { x: 8.0, y: 1.0, gps_time: Some(GpsTime(30.0)), ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 9.0, gps_time: Some(GpsTime(10.0)), ..PointRecord::default() },
-            PointRecord { x: 4.0, y: 3.0, gps_time: Some(GpsTime(20.0)), ..PointRecord::default() },
+            PointRecord {
+                x: 8.0,
+                y: 1.0,
+                gps_time: Some(GpsTime(30.0)),
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 9.0,
+                gps_time: Some(GpsTime(10.0)),
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 4.0,
+                y: 3.0,
+                gps_time: Some(GpsTime(20.0)),
+                ..PointRecord::default()
+            },
         ];
         let mut expected = pts.clone();
         sort_points_by_hilbert_order(&mut expected, 0.01, 0.01, 0.0, 0.0);
@@ -1590,7 +1730,12 @@ mod tests {
     #[test]
     fn hierarchy_closure_adds_missing_ancestors() {
         let leaf = CopcEntry {
-            key: VoxelKey { level: 3, x: 5, y: 2, z: 7 },
+            key: VoxelKey {
+                level: 3,
+                x: 5,
+                y: 2,
+                z: 7,
+            },
             offset: 100,
             byte_size: 25,
             point_count: 9,
@@ -1598,10 +1743,25 @@ mod tests {
         let closed = close_hierarchy_with_ancestors(vec![leaf]);
 
         assert!(closed.iter().any(|e| e.key == VoxelKey::ROOT));
-        assert!(closed.iter().any(|e| e.key == VoxelKey { level: 1, x: 1, y: 0, z: 1 }));
-        assert!(closed.iter().any(|e| e.key == VoxelKey { level: 2, x: 2, y: 1, z: 3 }));
+        assert!(closed.iter().any(|e| e.key
+            == VoxelKey {
+                level: 1,
+                x: 1,
+                y: 0,
+                z: 1
+            }));
+        assert!(closed.iter().any(|e| e.key
+            == VoxelKey {
+                level: 2,
+                x: 2,
+                y: 1,
+                z: 3
+            }));
 
-        let leaf_entry = closed.iter().find(|e| e.key == leaf.key).expect("leaf preserved");
+        let leaf_entry = closed
+            .iter()
+            .find(|e| e.key == leaf.key)
+            .expect("leaf preserved");
         assert_eq!(leaf_entry.offset, 100);
         assert_eq!(leaf_entry.byte_size, 25);
         assert_eq!(leaf_entry.point_count, 9);
@@ -1610,9 +1770,18 @@ mod tests {
     #[test]
     fn gps_time_range_uses_present_values() {
         let pts = vec![
-            PointRecord { gps_time: Some(crate::point::GpsTime(100.0)), ..PointRecord::default() },
-            PointRecord { gps_time: None, ..PointRecord::default() },
-            PointRecord { gps_time: Some(crate::point::GpsTime(250.5)), ..PointRecord::default() },
+            PointRecord {
+                gps_time: Some(crate::point::GpsTime(100.0)),
+                ..PointRecord::default()
+            },
+            PointRecord {
+                gps_time: None,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                gps_time: Some(crate::point::GpsTime(250.5)),
+                ..PointRecord::default()
+            },
         ];
         let (min, max) = super::gps_time_range(&pts);
         assert_eq!(min, 100.0);
@@ -1622,10 +1791,22 @@ mod tests {
     #[test]
     fn return_histograms_track_legacy_and_full_bins() {
         let pts = vec![
-            PointRecord { return_number: 1, ..PointRecord::default() },
-            PointRecord { return_number: 5, ..PointRecord::default() },
-            PointRecord { return_number: 8, ..PointRecord::default() },
-            PointRecord { return_number: 0, ..PointRecord::default() },
+            PointRecord {
+                return_number: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                return_number: 5,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                return_number: 8,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                return_number: 0,
+                ..PointRecord::default()
+            },
         ];
         let (legacy, full) = super::return_histograms(&pts);
         assert_eq!(legacy[0], 1);
@@ -1639,7 +1820,12 @@ mod tests {
     fn hierarchy_is_paginated_when_entry_count_exceeds_limit() -> crate::Result<()> {
         let leaves: Vec<CopcEntry> = (0..(super::HIERARCHY_PAGE_MAX_ENTRIES + 5))
             .map(|i| CopcEntry {
-                key: VoxelKey { level: 10, x: i as i32, y: 0, z: 0 },
+                key: VoxelKey {
+                    level: 10,
+                    x: i as i32,
+                    y: 0,
+                    z: 0,
+                },
                 offset: 1000 + i as u64,
                 byte_size: 10,
                 point_count: 1,
@@ -1654,7 +1840,10 @@ mod tests {
         assert!(!subpages.is_empty());
         assert!(root.entries.len() <= super::HIERARCHY_PAGE_MAX_ENTRIES);
         assert!(root.entries.iter().any(|e| e.key == VoxelKey::ROOT));
-        assert!(root.entries.iter().any(|e| e.point_count < 0 && e.byte_size > 0));
+        assert!(root
+            .entries
+            .iter()
+            .any(|e| e.point_count < 0 && e.byte_size > 0));
 
         for page_bytes in &subpages {
             let page = CopcHierarchy::from_bytes(page_bytes)?;
@@ -1761,7 +1950,9 @@ mod tests {
             }
         };
 
-        assert!(format!("{err}").contains("point cannot be represented in requested Point14 format"));
+        assert!(
+            format!("{err}").contains("point cannot be represented in requested Point14 format")
+        );
     }
 
     #[test]
@@ -1875,7 +2066,9 @@ mod tests {
             }
         };
 
-        assert!(format!("{err}").contains("point cannot be represented in requested Point14 format"));
+        assert!(
+            format!("{err}").contains("point cannot be represented in requested Point14 format")
+        );
     }
 
     #[test]
@@ -1898,14 +2091,19 @@ mod tests {
                     ..PointRecord::default()
                 })
                 .expect("point should buffer");
-            writer.finish().expect("finish should succeed with promoted format");
+            writer
+                .finish()
+                .expect("finish should succeed with promoted format");
         }
 
         cursor.set_position(0);
-        let las_reader = crate::las::reader::LasReader::new(&mut cursor)
-            .expect("header should read");
+        let las_reader =
+            crate::las::reader::LasReader::new(&mut cursor).expect("header should read");
         let header = las_reader.header().clone();
-        assert_eq!(header.point_data_format, crate::las::header::PointDataFormat::Pdrf6);
+        assert_eq!(
+            header.point_data_format,
+            crate::las::header::PointDataFormat::Pdrf6
+        );
     }
 
     #[test]
@@ -1937,10 +2135,13 @@ mod tests {
         }
 
         cursor.set_position(0);
-        let las_reader = crate::las::reader::LasReader::new(&mut cursor)
-            .expect("header should read");
+        let las_reader =
+            crate::las::reader::LasReader::new(&mut cursor).expect("header should read");
         let header = las_reader.header().clone();
-        assert_eq!(header.point_data_format, crate::las::header::PointDataFormat::Pdrf7);
+        assert_eq!(
+            header.point_data_format,
+            crate::las::header::PointDataFormat::Pdrf7
+        );
     }
 
     #[test]
@@ -1976,10 +2177,13 @@ mod tests {
         }
 
         cursor.set_position(0);
-        let las_reader = crate::las::reader::LasReader::new(&mut cursor)
-            .expect("header should read");
+        let las_reader =
+            crate::las::reader::LasReader::new(&mut cursor).expect("header should read");
         let header = las_reader.header().clone();
-        assert_eq!(header.point_data_format, crate::las::header::PointDataFormat::Pdrf6);
+        assert_eq!(
+            header.point_data_format,
+            crate::las::header::PointDataFormat::Pdrf6
+        );
     }
 
     #[test]
@@ -2048,8 +2252,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_scanner_channel_with_classification_change(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_scanner_channel_with_classification_change() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2098,8 +2301,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_scanner_channel_with_user_data_change(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_scanner_channel_with_user_data_change() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2150,8 +2352,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_scanner_channel_with_scan_angle_change(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_scanner_channel_with_scan_angle_change() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2204,8 +2405,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_scanner_channel_with_point_source_change(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_scanner_channel_with_point_source_change() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2260,8 +2460,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_scanner_channel_with_gps_time_change(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_scanner_channel_with_gps_time_change() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2318,8 +2517,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_scanner_channel_with_nir_change(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_scanner_channel_with_nir_change() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2386,8 +2584,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_scanner_channel_with_rgb_change(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_scanner_channel_with_rgb_change() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2454,8 +2651,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_scanner_channel_with_rgb_change_pdrf7(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_scanner_channel_with_rgb_change_pdrf7() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2520,8 +2716,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_scanner_channel_with_flags_change(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_scanner_channel_with_flags_change() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2577,8 +2772,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_scanner_channel_with_return_fields_change(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_scanner_channel_with_return_fields_change() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2635,8 +2829,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_multipoint_rgb_nir_change(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_multipoint_rgb_nir_change() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();
@@ -2705,8 +2898,7 @@ mod tests {
     }
 
     #[test]
-    fn strict_mode_accepts_multipoint_rgb_change_pdrf7(
-    ) -> crate::Result<()> {
+    fn strict_mode_accepts_multipoint_rgb_change_pdrf7() -> crate::Result<()> {
         let mut cursor = Cursor::new(Vec::<u8>::new());
 
         let mut cfg = CopcWriterConfig::default();

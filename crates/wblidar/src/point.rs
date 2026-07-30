@@ -55,9 +55,9 @@ impl From<Rgb16> for Color {
 impl From<Color> for Rgb16 {
     fn from(c: Color) -> Self {
         Rgb16 {
-            red:   u16::from(c.r) << 8 | u16::from(c.r),
+            red: u16::from(c.r) << 8 | u16::from(c.r),
             green: u16::from(c.g) << 8 | u16::from(c.g),
-            blue:  u16::from(c.b) << 8 | u16::from(c.b),
+            blue: u16::from(c.b) << 8 | u16::from(c.b),
         }
     }
 }
@@ -96,7 +96,12 @@ pub struct ExtraBytes {
 }
 
 impl Default for ExtraBytes {
-    fn default() -> Self { Self { data: [0u8; 192], len: 0 } }
+    fn default() -> Self {
+        Self {
+            data: [0u8; 192],
+            len: 0,
+        }
+    }
 }
 
 /// The canonical point record used throughout wblidar.

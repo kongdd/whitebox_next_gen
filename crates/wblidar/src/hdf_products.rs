@@ -7,12 +7,9 @@
 use std::path::Path;
 
 use crate::hdf_adapter::{
-    HdfAdapterResult,
-    GEDI_L2B_CANOPY_STYLE_DATASET_PATH,
-    ICESAT2_ATL08_CANOPY_SUBPATH,
-    read_gedi_l2b_canopy_style_f32_window_in_file,
-    read_icesat2_atl08_h_canopy_f32_window_in_file,
-    resolve_icesat2_atl08_h_canopy_path_in_file,
+    read_gedi_l2b_canopy_style_f32_window_in_file, read_icesat2_atl08_h_canopy_f32_window_in_file,
+    resolve_icesat2_atl08_h_canopy_path_in_file, HdfAdapterResult,
+    GEDI_L2B_CANOPY_STYLE_DATASET_PATH, ICESAT2_ATL08_CANOPY_SUBPATH,
 };
 
 /// Supported HDF LiDAR product families for the current integration slice.
@@ -132,7 +129,8 @@ impl HdfLidarProductProvider for GediL2bCanopyProvider {
     }
 
     fn can_handle(&self, file_path: &Path) -> bool {
-        wbhdf::dataset::resolve_dataset_in_file(file_path, GEDI_L2B_CANOPY_STYLE_DATASET_PATH).is_ok()
+        wbhdf::dataset::resolve_dataset_in_file(file_path, GEDI_L2B_CANOPY_STYLE_DATASET_PATH)
+            .is_ok()
     }
 
     fn resolve(&self, file_path: &Path) -> HdfAdapterResult<ResolvedHdfLidarProduct> {
@@ -265,13 +263,10 @@ fn apply_error_counters(diagnostics: &mut HdfLidarReadDiagnostics, err: &wbhdf::
 #[cfg(test)]
 mod tests {
     use super::{
-        HdfLidarReadDiagnostics,
-        HdfLidarProductFamily,
-        detect_hdf_lidar_product_family,
-        icesat2_atl08_canopy_subpath,
+        detect_hdf_lidar_product_family, icesat2_atl08_canopy_subpath,
         read_hdf_lidar_canopy_f32_window_in_file,
-        read_hdf_lidar_canopy_f32_window_with_diagnostics,
-        resolve_hdf_lidar_product,
+        read_hdf_lidar_canopy_f32_window_with_diagnostics, resolve_hdf_lidar_product,
+        HdfLidarProductFamily, HdfLidarReadDiagnostics,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -324,7 +319,8 @@ mod tests {
         fs::write(&path, b"plain-binary-content").expect("temp file should be writable");
 
         let detected = detect_hdf_lidar_product_family(&path);
-        let err = resolve_hdf_lidar_product(&path).expect_err("unmarked file should fail resolution");
+        let err =
+            resolve_hdf_lidar_product(&path).expect_err("unmarked file should fail resolution");
         let _ = fs::remove_file(&path);
 
         assert_eq!(detected, HdfLidarProductFamily::Unknown);
@@ -333,7 +329,10 @@ mod tests {
 
     #[test]
     fn atl08_subpath_accessor_is_stable() {
-        assert_eq!(icesat2_atl08_canopy_subpath(), "/land_segments/canopy/h_canopy");
+        assert_eq!(
+            icesat2_atl08_canopy_subpath(),
+            "/land_segments/canopy/h_canopy"
+        );
     }
 
     #[test]
@@ -356,7 +355,10 @@ mod tests {
         let (result, diagnostics) = read_hdf_lidar_canopy_f32_window_with_diagnostics(&path, 0, 8);
         let _ = fs::remove_file(&path);
 
-        assert!(result.is_err(), "unsupported file should fail read dispatch");
+        assert!(
+            result.is_err(),
+            "unsupported file should fail read dispatch"
+        );
         assert_eq!(
             diagnostics,
             HdfLidarReadDiagnostics {
@@ -383,7 +385,10 @@ mod tests {
         let (result, diagnostics) = read_hdf_lidar_canopy_f32_window_with_diagnostics(&path, 0, 8);
         let _ = fs::remove_file(&path);
 
-        assert!(result.is_err(), "malformed ATL08-like file should fail read dispatch");
+        assert!(
+            result.is_err(),
+            "malformed ATL08-like file should fail read dispatch"
+        );
         let err_text = format!(
             "{}",
             result.expect_err("error result should be present for malformed ATL08-like file")
@@ -393,7 +398,10 @@ mod tests {
             "error should indicate object-header discovery failure"
         );
 
-        assert_eq!(diagnostics.family, HdfLidarProductFamily::Icesat2Atl08Canopy);
+        assert_eq!(
+            diagnostics.family,
+            HdfLidarProductFamily::Icesat2Atl08Canopy
+        );
         assert_eq!(diagnostics.chunks_visited, 1);
         assert_eq!(diagnostics.chunks_decoded, 0);
         assert_eq!(diagnostics.filter_failures, 0);
