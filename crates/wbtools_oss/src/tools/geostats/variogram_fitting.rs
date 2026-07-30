@@ -15,8 +15,16 @@ Output includes fitted model parameters used by kriging tools. Workflow: estimat
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "lags_json", description: "Empirical lags as JSON", required: true },
-                ToolParamSpec { name: "model_family", description: "Model: spherical, exponential, gaussian", required: false },
+                ToolParamSpec {
+                    name: "lags_json",
+                    description: "Empirical lags as JSON",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "model_family",
+                    description: "Model: spherical, exponential, gaussian",
+                    required: false,
+                },
             ],
         }
     }
@@ -44,7 +52,7 @@ Output includes fitted model parameters used by kriging tools. Workflow: estimat
                 description: "Fit exponential variogram model".to_string(),
                 args: example_args,
             }],
-            tags: vec!["geostatistics".to_string(), "kriging".to_string(), "model-fitting".to_string()],
+            tags: vec!["geostatistics".to_string(), "kriging".to_string(), "model-fitting".to_string(), "spatial_statistics".to_string()],
             stability: ToolStability::Stable,
         }
     }
@@ -53,28 +61,30 @@ Output includes fitted model parameters used by kriging tools. Workflow: estimat
         let lags_str = parse_string_arg(args, "lags_json")?;
         serde_json::from_str::<Vec<Value>>(&lags_str)
             .map_err(|e| ToolError::Validation(format!("Invalid lags JSON: {}", e)))?;
-        
-        let model_family = args.get("model_family")
+
+        let model_family = args
+            .get("model_family")
             .and_then(|v| v.as_str())
             .unwrap_or("exponential")
             .to_ascii_lowercase();
-        
+
         match model_family.as_str() {
             "spherical" | "exponential" | "gaussian" => Ok(()),
             _ => Err(ToolError::Validation(
-                "model_family must be: spherical, exponential, or gaussian".to_string()
+                "model_family must be: spherical, exponential, or gaussian".to_string(),
             )),
         }
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         ctx.progress.info("Parsing empirical variogram lags");
-        
+
         let lags_str = parse_string_arg(args, "lags_json")?;
         let lags_data: Vec<Value> = serde_json::from_str(&lags_str)
             .map_err(|e| ToolError::Execution(format!("JSON parse error: {}", e)))?;
 
-        let model_family_str = args.get("model_family")
+        let model_family_str = args
+            .get("model_family")
             .and_then(|v| v.as_str())
             .unwrap_or("exponential")
             .to_ascii_lowercase();
@@ -89,33 +99,38 @@ Output includes fitted model parameters used by kriging tools. Workflow: estimat
         // Parse lags
         let mut lags = Vec::new();
         for lag_val in lags_data {
-            let obj = lag_val.as_object()
+            let obj = lag_val
+                .as_object()
                 .ok_or_else(|| ToolError::Execution("Each lag must be an object".to_string()))?;
-            
-            let distance = obj.get("distance")
+
+            let distance = obj
+                .get("distance")
                 .and_then(|v| v.as_f64())
                 .ok_or_else(|| ToolError::Execution("Lag missing 'distance'".to_string()))?;
-            let semivariance = obj.get("semivariance")
+            let semivariance = obj
+                .get("semivariance")
                 .and_then(|v| v.as_f64())
                 .ok_or_else(|| ToolError::Execution("Lag missing 'semivariance'".to_string()))?;
-            let pair_count = obj.get("pair_count")
-                .and_then(|v| v.as_u64())
-                .unwrap_or(1) as usize;
+            let pair_count = obj.get("pair_count").and_then(|v| v.as_u64()).unwrap_or(1) as usize;
 
-            lags.push(wbspatialstats::variogram::LagBin { 
-                distance, 
-                semivariance, 
-                pair_count 
+            lags.push(wbspatialstats::variogram::LagBin {
+                distance,
+                semivariance,
+                pair_count,
             });
         }
 
         if lags.len() < 3 {
             return Err(ToolError::Execution(
-                "At least 3 lag bins required for model fitting".to_string()
+                "At least 3 lag bins required for model fitting".to_string(),
             ));
         }
 
-        ctx.progress.info(&format!("Fitting {} variogram model to {} lags", model_family_str, lags.len()));
+        ctx.progress.info(&format!(
+            "Fitting {} variogram model to {} lags",
+            model_family_str,
+            lags.len()
+        ));
 
         // Fit model
         let model = VariogramFitter::fit(&lags, model_family)
@@ -143,6 +158,9 @@ Output includes fitted model parameters used by kriging tools. Workflow: estimat
 
         ctx.progress.info("Variogram model fitting complete");
 
-        Ok(ToolRunResult { outputs, ..Default::default() })
+        Ok(ToolRunResult {
+            outputs,
+            ..Default::default()
+        })
     }
 }

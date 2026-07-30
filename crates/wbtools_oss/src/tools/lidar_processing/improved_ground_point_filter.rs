@@ -1,24 +1,26 @@
+use rayon::prelude::*;
 /// LiDAR processing tools migrated from wbtools_pro.
 ///
 /// This module currently contains:
 /// - ImprovedGroundPointFilter: multi-stage ground point filtering pipeline
-
 use serde_json::json;
-use rayon::prelude::*;
 use std::sync::Arc;
 
 /// Minimum cell count before Rayon thread dispatch pays off.
 /// Below this threshold, `with_min_len` collapses the parallel iterator
 /// to a single chunk, avoiding pool overhead for small LiDAR grids.
 const RAYON_MIN_CHUNK: usize = 65_536;
-use wbcore::{
-    parse_optional_output_path, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
-    ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
-};
 use crate::{
     memory_store,
-    tools::{FilterLidarByPercentileTool, LidarTinGriddingTool, FillPitsTool, RemoveOffTerrainObjectsTool, FilterLidarByReferenceSurfaceTool},
+    tools::{
+        FillPitsTool, FilterLidarByPercentileTool, FilterLidarByReferenceSurfaceTool,
+        LidarTinGriddingTool, RemoveOffTerrainObjectsTool,
+    },
+};
+use wbcore::{
+    parse_optional_output_path, LicenseTier, Tool, ToolArgs, ToolCategory, ToolContext, ToolError,
+    ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSpec, ToolRunResult,
+    ToolStability,
 };
 
 pub struct ImprovedGroundPointFilterTool;
@@ -95,14 +97,46 @@ impl Tool for ImprovedGroundPointFilterTool {
             category: ToolCategory::Lidar,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input LiDAR path.".to_string(), required: true },
-                ToolParamDescriptor { name: "block_size".to_string(), description: "Grid cell size in xy units.".to_string(), required: false },
-                ToolParamDescriptor { name: "max_building_size".to_string(), description: "Maximum expected building width in xy units.".to_string(), required: false },
-                ToolParamDescriptor { name: "slope_threshold".to_string(), description: "Minimum edge slope in degrees.".to_string(), required: false },
-                ToolParamDescriptor { name: "elev_threshold".to_string(), description: "Elevation distance threshold.".to_string(), required: false },
-                ToolParamDescriptor { name: "classify".to_string(), description: "Classify rather than filter points.".to_string(), required: false },
-                ToolParamDescriptor { name: "preserve_classes".to_string(), description: "Preserve existing classes in classify mode.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output LiDAR path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input LiDAR path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "block_size".to_string(),
+                    description: "Grid cell size in xy units.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "max_building_size".to_string(),
+                    description: "Maximum expected building width in xy units.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "slope_threshold".to_string(),
+                    description: "Minimum edge slope in degrees.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "elev_threshold".to_string(),
+                    description: "Elevation distance threshold.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "classify".to_string(),
+                    description: "Classify rather than filter points.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "preserve_classes".to_string(),
+                    description: "Preserve existing classes in classify mode.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output LiDAR path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -110,34 +144,63 @@ impl Tool for ImprovedGroundPointFilterTool {
                 description: "Extract ground points from a LAS file.".to_string(),
                 args: example_args,
             }],
-            tags: vec!["lidar".to_string(), "ground".to_string(), "filter".to_string(), "dtm".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "lidar".to_string(),
+                "ground".to_string(),
+                "filter".to_string(),
+                "dtm".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        args.get("input").and_then(|v| v.as_str())
+        args.get("input")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'input' is required".to_string()))?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = args.get("input").and_then(|v| v.as_str())
+        let input_path = args
+            .get("input")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'input' is required".to_string()))?;
-        let block_size = args.get("block_size").and_then(|v| v.as_f64()).unwrap_or(1.0).max(0.01);
-        let max_building_size = args.get("max_building_size").and_then(|v| v.as_f64()).unwrap_or(150.0);
-        let slope_threshold = args.get("slope_threshold").and_then(|v| v.as_f64()).unwrap_or(15.0);
-        let elev_threshold = args.get("elev_threshold").and_then(|v| v.as_f64()).unwrap_or(0.15);
-        let classify = args.get("classify").and_then(|v| v.as_bool()).unwrap_or(false);
-        let preserve_classes = args.get("preserve_classes").and_then(|v| v.as_bool()).unwrap_or(false);
+        let block_size = args
+            .get("block_size")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0)
+            .max(0.01);
+        let max_building_size = args
+            .get("max_building_size")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(150.0);
+        let slope_threshold = args
+            .get("slope_threshold")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(15.0);
+        let elev_threshold = args
+            .get("elev_threshold")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.15);
+        let classify = args
+            .get("classify")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let preserve_classes = args
+            .get("preserve_classes")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let output_path = parse_optional_output_path(args, "output")?;
 
         // max_building_size expressed in cells
         let max_building_cells = (max_building_size / block_size).ceil() as usize;
 
         // Step 1: FilterLidarByPercentile — select lowest point per block
-        ctx.progress.info("improved_ground_point_filter: step 1 – percentile filter");
+        ctx.progress
+            .info("improved_ground_point_filter: step 1 – percentile filter");
         let mut a = ToolArgs::new();
         a.insert("input".to_string(), json!(input_path));
         a.insert("percentile".to_string(), json!(0.0));
@@ -146,7 +209,8 @@ impl Tool for ImprovedGroundPointFilterTool {
         let grd_pts_path = get_path(&r)?;
 
         // Step 2: LidarTinGridding — interpolate DEM from ground candidate points
-        ctx.progress.info("improved_ground_point_filter: step 2 – TIN gridding");
+        ctx.progress
+            .info("improved_ground_point_filter: step 2 – TIN gridding");
         let mut a = ToolArgs::new();
         a.insert("input".to_string(), json!(grd_pts_path));
         a.insert("interpolation_parameter".to_string(), json!("elevation"));
@@ -156,7 +220,8 @@ impl Tool for ImprovedGroundPointFilterTool {
         let tin_path = get_path(&r)?;
 
         // Step 3: FillPits — handle low noise artefacts, then conditional blend
-        ctx.progress.info("improved_ground_point_filter: step 3 – fill pits");
+        ctx.progress
+            .info("improved_ground_point_filter: step 3 – fill pits");
         let mut a = ToolArgs::new();
         a.insert("input".to_string(), json!(tin_path.clone()));
         let r = FillPitsTool.run(&a, ctx)?;
@@ -193,7 +258,8 @@ impl Tool for ImprovedGroundPointFilterTool {
         let blended_mem = raster_mem(blended);
 
         // Step 4: RemoveOffTerrainObjects — remove buildings/vegetation
-        ctx.progress.info("improved_ground_point_filter: step 4 – remove off-terrain objects");
+        ctx.progress
+            .info("improved_ground_point_filter: step 4 – remove off-terrain objects");
         let mut a = ToolArgs::new();
         a.insert("input".to_string(), json!(blended_mem));
         a.insert("filter_size".to_string(), json!(max_building_cells));
@@ -202,7 +268,8 @@ impl Tool for ImprovedGroundPointFilterTool {
         let dtm_path = get_path(&r)?;
 
         // Step 5: FilterLidarByReferenceSurface — extract final ground points
-        ctx.progress.info("improved_ground_point_filter: step 5 – filter by reference surface");
+        ctx.progress
+            .info("improved_ground_point_filter: step 5 – filter by reference surface");
         let mut a = ToolArgs::new();
         a.insert("input".to_string(), json!(input_path));
         a.insert("ref_surface".to_string(), json!(dtm_path));
@@ -220,4 +287,3 @@ impl Tool for ImprovedGroundPointFilterTool {
         Ok(r)
     }
 }
-

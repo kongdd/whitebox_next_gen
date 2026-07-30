@@ -8,29 +8,27 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use smartcore::ensemble::random_forest_classifier::{
-    RandomForestClassifier,
-    RandomForestClassifierParameters,
+    RandomForestClassifier, RandomForestClassifierParameters,
 };
 use smartcore::ensemble::random_forest_regressor::{
-    RandomForestRegressor,
-    RandomForestRegressorParameters,
-};
-use smartcore::linear::logistic_regression::{
-    LogisticRegression,
-    LogisticRegressionParameters,
+    RandomForestRegressor, RandomForestRegressorParameters,
 };
 use smartcore::linalg::basic::matrix::DenseMatrix;
-use smartcore::svm::svc::{SVC, SVCParameters};
-use smartcore::svm::svr::{SVR, SVRParameters};
+use smartcore::linear::logistic_regression::{LogisticRegression, LogisticRegressionParameters};
+use smartcore::svm::svc::{SVCParameters, SVC};
+use smartcore::svm::svr::{SVRParameters, SVR};
 use smartcore::svm::Kernels;
-use wbcore::{PercentCoalescer, 
-    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor,
-    ToolParamSpec, ToolRunResult, ToolStability,
+use wbcore::{
+    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier,
+    PercentCoalescer, Tool, ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample,
+    ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
 };
-use wbraster::{rgb_to_hsi_norm, hsi_to_rgb_norm, value2i, DataType, Raster, RasterConfig, RasterFormat};
+use wbraster::{
+    hsi_to_rgb_norm, rgb_to_hsi_norm, value2i, DataType, Raster, RasterConfig, RasterFormat,
+};
 use wbvector::Geometry as VectorGeometry;
 
+use super::color_support;
 use crate::memory_store;
 use crate::palettes::LegacyPalette;
 use crate::rendering::{BoxAndWhiskerPlot, LineGraph};
@@ -38,7 +36,6 @@ use crate::tools::raster_stack_validator::{
     align_and_validate_raster_stack, parse_resample_method as parse_stack_resample_method,
     RasterStackConfig,
 };
-use super::color_support;
 
 pub struct BalanceContrastEnhancementTool;
 pub struct CreateColourCompositeTool;
@@ -517,7 +514,9 @@ impl FlipImageTool {
     fn load_raster(path: &str) -> Result<Arc<Raster>, ToolError> {
         if memory_store::raster_is_memory_path(path) {
             let id = memory_store::raster_path_to_id(path).ok_or_else(|| {
-                ToolError::Validation("parameter 'input' has malformed in-memory raster path".to_string())
+                ToolError::Validation(
+                    "parameter 'input' has malformed in-memory raster path".to_string(),
+                )
             })?;
             return memory_store::get_raster_arc_by_id(id).ok_or_else(|| {
                 ToolError::Validation(format!(
@@ -540,7 +539,10 @@ impl FlipImageTool {
         Ok(json!({"__wbw_type__": "raster", "path": locator, "active_band": 0}))
     }
 
-    fn write_or_store_output(output: Raster, output_path: Option<std::path::PathBuf>) -> Result<String, ToolError> {
+    fn write_or_store_output(
+        output: Raster,
+        output_path: Option<std::path::PathBuf>,
+    ) -> Result<String, ToolError> {
         if let Some(output_path) = output_path {
             if let Some(parent) = output_path.parent() {
                 if !parent.as_os_str().is_empty() {
@@ -601,12 +603,14 @@ impl FlipImageTool {
                 });
                 params.push(ToolParamSpec {
                     name: "enhance",
-                    description: "Apply balance contrast enhancement after composing (default true).",
+                    description:
+                        "Apply balance contrast enhancement after composing (default true).",
                     required: false,
                 });
                 params.push(ToolParamSpec {
                     name: "treat_zeros_as_nodata",
-                    description: "Treat zero values in RGB inputs as nodata/background (default false).",
+                    description:
+                        "Treat zero values in RGB inputs as nodata/background (default false).",
                     required: false,
                 });
             }
@@ -618,7 +622,8 @@ impl FlipImageTool {
                 });
                 params.push(ToolParamSpec {
                     name: "clip_percent",
-                    description: "Percent tail clipping for post-stretch linear rescaling (default 1.0).",
+                    description:
+                        "Percent tail clipping for post-stretch linear rescaling (default 1.0).",
                     required: false,
                 });
             }
@@ -639,7 +644,8 @@ impl FlipImageTool {
             NonFilterOp::HistogramMatching => {
                 params.push(ToolParamSpec {
                     name: "histogram",
-                    description: "Reference histogram as [[value, frequency], ...] or [{x, y}, ...].",
+                    description:
+                        "Reference histogram as [[value, frequency], ...] or [{x, y}, ...].",
                     required: true,
                 });
                 params.push(ToolParamSpec {
@@ -750,7 +756,8 @@ impl FlipImageTool {
             NonFilterOp::StandardDeviationContrastStretch => {
                 params.push(ToolParamSpec {
                     name: "clip",
-                    description: "Standard deviation multiplier used to derive clip bounds (default 2.0).",
+                    description:
+                        "Standard deviation multiplier used to derive clip bounds (default 2.0).",
                     required: false,
                 });
                 params.push(ToolParamSpec {
@@ -1029,14 +1036,22 @@ impl FlipImageTool {
 
     fn unpack_rgba(value: f64) -> (u32, u32, u32, u32) {
         let v = value as u32;
-        (v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF)
+        (
+            v & 0xFF,
+            (v >> 8) & 0xFF,
+            (v >> 16) & 0xFF,
+            (v >> 24) & 0xFF,
+        )
     }
 
     fn pack_rgba(r: u32, g: u32, b: u32, a: u32) -> f64 {
         ((a << 24) | (b << 16) | (g << 8) | r) as f64
     }
 
-    fn run_balance_contrast_enhancement(input: &Raster, band_mean: f64) -> Result<Raster, ToolError> {
+    fn run_balance_contrast_enhancement(
+        input: &Raster,
+        band_mean: f64,
+    ) -> Result<Raster, ToolError> {
         Self::validate_packed_rgb(input, NonFilterOp::BalanceContrastEnhancement.id())?;
 
         let mut output = input.clone();
@@ -1091,7 +1106,8 @@ impl FlipImageTool {
                     mut rs2,
                     mut gs2,
                     mut bs2,
-                ), idx| {
+                ),
+                 idx| {
                     let r = (idx / input.cols) as isize;
                     let c = (idx % input.cols) as isize;
                     let z = input.get(0, r, c);
@@ -1166,11 +1182,14 @@ impl FlipImageTool {
         let b_s = b_sq_sum / num_pixels;
 
         let parabola = |min_v: f64, max_v: f64, mean_v: f64, sq_mean: f64| {
-            let denom = 2.0 * (max_v * (band_mean - l) - mean_v * (h - l) + min_v * (h - band_mean));
+            let denom =
+                2.0 * (max_v * (band_mean - l) - mean_v * (h - l) + min_v * (h - band_mean));
             if denom.abs() < 1e-12 || (max_v - min_v).abs() < 1e-12 {
                 (1.0, 0.0, 0.0)
             } else {
-                let b = (max_v * max_v * (band_mean - l) - sq_mean * (h - l) + min_v * min_v * (h - band_mean)) / denom;
+                let b = (max_v * max_v * (band_mean - l) - sq_mean * (h - l)
+                    + min_v * min_v * (h - band_mean))
+                    / denom;
                 let a = (h - l) / ((max_v - min_v) * (max_v + min_v - 2.0 * b)).max(1e-12);
                 let c = l - a * (min_v - b) * (min_v - b);
                 (a, b, c)
@@ -1191,9 +1210,15 @@ impl FlipImageTool {
                     z
                 } else {
                     let (rv, gv, bv, av) = Self::unpack_rgba(z);
-                    let rn = (ra * (rv as f64 - rb).powi(2) + rc).clamp(0.0, 255.0).round() as u32;
-                    let gn = (ga * (gv as f64 - gb).powi(2) + gc).clamp(0.0, 255.0).round() as u32;
-                    let bn = (ba * (bv as f64 - bb).powi(2) + bc).clamp(0.0, 255.0).round() as u32;
+                    let rn = (ra * (rv as f64 - rb).powi(2) + rc)
+                        .clamp(0.0, 255.0)
+                        .round() as u32;
+                    let gn = (ga * (gv as f64 - gb).powi(2) + gc)
+                        .clamp(0.0, 255.0)
+                        .round() as u32;
+                    let bn = (ba * (bv as f64 - bb).powi(2) + bc)
+                        .clamp(0.0, 255.0)
+                        .round() as u32;
                     Self::pack_rgba(rn, gn, bn, av)
                 }
             })
@@ -1233,9 +1258,15 @@ impl FlipImageTool {
 
                     let (rv, gv, bv, av) = Self::unpack_rgba(z);
                     let min_v = rv.min(gv).min(bv) as f64;
-                    let rn = (rv as f64 - achromatic_factor * min_v).clamp(0.0, 255.0).round() as u32;
-                    let gn = (gv as f64 - achromatic_factor * min_v).clamp(0.0, 255.0).round() as u32;
-                    let bn = (bv as f64 - achromatic_factor * min_v).clamp(0.0, 255.0).round() as u32;
+                    let rn = (rv as f64 - achromatic_factor * min_v)
+                        .clamp(0.0, 255.0)
+                        .round() as u32;
+                    let gn = (gv as f64 - achromatic_factor * min_v)
+                        .clamp(0.0, 255.0)
+                        .round() as u32;
+                    let bn = (bv as f64 - achromatic_factor * min_v)
+                        .clamp(0.0, 255.0)
+                        .round() as u32;
                     local_hist[rn as usize] += 1;
                     local_hist[gn as usize] += 1;
                     local_hist[bn as usize] += 1;
@@ -1321,9 +1352,7 @@ impl FlipImageTool {
             let r = (idx / stage1.cols) as isize;
             let c = (idx % stage1.cols) as isize;
             output.set(0, r, c, z).map_err(|e| {
-                ToolError::Execution(format!(
-                    "failed writing DDS output pixel at ({r},{c}): {e}"
-                ))
+                ToolError::Execution(format!("failed writing DDS output pixel at ({r},{c}): {e}"))
             })?;
         }
 
@@ -1409,9 +1438,7 @@ impl FlipImageTool {
         let (r_min, r_range) = band_min_max(red);
         let (g_min, g_range) = band_min_max(green);
         let (b_min, b_range) = band_min_max(blue);
-        let (a_min, a_range) = opacity
-            .map(band_min_max)
-            .unwrap_or((0.0, 255.0));
+        let (a_min, a_range) = opacity.map(band_min_max).unwrap_or((0.0, 255.0));
 
         let n = red.rows * red.cols;
         let out_values: Vec<f64> = (0..n)
@@ -1480,8 +1507,16 @@ impl FlipImageTool {
                 for c in 0..cols {
                     let z = input.get(band, r as isize, c as isize);
                     let v = if input.is_nodata(z) { 0.0 } else { z };
-                    let left = if c > 0 { integral[r * cols + (c - 1)] } else { 0.0 };
-                    let up = if r > 0 { integral[(r - 1) * cols + c] } else { 0.0 };
+                    let left = if c > 0 {
+                        integral[r * cols + (c - 1)]
+                    } else {
+                        0.0
+                    };
+                    let up = if r > 0 {
+                        integral[(r - 1) * cols + c]
+                    } else {
+                        0.0
+                    };
                     let up_left = if r > 0 && c > 0 {
                         integral[(r - 1) * cols + (c - 1)]
                     } else {
@@ -1508,7 +1543,10 @@ impl FlipImageTool {
         Ok(output)
     }
 
-    fn normalized_filter_sizes(filter_size_x: usize, filter_size_y: usize) -> (usize, usize, isize, isize) {
+    fn normalized_filter_sizes(
+        filter_size_x: usize,
+        filter_size_y: usize,
+    ) -> (usize, usize, isize, isize) {
         let mut fx = filter_size_x.max(3);
         let mut fy = filter_size_y.max(3);
         if fx % 2 == 0 {
@@ -1522,7 +1560,11 @@ impl FlipImageTool {
         (fx, fy, mx, my)
     }
 
-    fn morph_erode(input: &Raster, filter_size_x: usize, filter_size_y: usize) -> Result<Raster, ToolError> {
+    fn morph_erode(
+        input: &Raster,
+        filter_size_x: usize,
+        filter_size_y: usize,
+    ) -> Result<Raster, ToolError> {
         let (fx, _fy, mx, my) = Self::normalized_filter_sizes(filter_size_x, filter_size_y);
         let rows = input.rows as isize;
         let cols = input.cols as isize;
@@ -1591,7 +1633,11 @@ impl FlipImageTool {
         Ok(output)
     }
 
-    fn morph_dilate(input: &Raster, filter_size_x: usize, filter_size_y: usize) -> Result<Raster, ToolError> {
+    fn morph_dilate(
+        input: &Raster,
+        filter_size_x: usize,
+        filter_size_y: usize,
+    ) -> Result<Raster, ToolError> {
         let (fx, _fy, mx, my) = Self::normalized_filter_sizes(filter_size_x, filter_size_y);
         let rows = input.rows as isize;
         let cols = input.cols as isize;
@@ -1660,12 +1706,20 @@ impl FlipImageTool {
         Ok(output)
     }
 
-    fn run_opening(input: &Raster, filter_size_x: usize, filter_size_y: usize) -> Result<Raster, ToolError> {
+    fn run_opening(
+        input: &Raster,
+        filter_size_x: usize,
+        filter_size_y: usize,
+    ) -> Result<Raster, ToolError> {
         let eroded = Self::morph_erode(input, filter_size_x, filter_size_y)?;
         Self::morph_dilate(&eroded, filter_size_x, filter_size_y)
     }
 
-    fn run_closing(input: &Raster, filter_size_x: usize, filter_size_y: usize) -> Result<Raster, ToolError> {
+    fn run_closing(
+        input: &Raster,
+        filter_size_x: usize,
+        filter_size_y: usize,
+    ) -> Result<Raster, ToolError> {
         let dilated = Self::morph_dilate(input, filter_size_x, filter_size_y)?;
         Self::morph_erode(&dilated, filter_size_x, filter_size_y)
     }
@@ -1794,7 +1848,10 @@ impl FlipImageTool {
             running += histo[i];
             cumulative[i] = running;
         }
-        let cdf = cumulative.iter().map(|&v| v as f64 / total).collect::<Vec<_>>();
+        let cdf = cumulative
+            .iter()
+            .map(|&v| v as f64 / total)
+            .collect::<Vec<_>>();
 
         let mut prefix_weighted = vec![0usize; num_bins];
         let mut weighted_running = 0usize;
@@ -2127,7 +2184,11 @@ impl FlipImageTool {
                     let mut neighbours = [0.0f64; 8];
                     for i in 0..8 {
                         let zn = input.get(b, r + dy[i], c + dx[i]);
-                        neighbours[i] = if !input.is_nodata(zn) && zn > 0.0 { 1.0 } else { 0.0 };
+                        neighbours[i] = if !input.is_nodata(zn) && zn > 0.0 {
+                            1.0
+                        } else {
+                            0.0
+                        };
                     }
 
                     let mut pattern_match = false;
@@ -2145,7 +2206,11 @@ impl FlipImageTool {
                         }
                     }
 
-                    if pattern_match { 1.0 } else { 0.0 }
+                    if pattern_match {
+                        1.0
+                    } else {
+                        0.0
+                    }
                 })
                 .collect();
 
@@ -2171,7 +2236,8 @@ impl FlipImageTool {
         }
         if band1 >= input.bands || band2 >= input.bands || band1 == band2 {
             return Err(ToolError::Validation(
-                "parameters 'band1' and 'band2' must be distinct valid one-based band indices".to_string(),
+                "parameters 'band1' and 'band2' must be distinct valid one-based band indices"
+                    .to_string(),
             ));
         }
 
@@ -2522,7 +2588,10 @@ impl FlipImageTool {
         Ok(output)
     }
 
-    fn run_histogram_matching_two_images(input: &Raster, reference: &Raster) -> Result<Raster, ToolError> {
+    fn run_histogram_matching_two_images(
+        input: &Raster,
+        reference: &Raster,
+    ) -> Result<Raster, ToolError> {
         if reference.bands == 0 {
             return Err(ToolError::Validation(
                 "reference raster must contain at least one band".to_string(),
@@ -2736,7 +2805,10 @@ impl FlipImageTool {
         pairs
     }
 
-    fn run_gaussian_contrast_stretch(input: &Raster, num_tones: usize) -> Result<Raster, ToolError> {
+    fn run_gaussian_contrast_stretch(
+        input: &Raster,
+        num_tones: usize,
+    ) -> Result<Raster, ToolError> {
         let reference = Self::gaussian_reference_pairs(num_tones);
         Self::run_histogram_matching(input, reference, true)
     }
@@ -2799,8 +2871,8 @@ impl FlipImageTool {
                     if input.is_nodata(z) {
                         nodata
                     } else {
-                        let idx = (((z - min_z) / width).clamp(0.0, 1.0) * lut_scale).round()
-                            as usize;
+                        let idx =
+                            (((z - min_z) / width).clamp(0.0, 1.0) * lut_scale).round() as usize;
                         lut[idx]
                     }
                 })
@@ -2883,7 +2955,11 @@ impl FlipImageTool {
         Ok(output)
     }
 
-    fn run_with_op(op: NonFilterOp, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_with_op(
+        op: NonFilterOp,
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let output_path = parse_optional_output_path(args, "output")?;
 
         ctx.progress.info(&format!("running {}", op.id()));
@@ -3088,16 +3164,31 @@ define_non_filter_tool!(
     NonFilterOp::DirectDecorrelationStretch
 );
 define_non_filter_tool!(FlipImageTool, NonFilterOp::FlipImage);
-define_non_filter_tool!(HistogramEqualizationTool, NonFilterOp::HistogramEqualization);
+define_non_filter_tool!(
+    HistogramEqualizationTool,
+    NonFilterOp::HistogramEqualization
+);
 define_non_filter_tool!(HistogramMatchingTool, NonFilterOp::HistogramMatching);
 define_non_filter_tool!(
     HistogramMatchingTwoImagesTool,
     NonFilterOp::HistogramMatchingTwoImages
 );
-define_non_filter_tool!(IntegralImageTransformTool, NonFilterOp::IntegralImageTransform);
-define_non_filter_tool!(GaussianContrastStretchTool, NonFilterOp::GaussianContrastStretch);
-define_non_filter_tool!(MinMaxContrastStretchTool, NonFilterOp::MinMaxContrastStretch);
-define_non_filter_tool!(NormalizedDifferenceIndexTool, NonFilterOp::NormalizedDifferenceIndex);
+define_non_filter_tool!(
+    IntegralImageTransformTool,
+    NonFilterOp::IntegralImageTransform
+);
+define_non_filter_tool!(
+    GaussianContrastStretchTool,
+    NonFilterOp::GaussianContrastStretch
+);
+define_non_filter_tool!(
+    MinMaxContrastStretchTool,
+    NonFilterOp::MinMaxContrastStretch
+);
+define_non_filter_tool!(
+    NormalizedDifferenceIndexTool,
+    NonFilterOp::NormalizedDifferenceIndex
+);
 define_non_filter_tool!(ClosingTool, NonFilterOp::Closing);
 define_non_filter_tool!(CornerDetectionTool, NonFilterOp::CornerDetection);
 define_non_filter_tool!(OpeningTool, NonFilterOp::Opening);
@@ -3107,7 +3198,10 @@ define_non_filter_tool!(
     NonFilterOp::PercentageContrastStretch
 );
 define_non_filter_tool!(RemoveSpursTool, NonFilterOp::RemoveSpurs);
-define_non_filter_tool!(SigmoidalContrastStretchTool, NonFilterOp::SigmoidalContrastStretch);
+define_non_filter_tool!(
+    SigmoidalContrastStretchTool,
+    NonFilterOp::SigmoidalContrastStretch
+);
 define_non_filter_tool!(
     StandardDeviationContrastStretchTool,
     NonFilterOp::StandardDeviationContrastStretch
@@ -3166,18 +3260,27 @@ impl Tool for SplitColourCompositeTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_split_colour_composite".to_string(),
                 description: "Split a colour composite into R/G/B bands.".to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "raster".to_string(), "split_colour_composite".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "raster".to_string(),
+                "split_colour_composite".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3196,9 +3299,18 @@ impl Tool for SplitColourCompositeTool {
         let (red, green, blue) = run_split_colour_composite(&input)?;
         ctx.progress.progress(1.0);
         let mut outputs = BTreeMap::new();
-        outputs.insert("red".to_string(), FlipImageTool::store_named_raster_output(red, red_out_path)?);
-        outputs.insert("green".to_string(), FlipImageTool::store_named_raster_output(green, green_out_path)?);
-        outputs.insert("blue".to_string(), FlipImageTool::store_named_raster_output(blue, blue_out_path)?);
+        outputs.insert(
+            "red".to_string(),
+            FlipImageTool::store_named_raster_output(red, red_out_path)?,
+        );
+        outputs.insert(
+            "green".to_string(),
+            FlipImageTool::store_named_raster_output(green, green_out_path)?,
+        );
+        outputs.insert(
+            "blue".to_string(),
+            FlipImageTool::store_named_raster_output(blue, blue_out_path)?,
+        );
         Ok(ToolRunResult { outputs })
     }
 }
@@ -3231,7 +3343,8 @@ impl Tool for RgbToIhsTool {
                 },
                 ToolParamSpec {
                     name: "composite",
-                    description: "Packed RGB composite raster (mutually exclusive with red/green/blue).",
+                    description:
+                        "Packed RGB composite raster (mutually exclusive with red/green/blue).",
                     required: false,
                 },
                 ToolParamSpec {
@@ -3272,24 +3385,34 @@ impl Tool for RgbToIhsTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_rgb_to_ihs".to_string(),
                 description: "Convert an RGB triple to IHS.".to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "raster".to_string(), "rgb_to_ihs".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "raster".to_string(),
+                "rgb_to_ihs".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let has_rgb = args.contains_key("red") || args.contains_key("green") || args.contains_key("blue");
+        let has_rgb =
+            args.contains_key("red") || args.contains_key("green") || args.contains_key("blue");
         let has_composite = args.contains_key("composite");
         if !has_rgb && !has_composite {
             return Err(ToolError::Validation(
@@ -3326,9 +3449,18 @@ impl Tool for RgbToIhsTool {
 
         ctx.progress.progress(1.0);
         let mut outputs = BTreeMap::new();
-        outputs.insert("intensity".to_string(), FlipImageTool::store_named_raster_output(intensity, intensity_out)?);
-        outputs.insert("hue".to_string(), FlipImageTool::store_named_raster_output(hue, hue_out)?);
-        outputs.insert("saturation".to_string(), FlipImageTool::store_named_raster_output(saturation, sat_out)?);
+        outputs.insert(
+            "intensity".to_string(),
+            FlipImageTool::store_named_raster_output(intensity, intensity_out)?,
+        );
+        outputs.insert(
+            "hue".to_string(),
+            FlipImageTool::store_named_raster_output(hue, hue_out)?,
+        );
+        outputs.insert(
+            "saturation".to_string(),
+            FlipImageTool::store_named_raster_output(saturation, sat_out)?,
+        );
         Ok(ToolRunResult { outputs })
     }
 }
@@ -3397,18 +3529,27 @@ impl Tool for IhsToRgbTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_ihs_to_rgb".to_string(),
                 description: "Reconstruct RGB channels from IHS components.".to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "raster".to_string(), "ihs_to_rgb".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "raster".to_string(),
+                "ihs_to_rgb".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3433,9 +3574,18 @@ impl Tool for IhsToRgbTool {
         let (red, green, blue) = run_ihs_to_rgb(&intensity, &hue, &saturation)?;
         ctx.progress.progress(1.0);
         let mut outputs = BTreeMap::new();
-        outputs.insert("red".to_string(), FlipImageTool::store_named_raster_output(red, red_out)?);
-        outputs.insert("green".to_string(), FlipImageTool::store_named_raster_output(green, green_out)?);
-        outputs.insert("blue".to_string(), FlipImageTool::store_named_raster_output(blue, blue_out)?);
+        outputs.insert(
+            "red".to_string(),
+            FlipImageTool::store_named_raster_output(red, red_out)?,
+        );
+        outputs.insert(
+            "green".to_string(),
+            FlipImageTool::store_named_raster_output(green, green_out)?,
+        );
+        outputs.insert(
+            "blue".to_string(),
+            FlipImageTool::store_named_raster_output(blue, blue_out)?,
+        );
         Ok(ToolRunResult { outputs })
     }
 }
@@ -3478,12 +3628,24 @@ impl Tool for ChangeVectorAnalysisTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("date1".to_string(), json!(["d1_band1.tif", "d1_band2.tif", "d1_band3.tif"]));
-        defaults.insert("date2".to_string(), json!(["d2_band1.tif", "d2_band2.tif", "d2_band3.tif"]));
+        defaults.insert(
+            "date1".to_string(),
+            json!(["d1_band1.tif", "d1_band2.tif", "d1_band3.tif"]),
+        );
+        defaults.insert(
+            "date2".to_string(),
+            json!(["d2_band1.tif", "d2_band2.tif", "d2_band3.tif"]),
+        );
 
         let mut example = ToolArgs::new();
-        example.insert("date1".to_string(), json!(["d1_band1.tif", "d1_band2.tif", "d1_band3.tif"]));
-        example.insert("date2".to_string(), json!(["d2_band1.tif", "d2_band2.tif", "d2_band3.tif"]));
+        example.insert(
+            "date1".to_string(),
+            json!(["d1_band1.tif", "d1_band2.tif", "d1_band3.tif"]),
+        );
+        example.insert(
+            "date2".to_string(),
+            json!(["d2_band1.tif", "d2_band2.tif", "d2_band3.tif"]),
+        );
         example.insert("magnitude_output".to_string(), json!("cva_magnitude.tif"));
         example.insert("direction_output".to_string(), json!("cva_direction.tif"));
 
@@ -3528,7 +3690,8 @@ impl Tool for ChangeVectorAnalysisTool {
         }
         if d1.len() != d2.len() {
             return Err(ToolError::Validation(
-                "parameters 'date1' and 'date2' must contain the same number of rasters".to_string(),
+                "parameters 'date1' and 'date2' must contain the same number of rasters"
+                    .to_string(),
             ));
         }
         Ok(())
@@ -3544,7 +3707,8 @@ impl Tool for ChangeVectorAnalysisTool {
         }
         if date1_paths.len() != date2_paths.len() {
             return Err(ToolError::Validation(
-                "parameters 'date1' and 'date2' must contain the same number of rasters".to_string(),
+                "parameters 'date1' and 'date2' must contain the same number of rasters"
+                    .to_string(),
             ));
         }
 
@@ -3641,7 +3805,9 @@ impl Tool for WriteFunctionMemoryInsertionTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_write_function_memory_insertion".to_string(),
-                description: "Creates a WFM insertion RGB composite for qualitative change detection.".to_string(),
+                description:
+                    "Creates a WFM insertion RGB composite for qualitative change detection."
+                        .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -3758,7 +3924,10 @@ impl Tool for PanchromaticSharpeningTool {
         defaults.insert("output_mode".to_string(), json!("packed"));
 
         let mut example = ToolArgs::new();
-        example.insert("composite".to_string(), json!("multispectral_composite.tif"));
+        example.insert(
+            "composite".to_string(),
+            json!("multispectral_composite.tif"),
+        );
         example.insert("pan".to_string(), json!("pan.tif"));
         example.insert("method".to_string(), json!("ihs"));
         example.insert("output_mode".to_string(), json!("bands"));
@@ -3782,7 +3951,8 @@ impl Tool for PanchromaticSharpeningTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_panchromatic_sharpening".to_string(),
-                description: "Runs panchromatic sharpening with IHS and 3-band output mode.".to_string(),
+                description: "Runs panchromatic sharpening with IHS and 3-band output mode."
+                    .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -3796,7 +3966,8 @@ impl Tool for PanchromaticSharpeningTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let has_rgb = args.contains_key("red") || args.contains_key("green") || args.contains_key("blue");
+        let has_rgb =
+            args.contains_key("red") || args.contains_key("green") || args.contains_key("blue");
         let has_composite = args.contains_key("composite");
         if !has_rgb && !has_composite {
             return Err(ToolError::Validation(
@@ -3893,7 +4064,10 @@ impl Tool for MosaicTool {
         defaults.insert("method".to_string(), json!("nn"));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["tile1.tif", "tile2.tif", "tile3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["tile1.tif", "tile2.tif", "tile3.tif"]),
+        );
         example.insert("method".to_string(), json!("cc"));
         example.insert("output".to_string(), json!("mosaic.tif"));
 
@@ -4181,7 +4355,10 @@ impl Tool for ResampleTool {
             ));
         }
         let has_base = args.contains_key("base");
-        let cell_size = args.get("cell_size").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let cell_size = args
+            .get("cell_size")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         if !has_base && cell_size <= 0.0 {
             return Err(ToolError::Validation(
                 "either 'base' or a positive 'cell_size' must be provided".to_string(),
@@ -4291,7 +4468,10 @@ impl Tool for KMeansClusteringTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("classes".to_string(), json!(8));
@@ -4495,7 +4675,10 @@ impl Tool for ModifiedKMeansClusteringTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("start_clusters".to_string(), json!(1000));
         defaults.insert("merge_dist".to_string(), json!(30.0));
         defaults.insert("max_iterations".to_string(), json!(10));
@@ -4528,7 +4711,9 @@ impl Tool for ModifiedKMeansClusteringTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_modified_k_means_clustering".to_string(),
-                description: "Classify multispectral bands using modified k-means with centroid merging.".to_string(),
+                description:
+                    "Classify multispectral bands using modified k-means with centroid merging."
+                        .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -4551,7 +4736,9 @@ impl Tool for ModifiedKMeansClusteringTool {
         let merge_dist = args
             .get("merge_dist")
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| ToolError::Validation("parameter 'merge_dist' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'merge_dist' is required".to_string())
+            })?;
         if merge_dist <= 0.0 {
             return Err(ToolError::Validation(
                 "parameter 'merge_dist' must be greater than 0".to_string(),
@@ -4591,7 +4778,9 @@ impl Tool for ModifiedKMeansClusteringTool {
         let merge_dist = args
             .get("merge_dist")
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| ToolError::Validation("parameter 'merge_dist' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'merge_dist' is required".to_string())
+            })?;
         let max_iterations = args
             .get("max_iterations")
             .and_then(|v| v.as_u64())
@@ -4655,7 +4844,8 @@ impl Tool for CorrectVignettingTool {
                 },
                 ToolParamSpec {
                     name: "pp",
-                    description: "Point vector path (or typed vector object) containing the principal point.",
+                    description:
+                        "Point vector path (or typed vector object) containing the principal point.",
                     required: true,
                 },
                 ToolParamSpec {
@@ -4665,7 +4855,8 @@ impl Tool for CorrectVignettingTool {
                 },
                 ToolParamSpec {
                     name: "image_width",
-                    description: "Distance between left and right image edges in mm (default 228.6).",
+                    description:
+                        "Distance between left and right image edges in mm (default 228.6).",
                     required: false,
                 },
                 ToolParamSpec {
@@ -4797,11 +4988,17 @@ impl Tool for ImageStackProfileTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["image1.tif", "image2.tif", "image3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["image1.tif", "image2.tif", "image3.tif"]),
+        );
         defaults.insert("points".to_string(), json!("sample_points.geojson"));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["image1.tif", "image2.tif", "image3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["image1.tif", "image2.tif", "image3.tif"]),
+        );
         example.insert("points".to_string(), json!("sample_points.geojson"));
         example.insert("output_html".to_string(), json!("stack_profile.html"));
 
@@ -4823,7 +5020,8 @@ impl Tool for ImageStackProfileTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_image_stack_profile".to_string(),
-                description: "Extract profile signatures for points from a raster stack.".to_string(),
+                description: "Extract profile signatures for points from a raster stack."
+                    .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -4886,7 +5084,8 @@ impl Tool for PiecewiseContrastStretchTool {
         ToolMetadata {
             id: "piecewise_contrast_stretch",
             display_name: "Piecewise Contrast Stretch",
-            summary: "Performs piecewise linear contrast stretching using user-specified breakpoints.",
+            summary:
+                "Performs piecewise linear contrast stretching using user-specified breakpoints.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
@@ -4897,7 +5096,8 @@ impl Tool for PiecewiseContrastStretchTool {
                 },
                 ToolParamSpec {
                     name: "function",
-                    description: "Breakpoint statement string, e.g. '(50,0.1);(120,0.6);(180,0.85)'.",
+                    description:
+                        "Breakpoint statement string, e.g. '(50,0.1);(120,0.6);(180,0.85)'.",
                     required: true,
                 },
                 ToolParamSpec {
@@ -4918,12 +5118,18 @@ impl Tool for PiecewiseContrastStretchTool {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
         defaults.insert("input".to_string(), json!("input.tif"));
-        defaults.insert("function".to_string(), json!("(50,0.1);(120,0.6);(180,0.85)"));
+        defaults.insert(
+            "function".to_string(),
+            json!("(50,0.1);(120,0.6);(180,0.85)"),
+        );
         defaults.insert("greytones".to_string(), json!(1024));
 
         let mut example = ToolArgs::new();
         example.insert("input".to_string(), json!("input.tif"));
-        example.insert("function".to_string(), json!("(80,0.2);(140,0.7);(200,0.92)"));
+        example.insert(
+            "function".to_string(),
+            json!("(80,0.2);(140,0.7);(200,0.92)"),
+        );
         example.insert("greytones".to_string(), json!(512));
         example.insert("output".to_string(), json!("piecewise_contrast.tif"));
 
@@ -4945,7 +5151,8 @@ impl Tool for PiecewiseContrastStretchTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_piecewise_contrast_stretch".to_string(),
-                description: "Apply a piecewise transfer function to image brightness values.".to_string(),
+                description: "Apply a piecewise transfer function to image brightness values."
+                    .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -5020,12 +5227,14 @@ impl Tool for GeneralizeClassifiedRasterTool {
                 },
                 ToolParamSpec {
                     name: "min_size",
-                    description: "Minimum feature size in cells; smaller patches are reassigned (default 5).",
+                    description:
+                        "Minimum feature size in cells; smaller patches are reassigned (default 5).",
                     required: false,
                 },
                 ToolParamSpec {
                     name: "method",
-                    description: "Generalization method: 'longest' (default), 'largest', or 'nearest'.",
+                    description:
+                        "Generalization method: 'longest' (default), 'largest', or 'nearest'.",
                     required: false,
                 },
                 ToolParamSpec {
@@ -5288,7 +5497,9 @@ impl Tool for ImageSliderTool {
             p
         } else {
             std::env::current_dir()
-                .map_err(|e| ToolError::Execution(format!("failed reading current directory: {e}")))?
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed reading current directory: {e}"))
+                })?
                 .join("image_slider.html")
         };
 
@@ -5370,17 +5581,22 @@ fn band_min_max(raster: &Raster) -> (f64, f64) {
                 (local_min, local_max)
             },
         )
-        .reduce(
-            || (f64::MAX, f64::MIN),
-            |a, b| (a.0.min(b.0), a.1.max(b.1)),
-        );
-    if min > max { (0.0, 1.0) } else { (min, max) }
+        .reduce(|| (f64::MAX, f64::MIN), |a, b| (a.0.min(b.0), a.1.max(b.1)));
+    if min > max {
+        (0.0, 1.0)
+    } else {
+        (min, max)
+    }
 }
 
 #[inline]
 fn norm01(v: f64, min: f64, max: f64) -> f64 {
     let range = max - min;
-    if range.abs() < 1e-12 { 0.5 } else { (v - min) / range }
+    if range.abs() < 1e-12 {
+        0.5
+    } else {
+        (v - min) / range
+    }
 }
 
 fn run_split_colour_composite(input: &Raster) -> Result<(Raster, Raster, Raster), ToolError> {
@@ -5418,7 +5634,9 @@ fn run_split_colour_composite(input: &Raster) -> Result<(Raster, Raster, Raster)
     Ok((red, green, blue))
 }
 
-fn run_rgb_to_ihs_from_composite(composite: &Raster) -> Result<(Raster, Raster, Raster), ToolError> {
+fn run_rgb_to_ihs_from_composite(
+    composite: &Raster,
+) -> Result<(Raster, Raster, Raster), ToolError> {
     let out_nd = -32768.0f64;
     let mut intensity = new_f32_band_like(composite);
     let mut hue = new_f32_band_like(composite);
@@ -5573,7 +5791,8 @@ fn parse_piecewise_statement(statement: &str) -> Result<Vec<(f64, f64)>, ToolErr
         let parts: Vec<&str> = clean.split(',').filter(|s| !s.is_empty()).collect();
         if parts.len() != 2 {
             return Err(ToolError::Validation(
-                "parameter 'function' contains malformed breakpoint; expected '(x,y);...'".to_string(),
+                "parameter 'function' contains malformed breakpoint; expected '(x,y);...'"
+                    .to_string(),
             ));
         }
         let x = parts[0].parse::<f64>().map_err(|_| {
@@ -5626,7 +5845,8 @@ fn run_piecewise_contrast_stretch(
     statement: &str,
     num_greytones: usize,
 ) -> Result<Raster, ToolError> {
-    let is_rgb = color_support::detect_rgb_mode(input, false, true) == color_support::RgbMode::Packed;
+    let is_rgb =
+        color_support::detect_rgb_mode(input, false, true) == color_support::RgbMode::Packed;
     let n = input.rows * input.cols;
     let nodata = input.nodata;
 
@@ -5639,8 +5859,11 @@ fn run_piecewise_contrast_stretch(
                 if !input.is_nodata(z) {
                     let v = if is_rgb {
                         let (rv, gv, bv, _) = FlipImageTool::unpack_rgba(z);
-                        let (_, _, i) =
-                            rgb_to_hsi_norm(rv as f64 / 255.0, gv as f64 / 255.0, bv as f64 / 255.0);
+                        let (_, _, i) = rgb_to_hsi_norm(
+                            rv as f64 / 255.0,
+                            gv as f64 / 255.0,
+                            bv as f64 / 255.0,
+                        );
                         i
                     } else {
                         z
@@ -5998,7 +6221,11 @@ fn run_generalize_classified_raster(
     Ok(output)
 }
 
-fn parse_legacy_palette_arg(args: &ToolArgs, key: &str, default: LegacyPalette) -> Result<LegacyPalette, ToolError> {
+fn parse_legacy_palette_arg(
+    args: &ToolArgs,
+    key: &str,
+    default: LegacyPalette,
+) -> Result<LegacyPalette, ToolError> {
     let Some(name) = args.get(key).and_then(|v| v.as_str()) else {
         return Ok(default);
     };
@@ -6012,7 +6239,11 @@ fn parse_legacy_palette_arg(args: &ToolArgs, key: &str, default: LegacyPalette) 
     })
 }
 
-fn raster_to_rgba_image(input: &Raster, palette: LegacyPalette, reverse_palette: bool) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
+fn raster_to_rgba_image(
+    input: &Raster,
+    palette: LegacyPalette,
+    reverse_palette: bool,
+) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
     let rows = input.rows as isize;
     let cols = input.cols as isize;
     let mut imgbuf: ImageBuffer<Rgba<u8>, Vec<u8>> = ImageBuffer::new(cols as u32, rows as u32);
@@ -6092,7 +6323,9 @@ fn run_image_slider_html(
     let parent = html_output_path
         .parent()
         .map(|p| p.to_path_buf())
-        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")));
+        .unwrap_or_else(|| {
+            std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+        });
     std::fs::create_dir_all(&parent).map_err(|e| {
         ToolError::Execution(format!(
             "failed creating image_slider output directory '{}': {}",
@@ -6113,10 +6346,18 @@ fn run_image_slider_html(
     let left_img = raster_to_rgba_image(input1, left_palette, left_reverse_palette);
     let right_img = raster_to_rgba_image(input2, right_palette, right_reverse_palette);
     left_img.save(&left_png).map_err(|e| {
-        ToolError::Execution(format!("failed writing slider left image '{}': {}", left_png.display(), e))
+        ToolError::Execution(format!(
+            "failed writing slider left image '{}': {}",
+            left_png.display(),
+            e
+        ))
     })?;
     right_img.save(&right_png).map_err(|e| {
-        ToolError::Execution(format!("failed writing slider right image '{}': {}", right_png.display(), e))
+        ToolError::Execution(format!(
+            "failed writing slider right image '{}': {}",
+            right_png.display(),
+            e
+        ))
     })?;
 
     let width_px = ((height_px as f64) * (input1.cols as f64 / input1.rows as f64)) as usize;
@@ -6275,7 +6516,11 @@ fn sample_nearest(input: &Raster, band: isize, rowf: f64, colf: f64) -> Option<f
         return None;
     }
     let v = input.get(band, row, col);
-    if input.is_nodata(v) { None } else { Some(v) }
+    if input.is_nodata(v) {
+        None
+    } else {
+        Some(v)
+    }
 }
 
 fn sample_bilinear(input: &Raster, band: isize, rowf: f64, colf: f64) -> Option<f64> {
@@ -6285,7 +6530,11 @@ fn sample_bilinear(input: &Raster, band: isize, rowf: f64, colf: f64) -> Option<
     let c1 = c0 + 1;
 
     let neighbours = [
-        (r0, c0, (1.0 - (rowf - r0 as f64)) * (1.0 - (colf - c0 as f64))),
+        (
+            r0,
+            c0,
+            (1.0 - (rowf - r0 as f64)) * (1.0 - (colf - c0 as f64)),
+        ),
         (r0, c1, (1.0 - (rowf - r0 as f64)) * (colf - c0 as f64)),
         (r1, c0, (rowf - r0 as f64) * (1.0 - (colf - c0 as f64))),
         (r1, c1, (rowf - r0 as f64) * (colf - c0 as f64)),
@@ -6347,7 +6596,13 @@ fn sample_cubic_like(input: &Raster, band: isize, rowf: f64, colf: f64) -> Optio
     }
 }
 
-fn sample_value(input: &Raster, band: isize, rowf: f64, colf: f64, method: ResampleMethod) -> Option<f64> {
+fn sample_value(
+    input: &Raster,
+    band: isize,
+    rowf: f64,
+    colf: f64,
+    method: ResampleMethod,
+) -> Option<f64> {
     match method {
         ResampleMethod::Nearest => sample_nearest(input, band, rowf, colf),
         ResampleMethod::Bilinear => sample_bilinear(input, band, rowf, colf),
@@ -6425,7 +6680,7 @@ fn run_mosaic(inputs: &[Raster], method: ResampleMethod) -> Result<Raster, ToolE
                 let x = out_x_min + (col as f64 + 0.5) * cell_size_x;
 
                 let mut chosen = None;
-                for input in inputs.iter() {
+                for input in inputs.iter().rev() {
                     let rowf = (input.y_max() - y) / input.cell_size_y;
                     let colf = (x - input.x_min) / input.cell_size_x;
                     if let Some(v) = sample_value(input, band, rowf, colf, method) {
@@ -6496,7 +6751,11 @@ fn sample_rgb_bilinear(input: &Raster, rowf: f64, colf: f64) -> Option<(f64, f64
     let c1 = c0 + 1;
 
     let neighbours = [
-        (r0, c0, (1.0 - (rowf - r0 as f64)) * (1.0 - (colf - c0 as f64))),
+        (
+            r0,
+            c0,
+            (1.0 - (rowf - r0 as f64)) * (1.0 - (colf - c0 as f64)),
+        ),
         (r0, c1, (1.0 - (rowf - r0 as f64)) * (colf - c0 as f64)),
         (r1, c0, (rowf - r0 as f64) * (1.0 - (colf - c0 as f64))),
         (r1, c1, (rowf - r0 as f64) * (colf - c0 as f64)),
@@ -6569,7 +6828,12 @@ fn sample_rgb_cubic_like(input: &Raster, rowf: f64, colf: f64) -> Option<(f64, f
     }
 }
 
-fn sample_rgb_value(input: &Raster, rowf: f64, colf: f64, method: ResampleMethod) -> Option<(f64, f64, f64)> {
+fn sample_rgb_value(
+    input: &Raster,
+    rowf: f64,
+    colf: f64,
+    method: ResampleMethod,
+) -> Option<(f64, f64, f64)> {
     match method {
         ResampleMethod::Nearest => sample_rgb_nearest(input, rowf, colf),
         ResampleMethod::Bilinear => sample_rgb_bilinear(input, rowf, colf),
@@ -6591,7 +6855,8 @@ fn run_mosaic_with_feathering(
 
     let mode1 = color_support::detect_rgb_mode(input1, false, true);
     let mode2 = color_support::detect_rgb_mode(input2, false, true);
-    let packed_rgb = mode1 == color_support::RgbMode::Packed && mode2 == color_support::RgbMode::Packed;
+    let packed_rgb =
+        mode1 == color_support::RgbMode::Packed && mode2 == color_support::RgbMode::Packed;
 
     let x_min = input1.x_min.min(input2.x_min);
     let y_min = input1.y_min.min(input2.y_min);
@@ -6613,7 +6878,11 @@ fn run_mosaic_with_feathering(
         cell_size: cell_size_x,
         cell_size_y: Some(cell_size_y),
         nodata: input1.nodata,
-        data_type: if packed_rgb { DataType::U32 } else { DataType::F32 },
+        data_type: if packed_rgb {
+            DataType::U32
+        } else {
+            DataType::F32
+        },
         crs: input1.crs.clone(),
         metadata: input1.metadata.clone(),
     });
@@ -6633,8 +6902,10 @@ fn run_mosaic_with_feathering(
             let rowf2 = (input2.y_max() - y) / input2.cell_size_y;
             let colf2 = (x - input2.x_min) / input2.cell_size_x;
 
-            let d1 = edge_distance_weight(rowf1, colf1, input1.rows, input1.cols).powf(distance_weight);
-            let d2 = edge_distance_weight(rowf2, colf2, input2.rows, input2.cols).powf(distance_weight);
+            let d1 =
+                edge_distance_weight(rowf1, colf1, input1.rows, input1.cols).powf(distance_weight);
+            let d2 =
+                edge_distance_weight(rowf2, colf2, input2.rows, input2.cols).powf(distance_weight);
 
             if packed_rgb {
                 let c1 = sample_rgb_value(input1, rowf1, colf1, method);
@@ -6645,7 +6916,11 @@ fn run_mosaic_with_feathering(
                         if sw <= 0.0 {
                             Some((r1, g1, b1))
                         } else {
-                            Some(((r1 * d1 + r2 * d2) / sw, (g1 * d1 + g2 * d2) / sw, (b1 * d1 + b2 * d2) / sw))
+                            Some((
+                                (r1 * d1 + r2 * d2) / sw,
+                                (g1 * d1 + g2 * d2) / sw,
+                                (b1 * d1 + b2 * d2) / sw,
+                            ))
                         }
                     }
                     (Some(rgb), None) => Some(rgb),
@@ -6706,50 +6981,59 @@ fn run_resample(
     validate_resample_inputs(inputs, "resample")?;
 
     let first = &inputs[0];
-    let (rows, cols, out_x_min, out_y_min, out_cell_x, out_cell_y, out_y_max, out_crs, out_metadata) =
-        if let Some(base_r) = base {
-            (
-                base_r.rows,
-                base_r.cols,
-                base_r.x_min,
-                base_r.y_min,
-                base_r.cell_size_x.abs(),
-                base_r.cell_size_y.abs(),
-                base_r.y_max(),
-                base_r.crs.clone(),
-                base_r.metadata.clone(),
-            )
-        } else {
-            let cs = cell_size.unwrap_or(0.0);
-            if cs <= 0.0 {
-                return Err(ToolError::Validation(
-                    "either 'base' or a positive 'cell_size' must be provided".to_string(),
-                ));
-            }
-            let mut x_min = f64::INFINITY;
-            let mut y_min = f64::INFINITY;
-            let mut x_max = f64::NEG_INFINITY;
-            let mut y_max = f64::NEG_INFINITY;
-            for r in inputs {
-                x_min = x_min.min(r.x_min);
-                y_min = y_min.min(r.y_min);
-                x_max = x_max.max(r.x_max());
-                y_max = y_max.max(r.y_max());
-            }
-            let (rr, cc, xx_min, yy_min, _xx_max, yy_max) =
-                output_grid_from_extent(x_min, y_min, x_max, y_max, cs, cs);
-            (
-                rr,
-                cc,
-                xx_min,
-                yy_min,
-                cs,
-                cs,
-                yy_max,
-                first.crs.clone(),
-                first.metadata.clone(),
-            )
-        };
+    let (
+        rows,
+        cols,
+        out_x_min,
+        out_y_min,
+        out_cell_x,
+        out_cell_y,
+        out_y_max,
+        out_crs,
+        out_metadata,
+    ) = if let Some(base_r) = base {
+        (
+            base_r.rows,
+            base_r.cols,
+            base_r.x_min,
+            base_r.y_min,
+            base_r.cell_size_x.abs(),
+            base_r.cell_size_y.abs(),
+            base_r.y_max(),
+            base_r.crs.clone(),
+            base_r.metadata.clone(),
+        )
+    } else {
+        let cs = cell_size.unwrap_or(0.0);
+        if cs <= 0.0 {
+            return Err(ToolError::Validation(
+                "either 'base' or a positive 'cell_size' must be provided".to_string(),
+            ));
+        }
+        let mut x_min = f64::INFINITY;
+        let mut y_min = f64::INFINITY;
+        let mut x_max = f64::NEG_INFINITY;
+        let mut y_max = f64::NEG_INFINITY;
+        for r in inputs {
+            x_min = x_min.min(r.x_min);
+            y_min = y_min.min(r.y_min);
+            x_max = x_max.max(r.x_max());
+            y_max = y_max.max(r.y_max());
+        }
+        let (rr, cc, xx_min, yy_min, _xx_max, yy_max) =
+            output_grid_from_extent(x_min, y_min, x_max, y_max, cs, cs);
+        (
+            rr,
+            cc,
+            xx_min,
+            yy_min,
+            cs,
+            cs,
+            yy_max,
+            first.crs.clone(),
+            first.metadata.clone(),
+        )
+    };
 
     let mut output = Raster::new(RasterConfig {
         rows,
@@ -7117,8 +7401,10 @@ fn run_kmeans(inputs: &[Raster], opts: KMeansOptions) -> Result<KMeansRunResult,
         crs: inputs[0].crs.clone(),
         metadata: inputs[0].metadata.clone(),
     });
-    out.metadata
-        .push(("color_interpretation".to_string(), "categorical".to_string()));
+    out.metadata.push((
+        "color_interpretation".to_string(),
+        "categorical".to_string(),
+    ));
 
     let output_vals: Vec<(usize, usize, f64)> = valid_indices
         .par_iter()
@@ -7176,7 +7462,9 @@ fn write_cluster_html_report(
     html.push_str(&result.centroids.len().to_string());
     html.push_str("</p>");
 
-    html.push_str("<p><table><caption>Cluster Size</caption><tr><th>Cluster</th><th>Num. Pixels</th></tr>");
+    html.push_str(
+        "<p><table><caption>Cluster Size</caption><tr><th>Cluster</th><th>Num. Pixels</th></tr>",
+    );
     for (i, n) in result.counts.iter().enumerate() {
         html.push_str(&format!(
             "<tr><td>{}</td><td class=\"numberCell\">{}</td></tr>",
@@ -7212,7 +7500,9 @@ fn write_cluster_html_report(
     }
     html.push_str("</table></p>");
 
-    let xdata = vec![(1..=result.change_history.len()).map(|v| v as f64).collect::<Vec<f64>>()];
+    let xdata = vec![(1..=result.change_history.len())
+        .map(|v| v as f64)
+        .collect::<Vec<f64>>()];
     let ydata = vec![result.change_history.clone()];
     let graph = LineGraph {
         parent_id: "graph".to_string(),
@@ -7229,7 +7519,10 @@ fn write_cluster_html_report(
         draw_grey_background: false,
     };
     html.push_str("<br><br><h2>Convergence Plot</h2>");
-    html.push_str(&format!("<div id='graph' align=\"center\">{}</div>", graph.get_svg()));
+    html.push_str(&format!(
+        "<div id='graph' align=\"center\">{}</div>",
+        graph.get_svg()
+    ));
 
     html.push_str("</body></html>");
 
@@ -7334,11 +7627,8 @@ fn run_correct_vignetting(
                         return (local_min, local_max);
                     }
                     let (rv, gv, bv, _) = FlipImageTool::unpack_rgba(i_in);
-                    let (_, _, i_norm) = rgb_to_hsi_norm(
-                        rv as f64 / 255.0,
-                        gv as f64 / 255.0,
-                        bv as f64 / 255.0,
-                    );
+                    let (_, _, i_norm) =
+                        rgb_to_hsi_norm(rv as f64 / 255.0, gv as f64 / 255.0, bv as f64 / 255.0);
                     i_in = i_norm;
                 } else if input.is_nodata(i_in) {
                     return (local_min, local_max);
@@ -7396,11 +7686,8 @@ fn run_correct_vignetting(
             if matches!(rgb_mode, color_support::RgbMode::Packed) {
                 let raw = input.get(0, r, c);
                 let (rv, gv, bv, _) = FlipImageTool::unpack_rgba(raw);
-                let (h, s, _) = rgb_to_hsi_norm(
-                    rv as f64 / 255.0,
-                    gv as f64 / 255.0,
-                    bv as f64 / 255.0,
-                );
+                let (h, s, _) =
+                    rgb_to_hsi_norm(rv as f64 / 255.0, gv as f64 / 255.0, bv as f64 / 255.0);
                 let (rn, gn, bn) = hsi_to_rgb_norm(h, s, scaled_i.clamp(0.0, 1.0));
                 FlipImageTool::pack_rgba(
                     (rn * 255.0).round().clamp(0.0, 255.0) as u32,
@@ -7425,9 +7712,7 @@ fn run_correct_vignetting(
             })?;
         } else {
             output.set(0, r, c, out_val).map_err(|e| {
-                ToolError::Execution(format!(
-                    "failed writing vignetting value at ({r},{c}): {e}"
-                ))
+                ToolError::Execution(format!("failed writing vignetting value at ({r},{c}): {e}"))
             })?;
         }
     }
@@ -7441,7 +7726,10 @@ fn parse_vector_points_arg(args: &ToolArgs, param: &str) -> Result<Vec<(f64, f64
     extract_vector_points(&layer, param)
 }
 
-fn extract_vector_points(layer: &wbvector::Layer, param: &str) -> Result<Vec<(f64, f64)>, ToolError> {
+fn extract_vector_points(
+    layer: &wbvector::Layer,
+    param: &str,
+) -> Result<Vec<(f64, f64)>, ToolError> {
     let mut points = Vec::new();
     for feature in &layer.features {
         if let Some(geom) = &feature.geometry {
@@ -7568,7 +7856,10 @@ fn write_image_stack_profile_html(
         draw_legend: multiples,
         draw_grey_background: false,
     };
-    html.push_str(&format!("<div id='graph' align=\"center\">{}</div>", graph.get_svg()));
+    html.push_str(&format!(
+        "<div id='graph' align=\"center\">{}</div>",
+        graph.get_svg()
+    ));
 
     html.push_str("<p><table><caption>Profile Data Table</caption><tr><th>Image</th>");
     for pidx in 0..num_points {
@@ -7659,8 +7950,16 @@ fn html_escape(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-fn build_ms_packed_from_bands(red: &Raster, green: &Raster, blue: &Raster) -> Result<Raster, ToolError> {
-    if red.rows != green.rows || red.cols != green.cols || red.rows != blue.rows || red.cols != blue.cols {
+fn build_ms_packed_from_bands(
+    red: &Raster,
+    green: &Raster,
+    blue: &Raster,
+) -> Result<Raster, ToolError> {
+    if red.rows != green.rows
+        || red.cols != green.cols
+        || red.rows != blue.rows
+        || red.cols != blue.cols
+    {
         return Err(ToolError::Validation(
             "red, green, and blue rasters must share dimensions".to_string(),
         ));
@@ -7691,11 +7990,12 @@ fn build_ms_packed_from_bands(red: &Raster, green: &Raster, blue: &Raster) -> Re
             let r8 = (norm01(rv, r_min, r_max) * 255.0).round().clamp(0.0, 255.0) as u32;
             let g8 = (norm01(gv, g_min, g_max) * 255.0).round().clamp(0.0, 255.0) as u32;
             let b8 = (norm01(bv, b_min, b_max) * 255.0).round().clamp(0.0, 255.0) as u32;
-            out.set(0, r, c, FlipImageTool::pack_rgba(r8, g8, b8, 255)).map_err(|e| {
-                ToolError::Execution(format!(
-                    "failed writing packed MS pixel at ({r},{c}): {e}"
-                ))
-            })?;
+            out.set(0, r, c, FlipImageTool::pack_rgba(r8, g8, b8, 255))
+                .map_err(|e| {
+                    ToolError::Execution(format!(
+                        "failed writing packed MS pixel at ({r},{c}): {e}"
+                    ))
+                })?;
         }
     }
     Ok(out)
@@ -7715,7 +8015,11 @@ fn run_panchromatic_sharpening(
     let mut output = Raster::new(RasterConfig {
         rows: pan.rows,
         cols: pan.cols,
-        bands: if matches!(output_mode, PanSharpenOutputMode::Bands) { 3 } else { 1 },
+        bands: if matches!(output_mode, PanSharpenOutputMode::Bands) {
+            3
+        } else {
+            1
+        },
         x_min: pan.x_min,
         y_min: pan.y_min,
         cell_size: pan.cell_size_x,
@@ -7854,7 +8158,10 @@ fn run_panchromatic_sharpening(
     Ok(output)
 }
 
-fn run_change_vector_analysis(date1: &[Raster], date2: &[Raster]) -> Result<(Raster, Raster), ToolError> {
+fn run_change_vector_analysis(
+    date1: &[Raster],
+    date2: &[Raster],
+) -> Result<(Raster, Raster), ToolError> {
     if date1.is_empty() || date2.is_empty() {
         return Err(ToolError::Validation(
             "change_vector_analysis requires at least one raster in each date list".to_string(),
@@ -7870,7 +8177,11 @@ fn run_change_vector_analysis(date1: &[Raster], date2: &[Raster]) -> Result<(Ras
     let out_nodata = template.nodata;
 
     for (idx, (a, b)) in date1.iter().zip(date2.iter()).enumerate() {
-        if a.rows != template.rows || a.cols != template.cols || b.rows != template.rows || b.cols != template.cols {
+        if a.rows != template.rows
+            || a.cols != template.cols
+            || b.rows != template.rows
+            || b.cols != template.cols
+        {
             return Err(ToolError::Validation(format!(
                 "all input rasters must share dimensions; mismatch found at pair index {}",
                 idx
@@ -7938,14 +8249,10 @@ fn run_change_vector_analysis(date1: &[Raster], date2: &[Raster]) -> Result<(Ras
         let r = (idx / template.cols) as isize;
         let c = (idx % template.cols) as isize;
         mag.set(0, r, c, mag_val).map_err(|e| {
-            ToolError::Execution(format!(
-                "failed writing CVA magnitude at ({r},{c}): {e}"
-            ))
+            ToolError::Execution(format!("failed writing CVA magnitude at ({r},{c}): {e}"))
         })?;
         dir.set(0, r, c, dir_val).map_err(|e| {
-            ToolError::Execution(format!(
-                "failed writing CVA direction at ({r},{c}): {e}"
-            ))
+            ToolError::Execution(format!("failed writing CVA direction at ({r},{c}): {e}"))
         })?;
     }
 
@@ -8062,10 +8369,18 @@ fn scan_rasterize_ring(
     let mut min_y = f64::INFINITY;
     let mut max_y = f64::NEG_INFINITY;
     for c in coords {
-        if c.x < min_x { min_x = c.x; }
-        if c.x > max_x { max_x = c.x; }
-        if c.y < min_y { min_y = c.y; }
-        if c.y > max_y { max_y = c.y; }
+        if c.x < min_x {
+            min_x = c.x;
+        }
+        if c.x > max_x {
+            max_x = c.x;
+        }
+        if c.y < min_y {
+            min_y = c.y;
+        }
+        if c.y > max_y {
+            max_y = c.y;
+        }
     }
 
     let mut top_row = geo_y_to_row(reference_raster, max_y).max(0);
@@ -8078,10 +8393,18 @@ fn scan_rasterize_ring(
     }
 
     // Clamp to raster extent.
-    if top_row < 0 { top_row = 0; }
-    if bottom_row >= rows { bottom_row = rows - 1; }
-    if left_col < 0 { left_col = 0; }
-    if right_col >= cols { right_col = cols - 1; }
+    if top_row < 0 {
+        top_row = 0;
+    }
+    if bottom_row >= rows {
+        bottom_row = rows - 1;
+    }
+    if left_col < 0 {
+        left_col = 0;
+    }
+    if right_col >= cols {
+        right_col = cols - 1;
+    }
 
     // Scan each row: find e-intersections with ring edges.
     for row in top_row..=bottom_row {
@@ -8098,7 +8421,10 @@ fn scan_rasterize_ring(
                     let mut is_nodata = false;
                     for (b, raster) in bands.iter().enumerate() {
                         let z = raster.get(0, row, col);
-                        if z == nodata[b] { is_nodata = true; break; }
+                        if z == nodata[b] {
+                            is_nodata = true;
+                            break;
+                        }
                         vals[b] = z;
                     }
                     if !is_nodata {
@@ -8124,7 +8450,10 @@ fn scan_rasterize_ring(
                     let mut is_nodata = false;
                     for (b, raster) in bands.iter().enumerate() {
                         let z = raster.get(0, row, col);
-                        if z == nodata[b] { is_nodata = true; break; }
+                        if z == nodata[b] {
+                            is_nodata = true;
+                            break;
+                        }
                         vals[b] = z;
                     }
                     if !is_nodata {
@@ -8228,14 +8557,20 @@ impl Tool for MinDistClassificationTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training.shp"));
         defaults.insert("class_field".to_string(), json!("class"));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training.shp"));
         example.insert("class_field".to_string(), json!("class"));
         example.insert("dist_threshold".to_string(), json!(3.0));
@@ -8247,18 +8582,27 @@ impl Tool for MinDistClassificationTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_min_dist_classification".to_string(),
                 description: "Classifies a three-band image with a z-score threshold.".to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "raster".to_string(), "classification".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "raster".to_string(),
+                "classification".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -8266,21 +8610,27 @@ impl Tool for MinDistClassificationTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let paths = parse_raster_list_arg(args, "inputs")?;
         if paths.is_empty() {
-            return Err(ToolError::Validation("'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         parse_vector_path_arg(args, "training_data")?;
-        args.get("class_field").ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+        args.get("class_field").ok_or_else(|| {
+            ToolError::Validation("parameter 'class_field' is required".to_string())
+        })?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let training_path = parse_vector_path_arg(args, "training_data")?;
         let class_field = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?
             .to_string();
         let dist_threshold = args
             .get("dist_threshold")
@@ -8297,10 +8647,13 @@ impl Tool for MinDistClassificationTool {
 
         coalescer.emit_unit_fraction(ctx.progress, 0.05);
 
-        let (class_names, per_class) = extract_training_polygon_pixels(&bands, &layer, &class_field)?;
+        let (class_names, per_class) =
+            extract_training_polygon_pixels(&bands, &layer, &class_field)?;
         let num_classes = class_names.len();
         if num_classes == 0 {
-            return Err(ToolError::Validation("No classes found in training data.".to_string()));
+            return Err(ToolError::Validation(
+                "No classes found in training data.".to_string(),
+            ));
         }
 
         // Compute per-class mean vectors.
@@ -8308,11 +8661,15 @@ impl Tool for MinDistClassificationTool {
         let mut class_n = vec![0usize; num_classes];
         for c in 0..num_classes {
             for vals in &per_class[c] {
-                for b in 0..num_bands { class_mean[c][b] += vals[b]; }
+                for b in 0..num_bands {
+                    class_mean[c][b] += vals[b];
+                }
                 class_n[c] += 1;
             }
             if class_n[c] > 0 {
-                for b in 0..num_bands { class_mean[c][b] /= class_n[c] as f64; }
+                for b in 0..num_bands {
+                    class_mean[c][b] /= class_n[c] as f64;
+                }
             }
         }
 
@@ -8324,12 +8681,25 @@ impl Tool for MinDistClassificationTool {
                 let n = per_class[c].len();
                 if n > 0 {
                     let mut sum_dist = 0f64;
-                    let dists: Vec<f64> = per_class[c].iter().map(|vals| {
-                        vals.iter().enumerate().map(|(b, &v)| (v - class_mean[c][b]).powi(2)).sum::<f64>().sqrt()
-                    }).collect();
-                    for &d in &dists { sum_dist += d; }
+                    let dists: Vec<f64> = per_class[c]
+                        .iter()
+                        .map(|vals| {
+                            vals.iter()
+                                .enumerate()
+                                .map(|(b, &v)| (v - class_mean[c][b]).powi(2))
+                                .sum::<f64>()
+                                .sqrt()
+                        })
+                        .collect();
+                    for &d in &dists {
+                        sum_dist += d;
+                    }
                     class_mean_dist[c] = sum_dist / n as f64;
-                    let var: f64 = dists.iter().map(|&d| (d - class_mean_dist[c]).powi(2)).sum::<f64>() / n as f64;
+                    let var: f64 = dists
+                        .iter()
+                        .map(|&d| (d - class_mean_dist[c]).powi(2))
+                        .sum::<f64>()
+                        / n as f64;
                     class_stddev[c] = var.sqrt();
                 }
             }
@@ -8418,7 +8788,8 @@ impl Tool for MinDistClassificationTool {
                 }
             }
             if row % 100 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, 0.15 + 0.80 * (row as f64 / rows as f64));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, 0.15 + 0.80 * (row as f64 / rows as f64));
             }
         }
 
@@ -8462,14 +8833,20 @@ impl Tool for ParallelepipedClassificationTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training.shp"));
         defaults.insert("class_field".to_string(), json!("class"));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training.shp"));
         example.insert("class_field".to_string(), json!("class"));
         example.insert("output".to_string(), json!("classified.tif"));
@@ -8480,18 +8857,28 @@ impl Tool for ParallelepipedClassificationTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_parallelepiped_classification".to_string(),
-                description: "Classifies a three-band image using the parallelepiped method.".to_string(),
+                description: "Classifies a three-band image using the parallelepiped method."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "raster".to_string(), "classification".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "raster".to_string(),
+                "classification".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -8499,21 +8886,27 @@ impl Tool for ParallelepipedClassificationTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let paths = parse_raster_list_arg(args, "inputs")?;
         if paths.is_empty() {
-            return Err(ToolError::Validation("'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         parse_vector_path_arg(args, "training_data")?;
-        args.get("class_field").ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+        args.get("class_field").ok_or_else(|| {
+            ToolError::Validation("parameter 'class_field' is required".to_string())
+        })?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let training_path = parse_vector_path_arg(args, "training_data")?;
         let class_field = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?
             .to_string();
         let output_path = parse_optional_output_path(args, "output")?;
 
@@ -8526,10 +8919,13 @@ impl Tool for ParallelepipedClassificationTool {
 
         coalescer.emit_unit_fraction(ctx.progress, 0.05);
 
-        let (class_names, per_class) = extract_training_polygon_pixels(&bands, &layer, &class_field)?;
+        let (class_names, per_class) =
+            extract_training_polygon_pixels(&bands, &layer, &class_field)?;
         let num_classes = class_names.len();
         if num_classes == 0 {
-            return Err(ToolError::Validation("No classes found in training data.".to_string()));
+            return Err(ToolError::Validation(
+                "No classes found in training data.".to_string(),
+            ));
         }
 
         // Compute per-class min/max vectors.
@@ -8538,17 +8934,25 @@ impl Tool for ParallelepipedClassificationTool {
         for c in 0..num_classes {
             for vals in &per_class[c] {
                 for b in 0..num_bands {
-                    if vals[b] < class_min[c][b] { class_min[c][b] = vals[b]; }
-                    if vals[b] > class_max[c][b] { class_max[c][b] = vals[b]; }
+                    if vals[b] < class_min[c][b] {
+                        class_min[c][b] = vals[b];
+                    }
+                    if vals[b] > class_max[c][b] {
+                        class_max[c][b] = vals[b];
+                    }
                 }
             }
         }
 
         // Sort classes by hyper-volume (smallest first) so the tightest class wins ties.
-        let mut class_index: Vec<(usize, f64)> = (0..num_classes).map(|c| {
-            let vol = (0..num_bands).map(|b| (class_max[c][b] - class_min[c][b]).max(0.0)).product::<f64>();
-            (c, vol)
-        }).collect();
+        let mut class_index: Vec<(usize, f64)> = (0..num_classes)
+            .map(|c| {
+                let vol = (0..num_bands)
+                    .map(|b| (class_max[c][b] - class_min[c][b]).max(0.0))
+                    .product::<f64>();
+                (c, vol)
+            })
+            .collect();
         class_index.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
         coalescer.emit_unit_fraction(ctx.progress, 0.15);
@@ -8617,7 +9021,8 @@ impl Tool for ParallelepipedClassificationTool {
                 }
             }
             if row % 100 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, 0.15 + 0.80 * (row as f64 / rows as f64));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, 0.15 + 0.80 * (row as f64 / rows as f64));
             }
         }
 
@@ -8672,18 +9077,28 @@ impl Tool for CannyEdgeDetectionTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_canny_edge_detection".to_string(),
                 description: "Detects edges with default sigma and thresholds.".to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "raster".to_string(), "filter".to_string(), "edge_detection".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "raster".to_string(),
+                "filter".to_string(),
+                "edge_detection".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -8694,12 +9109,28 @@ impl Tool for CannyEdgeDetectionTool {
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let input_path = parse_raster_path_arg(args, "input")?;
-        let sigma = args.get("sigma").and_then(|v| v.as_f64()).unwrap_or(0.5).max(0.15).min(20.0);
-        let mut low_threshold = args.get("low_threshold").and_then(|v| v.as_f64()).unwrap_or(0.05_f64).clamp(0.0, 1.0);
-        let mut high_threshold = args.get("high_threshold").and_then(|v| v.as_f64()).unwrap_or(0.15_f64).clamp(0.0, 1.0);
-        let add_back = args.get("add_back").and_then(|v| v.as_bool()).unwrap_or(false);
+        let sigma = args
+            .get("sigma")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.5)
+            .max(0.15)
+            .min(20.0);
+        let mut low_threshold = args
+            .get("low_threshold")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.05_f64)
+            .clamp(0.0, 1.0);
+        let mut high_threshold = args
+            .get("high_threshold")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.15_f64)
+            .clamp(0.0, 1.0);
+        let add_back = args
+            .get("add_back")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let input = FlipImageTool::load_raster(&input_path)?;
@@ -8707,7 +9138,8 @@ impl Tool for CannyEdgeDetectionTool {
         let cols_count = input.cols as isize;
         let nodata = input.nodata;
 
-        let is_rgb = color_support::detect_rgb_mode(&input, false, true) == color_support::RgbMode::Packed;
+        let is_rgb =
+            color_support::detect_rgb_mode(&input, false, true) == color_support::RgbMode::Packed;
 
         // ── Build Gaussian kernel ────────────────────────────────────────────
         let recip_root_2pi_sigma = 1.0 / ((2.0 * std::f64::consts::PI).sqrt() * sigma);
@@ -8721,8 +9153,12 @@ impl Tool for CannyEdgeDetectionTool {
                 break;
             }
         }
-        if filter_size % 2 == 0 { filter_size += 1; }
-        if filter_size < 3 { filter_size = 3; }
+        if filter_size % 2 == 0 {
+            filter_size += 1;
+        }
+        if filter_size < 3 {
+            filter_size = 3;
+        }
 
         let half = (filter_size / 2) as isize;
         let mut kernel_weights: Vec<f64> = Vec::with_capacity(filter_size * filter_size);
@@ -8743,8 +9179,14 @@ impl Tool for CannyEdgeDetectionTool {
         // Helper: get intensity value at (row, col) – uses hsi 'i' for packed RGB.
         let get_intensity = |raster: &Raster, row: isize, col: isize| -> f64 {
             let z = raster.get(0, row, col);
-            if raster.is_nodata(z) { return nodata; }
-            if is_rgb { value2i(z) } else { z }
+            if raster.is_nodata(z) {
+                return nodata;
+            }
+            if is_rgb {
+                value2i(z)
+            } else {
+                z
+            }
         };
 
         // ── Stage 1: Gaussian filter → `g` ──────────────────────────────────
@@ -8783,7 +9225,9 @@ impl Tool for CannyEdgeDetectionTool {
 
         // ── Stage 2: Sobel gradient magnitude + angle ────────────────────────
         let gget = |row: isize, col: isize| -> f64 {
-            if row < 0 || row >= rows || col < 0 || col >= cols_count { return g_nd; }
+            if row < 0 || row >= rows || col < 0 || col >= cols_count {
+                return g_nd;
+            }
             g_data[(row * cols_count + col) as usize]
         };
         let sobel_dx = [1isize, 1, 1, 0, -1, -1, -1, 0];
@@ -8835,7 +9279,9 @@ impl Tool for CannyEdgeDetectionTool {
         // Normalise magnitude to 0–255.
         if max_slope > 0.0 {
             for v in slope_mag.iter_mut() {
-                if *v != g_nd { *v = *v / max_slope * 255.0; }
+                if *v != g_nd {
+                    *v = *v / max_slope * 255.0;
+                }
             }
         }
         coalescer.emit_unit_fraction(ctx.progress, 0.50);
@@ -8851,7 +9297,8 @@ impl Tool for CannyEdgeDetectionTool {
                     if v == g_nd {
                         continue;
                     }
-                    let angle = theta_data[(row * cols_count + col) as usize] * 180.0 / std::f64::consts::PI;
+                    let angle = theta_data[(row * cols_count + col) as usize] * 180.0
+                        / std::f64::consts::PI;
                     let angle = if angle < 0.0 { angle + 180.0 } else { angle };
                     let smget = |rr: isize, cc: isize| -> f64 {
                         if rr < 0 || rr >= rows || cc < 0 || cc >= cols_count {
@@ -8860,15 +9307,16 @@ impl Tool for CannyEdgeDetectionTool {
                             slope_mag[(rr * cols_count + cc) as usize]
                         }
                     };
-                    let (q, r) = if (0.0 <= angle && angle < 22.5) || (157.5 <= angle && angle <= 180.0) {
-                        (smget(row, col + 1), smget(row, col - 1))
-                    } else if 22.5 <= angle && angle < 67.5 {
-                        (smget(row + 1, col - 1), smget(row - 1, col + 1))
-                    } else if 67.5 <= angle && angle < 112.5 {
-                        (smget(row + 1, col), smget(row - 1, col))
-                    } else {
-                        (smget(row - 1, col - 1), smget(row + 1, col + 1))
-                    };
+                    let (q, r) =
+                        if (0.0 <= angle && angle < 22.5) || (157.5 <= angle && angle <= 180.0) {
+                            (smget(row, col + 1), smget(row, col - 1))
+                        } else if 22.5 <= angle && angle < 67.5 {
+                            (smget(row + 1, col - 1), smget(row - 1, col + 1))
+                        } else if 67.5 <= angle && angle < 112.5 {
+                            (smget(row + 1, col), smget(row - 1, col))
+                        } else {
+                            (smget(row - 1, col - 1), smget(row + 1, col + 1))
+                        };
                     if v >= q && v >= r {
                         row_nms[col as usize] = v;
                         if v > row_max {
@@ -8899,25 +9347,24 @@ impl Tool for CannyEdgeDetectionTool {
         const STRONG: f64 = 255.0;
         const WEAK: f64 = 75.0;
         let mut thresh = vec![0.0f64; (rows * cols_count) as usize];
-        thresh
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(idx, out)| {
-                let v = nms[idx];
-                *out = if v >= high_threshold {
-                    STRONG
-                } else if v >= low_threshold {
-                    WEAK
-                } else {
-                    0.0
-                };
-            });
+        thresh.par_iter_mut().enumerate().for_each(|(idx, out)| {
+            let v = nms[idx];
+            *out = if v >= high_threshold {
+                STRONG
+            } else if v >= low_threshold {
+                WEAK
+            } else {
+                0.0
+            };
+        });
         drop(nms);
         coalescer.emit_unit_fraction(ctx.progress, 0.80);
 
         // ── Stage 5: Hysteresis ───────────────────────────────────────────────
         let tget = |row: isize, col: isize| -> f64 {
-            if row < 0 || row >= rows || col < 0 || col >= cols_count { return 0.0; }
+            if row < 0 || row >= rows || col < 0 || col >= cols_count {
+                return 0.0;
+            }
             thresh[(row * cols_count + col) as usize]
         };
         let out_nodata = if !add_back { -32768.0f64 } else { nodata };
@@ -8930,7 +9377,11 @@ impl Tool for CannyEdgeDetectionTool {
             cell_size: input.cell_size_x,
             cell_size_y: Some(input.cell_size_y),
             nodata: out_nodata,
-            data_type: if !add_back || !is_rgb { DataType::I16 } else { DataType::F32 },
+            data_type: if !add_back || !is_rgb {
+                DataType::I16
+            } else {
+                DataType::F32
+            },
             crs: input.crs.clone(),
             metadata: vec![],
         });
@@ -8956,14 +9407,22 @@ impl Tool for CannyEdgeDetectionTool {
                             || tget(row - 1, col) == STRONG
                             || tget(row - 1, col + 1) == STRONG;
                         if !add_back {
-                            if strong_nbr { STRONG } else { 0.0 }
+                            if strong_nbr {
+                                STRONG
+                            } else {
+                                0.0
+                            }
                         } else if strong_nbr {
                             0.0
                         } else {
                             iz
                         }
                     } else if v == STRONG {
-                        if !add_back { STRONG } else { 0.0 }
+                        if !add_back {
+                            STRONG
+                        } else {
+                            0.0
+                        }
                     } else if !add_back {
                         0.0
                     } else {
@@ -9009,7 +9468,15 @@ fn percentile_sorted(sorted: &[f64], p: f64) -> f64 {
 
 fn values_to_box_row(values: &mut [f64]) -> (f64, f64, f64, f64, f64, f64, f64) {
     if values.is_empty() {
-        return (f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN);
+        return (
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+        );
     }
     values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     let min = values[0];
@@ -9119,13 +9586,19 @@ impl Tool for EvaluateTrainingSitesTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("training_data".to_string(), json!("training.shp"));
         defaults.insert("class_field".to_string(), json!("class"));
         defaults.insert("output".to_string(), json!("training_sites_report.html"));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training.shp"));
         example.insert("class_field".to_string(), json!("class"));
         example.insert("output".to_string(), json!("training_sites_report.html"));
@@ -9148,10 +9621,16 @@ impl Tool for EvaluateTrainingSitesTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_evaluate_training_sites".to_string(),
-                description: "Create a training-site evaluation HTML report for three image bands.".to_string(),
+                description: "Create a training-site evaluation HTML report for three image bands."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "classification".to_string(), "report".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "classification".to_string(),
+                "report".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -9159,31 +9638,39 @@ impl Tool for EvaluateTrainingSitesTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         let _ = parse_vector_path_arg(args, "training_data")?;
         let _ = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let band_paths = parse_raster_list_arg(args, "inputs")?;
         let training_path = parse_vector_path_arg(args, "training_data")?;
         let class_field = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?
             .to_string();
 
         let output_path = if let Some(path) = parse_optional_output_path(args, "output")? {
             path
         } else {
             std::env::current_dir()
-                .map_err(|e| ToolError::Execution(format!("failed reading current directory: {e}")))?
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed reading current directory: {e}"))
+                })?
                 .join("training_sites_report.html")
         };
 
@@ -9205,17 +9692,26 @@ impl Tool for EvaluateTrainingSitesTool {
         let layer = load_vector_layer(&training_path, "training_data")?;
 
         coalescer.emit_unit_fraction(ctx.progress, 0.15);
-        let (class_names, class_pixels) = extract_training_polygon_pixels(&bands, &layer, &class_field)?;
+        let (class_names, class_pixels) =
+            extract_training_polygon_pixels(&bands, &layer, &class_field)?;
         if class_names.is_empty() {
-            return Err(ToolError::Validation("no classes found in training data".to_string()));
+            return Err(ToolError::Validation(
+                "no classes found in training data".to_string(),
+            ));
         }
 
         let mut html = String::new();
         html.push_str("<!doctype html><html><head><meta charset=\"utf-8\"><title>Evaluate Training Sites</title>");
         html.push_str(wbw_report_css());
         html.push_str("</head><body><h1>Evaluate Training Sites</h1><p>");
-        html.push_str(&format!("<strong>Training data</strong>: {}<br>", html_escape(&training_path)));
-        html.push_str(&format!("<strong>Class field</strong>: {}<br>", html_escape(&class_field)));
+        html.push_str(&format!(
+            "<strong>Training data</strong>: {}<br>",
+            html_escape(&training_path)
+        ));
+        html.push_str(&format!(
+            "<strong>Class field</strong>: {}<br>",
+            html_escape(&class_field)
+        ));
         html.push_str(&format!("<strong>Num. bands</strong>: {}<br>", bands.len()));
         html.push_str("</p>");
 
@@ -9276,7 +9772,10 @@ impl Tool for EvaluateTrainingSitesTool {
                     graph.get_svg()
                 ));
             }
-            coalescer.emit_unit_fraction(ctx.progress, 0.15 + 0.35 * ((b + 1) as f64 / bands.len() as f64));
+            coalescer.emit_unit_fraction(
+                ctx.progress,
+                0.15 + 0.35 * ((b + 1) as f64 / bands.len() as f64),
+            );
         }
         html.push_str("</table>");
 
@@ -9293,7 +9792,10 @@ impl Tool for EvaluateTrainingSitesTool {
                 ));
             }
             html.push_str("</table>");
-            coalescer.emit_unit_fraction(ctx.progress, 0.50 + 0.49 * ((b + 1) as f64 / bands.len() as f64));
+            coalescer.emit_unit_fraction(
+                ctx.progress,
+                0.50 + 0.49 * ((b + 1) as f64 / bands.len() as f64),
+            );
         }
         html.push_str("</body></html>");
 
@@ -9307,12 +9809,19 @@ impl Tool for EvaluateTrainingSitesTool {
             })?;
         }
         std::fs::write(&output_path, html).map_err(|e| {
-            ToolError::Execution(format!("failed writing report '{}': {}", output_path.display(), e))
+            ToolError::Execution(format!(
+                "failed writing report '{}': {}",
+                output_path.display(),
+                e
+            ))
         })?;
 
         ctx.progress.progress(1.0);
         let mut outputs = BTreeMap::new();
-        outputs.insert("path".to_string(), json!(output_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(output_path.to_string_lossy().to_string()),
+        );
         Ok(ToolRunResult { outputs })
     }
 }
@@ -9338,12 +9847,18 @@ impl Tool for GeneralizeWithSimilarityTool {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
         defaults.insert("input".to_string(), json!("classes.tif"));
-        defaults.insert("similarity".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "similarity".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("min_size".to_string(), json!(5));
 
         let mut example = ToolArgs::new();
         example.insert("input".to_string(), json!("classes.tif"));
-        example.insert("similarity".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "similarity".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("min_size".to_string(), json!(8));
         example.insert("output".to_string(), json!("generalized_similarity.tif"));
 
@@ -9353,18 +9868,28 @@ impl Tool for GeneralizeWithSimilarityTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_generalize_with_similarity".to_string(),
-                description: "Merge undersized patches into spectrally nearest neighbors.".to_string(),
+                description: "Merge undersized patches into spectrally nearest neighbors."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "classification".to_string(), "generalization".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "classification".to_string(),
+                "generalization".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -9373,16 +9898,23 @@ impl Tool for GeneralizeWithSimilarityTool {
         let _ = parse_raster_path_arg(args, "input")?;
         let sim = parse_raster_list_arg(args, "similarity")?;
         if sim.is_empty() {
-            return Err(ToolError::Validation("parameter 'similarity' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'similarity' must contain at least one raster".to_string(),
+            ));
         }
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let input_path = parse_raster_path_arg(args, "input")?;
         let sim_paths = parse_raster_list_arg(args, "similarity")?;
-        let min_size = args.get("min_size").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(5).max(1);
+        let min_size = args
+            .get("min_size")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(5)
+            .max(1);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let input = FlipImageTool::load_raster(&input_path)?;
@@ -9395,11 +9927,23 @@ impl Tool for GeneralizeWithSimilarityTool {
         let n = input.rows * input.cols;
         for (i, s) in sims.iter().enumerate() {
             if s.rows != input.rows || s.cols != input.cols {
-                return Err(ToolError::Validation(format!("similarity raster dimensions mismatch at index {}", i)));
+                return Err(ToolError::Validation(format!(
+                    "similarity raster dimensions mismatch at index {}",
+                    i
+                )));
             }
         }
 
-        let n8 = [(-1isize, -1isize), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
+        let n8 = [
+            (-1isize, -1isize),
+            (-1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+            (1, 0),
+            (1, -1),
+            (0, -1),
+        ];
         let mut comp_id = vec![-1isize; n];
         let mut comp_cells: Vec<Vec<usize>> = Vec::new();
         let mut comp_class: Vec<f64> = Vec::new();
@@ -9547,7 +10091,9 @@ impl Tool for GeneralizeWithSimilarityTool {
                     let n2 = comp_center_n[cid] as f64;
                     if n1 + n2 > 0.0 {
                         for d in 0..dims {
-                            comp_center[target][d] = (comp_center[target][d] * n1 + comp_center[cid][d] * n2) / (n1 + n2);
+                            comp_center[target][d] = (comp_center[target][d] * n1
+                                + comp_center[cid][d] * n2)
+                                / (n1 + n2);
                         }
                     }
                     comp_center_n[target] += comp_center_n[cid];
@@ -9623,7 +10169,10 @@ impl Tool for ImageSegmentationTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("threshold".to_string(), json!(0.5));
@@ -9631,7 +10180,10 @@ impl Tool for ImageSegmentationTool {
         defaults.insert("min_area".to_string(), json!(4));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("auto_reproject".to_string(), json!(true));
         example.insert("auto_reproject_method".to_string(), json!(""));
         example.insert("threshold".to_string(), json!(0.45));
@@ -9645,18 +10197,27 @@ impl Tool for ImageSegmentationTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_image_segmentation".to_string(),
                 description: "Segment a three-band stack with seeded region growing.".to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "segmentation".to_string(), "raster".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "segmentation".to_string(),
+                "raster".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -9664,7 +10225,9 @@ impl Tool for ImageSegmentationTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         if let Some(method) = args.get("auto_reproject_method").and_then(|v| v.as_str()) {
             let method = method.trim();
@@ -9679,10 +10242,23 @@ impl Tool for ImageSegmentationTool {
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_paths = parse_raster_list_arg(args, "inputs")?;
-        let threshold = args.get("threshold").and_then(|v| v.as_f64()).unwrap_or(0.5);
-        let steps = args.get("steps").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(10).max(1);
+        let threshold = args
+            .get("threshold")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.5);
+        let steps = args
+            .get("steps")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(10)
+            .max(1);
         let coalescer = PercentCoalescer::new(1, 99);
-        let min_area = args.get("min_area").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(4).max(1);
+        let min_area = args
+            .get("min_area")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(4)
+            .max(1);
         let output_path = parse_optional_output_path(args, "output")?;
         let auto_reproject = args
             .get("auto_reproject")
@@ -9714,7 +10290,10 @@ impl Tool for ImageSegmentationTool {
         let n = rasters[0].rows * rasters[0].cols;
         for (i, r) in rasters.iter().enumerate() {
             if r.rows as isize != rows || r.cols as isize != cols {
-                return Err(ToolError::Validation(format!("input raster dimensions mismatch at index {}", i)));
+                return Err(ToolError::Validation(format!(
+                    "input raster dimensions mismatch at index {}",
+                    i
+                )));
             }
         }
 
@@ -9739,8 +10318,21 @@ impl Tool for ImageSegmentationTool {
         }
         coalescer.emit_unit_fraction(ctx.progress, 0.20);
 
-        let n8 = [(-1isize, -1isize), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
-        let threshold2 = if threshold <= 0.0 { f64::INFINITY } else { threshold * threshold };
+        let n8 = [
+            (-1isize, -1isize),
+            (-1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+            (1, 0),
+            (1, -1),
+            (0, -1),
+        ];
+        let threshold2 = if threshold <= 0.0 {
+            f64::INFINITY
+        } else {
+            threshold * threshold
+        };
         let valid: Vec<bool> = (0..n)
             .into_par_iter()
             .map(|idx| zscores.iter().all(|band| band[idx].is_finite()))
@@ -9770,7 +10362,11 @@ impl Tool for ImageSegmentationTool {
                     local += sqr_dist_zscores_at(&zscores, idx, ni);
                     k += 1;
                 }
-                let avg = if k > 0 { local / k as f64 } else { f64::INFINITY };
+                let avg = if k > 0 {
+                    local / k as f64
+                } else {
+                    f64::INFINITY
+                };
                 let mut bin = if threshold2.is_finite() {
                     (avg / threshold2).floor() as isize
                 } else {
@@ -9841,7 +10437,8 @@ impl Tool for ImageSegmentationTool {
                 seg_cells.push(cells);
                 seg_center.push(center);
             }
-            coalescer.emit_unit_fraction(ctx.progress, 0.20 + 0.45 * ((b + 1) as f64 / steps as f64));
+            coalescer
+                .emit_unit_fraction(ctx.progress, 0.20 + 0.45 * ((b + 1) as f64 / steps as f64));
         }
 
         // Fill any remaining valid, unsolved cells by nearest solved neighbor BFS.
@@ -9935,8 +10532,8 @@ impl Tool for ImageSegmentationTool {
                 let n1 = seg_size[nid] as f64;
                 let n2 = seg_size[sid] as f64;
                 for d in 0..dims {
-                    seg_center[nid][d] = (seg_center[nid][d] * n1 + seg_center[sid][d] * n2)
-                        / (n1 + n2).max(1.0);
+                    seg_center[nid][d] =
+                        (seg_center[nid][d] * n1 + seg_center[sid][d] * n2) / (n1 + n2).max(1.0);
                 }
                 for &idx in &seg_cells[sid] {
                     seg[idx] = nid as isize;
@@ -9971,7 +10568,10 @@ impl Tool for ImageSegmentationTool {
             nodata: -1.0,
             data_type: DataType::I32,
             crs: rasters[0].crs.clone(),
-            metadata: vec![("color_interpretation".to_string(), "categorical".to_string())],
+            metadata: vec![(
+                "color_interpretation".to_string(),
+                "categorical".to_string(),
+            )],
         });
 
         for row in 0..rows {
@@ -10148,8 +10748,9 @@ fn scaling_mode_name(mode: ScalingMode) -> &'static str {
 }
 
 fn dense_matrix_from_2d(data: &Vec<Vec<f64>>, label: &str) -> Result<DenseMatrix<f64>, ToolError> {
-    DenseMatrix::from_2d_vec(data)
-        .map_err(|e| ToolError::Execution(format!("failed building dense matrix for {}: {e}", label)))
+    DenseMatrix::from_2d_vec(data).map_err(|e| {
+        ToolError::Execution(format!("failed building dense matrix for {}: {e}", label))
+    })
 }
 
 fn raster_min_max_valid(raster: &Raster) -> (f64, f64) {
@@ -10238,10 +10839,9 @@ fn extract_training_class_samples(
     layer: &wbvector::Layer,
     field_name: &str,
 ) -> Result<(Vec<String>, Vec<Vec<f64>>, Vec<usize>), ToolError> {
-    let field_idx = layer
-        .schema
-        .field_index(field_name)
-        .ok_or_else(|| ToolError::Validation(format!("field '{}' not found in training data", field_name)))?;
+    let field_idx = layer.schema.field_index(field_name).ok_or_else(|| {
+        ToolError::Validation(format!("field '{}' not found in training data", field_name))
+    })?;
 
     let mut class_set = std::collections::HashSet::new();
     for f in &layer.features {
@@ -10274,7 +10874,8 @@ fn extract_training_class_samples(
         match geom {
             VectorGeometry::Point(c) => {
                 if let Some((col, row)) = rasters[0].world_to_pixel(c.x, c.y) {
-                    if let Some(feat) = sample_scaled_features_at(rasters, mode, scalers, row, col) {
+                    if let Some(feat) = sample_scaled_features_at(rasters, mode, scalers, row, col)
+                    {
                         x.push(feat);
                         y.push(class_idx);
                     }
@@ -10283,7 +10884,9 @@ fn extract_training_class_samples(
             VectorGeometry::MultiPoint(coords) => {
                 for c in coords {
                     if let Some((col, row)) = rasters[0].world_to_pixel(c.x, c.y) {
-                        if let Some(feat) = sample_scaled_features_at(rasters, mode, scalers, row, col) {
+                        if let Some(feat) =
+                            sample_scaled_features_at(rasters, mode, scalers, row, col)
+                        {
                             x.push(feat);
                             y.push(class_idx);
                         }
@@ -10328,10 +10931,9 @@ fn extract_training_regression_samples(
     layer: &wbvector::Layer,
     field_name: &str,
 ) -> Result<(Vec<Vec<f64>>, Vec<f64>), ToolError> {
-    let field_idx = layer
-        .schema
-        .field_index(field_name)
-        .ok_or_else(|| ToolError::Validation(format!("field '{}' not found in training data", field_name)))?;
+    let field_idx = layer.schema.field_index(field_name).ok_or_else(|| {
+        ToolError::Validation(format!("field '{}' not found in training data", field_name))
+    })?;
 
     let mut x = Vec::<Vec<f64>>::new();
     let mut y = Vec::<f64>::new();
@@ -10352,7 +10954,8 @@ fn extract_training_regression_samples(
         match geom {
             VectorGeometry::Point(c) => {
                 if let Some((col, row)) = rasters[0].world_to_pixel(c.x, c.y) {
-                    if let Some(feat) = sample_scaled_features_at(rasters, mode, scalers, row, col) {
+                    if let Some(feat) = sample_scaled_features_at(rasters, mode, scalers, row, col)
+                    {
                         x.push(feat);
                         y.push(target);
                     }
@@ -10361,7 +10964,9 @@ fn extract_training_regression_samples(
             VectorGeometry::MultiPoint(coords) => {
                 for c in coords {
                     if let Some((col, row)) = rasters[0].world_to_pixel(c.x, c.y) {
-                        if let Some(feat) = sample_scaled_features_at(rasters, mode, scalers, row, col) {
+                        if let Some(feat) =
+                            sample_scaled_features_at(rasters, mode, scalers, row, col)
+                        {
                             x.push(feat);
                             y.push(target);
                         }
@@ -10448,7 +11053,10 @@ impl Tool for KnnClassificationTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training.shp"));
@@ -10458,7 +11066,10 @@ impl Tool for KnnClassificationTool {
         defaults.insert("clip".to_string(), json!(false));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training.shp"));
         example.insert("class_field".to_string(), json!("class"));
         example.insert("scaling".to_string(), json!("standardize"));
@@ -10472,18 +11083,28 @@ impl Tool for KnnClassificationTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_knn_classification".to_string(),
-                description: "Run kNN classification with standardized features and clipping.".to_string(),
+                description: "Run kNN classification with standardized features and clipping."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "classification".to_string(), "knn".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "classification".to_string(),
+                "knn".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -10491,43 +11112,66 @@ impl Tool for KnnClassificationTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
-        let _ = args.get("class_field").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+        let _ = args
+            .get("class_field")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let training_path = parse_vector_path_arg(args, "training_data")?;
-        let class_field = args.get("class_field").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+        let class_field = args
+            .get("class_field")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         let mode = parse_scaling_mode(args);
-        let mut k = args.get("k").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(5).max(1);
+        let mut k = args
+            .get("k")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(5)
+            .max(1);
         let clip = args.get("clip").and_then(|v| v.as_bool()).unwrap_or(false);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", Some(ctx))?;
         let scalers = build_scalers(&rasters, mode);
         let layer = load_vector_layer(&training_path, "training_data")?;
-        let (_class_names, mut x_train, mut y_train) = extract_training_class_samples(&rasters, mode, &scalers, &layer, class_field)?;
+        let (_class_names, mut x_train, mut y_train) =
+            extract_training_class_samples(&rasters, mode, &scalers, &layer, class_field)?;
         if x_train.is_empty() {
-            return Err(ToolError::Validation("no training samples extracted".to_string()));
+            return Err(ToolError::Validation(
+                "no training samples extracted".to_string(),
+            ));
         }
         k = k.min(x_train.len());
 
         if clip && x_train.len() > 2 {
             let mut tree = KdTree::new(rasters.len());
             for i in 0..x_train.len() {
-                tree.add(x_train[i].clone(), i)
-                    .map_err(|e| ToolError::Execution(format!("kdtree add failed during clipping: {e}")))?;
+                tree.add(x_train[i].clone(), i).map_err(|e| {
+                    ToolError::Execution(format!("kdtree add failed during clipping: {e}"))
+                })?;
             }
             let mut keep = vec![true; x_train.len()];
             for i in 0..x_train.len() {
                 let ret = tree
                     .nearest(&x_train[i], (k + 1).min(x_train.len()), &squared_euclidean)
-                    .map_err(|e| ToolError::Execution(format!("kdtree query failed during clipping: {e}")))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("kdtree query failed during clipping: {e}"))
+                    })?;
                 let mut neigh_labels = Vec::<usize>::new();
                 for (_d, idx_ref) in ret {
                     let idx = *idx_ref;
@@ -10577,7 +11221,10 @@ impl Tool for KnnClassificationTool {
             nodata: -32768.0,
             data_type: DataType::I16,
             crs: rasters[0].crs.clone(),
-            metadata: vec![("color_interpretation".to_string(), "categorical".to_string())],
+            metadata: vec![(
+                "color_interpretation".to_string(),
+                "categorical".to_string(),
+            )],
         });
 
         let rows_usize = rows as usize;
@@ -10589,7 +11236,8 @@ impl Tool for KnnClassificationTool {
                 let mut out_row = vec![None; cols_usize];
                 for col_u in 0..cols_usize {
                     let col = col_u as isize;
-                    let Some(feat) = sample_scaled_features_at(&rasters, mode, &scalers, row, col) else {
+                    let Some(feat) = sample_scaled_features_at(&rasters, mode, &scalers, row, col)
+                    else {
                         continue;
                     };
                     let ret = tree
@@ -10617,7 +11265,8 @@ impl Tool for KnnClassificationTool {
                 }
             }
             if row % 100 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
             }
         }
         ctx.progress.progress(1.0);
@@ -10662,7 +11311,10 @@ impl Tool for KnnRegressionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training_points.shp"));
@@ -10672,7 +11324,10 @@ impl Tool for KnnRegressionTool {
         defaults.insert("distance_weighted".to_string(), json!(false));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training_points.shp"));
         example.insert("field".to_string(), json!("value"));
         example.insert("scaling".to_string(), json!("standardize"));
@@ -10686,18 +11341,27 @@ impl Tool for KnnRegressionTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_knn_regression".to_string(),
                 description: "Run kNN regression with distance weighting.".to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "regression".to_string(), "knn".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "regression".to_string(),
+                "knn".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -10705,27 +11369,44 @@ impl Tool for KnnRegressionTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
-        let _ = args.get("field").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'field' is required".to_string()))?;
+        let _ = args
+            .get("field")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::Validation("parameter 'field' is required".to_string()))?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let training_path = parse_vector_path_arg(args, "training_data")?;
-        let field = args.get("field").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'field' is required".to_string()))?;
+        let field = args
+            .get("field")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::Validation("parameter 'field' is required".to_string()))?;
         let mode = parse_scaling_mode(args);
-        let mut k = args.get("k").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(5).max(1);
-        let distance_weighted = args.get("distance_weighted").and_then(|v| v.as_bool()).unwrap_or(false);
+        let mut k = args
+            .get("k")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(5)
+            .max(1);
+        let distance_weighted = args
+            .get("distance_weighted")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", Some(ctx))?;
         let scalers = build_scalers(&rasters, mode);
         let layer = load_vector_layer(&training_path, "training_data")?;
-        let (x_train, y_train) = extract_training_regression_samples(&rasters, mode, &scalers, &layer, field)?;
+        let (x_train, y_train) =
+            extract_training_regression_samples(&rasters, mode, &scalers, &layer, field)?;
         k = k.min(x_train.len());
 
         let mut tree = KdTree::new(rasters.len());
@@ -10778,7 +11459,11 @@ impl Tool for KnnRegressionTool {
                             sum_w += w;
                             sum_y += w * y_train[*idx_ref];
                         }
-                        if sum_w > 0.0 { sum_y / sum_w } else { nodata_out }
+                        if sum_w > 0.0 {
+                            sum_y / sum_w
+                        } else {
+                            nodata_out
+                        }
                     } else {
                         let mut sum = 0.0;
                         let mut n = 0usize;
@@ -10786,7 +11471,11 @@ impl Tool for KnnRegressionTool {
                             sum += y_train[*idx_ref];
                             n += 1;
                         }
-                        if n > 0 { sum / n as f64 } else { nodata_out }
+                        if n > 0 {
+                            sum / n as f64
+                        } else {
+                            nodata_out
+                        }
                     };
                     if pred != nodata_out {
                         out_row[col_u] = Some(pred);
@@ -10805,7 +11494,8 @@ impl Tool for KnnRegressionTool {
                 }
             }
             if row % 100 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
             }
         }
         ctx.progress.progress(1.0);
@@ -10851,7 +11541,10 @@ impl Tool for FuzzyKnnClassificationTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training.shp"));
@@ -10861,13 +11554,19 @@ impl Tool for FuzzyKnnClassificationTool {
         defaults.insert("m".to_string(), json!(2.0));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training.shp"));
         example.insert("class_field".to_string(), json!("class"));
         example.insert("k".to_string(), json!(7));
         example.insert("m".to_string(), json!(2.0));
         example.insert("output".to_string(), json!("fuzzy_knn_classified.tif"));
-        example.insert("probability_output".to_string(), json!("fuzzy_knn_probability.tif"));
+        example.insert(
+            "probability_output".to_string(),
+            json!("fuzzy_knn_probability.tif"),
+        );
 
         ToolManifest {
             id: meta.id.to_string(),
@@ -10875,18 +11574,29 @@ impl Tool for FuzzyKnnClassificationTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_fuzzy_knn_classification".to_string(),
-                description: "Run fuzzy kNN and output both class and confidence rasters.".to_string(),
+                description: "Run fuzzy kNN and output both class and confidence rasters."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "classification".to_string(), "knn".to_string(), "fuzzy".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "classification".to_string(),
+                "knn".to_string(),
+                "fuzzy".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -10894,28 +11604,50 @@ impl Tool for FuzzyKnnClassificationTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
-        let _ = args.get("class_field").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+        let _ = args
+            .get("class_field")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let training_path = parse_vector_path_arg(args, "training_data")?;
-        let class_field = args.get("class_field").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+        let class_field = args
+            .get("class_field")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         let mode = parse_scaling_mode(args);
-        let mut k = args.get("k").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(5).max(1);
-        let m = args.get("m").and_then(|v| v.as_f64()).unwrap_or(2.0).max(1.01);
+        let mut k = args
+            .get("k")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(5)
+            .max(1);
+        let m = args
+            .get("m")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(2.0)
+            .max(1.01);
         let output_path = parse_optional_output_path(args, "output")?;
         let prob_output_path = parse_optional_output_path(args, "probability_output")?;
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", Some(ctx))?;
         let scalers = build_scalers(&rasters, mode);
         let layer = load_vector_layer(&training_path, "training_data")?;
-        let (class_names, x_train, y_train) = extract_training_class_samples(&rasters, mode, &scalers, &layer, class_field)?;
+        let (class_names, x_train, y_train) =
+            extract_training_class_samples(&rasters, mode, &scalers, &layer, class_field)?;
         k = k.min(x_train.len());
 
         let mut tree = KdTree::new(rasters.len());
@@ -10937,7 +11669,10 @@ impl Tool for FuzzyKnnClassificationTool {
             nodata: -32768.0,
             data_type: DataType::I16,
             crs: rasters[0].crs.clone(),
-            metadata: vec![("color_interpretation".to_string(), "categorical".to_string())],
+            metadata: vec![(
+                "color_interpretation".to_string(),
+                "categorical".to_string(),
+            )],
         });
         let mut prob_out = Raster::new(RasterConfig {
             rows: rasters[0].rows,
@@ -11010,7 +11745,8 @@ impl Tool for FuzzyKnnClassificationTool {
                 }
             }
             if row % 100 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
             }
         }
         ctx.progress.progress(1.0);
@@ -11058,7 +11794,10 @@ impl Tool for RandomForestClassificationTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training.shp"));
@@ -11069,7 +11808,10 @@ impl Tool for RandomForestClassificationTool {
         defaults.insert("min_samples_split".to_string(), json!(2));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training.shp"));
         example.insert("class_field".to_string(), json!("class"));
         example.insert("scaling".to_string(), json!("standardize"));
@@ -11082,18 +11824,28 @@ impl Tool for RandomForestClassificationTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_random_forest_classification".to_string(),
-                description: "Run random forest classification on multiband predictors.".to_string(),
+                description: "Run random forest classification on multiband predictors."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "classification".to_string(), "random_forest".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "classification".to_string(),
+                "random_forest".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -11101,28 +11853,49 @@ impl Tool for RandomForestClassificationTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
         let _ = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let training_path = parse_vector_path_arg(args, "training_data")?;
         let class_field = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         let mode = parse_scaling_mode(args);
-        let n_trees = args.get("n_trees").and_then(|v| v.as_u64()).map(|v| v as u16).unwrap_or(200).max(1);
-        let min_samples_leaf = args.get("min_samples_leaf").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(1).max(1);
-        let min_samples_split = args.get("min_samples_split").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(2).max(2);
+        let n_trees = args
+            .get("n_trees")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u16)
+            .unwrap_or(200)
+            .max(1);
+        let min_samples_leaf = args
+            .get("min_samples_leaf")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(1)
+            .max(1);
+        let min_samples_split = args
+            .get("min_samples_split")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(2)
+            .max(2);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", Some(ctx))?;
@@ -11133,7 +11906,9 @@ impl Tool for RandomForestClassificationTool {
             extract_training_class_samples(&rasters, mode, &scalers, &layer, class_field)?;
 
         if x_train.is_empty() {
-            return Err(ToolError::Validation("no training samples extracted".to_string()));
+            return Err(ToolError::Validation(
+                "no training samples extracted".to_string(),
+            ));
         }
 
         let y_train: Vec<u32> = y_train_raw.into_iter().map(|v| v as u32).collect();
@@ -11143,9 +11918,10 @@ impl Tool for RandomForestClassificationTool {
             .with_min_samples_leaf(min_samples_leaf)
             .with_min_samples_split(min_samples_split);
 
-        let model = RandomForestClassifier::fit(&x_train_matrix, &y_train, params).map_err(|e| {
-            ToolError::Execution(format!("random forest classification fit failed: {e}"))
-        })?;
+        let model =
+            RandomForestClassifier::fit(&x_train_matrix, &y_train, params).map_err(|e| {
+                ToolError::Execution(format!("random forest classification fit failed: {e}"))
+            })?;
 
         let rows = rasters[0].rows as isize;
         let cols = rasters[0].cols as isize;
@@ -11160,7 +11936,10 @@ impl Tool for RandomForestClassificationTool {
             nodata: -32768.0,
             data_type: DataType::I16,
             crs: rasters[0].crs.clone(),
-            metadata: vec![("color_interpretation".to_string(), "categorical".to_string())],
+            metadata: vec![(
+                "color_interpretation".to_string(),
+                "categorical".to_string(),
+            )],
         });
 
         for row in 0..rows {
@@ -11176,7 +11955,9 @@ impl Tool for RandomForestClassificationTool {
             if !batch_feats.is_empty() {
                 let batch = dense_matrix_from_2d(&batch_feats, "prediction batch")?;
                 let preds = model.predict(&batch).map_err(|e| {
-                    ToolError::Execution(format!("random forest classification predict failed: {e}"))
+                    ToolError::Execution(format!(
+                        "random forest classification predict failed: {e}"
+                    ))
                 })?;
                 for (i, pred) in preds.iter().enumerate() {
                     let _ = output.set(0, row, batch_cols[i], (*pred as f64) + 1.0);
@@ -11184,7 +11965,8 @@ impl Tool for RandomForestClassificationTool {
             }
 
             if row % 100 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
             }
         }
         ctx.progress.progress(1.0);
@@ -11230,7 +12012,10 @@ impl Tool for RandomForestRegressionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training_points.shp"));
@@ -11241,7 +12026,10 @@ impl Tool for RandomForestRegressionTool {
         defaults.insert("min_samples_split".to_string(), json!(2));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training_points.shp"));
         example.insert("field".to_string(), json!("target"));
         example.insert("scaling".to_string(), json!("standardize"));
@@ -11254,18 +12042,27 @@ impl Tool for RandomForestRegressionTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_random_forest_regression".to_string(),
                 description: "Run random forest regression on multiband predictors.".to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "regression".to_string(), "random_forest".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "regression".to_string(),
+                "random_forest".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -11273,7 +12070,9 @@ impl Tool for RandomForestRegressionTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
@@ -11285,26 +12084,44 @@ impl Tool for RandomForestRegressionTool {
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let training_path = parse_vector_path_arg(args, "training_data")?;
         let field = args
             .get("field")
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'field' is required".to_string()))?;
         let mode = parse_scaling_mode(args);
-        let n_trees = args.get("n_trees").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(200).max(1);
-        let min_samples_leaf = args.get("min_samples_leaf").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(1).max(1);
-        let min_samples_split = args.get("min_samples_split").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(2).max(2);
+        let n_trees = args
+            .get("n_trees")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(200)
+            .max(1);
+        let min_samples_leaf = args
+            .get("min_samples_leaf")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(1)
+            .max(1);
+        let min_samples_split = args
+            .get("min_samples_split")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(2)
+            .max(2);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", Some(ctx))?;
 
         let scalers = build_scalers(&rasters, mode);
         let layer = load_vector_layer(&training_path, "training_data")?;
-        let (x_train, y_train) = extract_training_regression_samples(&rasters, mode, &scalers, &layer, field)?;
+        let (x_train, y_train) =
+            extract_training_regression_samples(&rasters, mode, &scalers, &layer, field)?;
 
         if x_train.is_empty() {
-            return Err(ToolError::Validation("no training samples extracted".to_string()));
+            return Err(ToolError::Validation(
+                "no training samples extracted".to_string(),
+            ));
         }
 
         let x_train_matrix = dense_matrix_from_2d(&x_train, "training features")?;
@@ -11353,7 +12170,8 @@ impl Tool for RandomForestRegressionTool {
             }
 
             if row % 100 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
             }
         }
         ctx.progress.progress(1.0);
@@ -11370,19 +12188,57 @@ impl Tool for RandomForestClassificationFitTool {
         ToolMetadata {
             id: "random_forest_classification_fit",
             display_name: "Random Forest Classification Fit",
-            summary: "Fits a random forest classification model and returns serialized model bytes.",
+            summary:
+                "Fits a random forest classification model and returns serialized model bytes.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "inputs", description: "Array of single-band input rasters.", required: true },
-                ToolParamSpec { name: "training_data", description: "Point/polygon vector training data path.", required: true },
-                ToolParamSpec { name: "class_field", description: "Class field in training_data attributes.", required: true },
-                ToolParamSpec { name: "scaling", description: "Feature scaling mode: none (default), normalize, standardize.", required: false },
-                ToolParamSpec { name: "split_criterion", description: "Tree split criterion hint (retained for legacy compatibility).", required: false },
-                ToolParamSpec { name: "n_trees", description: "Number of trees in the forest (default 200).", required: false },
-                ToolParamSpec { name: "min_samples_leaf", description: "Minimum number of samples required at a leaf node (default 1).", required: false },
-                ToolParamSpec { name: "min_samples_split", description: "Minimum number of samples required to split an internal node (default 2).", required: false },
-                ToolParamSpec { name: "test_proportion", description: "Legacy compatibility argument; reserved for future diagnostics.", required: false },
+                ToolParamSpec {
+                    name: "inputs",
+                    description: "Array of single-band input rasters.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "training_data",
+                    description: "Point/polygon vector training data path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "class_field",
+                    description: "Class field in training_data attributes.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "scaling",
+                    description: "Feature scaling mode: none (default), normalize, standardize.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "split_criterion",
+                    description: "Tree split criterion hint (retained for legacy compatibility).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "n_trees",
+                    description: "Number of trees in the forest (default 200).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "min_samples_leaf",
+                    description: "Minimum number of samples required at a leaf node (default 1).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "min_samples_split",
+                    description:
+                        "Minimum number of samples required to split an internal node (default 2).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "test_proportion",
+                    description: "Legacy compatibility argument; reserved for future diagnostics.",
+                    required: false,
+                },
             ],
         }
     }
@@ -11390,14 +12246,18 @@ impl Tool for RandomForestClassificationFitTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
         let _ = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         Ok(())
     }
 
@@ -11406,11 +12266,28 @@ impl Tool for RandomForestClassificationFitTool {
         let class_field = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         let mode = parse_scaling_mode(args);
-        let n_trees = args.get("n_trees").and_then(|v| v.as_u64()).map(|v| v as u16).unwrap_or(200).max(1);
-        let min_samples_leaf = args.get("min_samples_leaf").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(1).max(1);
-        let min_samples_split = args.get("min_samples_split").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(2).max(2);
+        let n_trees = args
+            .get("n_trees")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as u16)
+            .unwrap_or(200)
+            .max(1);
+        let min_samples_leaf = args
+            .get("min_samples_leaf")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(1)
+            .max(1);
+        let min_samples_split = args
+            .get("min_samples_split")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(2)
+            .max(2);
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", None)?;
 
@@ -11420,7 +12297,9 @@ impl Tool for RandomForestClassificationFitTool {
             extract_training_class_samples(&rasters, mode, &scalers, &layer, class_field)?;
 
         if x_train.is_empty() {
-            return Err(ToolError::Validation("no training samples extracted".to_string()));
+            return Err(ToolError::Validation(
+                "no training samples extracted".to_string(),
+            ));
         }
         let y_train: Vec<u32> = y_train_raw.into_iter().map(|v| v as u32).collect();
 
@@ -11429,8 +12308,10 @@ impl Tool for RandomForestClassificationFitTool {
             .with_n_trees(n_trees)
             .with_min_samples_leaf(min_samples_leaf)
             .with_min_samples_split(min_samples_split);
-        let model = RandomForestClassifier::fit(&x_train_matrix, &y_train, params)
-            .map_err(|e| ToolError::Execution(format!("random forest classification fit failed: {e}")))?;
+        let model =
+            RandomForestClassifier::fit(&x_train_matrix, &y_train, params).map_err(|e| {
+                ToolError::Execution(format!("random forest classification fit failed: {e}"))
+            })?;
 
         let bundle = RfClassificationModelBundle {
             kind: "rf_classification_v2".to_string(),
@@ -11440,7 +12321,9 @@ impl Tool for RandomForestClassificationFitTool {
             model,
         };
         let model_bytes = bincode::serde::encode_to_vec(&bundle, bincode::config::standard())
-            .map_err(|e| ToolError::Execution(format!("failed to serialize random forest model: {e}")))?;
+            .map_err(|e| {
+                ToolError::Execution(format!("failed to serialize random forest model: {e}"))
+            })?;
 
         let mut outputs = BTreeMap::new();
         outputs.insert("model_bytes".to_string(), json!(model_bytes));
@@ -11453,13 +12336,26 @@ impl Tool for RandomForestClassificationPredictTool {
         ToolMetadata {
             id: "random_forest_classification_predict",
             display_name: "Random Forest Classification Predict",
-            summary: "Applies a serialized random forest classification model to multi-band predictors.",
+            summary:
+                "Applies a serialized random forest classification model to multi-band predictors.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "inputs", description: "Array of single-band input rasters.", required: true },
-                ToolParamSpec { name: "model_bytes", description: "Model bytes produced by random_forest_classification_fit.", required: true },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "inputs",
+                    description: "Array of single-band input rasters.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "model_bytes",
+                    description: "Model bytes produced by random_forest_classification_fit.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -11467,18 +12363,24 @@ impl Tool for RandomForestClassificationPredictTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = args
             .get("model_bytes")
             .and_then(|v| v.as_array())
-            .ok_or_else(|| ToolError::Validation("parameter 'model_bytes' is required and must be a list of bytes".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation(
+                    "parameter 'model_bytes' is required and must be a list of bytes".to_string(),
+                )
+            })?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let output_path = parse_optional_output_path(args, "output")?;
         let model_bytes = parse_model_bytes_arg(args)?;
         let rasters = load_aligned_raster_stack_arg(args, "inputs", Some(ctx))?;
@@ -11509,16 +12411,13 @@ impl Tool for RandomForestClassificationPredictTool {
                 }
                 Err(_) => {
                     // Backward compatibility: accept v1 payloads that stored training data.
-                    let payload: serde_json::Value = serde_json::from_slice(&model_bytes)
-                        .map_err(|e| {
+                    let payload: serde_json::Value =
+                        serde_json::from_slice(&model_bytes).map_err(|e| {
                             ToolError::Validation(format!(
                                 "failed to parse model_bytes as current or legacy payload: {e}"
                             ))
                         })?;
-                    let kind = payload
-                        .get("kind")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
+                    let kind = payload.get("kind").and_then(|v| v.as_str()).unwrap_or("");
                     if kind != "rf_classification_v1" {
                         return Err(ToolError::Validation(
                             "model_bytes payload kind is not rf_classification_v1".to_string(),
@@ -11545,27 +12444,17 @@ impl Tool for RandomForestClassificationPredictTool {
                         .unwrap_or(2) as usize;
 
                     let x_train: Vec<Vec<f64>> = serde_json::from_value(
-                        payload
-                            .get("x_train")
-                            .cloned()
-                            .ok_or_else(|| {
-                                ToolError::Validation(
-                                    "model_bytes payload missing x_train".to_string(),
-                                )
-                            })?,
+                        payload.get("x_train").cloned().ok_or_else(|| {
+                            ToolError::Validation("model_bytes payload missing x_train".to_string())
+                        })?,
                     )
                     .map_err(|e| {
                         ToolError::Validation(format!("invalid x_train in model payload: {e}"))
                     })?;
                     let y_train: Vec<u32> = serde_json::from_value(
-                        payload
-                            .get("y_train")
-                            .cloned()
-                            .ok_or_else(|| {
-                                ToolError::Validation(
-                                    "model_bytes payload missing y_train".to_string(),
-                                )
-                            })?,
+                        payload.get("y_train").cloned().ok_or_else(|| {
+                            ToolError::Validation("model_bytes payload missing y_train".to_string())
+                        })?,
                     )
                     .map_err(|e| {
                         ToolError::Validation(format!("invalid y_train in model payload: {e}"))
@@ -11600,7 +12489,10 @@ impl Tool for RandomForestClassificationPredictTool {
             nodata: -32768.0,
             data_type: DataType::I16,
             crs: rasters[0].crs.clone(),
-            metadata: vec![("color_interpretation".to_string(), "categorical".to_string())],
+            metadata: vec![(
+                "color_interpretation".to_string(),
+                "categorical".to_string(),
+            )],
         });
 
         for row in 0..rows {
@@ -11616,7 +12508,9 @@ impl Tool for RandomForestClassificationPredictTool {
             if !batch_feats.is_empty() {
                 let batch = dense_matrix_from_2d(&batch_feats, "prediction batch")?;
                 let preds = model.predict(&batch).map_err(|e| {
-                    ToolError::Execution(format!("random forest classification predict failed: {e}"))
+                    ToolError::Execution(format!(
+                        "random forest classification predict failed: {e}"
+                    ))
                 })?;
                 for (i, pred) in preds.iter().enumerate() {
                     let _ = output.set(0, row, batch_cols[i], (*pred as f64) + 1.0);
@@ -11624,7 +12518,8 @@ impl Tool for RandomForestClassificationPredictTool {
             }
 
             if row % 100 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
             }
         }
         ctx.progress.progress(1.0);
@@ -11645,14 +12540,47 @@ impl Tool for RandomForestRegressionFitTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "inputs", description: "Array of single-band input rasters.", required: true },
-                ToolParamSpec { name: "training_data", description: "Point vector training data path.", required: true },
-                ToolParamSpec { name: "field", description: "Numeric target field in training_data attributes.", required: true },
-                ToolParamSpec { name: "scaling", description: "Feature scaling mode: none (default), normalize, standardize.", required: false },
-                ToolParamSpec { name: "n_trees", description: "Number of trees in the forest (default 200).", required: false },
-                ToolParamSpec { name: "min_samples_leaf", description: "Minimum number of samples required at a leaf node (default 1).", required: false },
-                ToolParamSpec { name: "min_samples_split", description: "Minimum number of samples required to split an internal node (default 2).", required: false },
-                ToolParamSpec { name: "test_proportion", description: "Legacy compatibility argument; reserved for future diagnostics.", required: false },
+                ToolParamSpec {
+                    name: "inputs",
+                    description: "Array of single-band input rasters.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "training_data",
+                    description: "Point vector training data path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Numeric target field in training_data attributes.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "scaling",
+                    description: "Feature scaling mode: none (default), normalize, standardize.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "n_trees",
+                    description: "Number of trees in the forest (default 200).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "min_samples_leaf",
+                    description: "Minimum number of samples required at a leaf node (default 1).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "min_samples_split",
+                    description:
+                        "Minimum number of samples required to split an internal node (default 2).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "test_proportion",
+                    description: "Legacy compatibility argument; reserved for future diagnostics.",
+                    required: false,
+                },
             ],
         }
     }
@@ -11660,7 +12588,9 @@ impl Tool for RandomForestRegressionFitTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
@@ -11678,17 +12608,35 @@ impl Tool for RandomForestRegressionFitTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'field' is required".to_string()))?;
         let mode = parse_scaling_mode(args);
-        let n_trees = args.get("n_trees").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(200).max(1);
-        let min_samples_leaf = args.get("min_samples_leaf").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(1).max(1);
-        let min_samples_split = args.get("min_samples_split").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(2).max(2);
+        let n_trees = args
+            .get("n_trees")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(200)
+            .max(1);
+        let min_samples_leaf = args
+            .get("min_samples_leaf")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(1)
+            .max(1);
+        let min_samples_split = args
+            .get("min_samples_split")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(2)
+            .max(2);
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", None)?;
 
         let scalers = build_scalers(&rasters, mode);
         let layer = load_vector_layer(&training_path, "training_data")?;
-        let (x_train, y_train) = extract_training_regression_samples(&rasters, mode, &scalers, &layer, field)?;
+        let (x_train, y_train) =
+            extract_training_regression_samples(&rasters, mode, &scalers, &layer, field)?;
         if x_train.is_empty() {
-            return Err(ToolError::Validation("no training samples extracted".to_string()));
+            return Err(ToolError::Validation(
+                "no training samples extracted".to_string(),
+            ));
         }
 
         let x_train_matrix = dense_matrix_from_2d(&x_train, "training features")?;
@@ -11696,8 +12644,9 @@ impl Tool for RandomForestRegressionFitTool {
             .with_n_trees(n_trees)
             .with_min_samples_leaf(min_samples_leaf)
             .with_min_samples_split(min_samples_split);
-        let model = RandomForestRegressor::fit(&x_train_matrix, &y_train, params)
-            .map_err(|e| ToolError::Execution(format!("random forest regression fit failed: {e}")))?;
+        let model = RandomForestRegressor::fit(&x_train_matrix, &y_train, params).map_err(|e| {
+            ToolError::Execution(format!("random forest regression fit failed: {e}"))
+        })?;
 
         let bundle = RfRegressionModelBundle {
             kind: "rf_regression_v2".to_string(),
@@ -11707,7 +12656,9 @@ impl Tool for RandomForestRegressionFitTool {
             model,
         };
         let model_bytes = bincode::serde::encode_to_vec(&bundle, bincode::config::standard())
-            .map_err(|e| ToolError::Execution(format!("failed to serialize random forest model: {e}")))?;
+            .map_err(|e| {
+                ToolError::Execution(format!("failed to serialize random forest model: {e}"))
+            })?;
 
         let mut outputs = BTreeMap::new();
         outputs.insert("model_bytes".to_string(), json!(model_bytes));
@@ -11720,13 +12671,26 @@ impl Tool for RandomForestRegressionPredictTool {
         ToolMetadata {
             id: "random_forest_regression_predict",
             display_name: "Random Forest Regression Predict",
-            summary: "Applies a serialized random forest regression model to multi-band predictors.",
+            summary:
+                "Applies a serialized random forest regression model to multi-band predictors.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "inputs", description: "Array of single-band input rasters.", required: true },
-                ToolParamSpec { name: "model_bytes", description: "Model bytes produced by random_forest_regression_fit.", required: true },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "inputs",
+                    description: "Array of single-band input rasters.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "model_bytes",
+                    description: "Model bytes produced by random_forest_regression_fit.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -11734,18 +12698,24 @@ impl Tool for RandomForestRegressionPredictTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = args
             .get("model_bytes")
             .and_then(|v| v.as_array())
-            .ok_or_else(|| ToolError::Validation("parameter 'model_bytes' is required and must be a list of bytes".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation(
+                    "parameter 'model_bytes' is required and must be a list of bytes".to_string(),
+                )
+            })?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let output_path = parse_optional_output_path(args, "output")?;
         let model_bytes = parse_model_bytes_arg(args)?;
         let rasters = load_aligned_raster_stack_arg(args, "inputs", Some(ctx))?;
@@ -11776,16 +12746,13 @@ impl Tool for RandomForestRegressionPredictTool {
                 }
                 Err(_) => {
                     // Backward compatibility: accept v1 payloads that stored training data.
-                    let payload: serde_json::Value = serde_json::from_slice(&model_bytes)
-                        .map_err(|e| {
+                    let payload: serde_json::Value =
+                        serde_json::from_slice(&model_bytes).map_err(|e| {
                             ToolError::Validation(format!(
                                 "failed to parse model_bytes as current or legacy payload: {e}"
                             ))
                         })?;
-                    let kind = payload
-                        .get("kind")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
+                    let kind = payload.get("kind").and_then(|v| v.as_str()).unwrap_or("");
                     if kind != "rf_regression_v1" {
                         return Err(ToolError::Validation(
                             "model_bytes payload kind is not rf_regression_v1".to_string(),
@@ -11812,27 +12779,17 @@ impl Tool for RandomForestRegressionPredictTool {
                         .unwrap_or(2) as usize;
 
                     let x_train: Vec<Vec<f64>> = serde_json::from_value(
-                        payload
-                            .get("x_train")
-                            .cloned()
-                            .ok_or_else(|| {
-                                ToolError::Validation(
-                                    "model_bytes payload missing x_train".to_string(),
-                                )
-                            })?,
+                        payload.get("x_train").cloned().ok_or_else(|| {
+                            ToolError::Validation("model_bytes payload missing x_train".to_string())
+                        })?,
                     )
                     .map_err(|e| {
                         ToolError::Validation(format!("invalid x_train in model payload: {e}"))
                     })?;
                     let y_train: Vec<f64> = serde_json::from_value(
-                        payload
-                            .get("y_train")
-                            .cloned()
-                            .ok_or_else(|| {
-                                ToolError::Validation(
-                                    "model_bytes payload missing y_train".to_string(),
-                                )
-                            })?,
+                        payload.get("y_train").cloned().ok_or_else(|| {
+                            ToolError::Validation("model_bytes payload missing y_train".to_string())
+                        })?,
                     )
                     .map_err(|e| {
                         ToolError::Validation(format!("invalid y_train in model payload: {e}"))
@@ -11891,7 +12848,8 @@ impl Tool for RandomForestRegressionPredictTool {
             }
 
             if row % 100 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
             }
         }
         ctx.progress.progress(1.0);
@@ -11935,7 +12893,10 @@ impl Tool for LogisticRegressionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training.shp"));
@@ -11944,7 +12905,10 @@ impl Tool for LogisticRegressionTool {
         defaults.insert("alpha".to_string(), json!(0.0));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training.shp"));
         example.insert("class_field".to_string(), json!("class"));
         example.insert("scaling".to_string(), json!("standardize"));
@@ -11957,18 +12921,28 @@ impl Tool for LogisticRegressionTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_logistic_regression".to_string(),
-                description: "Run multinomial logistic regression on multiband predictors.".to_string(),
+                description: "Run multinomial logistic regression on multiband predictors."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "classification".to_string(), "logistic_regression".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "classification".to_string(),
+                "logistic_regression".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -11976,14 +12950,18 @@ impl Tool for LogisticRegressionTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
         let _ = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         Ok(())
     }
 
@@ -11992,9 +12970,15 @@ impl Tool for LogisticRegressionTool {
         let class_field = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         let mode = parse_scaling_mode(args);
-        let alpha = args.get("alpha").and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0);
+        let alpha = args
+            .get("alpha")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0)
+            .max(0.0);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", None)?;
@@ -12004,21 +12988,24 @@ impl Tool for LogisticRegressionTool {
         let (_class_names, x_train, y_train_raw) =
             extract_training_class_samples(&rasters, mode, &scalers, &layer, class_field)?;
         if x_train.is_empty() {
-            return Err(ToolError::Validation("no training samples extracted".to_string()));
+            return Err(ToolError::Validation(
+                "no training samples extracted".to_string(),
+            ));
         }
 
         let (x_pred, pred_coords) = collect_scaled_predictor_rows(&rasters, mode, &scalers);
         if x_pred.is_empty() {
-            return Err(ToolError::Validation("no valid predictor cells available for classification".to_string()));
+            return Err(ToolError::Validation(
+                "no valid predictor cells available for classification".to_string(),
+            ));
         }
 
         let x_train_matrix = dense_matrix_from_2d(&x_train, "training features")?;
         let x_pred_matrix = dense_matrix_from_2d(&x_pred, "prediction features")?;
         let y_train: Vec<u32> = y_train_raw.into_iter().map(|v| v as u32).collect();
         let params = LogisticRegressionParameters::default().with_alpha(alpha);
-        let model = LogisticRegression::fit(&x_train_matrix, &y_train, params).map_err(|e| {
-            ToolError::Execution(format!("logistic regression fit failed: {e}"))
-        })?;
+        let model = LogisticRegression::fit(&x_train_matrix, &y_train, params)
+            .map_err(|e| ToolError::Execution(format!("logistic regression fit failed: {e}")))?;
 
         let preds = model.predict(&x_pred_matrix).map_err(|e| {
             ToolError::Execution(format!("logistic regression predict failed: {e}"))
@@ -12035,7 +13022,10 @@ impl Tool for LogisticRegressionTool {
             nodata: -32768.0,
             data_type: DataType::I16,
             crs: rasters[0].crs.clone(),
-            metadata: vec![("color_interpretation".to_string(), "categorical".to_string())],
+            metadata: vec![(
+                "color_interpretation".to_string(),
+                "categorical".to_string(),
+            )],
         });
 
         for (i, (row, col)) in pred_coords.iter().enumerate() {
@@ -12085,7 +13075,10 @@ impl Tool for SvmClassificationTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training.shp"));
@@ -12096,7 +13089,10 @@ impl Tool for SvmClassificationTool {
         defaults.insert("epoch".to_string(), json!(2));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training.shp"));
         example.insert("class_field".to_string(), json!("class"));
         example.insert("scaling".to_string(), json!("standardize"));
@@ -12112,18 +13108,28 @@ impl Tool for SvmClassificationTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_svm_classification".to_string(),
-                description: "Run one-vs-rest SVM classification on multiband predictors.".to_string(),
+                description: "Run one-vs-rest SVM classification on multiband predictors."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "classification".to_string(), "svm".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "classification".to_string(),
+                "svm".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -12131,14 +13137,18 @@ impl Tool for SvmClassificationTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
         let _ = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         Ok(())
     }
 
@@ -12147,11 +13157,26 @@ impl Tool for SvmClassificationTool {
         let class_field = args
             .get("class_field")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         let mode = parse_scaling_mode(args);
-        let kernel_name = args.get("kernel").and_then(|v| v.as_str()).unwrap_or("linear").to_ascii_lowercase();
-        let c = args.get("c").and_then(|v| v.as_f64()).unwrap_or(1.0).max(1e-9);
-        let epoch = args.get("epoch").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(2).max(1);
+        let kernel_name = args
+            .get("kernel")
+            .and_then(|v| v.as_str())
+            .unwrap_or("linear")
+            .to_ascii_lowercase();
+        let c = args
+            .get("c")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0)
+            .max(1e-9);
+        let epoch = args
+            .get("epoch")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(2)
+            .max(1);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", None)?;
@@ -12161,12 +13186,16 @@ impl Tool for SvmClassificationTool {
         let (class_names, x_train, y_train_raw) =
             extract_training_class_samples(&rasters, mode, &scalers, &layer, class_field)?;
         if x_train.is_empty() {
-            return Err(ToolError::Validation("no training samples extracted".to_string()));
+            return Err(ToolError::Validation(
+                "no training samples extracted".to_string(),
+            ));
         }
 
         let (x_pred, pred_coords) = collect_scaled_predictor_rows(&rasters, mode, &scalers);
         if x_pred.is_empty() {
-            return Err(ToolError::Validation("no valid predictor cells available for classification".to_string()));
+            return Err(ToolError::Validation(
+                "no valid predictor cells available for classification".to_string(),
+            ));
         }
 
         let n_features = x_train[0].len();
@@ -12190,7 +13219,10 @@ impl Tool for SvmClassificationTool {
             nodata: -32768.0,
             data_type: DataType::I16,
             crs: rasters[0].crs.clone(),
-            metadata: vec![("color_interpretation".to_string(), "categorical".to_string())],
+            metadata: vec![(
+                "color_interpretation".to_string(),
+                "categorical".to_string(),
+            )],
         });
 
         if class_names.len() == 2 {
@@ -12206,9 +13238,9 @@ impl Tool for SvmClassificationTool {
             };
             let model = SVC::fit(&x_train_matrix, &y_bin, &params)
                 .map_err(|e| ToolError::Execution(format!("svm classification fit failed: {e}")))?;
-            let preds = model
-                .predict(&x_pred_matrix)
-                .map_err(|e| ToolError::Execution(format!("svm classification predict failed: {e}")))?;
+            let preds = model.predict(&x_pred_matrix).map_err(|e| {
+                ToolError::Execution(format!("svm classification predict failed: {e}"))
+            })?;
 
             for (i, (row, col)) in pred_coords.iter().enumerate() {
                 let class_idx = if preds[i] > 0.0 { 1usize } else { 0usize };
@@ -12228,10 +13260,16 @@ impl Tool for SvmClassificationTool {
                     base_params.with_kernel(Kernels::linear())
                 };
                 let model = SVC::fit(&x_train_matrix, &y_bin, &params).map_err(|e| {
-                    ToolError::Execution(format!("svm one-vs-rest fit failed for class {}: {e}", cls + 1))
+                    ToolError::Execution(format!(
+                        "svm one-vs-rest fit failed for class {}: {e}",
+                        cls + 1
+                    ))
                 })?;
                 let preds = model.predict(&x_pred_matrix).map_err(|e| {
-                    ToolError::Execution(format!("svm one-vs-rest predict failed for class {}: {e}", cls + 1))
+                    ToolError::Execution(format!(
+                        "svm one-vs-rest predict failed for class {}: {e}",
+                        cls + 1
+                    ))
                 })?;
                 for (i, p) in preds.iter().enumerate() {
                     if *p > 0.0 {
@@ -12296,7 +13334,10 @@ impl Tool for SvmRegressionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training_points.shp"));
@@ -12308,7 +13349,10 @@ impl Tool for SvmRegressionTool {
         defaults.insert("tol".to_string(), json!(1e-3));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training_points.shp"));
         example.insert("field".to_string(), json!("value"));
         example.insert("scaling".to_string(), json!("standardize"));
@@ -12325,18 +13369,27 @@ impl Tool for SvmRegressionTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_svm_regression".to_string(),
                 description: "Run SVM regression on multiband predictors.".to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "regression".to_string(), "svm".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "regression".to_string(),
+                "svm".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -12344,7 +13397,9 @@ impl Tool for SvmRegressionTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
@@ -12362,24 +13417,45 @@ impl Tool for SvmRegressionTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'field' is required".to_string()))?;
         let mode = parse_scaling_mode(args);
-        let kernel_name = args.get("kernel").and_then(|v| v.as_str()).unwrap_or("linear").to_ascii_lowercase();
-        let c = args.get("c").and_then(|v| v.as_f64()).unwrap_or(1.0).max(1e-9);
-        let eps = args.get("eps").and_then(|v| v.as_f64()).unwrap_or(0.1).max(1e-12);
-        let tol = args.get("tol").and_then(|v| v.as_f64()).unwrap_or(1e-3).max(1e-12);
+        let kernel_name = args
+            .get("kernel")
+            .and_then(|v| v.as_str())
+            .unwrap_or("linear")
+            .to_ascii_lowercase();
+        let c = args
+            .get("c")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0)
+            .max(1e-9);
+        let eps = args
+            .get("eps")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.1)
+            .max(1e-12);
+        let tol = args
+            .get("tol")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1e-3)
+            .max(1e-12);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", None)?;
 
         let scalers = build_scalers(&rasters, mode);
         let layer = load_vector_layer(&training_path, "training_data")?;
-        let (x_train, y_train) = extract_training_regression_samples(&rasters, mode, &scalers, &layer, field)?;
+        let (x_train, y_train) =
+            extract_training_regression_samples(&rasters, mode, &scalers, &layer, field)?;
         if x_train.is_empty() {
-            return Err(ToolError::Validation("no training samples extracted".to_string()));
+            return Err(ToolError::Validation(
+                "no training samples extracted".to_string(),
+            ));
         }
 
         let (x_pred, pred_coords) = collect_scaled_predictor_rows(&rasters, mode, &scalers);
         if x_pred.is_empty() {
-            return Err(ToolError::Validation("no valid predictor cells available for regression".to_string()));
+            return Err(ToolError::Validation(
+                "no valid predictor cells available for regression".to_string(),
+            ));
         }
 
         let n_features = x_train[0].len();
@@ -12466,7 +13542,10 @@ impl Tool for NndClassificationTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
         defaults.insert("training_data".to_string(), json!("training.shp"));
@@ -12477,7 +13556,10 @@ impl Tool for NndClassificationTool {
         defaults.insert("k".to_string(), json!(25));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("training_data".to_string(), json!("training.shp"));
         example.insert("class_field".to_string(), json!("class"));
         example.insert("scaling".to_string(), json!("standardize"));
@@ -12491,18 +13573,29 @@ impl Tool for NndClassificationTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.into_iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .into_iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![ToolExample {
                 name: "basic_nnd_classification".to_string(),
-                description: "Run nearest-normalized-distance classification with outlier thresholding.".to_string(),
+                description:
+                    "Run nearest-normalized-distance classification with outlier thresholding."
+                        .to_string(),
                 args: example,
             }],
-            tags: vec!["remote_sensing".to_string(), "classification".to_string(), "nnd".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "classification".to_string(),
+                "nnd".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -12510,28 +13603,52 @@ impl Tool for NndClassificationTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster".to_string(),
+            ));
         }
         validate_auto_reproject_args(args)?;
         let _ = parse_vector_path_arg(args, "training_data")?;
-        let _ = args.get("class_field").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+        let _ = args
+            .get("class_field")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+        let coalescer = PercentCoalescer::new(1, 99);
         let training_path = parse_vector_path_arg(args, "training_data")?;
-        let class_field = args.get("class_field").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'class_field' is required".to_string()))?;
+        let class_field = args
+            .get("class_field")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'class_field' is required".to_string())
+            })?;
         let mode = parse_scaling_mode(args);
-        let z_threshold = args.get("z_threshold").and_then(|v| v.as_f64()).unwrap_or(1.96);
-        let outlier_is_zero = args.get("outlier_is_zero").and_then(|v| v.as_bool()).unwrap_or(true);
-        let k = args.get("k").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(25).max(1);
+        let z_threshold = args
+            .get("z_threshold")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.96);
+        let outlier_is_zero = args
+            .get("outlier_is_zero")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
+        let k = args
+            .get("k")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(25)
+            .max(1);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let rasters = load_aligned_raster_stack_arg(args, "inputs", Some(ctx))?;
         let scalers = build_scalers(&rasters, mode);
         let layer = load_vector_layer(&training_path, "training_data")?;
-        let (class_names, x_train, y_train) = extract_training_class_samples(&rasters, mode, &scalers, &layer, class_field)?;
+        let (class_names, x_train, y_train) =
+            extract_training_class_samples(&rasters, mode, &scalers, &layer, class_field)?;
 
         let num_classes = class_names.len();
         let mut per_class: Vec<Vec<usize>> = vec![Vec::new(); num_classes];
@@ -12577,7 +13694,8 @@ impl Tool for NndClassificationTool {
             }
             if !dvals.is_empty() {
                 let mean = dvals.iter().sum::<f64>() / dvals.len() as f64;
-                let var = dvals.iter().map(|d| (d - mean) * (d - mean)).sum::<f64>() / dvals.len() as f64;
+                let var =
+                    dvals.iter().map(|d| (d - mean) * (d - mean)).sum::<f64>() / dvals.len() as f64;
                 class_mean[c] = mean;
                 class_std[c] = var.sqrt().max(1e-12);
             }
@@ -12597,12 +13715,16 @@ impl Tool for NndClassificationTool {
             nodata: nodata_out,
             data_type: DataType::I16,
             crs: rasters[0].crs.clone(),
-            metadata: vec![("color_interpretation".to_string(), "categorical".to_string())],
+            metadata: vec![(
+                "color_interpretation".to_string(),
+                "categorical".to_string(),
+            )],
         });
 
         for row in 0..rows {
             for col in 0..cols {
-                let Some(feat) = sample_scaled_features_at(&rasters, mode, &scalers, row, col) else {
+                let Some(feat) = sample_scaled_features_at(&rasters, mode, &scalers, row, col)
+                else {
                     continue;
                 };
                 let mut best_class = None;
@@ -12640,7 +13762,8 @@ impl Tool for NndClassificationTool {
                 }
             }
             if row % 100 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (row as f64 / rows as f64).clamp(0.0, 1.0));
             }
         }
         ctx.progress.progress(1.0);
@@ -12717,7 +13840,13 @@ mod tests {
         let input_path = memory_store::make_raster_memory_path(&id);
         args.insert("input".to_string(), json!(input_path));
         let result = tool.run(args, &make_ctx()).unwrap();
-        let out_path = result.outputs.get("path").unwrap().as_str().unwrap().to_string();
+        let out_path = result
+            .outputs
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         let out_id = memory_store::raster_path_to_id(&out_path).unwrap();
         memory_store::get_raster_by_id(out_id).unwrap()
     }
@@ -12745,7 +13874,13 @@ mod tests {
             json!(memory_store::make_raster_memory_path(&blue_id)),
         );
         let result = tool.run(args, &make_ctx()).unwrap();
-        let out_path = result.outputs.get("path").unwrap().as_str().unwrap().to_string();
+        let out_path = result
+            .outputs
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         let out_id = memory_store::raster_path_to_id(&out_path).unwrap();
         memory_store::get_raster_by_id(out_id).unwrap()
     }
@@ -12755,7 +13890,12 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("{}_{}_{}.geojson", prefix, std::process::id(), stamp))
+        std::env::temp_dir().join(format!(
+            "{}_{}_{}.geojson",
+            prefix,
+            std::process::id(),
+            stamp
+        ))
     }
 
     fn write_point_vector(path: &Path, points: &[(f64, f64)]) {
@@ -12908,7 +14048,11 @@ mod tests {
             .into_iter()
             .chain(vec![3.0; 9].into_iter())
             .collect::<Vec<_>>();
-        let out = run_with_memory(&NormalizedDifferenceIndexTool, &mut args, make_raster(3, 3, 2, &vals));
+        let out = run_with_memory(
+            &NormalizedDifferenceIndexTool,
+            &mut args,
+            make_raster(3, 3, 2, &vals),
+        );
         assert!((out.get(0, 1, 1) - 0.25).abs() < 1e-9);
     }
 
@@ -13047,11 +14191,7 @@ mod tests {
                 }
             }
         }
-        let out = run_with_memory(
-            &ThickenRasterLineTool,
-            &mut args,
-            input,
-        );
+        let out = run_with_memory(&ThickenRasterLineTool, &mut args, input);
         let mut out_count = 0usize;
         for r in 0..3 {
             for c in 0..3 {
@@ -13069,13 +14209,18 @@ mod tests {
         let out = run_with_memory(
             &LineThinningTool,
             &mut args,
-            make_raster(5, 5, 1, &[
-                0.0, 0.0, 0.0, 0.0, 0.0, //
-                0.0, 1.0, 1.0, 1.0, 0.0, //
-                0.0, 1.0, 1.0, 1.0, 0.0, //
-                0.0, 1.0, 1.0, 1.0, 0.0, //
-                0.0, 0.0, 0.0, 0.0, 0.0,
-            ]),
+            make_raster(
+                5,
+                5,
+                1,
+                &[
+                    0.0, 0.0, 0.0, 0.0, 0.0, //
+                    0.0, 1.0, 1.0, 1.0, 0.0, //
+                    0.0, 1.0, 1.0, 1.0, 0.0, //
+                    0.0, 1.0, 1.0, 1.0, 0.0, //
+                    0.0, 0.0, 0.0, 0.0, 0.0,
+                ],
+            ),
         );
         let mut count = 0usize;
         for r in 0..5 {
@@ -13096,13 +14241,18 @@ mod tests {
         let out = run_with_memory(
             &RemoveSpursTool,
             &mut args,
-            make_raster(5, 5, 1, &[
-                0.0, 0.0, 0.0, 0.0, 0.0, //
-                0.0, 0.0, 0.0, 0.0, 0.0, //
-                0.0, 0.0, 1.0, 0.0, 0.0, // isolated spur
-                0.0, 0.0, 0.0, 0.0, 0.0, //
-                0.0, 0.0, 0.0, 0.0, 0.0,
-            ]),
+            make_raster(
+                5,
+                5,
+                1,
+                &[
+                    0.0, 0.0, 0.0, 0.0, 0.0, //
+                    0.0, 0.0, 0.0, 0.0, 0.0, //
+                    0.0, 0.0, 1.0, 0.0, 0.0, // isolated spur
+                    0.0, 0.0, 0.0, 0.0, 0.0, //
+                    0.0, 0.0, 0.0, 0.0, 0.0,
+                ],
+            ),
         );
         assert_eq!(out.get(0, 2, 2), 0.0);
     }
@@ -13112,11 +14262,16 @@ mod tests {
         let out = run_with_memory(
             &CornerDetectionTool,
             &mut ToolArgs::new(),
-            make_raster(3, 3, 1, &[
-                1.0, 1.0, 0.0, //
-                1.0, 0.0, 0.0, //
-                0.0, 0.0, 0.0,
-            ]),
+            make_raster(
+                3,
+                3,
+                1,
+                &[
+                    1.0, 1.0, 0.0, //
+                    1.0, 0.0, 0.0, //
+                    0.0, 0.0, 0.0,
+                ],
+            ),
         );
         // The upper-left pixel has east and south neighbours foreground and southeast background.
         assert_eq!(out.get(0, 0, 0), 1.0);
@@ -13141,7 +14296,10 @@ mod tests {
         let input = make_packed_rgb_raster(1, 1, &[packed]);
         let input_id = memory_store::put_raster(input);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&input_id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&input_id)),
+        );
         let ctx = make_ctx();
         let result = SplitColourCompositeTool.run(&args, &ctx).unwrap();
         assert!(result.outputs.contains_key("red"));
@@ -13158,7 +14316,10 @@ mod tests {
         let grey_val = grey | (grey << 8) | (grey << 16);
         let composite = make_packed_rgb_raster(1, 1, &[grey_val]);
         let (intensity, _hue, saturation) = run_rgb_to_ihs_from_composite(&composite).unwrap();
-        assert!(saturation.get(0, 0, 0).abs() < 1e-6, "grey should be achromatic");
+        assert!(
+            saturation.get(0, 0, 0).abs() < 1e-6,
+            "grey should be achromatic"
+        );
         let expected_i = 128.0 / 255.0;
         assert!((intensity.get(0, 0, 0) - expected_i).abs() < 1e-4);
     }
@@ -13167,11 +14328,11 @@ mod tests {
     fn rgb_to_ihs_bands_round_trip_via_ihs_to_rgb() {
         // 2 rows × 2 cols, 1 band each — distinct non-degenerate colours.
         let r_vals = [200.0f64, 50.0, 100.0, 255.0];
-        let g_vals = [100.0f64, 200.0, 150.0,  20.0];
-        let b_vals = [ 50.0f64, 100.0,  80.0,  10.0];
-        let red_r   = make_raster(2, 2, 1, &r_vals);
+        let g_vals = [100.0f64, 200.0, 150.0, 20.0];
+        let b_vals = [50.0f64, 100.0, 80.0, 10.0];
+        let red_r = make_raster(2, 2, 1, &r_vals);
         let green_r = make_raster(2, 2, 1, &g_vals);
-        let blue_r  = make_raster(2, 2, 1, &b_vals);
+        let blue_r = make_raster(2, 2, 1, &b_vals);
 
         let (intensity, hue, saturation) =
             run_rgb_to_ihs_from_bands(&red_r, &green_r, &blue_r).unwrap();
@@ -13182,27 +14343,74 @@ mod tests {
                 let i_v = intensity.get(0, r, c);
                 let h_v = hue.get(0, r, c);
                 let s_v = saturation.get(0, r, c);
-                assert!(i_v >= 0.0 && i_v <= 1.0, "intensity out of [0,1] at ({},{}): {}", r, c, i_v);
+                assert!(
+                    i_v >= 0.0 && i_v <= 1.0,
+                    "intensity out of [0,1] at ({},{}): {}",
+                    r,
+                    c,
+                    i_v
+                );
                 assert!(h_v >= 0.0, "hue negative at ({},{}): {}", r, c, h_v);
-                assert!(s_v >= 0.0 && s_v <= 1.0, "saturation out of [0,1] at ({},{}): {}", r, c, s_v);
+                assert!(
+                    s_v >= 0.0 && s_v <= 1.0,
+                    "saturation out of [0,1] at ({},{}): {}",
+                    r,
+                    c,
+                    s_v
+                );
             }
         }
 
         // Convert back and check values are valid RGB
-        let (red_out, green_out, blue_out) =
-            run_ihs_to_rgb(&intensity, &hue, &saturation).unwrap();
+        let (red_out, green_out, blue_out) = run_ihs_to_rgb(&intensity, &hue, &saturation).unwrap();
 
         for r in 0..2isize {
             for c in 0..2isize {
                 let r_v = red_out.get(0, r, c);
                 let g_v = green_out.get(0, r, c);
                 let b_v = blue_out.get(0, r, c);
-                assert!(r_v.is_finite(), "red is non-finite at ({},{}): {}", r, c, r_v);
-                assert!(g_v.is_finite(), "green is non-finite at ({},{}): {}", r, c, g_v);
-                assert!(b_v.is_finite(), "blue is non-finite at ({},{}): {}", r, c, b_v);
-                assert!(r_v >= 0.0 && r_v <= 255.0, "red out of range at ({},{}): {}", r, c, r_v);
-                assert!(g_v >= 0.0 && g_v <= 255.0, "green out of range at ({},{}): {}", r, c, g_v);
-                assert!(b_v >= 0.0 && b_v <= 255.0, "blue out of range at ({},{}): {}", r, c, b_v);
+                assert!(
+                    r_v.is_finite(),
+                    "red is non-finite at ({},{}): {}",
+                    r,
+                    c,
+                    r_v
+                );
+                assert!(
+                    g_v.is_finite(),
+                    "green is non-finite at ({},{}): {}",
+                    r,
+                    c,
+                    g_v
+                );
+                assert!(
+                    b_v.is_finite(),
+                    "blue is non-finite at ({},{}): {}",
+                    r,
+                    c,
+                    b_v
+                );
+                assert!(
+                    r_v >= 0.0 && r_v <= 255.0,
+                    "red out of range at ({},{}): {}",
+                    r,
+                    c,
+                    r_v
+                );
+                assert!(
+                    g_v >= 0.0 && g_v <= 255.0,
+                    "green out of range at ({},{}): {}",
+                    r,
+                    c,
+                    g_v
+                );
+                assert!(
+                    b_v >= 0.0 && b_v <= 255.0,
+                    "blue out of range at ({},{}): {}",
+                    r,
+                    c,
+                    b_v
+                );
             }
         }
     }
@@ -13212,25 +14420,41 @@ mod tests {
     #[test]
     fn ihs_to_rgb_tool_run_returns_three_outputs_and_red_dominates() {
         // Fully saturated red: h=0, s=1, i≈0.333
-        let intensity  = make_raster(1, 1, 1, &[1.0 / 3.0]);
-        let hue        = make_raster(1, 1, 1, &[0.0]);
+        let intensity = make_raster(1, 1, 1, &[1.0 / 3.0]);
+        let hue = make_raster(1, 1, 1, &[0.0]);
         let saturation = make_raster(1, 1, 1, &[1.0]);
         let i_id = memory_store::put_raster(intensity);
         let h_id = memory_store::put_raster(hue);
         let s_id = memory_store::put_raster(saturation);
         let mut args = ToolArgs::new();
-        args.insert("intensity".to_string(), json!(memory_store::make_raster_memory_path(&i_id)));
-        args.insert("hue".to_string(),       json!(memory_store::make_raster_memory_path(&h_id)));
-        args.insert("saturation".to_string(),json!(memory_store::make_raster_memory_path(&s_id)));
+        args.insert(
+            "intensity".to_string(),
+            json!(memory_store::make_raster_memory_path(&i_id)),
+        );
+        args.insert(
+            "hue".to_string(),
+            json!(memory_store::make_raster_memory_path(&h_id)),
+        );
+        args.insert(
+            "saturation".to_string(),
+            json!(memory_store::make_raster_memory_path(&s_id)),
+        );
         let ctx = make_ctx();
         let result = IhsToRgbTool.run(&args, &ctx).unwrap();
         assert!(result.outputs.contains_key("red"));
         assert!(result.outputs.contains_key("green"));
         assert!(result.outputs.contains_key("blue"));
-        let red_path = result.outputs["red"].get("path").and_then(|p| p.as_str()).unwrap();
+        let red_path = result.outputs["red"]
+            .get("path")
+            .and_then(|p| p.as_str())
+            .unwrap();
         let red_id = memory_store::raster_path_to_id(red_path).unwrap();
         let red_r = memory_store::get_raster_by_id(red_id).unwrap();
-        assert!(red_r.get(0, 0, 0) > 200.0, "expected red-dominant output, got {}", red_r.get(0, 0, 0));
+        assert!(
+            red_r.get(0, 0, 0) > 200.0,
+            "expected red-dominant output, got {}",
+            red_r.get(0, 0, 0)
+        );
     }
 
     #[test]
@@ -13309,11 +14533,22 @@ mod tests {
         let i3_id = memory_store::put_raster(i3);
 
         let mut args = ToolArgs::new();
-        args.insert("input1".to_string(), json!(memory_store::make_raster_memory_path(&i1_id)));
-        args.insert("input2".to_string(), json!(memory_store::make_raster_memory_path(&i2_id)));
-        args.insert("input3".to_string(), json!(memory_store::make_raster_memory_path(&i3_id)));
+        args.insert(
+            "input1".to_string(),
+            json!(memory_store::make_raster_memory_path(&i1_id)),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(memory_store::make_raster_memory_path(&i2_id)),
+        );
+        args.insert(
+            "input3".to_string(),
+            json!(memory_store::make_raster_memory_path(&i3_id)),
+        );
 
-        let result = WriteFunctionMemoryInsertionTool.run(&args, &make_ctx()).unwrap();
+        let result = WriteFunctionMemoryInsertionTool
+            .run(&args, &make_ctx())
+            .unwrap();
         let out_path = result.outputs.get("path").unwrap().as_str().unwrap();
         assert!(out_path.starts_with("memory://raster/"));
     }
@@ -13366,7 +14601,13 @@ mod tests {
         for b in 0..3isize {
             for c in 0..2isize {
                 let v = out.get(b, 0, c);
-                assert!(v >= 0.0 && v <= 255.0, "band {} col {} out of range: {}", b, c, v);
+                assert!(
+                    v >= 0.0 && v <= 255.0,
+                    "band {} col {} out of range: {}",
+                    b,
+                    c,
+                    v
+                );
             }
         }
     }
@@ -13467,8 +14708,14 @@ mod tests {
         let i2_id = memory_store::put_raster(i2);
 
         let mut args = ToolArgs::new();
-        args.insert("input1".to_string(), json!(memory_store::make_raster_memory_path(&i1_id)));
-        args.insert("input2".to_string(), json!(memory_store::make_raster_memory_path(&i2_id)));
+        args.insert(
+            "input1".to_string(),
+            json!(memory_store::make_raster_memory_path(&i1_id)),
+        );
+        args.insert(
+            "input2".to_string(),
+            json!(memory_store::make_raster_memory_path(&i2_id)),
+        );
         args.insert("method".to_string(), json!("cc"));
         args.insert("weight".to_string(), json!(4.0));
 
@@ -13556,7 +14803,9 @@ mod tests {
         );
         args.insert("start_clusters".to_string(), json!(4));
         args.insert("merge_dist".to_string(), json!(2.0));
-        let result = ModifiedKMeansClusteringTool.run(&args, &make_ctx()).unwrap();
+        let result = ModifiedKMeansClusteringTool
+            .run(&args, &make_ctx())
+            .unwrap();
         assert!(result.outputs.get("num_classes").is_some());
     }
 
@@ -13578,8 +14827,14 @@ mod tests {
         let pp_path = temp_geojson_path("pp");
         write_point_vector(&pp_path, &[(1.0, 1.0)]);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&input_id)));
-        args.insert("pp".to_string(), json!(pp_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&input_id)),
+        );
+        args.insert(
+            "pp".to_string(),
+            json!(pp_path.to_string_lossy().to_string()),
+        );
         let result = CorrectVignettingTool.run(&args, &make_ctx()).unwrap();
         assert!(result.outputs.get("path").is_some());
         let _ = std::fs::remove_file(pp_path);
@@ -13625,12 +14880,8 @@ mod tests {
         let html_path = temp_geojson_path("stack_profile_report").with_extension("html");
         let inputs = vec!["image1.tif".to_string(), "image2.tif".to_string()];
         let profiles = vec![vec![2.0, 20.0], vec![3.0, 30.0]];
-        write_image_stack_profile_html(
-            html_path.to_string_lossy().as_ref(),
-            &inputs,
-            &profiles,
-        )
-        .unwrap();
+        write_image_stack_profile_html(html_path.to_string_lossy().as_ref(), &inputs, &profiles)
+            .unwrap();
         let html = std::fs::read_to_string(&html_path).unwrap();
         assert!(html.contains("<svg"));
         assert!(html.contains("Profile Data Table"));

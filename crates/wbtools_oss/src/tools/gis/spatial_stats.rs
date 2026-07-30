@@ -1,10 +1,10 @@
 use super::*;
-use wbspatialstats::weights;
 use wbspatialstats::autocorrelation;
+use wbspatialstats::weights;
 
 // Re-export from wbspatialstats for convenience
-use weights::SpatialWeightsMode;
 use weights::IslandPolicy;
+use weights::SpatialWeightsMode;
 
 // Helper trait to convert wbspatialstats enums to/from strings for Tool args
 trait WeightsModeExt {
@@ -45,7 +45,8 @@ impl IslandPolicyExt for IslandPolicy {
             .to_ascii_lowercase();
         IslandPolicy::from_str(&text).ok_or_else(|| {
             ToolError::Validation(
-                "island_policy must be one of: drop_with_warning, keep_zero_weight, error".to_string(),
+                "island_policy must be one of: drop_with_warning, keep_zero_weight, error"
+                    .to_string(),
             )
         })
     }
@@ -83,10 +84,16 @@ fn parse_optional_usize_arg(args: &ToolArgs, key: &str) -> Result<Option<usize>,
         None => Ok(None),
         Some(value) => {
             let Some(raw) = value.as_i64() else {
-                return Err(ToolError::Validation(format!("parameter '{}' must be an integer", key)));
+                return Err(ToolError::Validation(format!(
+                    "parameter '{}' must be an integer",
+                    key
+                )));
             };
             if raw <= 0 {
-                return Err(ToolError::Validation(format!("parameter '{}' must be > 0", key)));
+                return Err(ToolError::Validation(format!(
+                    "parameter '{}' must be > 0",
+                    key
+                )));
             }
             Ok(Some(raw as usize))
         }
@@ -127,7 +134,11 @@ fn normal_cdf(x: f64) -> f64 {
                 + t * (1.781_477_937 + t * (-1.821_255_978 + t * 1.330_274_429))));
     let pdf = (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt();
     let cdf = 1.0 - pdf * poly;
-    if x >= 0.0 { cdf } else { 1.0 - cdf }
+    if x >= 0.0 {
+        cdf
+    } else {
+        1.0 - cdf
+    }
 }
 
 #[allow(dead_code)]
@@ -135,7 +146,10 @@ fn two_tailed_normal_p(z: f64) -> f64 {
     (2.0 * (1.0 - normal_cdf(z.abs()))).clamp(0.0, 1.0)
 }
 
-fn collect_spatial_observations(layer: &wbvector::Layer, field: &str) -> Result<(Vec<SpatialObservation>, usize), ToolError> {
+fn collect_spatial_observations(
+    layer: &wbvector::Layer,
+    field: &str,
+) -> Result<(Vec<SpatialObservation>, usize), ToolError> {
     let field_idx = layer
         .schema
         .field_index(field)
@@ -386,7 +400,7 @@ fn compute_global_morans_i(
         .enumerate()
         .filter_map(|(i, keep)| if *keep { Some(i) } else { None })
         .collect();
-    
+
     if idxs.len() < 3 {
         return Err(ToolError::Validation(
             "insufficient connected observations after island handling".to_string(),
@@ -435,7 +449,15 @@ fn compute_local_morans_i_lisa(
     raw_weights: &weights::SpatialWeightsGraph,
     island_policy: IslandPolicy,
     alpha: f64,
-) -> Result<(Vec<Option<f64>>, Vec<Option<f64>>, Vec<Option<f64>>, Vec<String>), ToolError> {
+) -> Result<
+    (
+        Vec<Option<f64>>,
+        Vec<Option<f64>>,
+        Vec<Option<f64>>,
+        Vec<String>,
+    ),
+    ToolError,
+> {
     let n_total = values.len();
     let mut included = vec![true; n_total];
     if matches!(island_policy, IslandPolicy::DropWithWarning) {
@@ -586,8 +608,9 @@ fn compute_getis_ord_gi_star(
 fn write_text(path: &std::path::Path, contents: &str) -> Result<(), ToolError> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ToolError::Execution(format!("failed creating output directory: {e}"))
+            })?;
         }
     }
     std::fs::write(path, contents)
@@ -725,13 +748,17 @@ Outputs: I statistic, expected I under null hypothesis, variance, z-score, p-val
         if matches!(mode, SpatialWeightsMode::DistanceBand) {
             let d = parse_f64_arg(args, "distance")?;
             if !d.is_finite() || d <= 0.0 {
-                return Err(ToolError::Validation("distance must be finite and > 0".to_string()));
+                return Err(ToolError::Validation(
+                    "distance must be finite and > 0".to_string(),
+                ));
             }
         }
 
         if let Some(distance) = parse_optional_f64_arg(args, "distance") {
             if !distance.is_finite() || distance <= 0.0 {
-                return Err(ToolError::Validation("distance must be finite and > 0".to_string()));
+                return Err(ToolError::Validation(
+                    "distance must be finite and > 0".to_string(),
+                ));
             }
         }
 
@@ -780,7 +807,10 @@ Outputs: I statistic, expected I under null hypothesis, variance, z-score, p-val
             .to_ascii_lowercase();
         let island_policy = IslandPolicy::parse(args)?;
         let num_simulations = parse_optional_usize_arg(args, "num_simulations")?.unwrap_or(999);
-        let seed = parse_optional_usize_arg(args, "seed").map(|opt| opt.map(|s| s as u64)).ok().flatten();
+        let seed = parse_optional_usize_arg(args, "seed")
+            .map(|opt| opt.map(|s| s as u64))
+            .ok()
+            .flatten();
 
         let output_json = parse_optional_output_path(args, "output_json")?;
         let output_html = parse_optional_output_path(args, "output_html")?;
@@ -806,16 +836,26 @@ Outputs: I statistic, expected I under null hypothesis, variance, z-score, p-val
             compute_global_morans_i(&values, &weights, island_policy)?;
 
         // Determine inference method and compute results
-        let (final_p_value, permutation_distribution, inference_method) = if inference == "permutation" {
-            ctx.progress.info(&format!("computing permutation test ({} simulations)", num_simulations));
+        let (final_p_value, permutation_distribution, inference_method) = if inference
+            == "permutation"
+        {
+            ctx.progress.info(&format!(
+                "computing permutation test ({} simulations)",
+                num_simulations
+            ));
             let perm_result = wbspatialstats::autocorrelation::permutation::morans_i_permutation(
                 &values,
                 &weights,
                 num_simulations,
                 seed,
-            ).map_err(|e| ToolError::Execution(format!("permutation test failed: {}", e)))?;
+            )
+            .map_err(|e| ToolError::Execution(format!("permutation test failed: {}", e)))?;
 
-            (perm_result.p_value_two_tailed, Some(perm_result.permutation_distribution), "permutation")
+            (
+                perm_result.p_value_two_tailed,
+                Some(perm_result.permutation_distribution),
+                "permutation",
+            )
         } else {
             (p_value, None, "asymptotic")
         };
@@ -833,7 +873,10 @@ Outputs: I statistic, expected I under null hypothesis, variance, z-score, p-val
         report.insert("p_value_asymptotic".to_string(), json!(p_value));
         report.insert("p_value_two_sided".to_string(), json!(final_p_value));
         report.insert("n_features_used".to_string(), json!(n_used));
-        report.insert("n_features_dropped".to_string(), json!(weights.diagnostics.dropped_feature_count));
+        report.insert(
+            "n_features_dropped".to_string(),
+            json!(weights.diagnostics.dropped_feature_count),
+        );
         report.insert(
             "weights_diagnostics".to_string(),
             json!({
@@ -846,10 +889,7 @@ Outputs: I statistic, expected I under null hypothesis, variance, z-score, p-val
                 "row_standardized": weights.diagnostics.row_standardized,
             }),
         );
-        report.insert(
-            "warnings".to_string(),
-            json!(weights.warnings),
-        );
+        report.insert("warnings".to_string(), json!(weights.warnings));
         report.insert("statistic".to_string(), json!(statistic_i));
         report.insert("p_value".to_string(), json!(p_value));
         report.insert("alpha".to_string(), serde_json::Value::Null);
@@ -866,20 +906,29 @@ Outputs: I statistic, expected I under null hypothesis, variance, z-score, p-val
             "ns"
         };
         report.insert("significance_class".to_string(), json!(significance_class));
-        
+
         // Add permutation-specific info if applicable
         if inference == "permutation" {
             if let Some(dist) = &permutation_distribution {
-                report.insert("permutation_distribution_size".to_string(), json!(dist.len()));
-                report.insert("permutation_distribution_mean".to_string(), 
-                    json!(dist.iter().sum::<f64>() / dist.len() as f64));
-                report.insert("permutation_distribution_min".to_string(),
-                    json!(dist.iter().cloned().fold(f64::INFINITY, f64::min)));
-                report.insert("permutation_distribution_max".to_string(),
-                    json!(dist.iter().cloned().fold(f64::NEG_INFINITY, f64::max)));
+                report.insert(
+                    "permutation_distribution_size".to_string(),
+                    json!(dist.len()),
+                );
+                report.insert(
+                    "permutation_distribution_mean".to_string(),
+                    json!(dist.iter().sum::<f64>() / dist.len() as f64),
+                );
+                report.insert(
+                    "permutation_distribution_min".to_string(),
+                    json!(dist.iter().cloned().fold(f64::INFINITY, f64::min)),
+                );
+                report.insert(
+                    "permutation_distribution_max".to_string(),
+                    json!(dist.iter().cloned().fold(f64::NEG_INFINITY, f64::max)),
+                );
             }
         }
-        
+
         report.insert(
             "assumption_flags".to_string(),
             json!({
@@ -902,10 +951,14 @@ Outputs: I statistic, expected I under null hypothesis, variance, z-score, p-val
         outputs.insert("summary".to_string(), report_value.clone());
 
         if let Some(path) = output_json {
-            let body = serde_json::to_string_pretty(&report_value)
-                .map_err(|e| ToolError::Execution(format!("failed serializing JSON report: {e}")))?;
+            let body = serde_json::to_string_pretty(&report_value).map_err(|e| {
+                ToolError::Execution(format!("failed serializing JSON report: {e}"))
+            })?;
             write_text(&path, &body)?;
-            outputs.insert("output_json".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_json".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
 
         if let Some(path) = output_distribution {
@@ -916,10 +969,14 @@ Outputs: I statistic, expected I under null hypothesis, variance, z-score, p-val
                     "permutation_distribution": dist,
                     "n_simulations": dist.len(),
                 });
-                let body = serde_json::to_string_pretty(&dist_json)
-                    .map_err(|e| ToolError::Execution(format!("failed serializing distribution: {e}")))?;
+                let body = serde_json::to_string_pretty(&dist_json).map_err(|e| {
+                    ToolError::Execution(format!("failed serializing distribution: {e}"))
+                })?;
                 write_text(&path, &body)?;
-                outputs.insert("output_distribution".to_string(), json!(path.to_string_lossy().to_string()));
+                outputs.insert(
+                    "output_distribution".to_string(),
+                    json!(path.to_string_lossy().to_string()),
+                );
             } else {
                 ctx.progress.info("WARNING: output_distribution specified but inference mode is asymptotic (not permutation)");
             }
@@ -951,7 +1008,10 @@ Outputs: I statistic, expected I under null hypothesis, variance, z-score, p-val
                 )
             };
             write_text(&path, &body)?;
-            outputs.insert("output_csv".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_csv".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
 
         if let Some(path) = output_html {
@@ -1001,7 +1061,10 @@ Outputs: I statistic, expected I under null hypothesis, variance, z-score, p-val
                 )
             };
             write_text(&path, &body)?;
-            outputs.insert("output_html".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_html".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
 
         ctx.progress.progress(1.0);
@@ -1094,20 +1157,77 @@ Applications: identifying crime hotspots, disease clusters, pollution zones, or 
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector layer.", required: true },
-                ToolParamSpec { name: "field", description: "Numeric attribute field to analyze.", required: true },
-                ToolParamSpec { name: "weights_mode", description: "Neighborhood mode: queen, rook, k_nearest, distance_band.", required: false },
-                ToolParamSpec { name: "k", description: "k value for k_nearest mode.", required: false },
-                ToolParamSpec { name: "distance", description: "Distance threshold for distance_band mode.", required: false },
-                ToolParamSpec { name: "row_standardize", description: "Apply row standardization to weights (default true).", required: false },
-                ToolParamSpec { name: "inference", description: "Inference mode: asymptotic or permutation (default: asymptotic).", required: false },
-                ToolParamSpec { name: "num_simulations", description: "Number of permutations for permutation testing (default: 999).", required: false },
-                ToolParamSpec { name: "seed", description: "Random seed for reproducible permutation testing (default: u64::MAX).", required: false },
-                ToolParamSpec { name: "island_policy", description: "Island handling: drop_with_warning, keep_zero_weight, error.", required: false },
-                ToolParamSpec { name: "alpha", description: "Significance threshold in [0, 1]; default 0.05.", required: false },
-                ToolParamSpec { name: "fdr_correction", description: "Apply FDR-BH correction (default true for permutation).", required: false },
-                ToolParamSpec { name: "output", description: "Output vector path with LISA fields.", required: true },
-                ToolParamSpec { name: "output_html", description: "Optional HTML report output path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Numeric attribute field to analyze.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "weights_mode",
+                    description: "Neighborhood mode: queen, rook, k_nearest, distance_band.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "k",
+                    description: "k value for k_nearest mode.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "distance",
+                    description: "Distance threshold for distance_band mode.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "row_standardize",
+                    description: "Apply row standardization to weights (default true).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "inference",
+                    description: "Inference mode: asymptotic or permutation (default: asymptotic).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "num_simulations",
+                    description: "Number of permutations for permutation testing (default: 999).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "seed",
+                    description:
+                        "Random seed for reproducible permutation testing (default: u64::MAX).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "island_policy",
+                    description: "Island handling: drop_with_warning, keep_zero_weight, error.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "alpha",
+                    description: "Significance threshold in [0, 1]; default 0.05.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "fdr_correction",
+                    description: "Apply FDR-BH correction (default true for permutation).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector path with LISA fields.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output_html",
+                    description: "Optional HTML report output path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -1193,12 +1313,16 @@ Applications: identifying crime hotspots, disease clusters, pollution zones, or 
         if matches!(mode, SpatialWeightsMode::DistanceBand) {
             let d = parse_f64_arg(args, "distance")?;
             if !d.is_finite() || d <= 0.0 {
-                return Err(ToolError::Validation("distance must be finite and > 0".to_string()));
+                return Err(ToolError::Validation(
+                    "distance must be finite and > 0".to_string(),
+                ));
             }
         }
         if let Some(distance) = parse_optional_f64_arg(args, "distance") {
             if !distance.is_finite() || distance <= 0.0 {
-                return Err(ToolError::Validation("distance must be finite and > 0".to_string()));
+                return Err(ToolError::Validation(
+                    "distance must be finite and > 0".to_string(),
+                ));
             }
         }
 
@@ -1251,7 +1375,10 @@ Applications: identifying crime hotspots, disease clusters, pollution zones, or 
         let island_policy = IslandPolicy::parse(args)?;
         let alpha = parse_optional_f64_arg(args, "alpha").unwrap_or(0.05);
         let num_simulations = parse_optional_usize_arg(args, "num_simulations")?.unwrap_or(999);
-        let seed = parse_optional_usize_arg(args, "seed").map(|opt| opt.map(|s| s as u64)).ok().flatten();
+        let seed = parse_optional_usize_arg(args, "seed")
+            .map(|opt| opt.map(|s| s as u64))
+            .ok()
+            .flatten();
         let fdr_correction = parse_bool_arg(args, "fdr_correction", inference == "permutation");
         let output_path = parse_vector_path_arg(args, "output")?;
         let output_html = parse_optional_output_path(args, "output_html")?;
@@ -1271,31 +1398,43 @@ Applications: identifying crime hotspots, disease clusters, pollution zones, or 
         )?;
 
         ctx.progress.info("computing LISA");
-        
+
         let (lisa_i, lisa_z, lisa_p, quadrant, inference_method) = if inference == "permutation" {
-            ctx.progress.info(&format!("computing permutation test ({} simulations)", num_simulations));
-            let perm_result = wbspatialstats::autocorrelation::permutation::local_morans_i_permutation(
-                &values,
-                &weights,
-                num_simulations,
-                fdr_correction,
-                seed,
-            ).map_err(|e| ToolError::Execution(format!("permutation test failed: {}", e)))?;
-            
-            let lisa_i_vec: Vec<Option<f64>> = perm_result.observed_statistics.iter().map(|&s| Some(s)).collect();
-            let lisa_z_vec: Vec<Option<f64>> = perm_result.z_scores.iter().map(|&s| Some(s)).collect();
-            let lisa_p_vec: Vec<Option<f64>> = perm_result.p_values.iter().map(|&s| Some(s)).collect();
+            ctx.progress.info(&format!(
+                "computing permutation test ({} simulations)",
+                num_simulations
+            ));
+            let perm_result =
+                wbspatialstats::autocorrelation::permutation::local_morans_i_permutation(
+                    &values,
+                    &weights,
+                    num_simulations,
+                    fdr_correction,
+                    seed,
+                )
+                .map_err(|e| ToolError::Execution(format!("permutation test failed: {}", e)))?;
+
+            let lisa_i_vec: Vec<Option<f64>> = perm_result
+                .observed_statistics
+                .iter()
+                .map(|&s| Some(s))
+                .collect();
+            let lisa_z_vec: Vec<Option<f64>> =
+                perm_result.z_scores.iter().map(|&s| Some(s)).collect();
+            let lisa_p_vec: Vec<Option<f64>> =
+                perm_result.p_values.iter().map(|&s| Some(s)).collect();
             let quadrant_vec = perm_result.cluster_types.clone();
-            
+
             (
                 lisa_i_vec,
                 lisa_z_vec,
                 lisa_p_vec,
                 quadrant_vec,
-                "permutation"
+                "permutation",
             )
         } else {
-            let (i, z, p, q) = compute_local_morans_i_lisa(&values, &weights, island_policy, alpha)?;
+            let (i, z, p, q) =
+                compute_local_morans_i_lisa(&values, &weights, island_policy, alpha)?;
             (i, z, p, q, "asymptotic")
         };
 
@@ -1316,19 +1455,45 @@ Applications: identifying crime hotspots, disease clusters, pollution zones, or 
 
         let mut output = input.clone();
         let mut schema = output.schema.clone();
-        for field_name in ["LISA_I", "LISA_Z", "LISA_P", "LISA_P_ADJ", "LISA_SIG", "LISA_CLASS"] {
+        for field_name in [
+            "LISA_I",
+            "LISA_Z",
+            "LISA_P",
+            "LISA_P_ADJ",
+            "LISA_SIG",
+            "LISA_CLASS",
+        ] {
             if schema.field_index(field_name).is_some() {
                 return Err(ToolError::Validation(format!(
-                    "output schema already contains field '{}'", field_name
+                    "output schema already contains field '{}'",
+                    field_name
                 )));
             }
         }
-        schema.add_field(wbvector::FieldDef::new("LISA_I", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("LISA_Z", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("LISA_P", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("LISA_P_ADJ", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("LISA_SIG", wbvector::FieldType::Integer));
-        schema.add_field(wbvector::FieldDef::new("LISA_CLASS", wbvector::FieldType::Text));
+        schema.add_field(wbvector::FieldDef::new(
+            "LISA_I",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "LISA_Z",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "LISA_P",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "LISA_P_ADJ",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "LISA_SIG",
+            wbvector::FieldType::Integer,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "LISA_CLASS",
+            wbvector::FieldType::Text,
+        ));
         output.schema = schema;
 
         let mut obs_by_source = vec![None; input.features.len()];
@@ -1359,15 +1524,15 @@ Applications: identifying crime hotspots, disease clusters, pollution zones, or 
                     _ => ns += 1,
                 }
 
-                output.features[feature_index]
-                    .attributes
-                    .push(lisa_i[obs_idx].map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float));
-                output.features[feature_index]
-                    .attributes
-                    .push(lisa_z[obs_idx].map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float));
-                output.features[feature_index]
-                    .attributes
-                    .push(lisa_p[obs_idx].map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float));
+                output.features[feature_index].attributes.push(
+                    lisa_i[obs_idx].map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float),
+                );
+                output.features[feature_index].attributes.push(
+                    lisa_z[obs_idx].map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float),
+                );
+                output.features[feature_index].attributes.push(
+                    lisa_p[obs_idx].map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float),
+                );
                 output.features[feature_index]
                     .attributes
                     .push(p_adj.map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float));
@@ -1379,10 +1544,18 @@ Applications: identifying crime hotspots, disease clusters, pollution zones, or 
                     .push(wbvector::FieldValue::Text(class.to_string()));
             } else {
                 ns += 1;
-                output.features[feature_index].attributes.push(wbvector::FieldValue::Null);
-                output.features[feature_index].attributes.push(wbvector::FieldValue::Null);
-                output.features[feature_index].attributes.push(wbvector::FieldValue::Null);
-                output.features[feature_index].attributes.push(wbvector::FieldValue::Null);
+                output.features[feature_index]
+                    .attributes
+                    .push(wbvector::FieldValue::Null);
+                output.features[feature_index]
+                    .attributes
+                    .push(wbvector::FieldValue::Null);
+                output.features[feature_index]
+                    .attributes
+                    .push(wbvector::FieldValue::Null);
+                output.features[feature_index]
+                    .attributes
+                    .push(wbvector::FieldValue::Null);
                 output.features[feature_index]
                     .attributes
                     .push(wbvector::FieldValue::Integer(0));
@@ -1397,44 +1570,44 @@ Applications: identifying crime hotspots, disease clusters, pollution zones, or 
         let n_features_used = n_obs - weights.diagnostics.dropped_feature_count - island_count;
 
         let summary = json!({
-                "tool_id": "local_morans_i_lisa",
-                "inference_method": inference_method,
-                "statistic": serde_json::Value::Null,
-                "p_value": serde_json::Value::Null,
-                "alpha": alpha,
-                "significance_class": serde_json::Value::Null,
-                "fdr_correction": fdr_correction,
-                "n_features_used": n_features_used,
-                "n_features_dropped": weights.diagnostics.dropped_feature_count,
-                "n_observations": n_features_used,
-                "dropped_observations": weights.diagnostics.dropped_feature_count,
-                "n_islands": island_count,
-                "class_counts": {
-                    "HH": hh,
-                    "LL": ll,
-                    "HL": hl,
-                    "LH": lh,
-                    "NS": ns,
-                },
-                "weights_diagnostics": {
-                    "n_features": weights.diagnostics.n_features,
-                    "n_islands": weights.diagnostics.n_islands,
-                    "neighbor_count_min": weights.diagnostics.neighbor_count_min,
-                    "neighbor_count_mean": weights.diagnostics.neighbor_count_mean,
-                    "neighbor_count_max": weights.diagnostics.neighbor_count_max,
-                    "connected_component_count": weights.diagnostics.connected_component_count,
-                    "row_standardized": weights.diagnostics.row_standardized,
-                },
-                "warnings": weights.warnings,
-                "assumption_flags": {
-                    "permutation_supported": true,
-                    "inference": inference_method,
-                },
-                "runtime_metadata": {
-                    "seed": seed,
-                    "permutations": if inference == "permutation" { Some(num_simulations) } else { None },
-                },
-            });
+            "tool_id": "local_morans_i_lisa",
+            "inference_method": inference_method,
+            "statistic": serde_json::Value::Null,
+            "p_value": serde_json::Value::Null,
+            "alpha": alpha,
+            "significance_class": serde_json::Value::Null,
+            "fdr_correction": fdr_correction,
+            "n_features_used": n_features_used,
+            "n_features_dropped": weights.diagnostics.dropped_feature_count,
+            "n_observations": n_features_used,
+            "dropped_observations": weights.diagnostics.dropped_feature_count,
+            "n_islands": island_count,
+            "class_counts": {
+                "HH": hh,
+                "LL": ll,
+                "HL": hl,
+                "LH": lh,
+                "NS": ns,
+            },
+            "weights_diagnostics": {
+                "n_features": weights.diagnostics.n_features,
+                "n_islands": weights.diagnostics.n_islands,
+                "neighbor_count_min": weights.diagnostics.neighbor_count_min,
+                "neighbor_count_mean": weights.diagnostics.neighbor_count_mean,
+                "neighbor_count_max": weights.diagnostics.neighbor_count_max,
+                "connected_component_count": weights.diagnostics.connected_component_count,
+                "row_standardized": weights.diagnostics.row_standardized,
+            },
+            "warnings": weights.warnings,
+            "assumption_flags": {
+                "permutation_supported": true,
+                "inference": inference_method,
+            },
+            "runtime_metadata": {
+                "seed": seed,
+                "permutations": if inference == "permutation" { Some(num_simulations) } else { None },
+            },
+        });
 
         let mut outputs = BTreeMap::new();
         outputs.insert("output".to_string(), json!(locator));
@@ -1502,7 +1675,10 @@ Applications: identifying crime hotspots, disease clusters, pollution zones, or 
                 )
             };
             write_text(&path, &body)?;
-            outputs.insert("output_html".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_html".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
 
         ctx.progress.progress(1.0);
@@ -1547,20 +1723,77 @@ Applications: identifying retail sales hotspots, disease/crime hotspots, polluti
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector layer.", required: true },
-                ToolParamSpec { name: "field", description: "Numeric attribute field to analyze.", required: true },
-                ToolParamSpec { name: "weights_mode", description: "Neighborhood mode: queen, rook, k_nearest, distance_band.", required: false },
-                ToolParamSpec { name: "k", description: "k value for k_nearest mode.", required: false },
-                ToolParamSpec { name: "distance", description: "Distance threshold for distance_band mode.", required: false },
-                ToolParamSpec { name: "row_standardize", description: "Apply row standardization to weights (default true).", required: false },
-                ToolParamSpec { name: "variant", description: "Variant: gi or gi_star (default gi_star).", required: false },
-                ToolParamSpec { name: "inference", description: "Inference mode: asymptotic or permutation (default: asymptotic).", required: false },
-                ToolParamSpec { name: "num_simulations", description: "Number of permutations for permutation testing (default: 999).", required: false },
-                ToolParamSpec { name: "seed", description: "Random seed for reproducible permutation testing (default: u64::MAX).", required: false },
-                ToolParamSpec { name: "island_policy", description: "Island handling: drop_with_warning, keep_zero_weight, error.", required: false },
-                ToolParamSpec { name: "alpha", description: "Significance threshold in [0, 1]; default 0.05.", required: false },
-                ToolParamSpec { name: "output", description: "Output vector path with GI fields.", required: true },
-                ToolParamSpec { name: "output_html", description: "Optional HTML report output path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Numeric attribute field to analyze.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "weights_mode",
+                    description: "Neighborhood mode: queen, rook, k_nearest, distance_band.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "k",
+                    description: "k value for k_nearest mode.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "distance",
+                    description: "Distance threshold for distance_band mode.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "row_standardize",
+                    description: "Apply row standardization to weights (default true).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "variant",
+                    description: "Variant: gi or gi_star (default gi_star).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "inference",
+                    description: "Inference mode: asymptotic or permutation (default: asymptotic).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "num_simulations",
+                    description: "Number of permutations for permutation testing (default: 999).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "seed",
+                    description:
+                        "Random seed for reproducible permutation testing (default: u64::MAX).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "island_policy",
+                    description: "Island handling: drop_with_warning, keep_zero_weight, error.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "alpha",
+                    description: "Significance threshold in [0, 1]; default 0.05.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector path with GI fields.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output_html",
+                    description: "Optional HTML report output path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -1646,12 +1879,16 @@ Applications: identifying retail sales hotspots, disease/crime hotspots, polluti
         if matches!(mode, SpatialWeightsMode::DistanceBand) {
             let d = parse_f64_arg(args, "distance")?;
             if !d.is_finite() || d <= 0.0 {
-                return Err(ToolError::Validation("distance must be finite and > 0".to_string()));
+                return Err(ToolError::Validation(
+                    "distance must be finite and > 0".to_string(),
+                ));
             }
         }
         if let Some(distance) = parse_optional_f64_arg(args, "distance") {
             if !distance.is_finite() || distance <= 0.0 {
-                return Err(ToolError::Validation("distance must be finite and > 0".to_string()));
+                return Err(ToolError::Validation(
+                    "distance must be finite and > 0".to_string(),
+                ));
             }
         }
 
@@ -1706,7 +1943,10 @@ Applications: identifying retail sales hotspots, disease/crime hotspots, polluti
         let island_policy = IslandPolicy::parse(args)?;
         let alpha = parse_optional_f64_arg(args, "alpha").unwrap_or(0.05);
         let num_simulations = parse_optional_usize_arg(args, "num_simulations")?.unwrap_or(999);
-        let seed = parse_optional_usize_arg(args, "seed").map(|opt| opt.map(|s| s as u64)).ok().flatten();
+        let seed = parse_optional_usize_arg(args, "seed")
+            .map(|opt| opt.map(|s| s as u64))
+            .ok()
+            .flatten();
         let output_path = parse_vector_path_arg(args, "output")?;
         let output_html = parse_optional_output_path(args, "output_html")?;
 
@@ -1726,25 +1966,43 @@ Applications: identifying retail sales hotspots, disease/crime hotspots, polluti
 
         ctx.progress.info("computing Getis-Ord G*");
         let (gi_z, gi_p, cluster_type, inference_method) = if inference == "permutation" {
-            ctx.progress.info(&format!("computing permutation test ({} simulations)", num_simulations));
-            let perm_result = wbspatialstats::autocorrelation::permutation::getis_ord_gi_star_permutation(
-                &values,
-                &weights,
-                num_simulations,
-                seed,
-            ).map_err(|e| ToolError::Execution(format!("permutation test failed: {}", e)))?;
-            
+            ctx.progress.info(&format!(
+                "computing permutation test ({} simulations)",
+                num_simulations
+            ));
+            let perm_result =
+                wbspatialstats::autocorrelation::permutation::getis_ord_gi_star_permutation(
+                    &values,
+                    &weights,
+                    num_simulations,
+                    seed,
+                )
+                .map_err(|e| ToolError::Execution(format!("permutation test failed: {}", e)))?;
+
             let gi_z_vec: Vec<Option<f64>> = vec![Some(perm_result.z_score); values.len()];
-            let gi_p_vec: Vec<Option<f64>> = vec![Some(perm_result.p_value_two_tailed); values.len()];
-            let cluster_vec: Vec<String> = values.iter().enumerate().map(|(_i, &v)| {
-                let z = perm_result.z_score;
-                if v > values.iter().sum::<f64>() / values.len() as f64 {
-                    if z > 1.96 { "HotSpot".to_string() } else { "NotSignificant".to_string() }
-                } else {
-                    if z < -1.96 { "ColdSpot".to_string() } else { "NotSignificant".to_string() }
-                }
-            }).collect();
-            
+            let gi_p_vec: Vec<Option<f64>> =
+                vec![Some(perm_result.p_value_two_tailed); values.len()];
+            let cluster_vec: Vec<String> = values
+                .iter()
+                .enumerate()
+                .map(|(_i, &v)| {
+                    let z = perm_result.z_score;
+                    if v > values.iter().sum::<f64>() / values.len() as f64 {
+                        if z > 1.96 {
+                            "HotSpot".to_string()
+                        } else {
+                            "NotSignificant".to_string()
+                        }
+                    } else {
+                        if z < -1.96 {
+                            "ColdSpot".to_string()
+                        } else {
+                            "NotSignificant".to_string()
+                        }
+                    }
+                })
+                .collect();
+
             (gi_z_vec, gi_p_vec, cluster_vec, "permutation")
         } else {
             let (z, p, c) = compute_getis_ord_gi_star(&values, &weights, island_policy, alpha)?;
@@ -1776,15 +2034,25 @@ Applications: identifying retail sales hotspots, disease/crime hotspots, polluti
         for field_name in ["GI_Z", "GI_P", "GI_P_ADJ", "GI_SIG", "GI_CLASS"] {
             if schema.field_index(field_name).is_some() {
                 return Err(ToolError::Validation(format!(
-                    "output schema already contains field '{}'", field_name
+                    "output schema already contains field '{}'",
+                    field_name
                 )));
             }
         }
         schema.add_field(wbvector::FieldDef::new("GI_Z", wbvector::FieldType::Float));
         schema.add_field(wbvector::FieldDef::new("GI_P", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("GI_P_ADJ", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("GI_SIG", wbvector::FieldType::Integer));
-        schema.add_field(wbvector::FieldDef::new("GI_CLASS", wbvector::FieldType::Text));
+        schema.add_field(wbvector::FieldDef::new(
+            "GI_P_ADJ",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "GI_SIG",
+            wbvector::FieldType::Integer,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "GI_CLASS",
+            wbvector::FieldType::Text,
+        ));
         output.schema = schema;
 
         let mut obs_by_source = vec![None; input.features.len()];
@@ -1820,9 +2088,9 @@ Applications: identifying retail sales hotspots, disease/crime hotspots, polluti
                 output.features[feature_index]
                     .attributes
                     .push(z_value.map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float));
-                output.features[feature_index]
-                    .attributes
-                    .push(gi_p[obs_idx].map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float));
+                output.features[feature_index].attributes.push(
+                    gi_p[obs_idx].map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float),
+                );
                 output.features[feature_index]
                     .attributes
                     .push(p_adj.map_or(wbvector::FieldValue::Null, wbvector::FieldValue::Float));
@@ -1834,9 +2102,15 @@ Applications: identifying retail sales hotspots, disease/crime hotspots, polluti
                     .push(wbvector::FieldValue::Text(class.to_string()));
             } else {
                 ns += 1;
-                output.features[feature_index].attributes.push(wbvector::FieldValue::Null);
-                output.features[feature_index].attributes.push(wbvector::FieldValue::Null);
-                output.features[feature_index].attributes.push(wbvector::FieldValue::Null);
+                output.features[feature_index]
+                    .attributes
+                    .push(wbvector::FieldValue::Null);
+                output.features[feature_index]
+                    .attributes
+                    .push(wbvector::FieldValue::Null);
+                output.features[feature_index]
+                    .attributes
+                    .push(wbvector::FieldValue::Null);
                 output.features[feature_index]
                     .attributes
                     .push(wbvector::FieldValue::Integer(0));
@@ -1851,45 +2125,45 @@ Applications: identifying retail sales hotspots, disease/crime hotspots, polluti
         let n_features_used = n_obs - weights.diagnostics.dropped_feature_count - island_count;
 
         let summary = json!({
-                "tool_id": "getis_ord_gi_star",
-                "inference_method": inference_method,
-                "variant": match variant {
-                    GiVariant::Gi => "gi",
-                    GiVariant::GiStar => "gi_star",
-                },
-                "statistic": serde_json::Value::Null,
-                "p_value": serde_json::Value::Null,
-                "alpha": alpha,
-                "significance_class": serde_json::Value::Null,
-                "n_features_used": n_features_used,
-                "n_features_dropped": weights.diagnostics.dropped_feature_count,
-                "n_observations": n_features_used,
-                "dropped_observations": weights.diagnostics.dropped_feature_count,
-                "n_islands": island_count,
-                "class_counts": {
-                    "hot": hot,
-                    "cold": cold,
-                    "ns": ns,
-                },
-                "weights_diagnostics": {
-                    "n_features": weights.diagnostics.n_features,
-                    "n_islands": weights.diagnostics.n_islands,
-                    "neighbor_count_min": weights.diagnostics.neighbor_count_min,
-                    "neighbor_count_mean": weights.diagnostics.neighbor_count_mean,
-                    "neighbor_count_max": weights.diagnostics.neighbor_count_max,
-                    "connected_component_count": weights.diagnostics.connected_component_count,
-                    "row_standardized": weights.diagnostics.row_standardized,
-                },
-                "warnings": weights.warnings,
-                "assumption_flags": {
-                    "permutation_supported": true,
-                    "inference": inference_method,
-                },
-                "runtime_metadata": {
-                    "seed": seed,
-                    "permutations": if inference == "permutation" { Some(num_simulations) } else { None },
-                },
-            });
+            "tool_id": "getis_ord_gi_star",
+            "inference_method": inference_method,
+            "variant": match variant {
+                GiVariant::Gi => "gi",
+                GiVariant::GiStar => "gi_star",
+            },
+            "statistic": serde_json::Value::Null,
+            "p_value": serde_json::Value::Null,
+            "alpha": alpha,
+            "significance_class": serde_json::Value::Null,
+            "n_features_used": n_features_used,
+            "n_features_dropped": weights.diagnostics.dropped_feature_count,
+            "n_observations": n_features_used,
+            "dropped_observations": weights.diagnostics.dropped_feature_count,
+            "n_islands": island_count,
+            "class_counts": {
+                "hot": hot,
+                "cold": cold,
+                "ns": ns,
+            },
+            "weights_diagnostics": {
+                "n_features": weights.diagnostics.n_features,
+                "n_islands": weights.diagnostics.n_islands,
+                "neighbor_count_min": weights.diagnostics.neighbor_count_min,
+                "neighbor_count_mean": weights.diagnostics.neighbor_count_mean,
+                "neighbor_count_max": weights.diagnostics.neighbor_count_max,
+                "connected_component_count": weights.diagnostics.connected_component_count,
+                "row_standardized": weights.diagnostics.row_standardized,
+            },
+            "warnings": weights.warnings,
+            "assumption_flags": {
+                "permutation_supported": true,
+                "inference": inference_method,
+            },
+            "runtime_metadata": {
+                "seed": seed,
+                "permutations": if inference == "permutation" { Some(num_simulations) } else { None },
+            },
+        });
 
         let mut outputs = BTreeMap::new();
         outputs.insert("output".to_string(), json!(locator));
@@ -1955,7 +2229,10 @@ Applications: identifying retail sales hotspots, disease/crime hotspots, polluti
                 )
             };
             write_text(&path, &body)?;
-            outputs.insert("output_html".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_html".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
 
         ctx.progress.progress(1.0);
@@ -2048,10 +2325,7 @@ fn points_envelope(points: &[(f64, f64)]) -> (f64, f64, f64, f64) {
 }
 
 fn convex_hull_area(points: &[(f64, f64)]) -> f64 {
-    let topo_points: Vec<TopoCoord> = points
-        .iter()
-        .map(|(x, y)| TopoCoord::xy(*x, *y))
-        .collect();
+    let topo_points: Vec<TopoCoord> = points.iter().map(|(x, y)| TopoCoord::xy(*x, *y)).collect();
     match convex_hull(&topo_points, 1.0e-12) {
         TopoGeometry::Polygon(poly) => geometry_area(&TopoGeometry::Polygon(poly)).abs(),
         _ => {
@@ -2078,7 +2352,6 @@ fn polygon_area_and_membership(
     Ok((area, polygons))
 }
 
-
 impl Tool for NearestNeighbourIndexTool {
     fn metadata(&self) -> ToolMetadata {
         ToolMetadata {
@@ -2092,12 +2365,36 @@ Applications: Testing for ecological clustering, disease cluster detection, spat
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector layer.", required: true },
-                ToolParamSpec { name: "study_area_mode", description: "Study area mode: hull, envelope, polygon_layer.", required: false },
-                ToolParamSpec { name: "study_area_polygon", description: "Polygon layer used when study_area_mode=polygon_layer.", required: false },
-                ToolParamSpec { name: "output_json", description: "Optional JSON report output path.", required: false },
-                ToolParamSpec { name: "output_html", description: "Optional HTML report output path.", required: false },
-                ToolParamSpec { name: "output_csv", description: "Optional CSV summary output path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "study_area_mode",
+                    description: "Study area mode: hull, envelope, polygon_layer.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "study_area_polygon",
+                    description: "Polygon layer used when study_area_mode=polygon_layer.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output_json",
+                    description: "Optional JSON report output path.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output_html",
+                    description: "Optional HTML report output path.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output_csv",
+                    description: "Optional CSV summary output path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -2156,12 +2453,16 @@ Applications: Testing for ecological clustering, disease cluster detection, spat
             StudyAreaMode::Hull => (convex_hull_area(&points_all), points_all),
             StudyAreaMode::Envelope => {
                 let (min_x, min_y, max_x, max_y) = points_envelope(&points_all);
-                (((max_x - min_x).abs() * (max_y - min_y).abs()).max(1.0e-12), points_all)
+                (
+                    ((max_x - min_x).abs() * (max_y - min_y).abs()).max(1.0e-12),
+                    points_all,
+                )
             }
             StudyAreaMode::PolygonLayer => {
                 let study_path = parse_required_vector_path_arg(args, "study_area_polygon")?;
-                let polygons_layer = wbvector::read(&study_path)
-                    .map_err(|e| ToolError::Execution(format!("failed reading study_area_polygon: {e}")))?;
+                let polygons_layer = wbvector::read(&study_path).map_err(|e| {
+                    ToolError::Execution(format!("failed reading study_area_polygon: {e}"))
+                })?;
                 let (area, polygons) = polygon_area_and_membership(&polygons_layer)?;
                 let filtered: Vec<(f64, f64)> = points_all
                     .into_iter()
@@ -2193,7 +2494,11 @@ Applications: Testing for ecological clustering, disease cluster detection, spat
         let p_value = result.p_value;
 
         let significance_class = if p_value <= 0.05 {
-            if z_score > 0.0 { "clustered" } else { "dispersed" }
+            if z_score > 0.0 {
+                "clustered"
+            } else {
+                "dispersed"
+            }
         } else {
             "ns"
         };
@@ -2240,10 +2545,14 @@ Applications: Testing for ecological clustering, disease cluster detection, spat
         outputs.insert("summary".to_string(), report.clone());
 
         if let Some(path) = output_json {
-            let body = serde_json::to_string_pretty(&report)
-                .map_err(|e| ToolError::Execution(format!("failed serializing JSON report: {e}")))?;
+            let body = serde_json::to_string_pretty(&report).map_err(|e| {
+                ToolError::Execution(format!("failed serializing JSON report: {e}"))
+            })?;
             write_text(&path, &body)?;
-            outputs.insert("output_json".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_json".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
         if let Some(path) = output_csv {
             let body = format!(
@@ -2257,7 +2566,10 @@ Applications: Testing for ecological clustering, disease cluster detection, spat
                 study_area
             );
             write_text(&path, &body)?;
-            outputs.insert("output_csv".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_csv".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
         if let Some(path) = output_html {
             let body = build_branded_html_report(
@@ -2282,7 +2594,10 @@ Applications: Testing for ecological clustering, disease cluster detection, spat
                 ],
             );
             write_text(&path, &body)?;
-            outputs.insert("output_html".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_html".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
 
         ctx.progress.progress(1.0);
@@ -2303,17 +2618,61 @@ Applications: Disease cluster screening, ecological hotspot detection, retail lo
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector layer.", required: true },
-                ToolParamSpec { name: "grid_mode", description: "Grid mode: rows_cols or cell_size.", required: false },
-                ToolParamSpec { name: "rows", description: "Rows when grid_mode=rows_cols.", required: false },
-                ToolParamSpec { name: "cols", description: "Cols when grid_mode=rows_cols.", required: false },
-                ToolParamSpec { name: "cell_size", description: "Cell size when grid_mode=cell_size.", required: false },
-                ToolParamSpec { name: "study_area_mode", description: "Study area mode: hull, envelope, polygon_layer.", required: false },
-                ToolParamSpec { name: "study_area_polygon", description: "Polygon layer used when study_area_mode=polygon_layer.", required: false },
-                ToolParamSpec { name: "output_grid", description: "Optional quadrat polygon grid output path.", required: false },
-                ToolParamSpec { name: "output_json", description: "Optional JSON report output path.", required: false },
-                ToolParamSpec { name: "output_html", description: "Optional HTML report output path.", required: false },
-                ToolParamSpec { name: "output_csv", description: "Optional CSV summary output path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "grid_mode",
+                    description: "Grid mode: rows_cols or cell_size.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "rows",
+                    description: "Rows when grid_mode=rows_cols.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "cols",
+                    description: "Cols when grid_mode=rows_cols.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "cell_size",
+                    description: "Cell size when grid_mode=cell_size.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "study_area_mode",
+                    description: "Study area mode: hull, envelope, polygon_layer.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "study_area_polygon",
+                    description: "Polygon layer used when study_area_mode=polygon_layer.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output_grid",
+                    description: "Optional quadrat polygon grid output path.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output_json",
+                    description: "Optional JSON report output path.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output_html",
+                    description: "Optional HTML report output path.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output_csv",
+                    description: "Optional CSV summary output path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -2367,13 +2726,17 @@ Applications: Disease cluster screening, ecological hotspot detection, retail lo
                 let rows = parse_optional_usize_arg(args, "rows")?.unwrap_or(10);
                 let cols = parse_optional_usize_arg(args, "cols")?.unwrap_or(10);
                 if rows == 0 || cols == 0 {
-                    return Err(ToolError::Validation("rows and cols must be > 0".to_string()));
+                    return Err(ToolError::Validation(
+                        "rows and cols must be > 0".to_string(),
+                    ));
                 }
             }
             QuadratGridMode::CellSize => {
                 let cell_size = parse_f64_arg(args, "cell_size")?;
                 if !cell_size.is_finite() || cell_size <= 0.0 {
-                    return Err(ToolError::Validation("cell_size must be finite and > 0".to_string()));
+                    return Err(ToolError::Validation(
+                        "cell_size must be finite and > 0".to_string(),
+                    ));
                 }
             }
         }
@@ -2404,8 +2767,9 @@ Applications: Disease cluster screening, ecological hotspot detection, retail lo
             }
             StudyAreaMode::PolygonLayer => {
                 let study_path = parse_required_vector_path_arg(args, "study_area_polygon")?;
-                let polygons_layer = wbvector::read(&study_path)
-                    .map_err(|e| ToolError::Execution(format!("failed reading study_area_polygon: {e}")))?;
+                let polygons_layer = wbvector::read(&study_path).map_err(|e| {
+                    ToolError::Execution(format!("failed reading study_area_polygon: {e}"))
+                })?;
                 let (area, polygons) = polygon_area_and_membership(&polygons_layer)?;
                 points = points_all
                     .into_iter()
@@ -2522,10 +2886,14 @@ Applications: Disease cluster screening, ecological hotspot detection, retail lo
         outputs.insert("summary".to_string(), report.clone());
 
         if let Some(path) = output_json {
-            let body = serde_json::to_string_pretty(&report)
-                .map_err(|e| ToolError::Execution(format!("failed serializing JSON report: {e}")))?;
+            let body = serde_json::to_string_pretty(&report).map_err(|e| {
+                ToolError::Execution(format!("failed serializing JSON report: {e}"))
+            })?;
             write_text(&path, &body)?;
-            outputs.insert("output_json".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_json".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
         if let Some(path) = output_csv {
             let body = format!(
@@ -2539,7 +2907,10 @@ Applications: Disease cluster screening, ecological hotspot detection, retail lo
                 study_area,
             );
             write_text(&path, &body)?;
-            outputs.insert("output_csv".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_csv".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
         if let Some(path) = output_html {
             let body = build_branded_html_report(
@@ -2564,17 +2935,28 @@ Applications: Disease cluster screening, ecological hotspot detection, retail lo
                 ],
             );
             write_text(&path, &body)?;
-            outputs.insert("output_html".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "output_html".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
 
         if let Some(path) = output_grid {
             let mut grid = wbvector::Layer::new("quadrat_grid")
                 .with_geom_type(wbvector::GeometryType::Polygon);
             grid.crs = input.crs.clone();
-            grid.schema.add_field(wbvector::FieldDef::new("ROW", wbvector::FieldType::Integer));
-            grid.schema.add_field(wbvector::FieldDef::new("COL", wbvector::FieldType::Integer));
-            grid.schema.add_field(wbvector::FieldDef::new("COUNT", wbvector::FieldType::Integer));
-            grid.schema.add_field(wbvector::FieldDef::new("EXPECTED", wbvector::FieldType::Float));
+            grid.schema
+                .add_field(wbvector::FieldDef::new("ROW", wbvector::FieldType::Integer));
+            grid.schema
+                .add_field(wbvector::FieldDef::new("COL", wbvector::FieldType::Integer));
+            grid.schema.add_field(wbvector::FieldDef::new(
+                "COUNT",
+                wbvector::FieldType::Integer,
+            ));
+            grid.schema.add_field(wbvector::FieldDef::new(
+                "EXPECTED",
+                wbvector::FieldType::Float,
+            ));
 
             for r in 0..rows {
                 for c in 0..cols {
@@ -2590,20 +2972,21 @@ Applications: Disease cluster screening, ecological hotspot detection, retail lo
                         wbvector::Coord::xy(x0, y0),
                     ]);
                     let idx = r * cols + c;
-                    grid
-                        .add_feature(
-                            Some(wbvector::Geometry::Polygon {
-                                exterior: ring,
-                                interiors: Vec::new(),
-                            }),
-                            &[
-                                ("ROW", wbvector::FieldValue::Integer(r as i64)),
-                                ("COL", wbvector::FieldValue::Integer(c as i64)),
-                                ("COUNT", wbvector::FieldValue::Integer(counts[idx] as i64)),
-                                ("EXPECTED", wbvector::FieldValue::Float(expected)),
-                            ],
-                        )
-                        .map_err(|e| ToolError::Execution(format!("failed creating quadrat grid feature: {e}")))?;
+                    grid.add_feature(
+                        Some(wbvector::Geometry::Polygon {
+                            exterior: ring,
+                            interiors: Vec::new(),
+                        }),
+                        &[
+                            ("ROW", wbvector::FieldValue::Integer(r as i64)),
+                            ("COL", wbvector::FieldValue::Integer(c as i64)),
+                            ("COUNT", wbvector::FieldValue::Integer(counts[idx] as i64)),
+                            ("EXPECTED", wbvector::FieldValue::Float(expected)),
+                        ],
+                    )
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed creating quadrat grid feature: {e}"))
+                    })?;
                 }
             }
 
@@ -2633,14 +3016,46 @@ Compare to SEM (Spatial Error) when spatial dependence acts through residuals (e
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector layer.", required: true },
-                ToolParamSpec { name: "response_field", description: "Response variable (dependent variable).", required: true },
-                ToolParamSpec { name: "predictor_fields", description: "Comma-separated predictor field names.", required: true },
-                ToolParamSpec { name: "weights_mode", description: "Neighborhood mode: queen, rook, k_nearest, distance_band.", required: false },
-                ToolParamSpec { name: "k", description: "k value for k_nearest mode.", required: false },
-                ToolParamSpec { name: "distance", description: "Distance threshold for distance_band mode.", required: false },
-                ToolParamSpec { name: "row_standardize", description: "Apply row standardization to weights (default: true).", required: false },
-                ToolParamSpec { name: "output", description: "Output vector layer with regression results.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "response_field",
+                    description: "Response variable (dependent variable).",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "predictor_fields",
+                    description: "Comma-separated predictor field names.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "weights_mode",
+                    description: "Neighborhood mode: queen, rook, k_nearest, distance_band.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "k",
+                    description: "k value for k_nearest mode.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "distance",
+                    description: "Distance threshold for distance_band mode.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "row_standardize",
+                    description: "Apply row standardization to weights (default: true).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector layer with regression results.",
+                    required: true,
+                },
             ],
         }
     }
@@ -2649,7 +3064,10 @@ Compare to SEM (Spatial Error) when spatial dependence acts through residuals (e
         let mut defaults = ToolArgs::new();
         defaults.insert("input".to_string(), json!("input.gpkg"));
         defaults.insert("response_field".to_string(), json!("response"));
-        defaults.insert("predictor_fields".to_string(), json!("predictor1,predictor2"));
+        defaults.insert(
+            "predictor_fields".to_string(),
+            json!("predictor1,predictor2"),
+        );
         defaults.insert("weights_mode".to_string(), json!("queen"));
         defaults.insert("row_standardize".to_string(), json!(true));
         defaults.insert("output".to_string(), json!("output.gpkg"));
@@ -2693,8 +3111,8 @@ Compare to SEM (Spatial Error) when spatial dependence acts through residuals (e
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        use wbspatialstats::regression::SpatialLagRegression;
         use nalgebra::DMatrix;
+        use wbspatialstats::regression::SpatialLagRegression;
 
         let input = load_vector_arg(args, "input")?;
         let response_field = parse_string_arg(args, "response_field")?;
@@ -2708,7 +3126,8 @@ Compare to SEM (Spatial Error) when spatial dependence acts through residuals (e
 
         let predictor_fields: Vec<&str> = predictor_str.split(',').map(|s| s.trim()).collect();
 
-        ctx.progress.info("Extracting response and predictor variables");
+        ctx.progress
+            .info("Extracting response and predictor variables");
         let (observations, dropped) = collect_spatial_observations(&input, &response_field)?;
         if observations.is_empty() {
             return Err(ToolError::Execution(format!(
@@ -2722,7 +3141,7 @@ Compare to SEM (Spatial Error) when spatial dependence acts through residuals (e
 
         // Extract predictor fields - build design matrix column by column
         let mut x_data: Vec<f64> = Vec::with_capacity(n * (1 + predictor_fields.len()));
-        
+
         // Intercept column
         for _ in 0..n {
             x_data.push(1.0);
@@ -2765,7 +3184,10 @@ Compare to SEM (Spatial Error) when spatial dependence acts through residuals (e
         let mut schema = output_layer.schema.clone();
 
         // Add coefficient, SE, t-stat, p-value columns
-        schema.add_field(wbvector::FieldDef::new("coef_intercept", wbvector::FieldType::Float));
+        schema.add_field(wbvector::FieldDef::new(
+            "coef_intercept",
+            wbvector::FieldType::Float,
+        ));
         for pred_field in &predictor_fields {
             schema.add_field(wbvector::FieldDef::new(
                 &format!("{}_coef", pred_field),
@@ -2778,16 +3200,24 @@ Compare to SEM (Spatial Error) when spatial dependence acts through residuals (e
         }
 
         schema.add_field(wbvector::FieldDef::new("rho", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("rho_pvalue", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("r_squared", wbvector::FieldType::Float));
+        schema.add_field(wbvector::FieldDef::new(
+            "rho_pvalue",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "r_squared",
+            wbvector::FieldType::Float,
+        ));
         schema.add_field(wbvector::FieldDef::new("aic", wbvector::FieldType::Float));
 
         output_layer.schema = schema;
 
         // Add output features with results
         for (idx, feature) in input.features.iter().enumerate() {
-            if idx >= n { break; }
-            
+            if idx >= n {
+                break;
+            }
+
             let mut new_feature = feature.clone();
             new_feature.attributes.insert(
                 output_layer.schema.field_index("coef_intercept").unwrap(),
@@ -2795,8 +3225,14 @@ Compare to SEM (Spatial Error) when spatial dependence acts through residuals (e
             );
 
             for (i, &pred_field) in predictor_fields.iter().enumerate() {
-                let coef_idx = output_layer.schema.field_index(&format!("{}_coef", pred_field)).unwrap();
-                let se_idx = output_layer.schema.field_index(&format!("{}_se", pred_field)).unwrap();
+                let coef_idx = output_layer
+                    .schema
+                    .field_index(&format!("{}_coef", pred_field))
+                    .unwrap();
+                let se_idx = output_layer
+                    .schema
+                    .field_index(&format!("{}_se", pred_field))
+                    .unwrap();
 
                 new_feature.attributes.insert(
                     coef_idx,
@@ -2832,7 +3268,7 @@ Compare to SEM (Spatial Error) when spatial dependence acts through residuals (e
 
         let mut outputs = ToolArgs::new();
         outputs.insert("output".to_string(), json!(locator));
-        
+
         ctx.progress.progress(1.0);
         Ok(ToolRunResult { outputs })
     }
@@ -2851,14 +3287,46 @@ Compare to SAR when spatial dependence operates through the response variable di
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector layer.", required: true },
-                ToolParamSpec { name: "response_field", description: "Response variable.", required: true },
-                ToolParamSpec { name: "predictor_fields", description: "Comma-separated predictor field names.", required: true },
-                ToolParamSpec { name: "weights_mode", description: "Neighborhood mode: queen, rook, k_nearest, distance_band.", required: false },
-                ToolParamSpec { name: "k", description: "k value for k_nearest.", required: false },
-                ToolParamSpec { name: "distance", description: "Distance threshold.", required: false },
-                ToolParamSpec { name: "row_standardize", description: "Row standardize weights (default: true).", required: false },
-                ToolParamSpec { name: "output", description: "Output vector layer with results.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "response_field",
+                    description: "Response variable.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "predictor_fields",
+                    description: "Comma-separated predictor field names.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "weights_mode",
+                    description: "Neighborhood mode: queen, rook, k_nearest, distance_band.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "k",
+                    description: "k value for k_nearest.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "distance",
+                    description: "Distance threshold.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "row_standardize",
+                    description: "Row standardize weights (default: true).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector layer with results.",
+                    required: true,
+                },
             ],
         }
     }
@@ -2867,7 +3335,10 @@ Compare to SAR when spatial dependence operates through the response variable di
         let mut defaults = ToolArgs::new();
         defaults.insert("input".to_string(), json!("input.gpkg"));
         defaults.insert("response_field".to_string(), json!("response"));
-        defaults.insert("predictor_fields".to_string(), json!("predictor1,predictor2"));
+        defaults.insert(
+            "predictor_fields".to_string(),
+            json!("predictor1,predictor2"),
+        );
         defaults.insert("weights_mode".to_string(), json!("queen"));
         defaults.insert("row_standardize".to_string(), json!(true));
         defaults.insert("output".to_string(), json!("output.gpkg"));
@@ -2911,8 +3382,8 @@ Compare to SAR when spatial dependence operates through the response variable di
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        use wbspatialstats::regression::SpatialErrorRegression;
         use nalgebra::DMatrix;
+        use wbspatialstats::regression::SpatialErrorRegression;
 
         let input = load_vector_arg(args, "input")?;
         let response_field = parse_string_arg(args, "response_field")?;
@@ -2926,7 +3397,8 @@ Compare to SAR when spatial dependence operates through the response variable di
 
         let predictor_fields: Vec<&str> = predictor_str.split(',').map(|s| s.trim()).collect();
 
-        ctx.progress.info("Extracting response and predictor variables");
+        ctx.progress
+            .info("Extracting response and predictor variables");
         let (observations, dropped) = collect_spatial_observations(&input, &response_field)?;
         if observations.is_empty() {
             return Err(ToolError::Execution(format!(
@@ -2940,7 +3412,7 @@ Compare to SAR when spatial dependence operates through the response variable di
 
         // Extract predictor fields - build design matrix column by column
         let mut x_data: Vec<f64> = Vec::with_capacity(n * (1 + predictor_fields.len()));
-        
+
         // Intercept column
         for _ in 0..n {
             x_data.push(1.0);
@@ -2983,7 +3455,10 @@ Compare to SAR when spatial dependence operates through the response variable di
         let mut schema = output_layer.schema.clone();
 
         // Add coefficient, SE columns
-        schema.add_field(wbvector::FieldDef::new("coef_intercept", wbvector::FieldType::Float));
+        schema.add_field(wbvector::FieldDef::new(
+            "coef_intercept",
+            wbvector::FieldType::Float,
+        ));
         for pred_field in &predictor_fields {
             schema.add_field(wbvector::FieldDef::new(
                 &format!("{}_coef", pred_field),
@@ -2995,17 +3470,28 @@ Compare to SAR when spatial dependence operates through the response variable di
             ));
         }
 
-        schema.add_field(wbvector::FieldDef::new("lambda", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("lambda_pvalue", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("r_squared", wbvector::FieldType::Float));
+        schema.add_field(wbvector::FieldDef::new(
+            "lambda",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "lambda_pvalue",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "r_squared",
+            wbvector::FieldType::Float,
+        ));
         schema.add_field(wbvector::FieldDef::new("aic", wbvector::FieldType::Float));
 
         output_layer.schema = schema;
 
         // Add output features with results
         for (idx, feature) in input.features.iter().enumerate() {
-            if idx >= n { break; }
-            
+            if idx >= n {
+                break;
+            }
+
             let mut new_feature = feature.clone();
             new_feature.attributes.insert(
                 output_layer.schema.field_index("coef_intercept").unwrap(),
@@ -3013,8 +3499,14 @@ Compare to SAR when spatial dependence operates through the response variable di
             );
 
             for (i, &pred_field) in predictor_fields.iter().enumerate() {
-                let coef_idx = output_layer.schema.field_index(&format!("{}_coef", pred_field)).unwrap();
-                let se_idx = output_layer.schema.field_index(&format!("{}_se", pred_field)).unwrap();
+                let coef_idx = output_layer
+                    .schema
+                    .field_index(&format!("{}_coef", pred_field))
+                    .unwrap();
+                let se_idx = output_layer
+                    .schema
+                    .field_index(&format!("{}_se", pred_field))
+                    .unwrap();
 
                 new_feature.attributes.insert(
                     coef_idx,
@@ -3050,7 +3542,7 @@ Compare to SAR when spatial dependence operates through the response variable di
 
         let mut outputs = ToolArgs::new();
         outputs.insert("output".to_string(), json!(locator));
-        
+
         ctx.progress.progress(1.0);
         Ok(ToolRunResult { outputs })
     }
@@ -3069,11 +3561,31 @@ Applications: Identifying where relationships break down, detecting market segme
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector layer.", required: true },
-                ToolParamSpec { name: "response_field", description: "Response variable.", required: true },
-                ToolParamSpec { name: "predictor_fields", description: "Comma-separated predictor field names.", required: true },
-                ToolParamSpec { name: "bandwidth_hint", description: "Optional bandwidth hint (auto-optimizes if omitted).", required: false },
-                ToolParamSpec { name: "output", description: "Output vector with local coefficients.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "response_field",
+                    description: "Response variable.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "predictor_fields",
+                    description: "Comma-separated predictor field names.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "bandwidth_hint",
+                    description: "Optional bandwidth hint (auto-optimizes if omitted).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector with local coefficients.",
+                    required: true,
+                },
             ],
         }
     }
@@ -3082,7 +3594,10 @@ Applications: Identifying where relationships break down, detecting market segme
         let mut defaults = ToolArgs::new();
         defaults.insert("input".to_string(), json!("input.gpkg"));
         defaults.insert("response_field".to_string(), json!("response"));
-        defaults.insert("predictor_fields".to_string(), json!("predictor1,predictor2"));
+        defaults.insert(
+            "predictor_fields".to_string(),
+            json!("predictor1,predictor2"),
+        );
         defaults.insert("output".to_string(), json!("output.gpkg"));
 
         ToolManifest {
@@ -3122,8 +3637,8 @@ Applications: Identifying where relationships break down, detecting market segme
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        use wbspatialstats::regression::GeographicallyWeightedRegression;
         use nalgebra::DMatrix;
+        use wbspatialstats::regression::GeographicallyWeightedRegression;
 
         let input = load_vector_arg(args, "input")?;
         let response_field = parse_string_arg(args, "response_field")?;
@@ -3133,7 +3648,8 @@ Applications: Identifying where relationships break down, detecting market segme
 
         let predictor_fields: Vec<&str> = predictor_str.split(',').map(|s| s.trim()).collect();
 
-        ctx.progress.info("Extracting response and predictor variables");
+        ctx.progress
+            .info("Extracting response and predictor variables");
         let (observations, dropped) = collect_spatial_observations(&input, &response_field)?;
         if observations.is_empty() {
             return Err(ToolError::Execution(format!(
@@ -3148,7 +3664,7 @@ Applications: Identifying where relationships break down, detecting market segme
 
         // Extract predictor fields - build design matrix column by column
         let mut x_data: Vec<f64> = Vec::with_capacity(n * (1 + predictor_fields.len()));
-        
+
         // Intercept column
         for _ in 0..n {
             x_data.push(1.0);
@@ -3171,7 +3687,8 @@ Applications: Identifying where relationships break down, detecting market segme
 
         let x = DMatrix::from_column_slice(n, 1 + predictor_fields.len(), &x_data);
 
-        ctx.progress.info("Estimating geographically weighted regression (GWR)");
+        ctx.progress
+            .info("Estimating geographically weighted regression (GWR)");
         let result = GeographicallyWeightedRegression::estimate(&y, &x, &coords, bandwidth_hint)
             .map_err(|e| ToolError::Execution(format!("GWR estimation failed: {}", e)))?;
 
@@ -3180,7 +3697,10 @@ Applications: Identifying where relationships break down, detecting market segme
         let mut schema = output_layer.schema.clone();
 
         // Add local coefficient columns for each location and predictor
-        schema.add_field(wbvector::FieldDef::new("coef_intercept_local", wbvector::FieldType::Float));
+        schema.add_field(wbvector::FieldDef::new(
+            "coef_intercept_local",
+            wbvector::FieldType::Float,
+        ));
         for pred_field in &predictor_fields {
             schema.add_field(wbvector::FieldDef::new(
                 &format!("{}_coef_local", pred_field),
@@ -3192,25 +3712,42 @@ Applications: Identifying where relationships break down, detecting market segme
             ));
         }
 
-        schema.add_field(wbvector::FieldDef::new("gwr_bandwidth", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("gwr_r_squared", wbvector::FieldType::Float));
+        schema.add_field(wbvector::FieldDef::new(
+            "gwr_bandwidth",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "gwr_r_squared",
+            wbvector::FieldType::Float,
+        ));
 
         output_layer.schema = schema;
 
         // Add output features with local coefficients
         for (idx, feature) in input.features.iter().enumerate() {
-            if idx >= n { break; }
-            
+            if idx >= n {
+                break;
+            }
+
             let mut new_feature = feature.clone();
-            
+
             new_feature.attributes.insert(
-                output_layer.schema.field_index("coef_intercept_local").unwrap(),
+                output_layer
+                    .schema
+                    .field_index("coef_intercept_local")
+                    .unwrap(),
                 wbvector::FieldValue::Float(result.local_coefficients[(idx, 0)]),
             );
 
             for (i, &pred_field) in predictor_fields.iter().enumerate() {
-                let coef_idx = output_layer.schema.field_index(&format!("{}_coef_local", pred_field)).unwrap();
-                let se_idx = output_layer.schema.field_index(&format!("{}_se_local", pred_field)).unwrap();
+                let coef_idx = output_layer
+                    .schema
+                    .field_index(&format!("{}_coef_local", pred_field))
+                    .unwrap();
+                let se_idx = output_layer
+                    .schema
+                    .field_index(&format!("{}_se_local", pred_field))
+                    .unwrap();
 
                 new_feature.attributes.insert(
                     coef_idx,
@@ -3238,7 +3775,7 @@ Applications: Identifying where relationships break down, detecting market segme
 
         let mut outputs = ToolArgs::new();
         outputs.insert("output".to_string(), json!(locator));
-        
+
         ctx.progress.progress(1.0);
         Ok(ToolRunResult { outputs })
     }
@@ -3261,16 +3798,57 @@ Applications: Disease/crime hotspot mapping (combine with epidemiological/crime 
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector layer with observation points.", required: true },
-                ToolParamSpec { name: "field", description: "Numeric attribute field to analyze.", required: true },
-                ToolParamSpec { name: "weights_mode", description: "Neighborhood mode: queen, rook, k_nearest, distance_band.", required: false },
-                ToolParamSpec { name: "k", description: "k value for k_nearest mode (default 8).", required: false },
-                ToolParamSpec { name: "distance", description: "Distance threshold for distance_band mode.", required: false },
-                ToolParamSpec { name: "row_standardize", description: "Apply row standardization to weights (default true).", required: false },
-                ToolParamSpec { name: "island_policy", description: "Island handling: drop_with_warning, keep_zero_weight, error.", required: false },
-                ToolParamSpec { name: "alpha", description: "Significance threshold in [0, 1]; default 0.05.", required: false },
-                ToolParamSpec { name: "cell_size", description: "Output raster cell size (optional; uses input extent).", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path (classification: 0=NS, 1=HH, 2=LL, 3=HL, 4=LH).", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector layer with observation points.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Numeric attribute field to analyze.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "weights_mode",
+                    description: "Neighborhood mode: queen, rook, k_nearest, distance_band.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "k",
+                    description: "k value for k_nearest mode (default 8).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "distance",
+                    description: "Distance threshold for distance_band mode.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "row_standardize",
+                    description: "Apply row standardization to weights (default true).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "island_policy",
+                    description: "Island handling: drop_with_warning, keep_zero_weight, error.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "alpha",
+                    description: "Significance threshold in [0, 1]; default 0.05.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "cell_size",
+                    description: "Output raster cell size (optional; uses input extent).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description:
+                        "Output raster path (classification: 0=NS, 1=HH, 2=LL, 3=HL, 4=LH).",
+                    required: true,
+                },
             ],
         }
     }
@@ -3338,12 +3916,16 @@ Applications: Disease/crime hotspot mapping (combine with epidemiological/crime 
         if matches!(mode, SpatialWeightsMode::DistanceBand) {
             let d = parse_f64_arg(args, "distance")?;
             if !d.is_finite() || d <= 0.0 {
-                return Err(ToolError::Validation("distance must be finite and > 0".to_string()));
+                return Err(ToolError::Validation(
+                    "distance must be finite and > 0".to_string(),
+                ));
             }
         }
         if let Some(distance) = parse_optional_f64_arg(args, "distance") {
             if !distance.is_finite() || distance <= 0.0 {
-                return Err(ToolError::Validation("distance must be finite and > 0".to_string()));
+                return Err(ToolError::Validation(
+                    "distance must be finite and > 0".to_string(),
+                ));
             }
         }
 
@@ -3354,7 +3936,9 @@ Applications: Disease/crime hotspot mapping (combine with epidemiological/crime 
 
         if let Some(cell_size) = parse_optional_f64_arg(args, "cell_size") {
             if !cell_size.is_finite() || cell_size <= 0.0 {
-                return Err(ToolError::Validation("cell_size must be positive and finite".to_string()));
+                return Err(ToolError::Validation(
+                    "cell_size must be positive and finite".to_string(),
+                ));
             }
         }
 
@@ -3391,11 +3975,19 @@ Applications: Disease/crime hotspot mapping (combine with epidemiological/crime 
         )?;
 
         ctx.progress.info("Computing LISA");
-        let (_, _, _, quadrant) = compute_local_morans_i_lisa(&values, &weights, island_policy, alpha)?;
+        let (_, _, _, quadrant) =
+            compute_local_morans_i_lisa(&values, &weights, island_policy, alpha)?;
 
         ctx.progress.info("Building output raster");
-        let samples: Vec<(f64, f64, f64)> = observations.iter().map(|o| (o.x, o.y, o.value)).collect();
-        let mut output = super::build_point_interpolation_output(&input, &samples, cell_size, None, DataType::F64)?;
+        let samples: Vec<(f64, f64, f64)> =
+            observations.iter().map(|o| (o.x, o.y, o.value)).collect();
+        let mut output = super::build_point_interpolation_output(
+            &input,
+            &samples,
+            cell_size,
+            None,
+            DataType::F64,
+        )?;
 
         let rows = output.rows;
         let cols = output.cols;
@@ -3404,7 +3996,8 @@ Applications: Disease/crime hotspot mapping (combine with epidemiological/crime 
         let cell_x = output.cell_size_x;
         let cell_y = output.cell_size_y;
 
-        ctx.progress.info("Interpolating LISA classes to raster grid");
+        ctx.progress
+            .info("Interpolating LISA classes to raster grid");
         for row in 0..rows {
             for col in 0..cols {
                 let x = x_min + (col as f64 + 0.5) * cell_x;
@@ -3464,16 +4057,56 @@ Applications: Crime hotspot mapping, retail sales concentration, pollution zone 
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector layer with observation points.", required: true },
-                ToolParamSpec { name: "field", description: "Numeric attribute field to analyze.", required: true },
-                ToolParamSpec { name: "weights_mode", description: "Neighborhood mode: queen, rook, k_nearest, distance_band.", required: false },
-                ToolParamSpec { name: "k", description: "k value for k_nearest mode (default 8).", required: false },
-                ToolParamSpec { name: "distance", description: "Distance threshold for distance_band mode.", required: false },
-                ToolParamSpec { name: "row_standardize", description: "Apply row standardization to weights (default true).", required: false },
-                ToolParamSpec { name: "island_policy", description: "Island handling: drop_with_warning, keep_zero_weight, error.", required: false },
-                ToolParamSpec { name: "alpha", description: "Significance threshold in [0, 1]; default 0.05.", required: false },
-                ToolParamSpec { name: "cell_size", description: "Output raster cell size (optional; uses input extent).", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path (classification: -1=Cold, 0=NS, 1=Hot).", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector layer with observation points.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Numeric attribute field to analyze.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "weights_mode",
+                    description: "Neighborhood mode: queen, rook, k_nearest, distance_band.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "k",
+                    description: "k value for k_nearest mode (default 8).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "distance",
+                    description: "Distance threshold for distance_band mode.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "row_standardize",
+                    description: "Apply row standardization to weights (default true).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "island_policy",
+                    description: "Island handling: drop_with_warning, keep_zero_weight, error.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "alpha",
+                    description: "Significance threshold in [0, 1]; default 0.05.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "cell_size",
+                    description: "Output raster cell size (optional; uses input extent).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path (classification: -1=Cold, 0=NS, 1=Hot).",
+                    required: true,
+                },
             ],
         }
     }
@@ -3541,12 +4174,16 @@ Applications: Crime hotspot mapping, retail sales concentration, pollution zone 
         if matches!(mode, SpatialWeightsMode::DistanceBand) {
             let d = parse_f64_arg(args, "distance")?;
             if !d.is_finite() || d <= 0.0 {
-                return Err(ToolError::Validation("distance must be finite and > 0".to_string()));
+                return Err(ToolError::Validation(
+                    "distance must be finite and > 0".to_string(),
+                ));
             }
         }
         if let Some(distance) = parse_optional_f64_arg(args, "distance") {
             if !distance.is_finite() || distance <= 0.0 {
-                return Err(ToolError::Validation("distance must be finite and > 0".to_string()));
+                return Err(ToolError::Validation(
+                    "distance must be finite and > 0".to_string(),
+                ));
             }
         }
 
@@ -3557,7 +4194,9 @@ Applications: Crime hotspot mapping, retail sales concentration, pollution zone 
 
         if let Some(cell_size) = parse_optional_f64_arg(args, "cell_size") {
             if !cell_size.is_finite() || cell_size <= 0.0 {
-                return Err(ToolError::Validation("cell_size must be positive and finite".to_string()));
+                return Err(ToolError::Validation(
+                    "cell_size must be positive and finite".to_string(),
+                ));
             }
         }
 
@@ -3594,11 +4233,19 @@ Applications: Crime hotspot mapping, retail sales concentration, pollution zone 
         )?;
 
         ctx.progress.info("Computing Getis-Ord Gi*");
-        let (_, _, cluster_type) = compute_getis_ord_gi_star(&values, &weights, island_policy, alpha)?;
+        let (_, _, cluster_type) =
+            compute_getis_ord_gi_star(&values, &weights, island_policy, alpha)?;
 
         ctx.progress.info("Building output raster");
-        let samples: Vec<(f64, f64, f64)> = observations.iter().map(|o| (o.x, o.y, o.value)).collect();
-        let mut output = super::build_point_interpolation_output(&input, &samples, cell_size, None, DataType::F64)?;
+        let samples: Vec<(f64, f64, f64)> =
+            observations.iter().map(|o| (o.x, o.y, o.value)).collect();
+        let mut output = super::build_point_interpolation_output(
+            &input,
+            &samples,
+            cell_size,
+            None,
+            DataType::F64,
+        )?;
 
         let rows = output.rows;
         let cols = output.cols;
@@ -3607,7 +4254,8 @@ Applications: Crime hotspot mapping, retail sales concentration, pollution zone 
         let cell_x = output.cell_size_x;
         let cell_y = output.cell_size_y;
 
-        ctx.progress.info("Interpolating hotspot classes to raster grid");
+        ctx.progress
+            .info("Interpolating hotspot classes to raster grid");
         for row in 0..rows {
             for col in 0..cols {
                 let x = x_min + (col as f64 + 0.5) * cell_x;
@@ -3665,15 +4313,51 @@ impl Tool for SpatialLagRegressionRasterTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector layer.", required: true },
-                ToolParamSpec { name: "response_field", description: "Response variable.", required: true },
-                ToolParamSpec { name: "predictor_fields", description: "Comma-separated predictor fields.", required: true },
-                ToolParamSpec { name: "weights_mode", description: "Neighborhood mode: queen, rook, k_nearest, distance_band.", required: false },
-                ToolParamSpec { name: "k", description: "k value for k_nearest mode (default 8).", required: false },
-                ToolParamSpec { name: "distance", description: "Distance threshold for distance_band mode.", required: false },
-                ToolParamSpec { name: "row_standardize", description: "Apply row standardization to weights (default true).", required: false },
-                ToolParamSpec { name: "cell_size", description: "Output raster cell size (optional; uses input extent).", required: false },
-                ToolParamSpec { name: "output", description: "Output raster (fitted values).", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "response_field",
+                    description: "Response variable.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "predictor_fields",
+                    description: "Comma-separated predictor fields.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "weights_mode",
+                    description: "Neighborhood mode: queen, rook, k_nearest, distance_band.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "k",
+                    description: "k value for k_nearest mode (default 8).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "distance",
+                    description: "Distance threshold for distance_band mode.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "row_standardize",
+                    description: "Apply row standardization to weights (default true).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "cell_size",
+                    description: "Output raster cell size (optional; uses input extent).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster (fitted values).",
+                    required: true,
+                },
             ],
         }
     }
@@ -3697,15 +4381,51 @@ impl Tool for SpatialLagRegressionRasterTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input vector layer.".to_string(), required: true },
-                ToolParamDescriptor { name: "response_field".to_string(), description: "Response variable.".to_string(), required: true },
-                ToolParamDescriptor { name: "predictor_fields".to_string(), description: "Predictor fields.".to_string(), required: true },
-                ToolParamDescriptor { name: "weights_mode".to_string(), description: "Neighborhood mode.".to_string(), required: false },
-                ToolParamDescriptor { name: "k".to_string(), description: "k for k_nearest.".to_string(), required: false },
-                ToolParamDescriptor { name: "distance".to_string(), description: "Distance threshold.".to_string(), required: false },
-                ToolParamDescriptor { name: "row_standardize".to_string(), description: "Row standardize weights.".to_string(), required: false },
-                ToolParamDescriptor { name: "cell_size".to_string(), description: "Output raster cell size.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Output raster.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input vector layer.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "response_field".to_string(),
+                    description: "Response variable.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "predictor_fields".to_string(),
+                    description: "Predictor fields.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "weights_mode".to_string(),
+                    description: "Neighborhood mode.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "k".to_string(),
+                    description: "k for k_nearest.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "distance".to_string(),
+                    description: "Distance threshold.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "row_standardize".to_string(),
+                    description: "Row standardize weights.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "cell_size".to_string(),
+                    description: "Output raster cell size.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Output raster.".to_string(),
+                    required: true,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -3713,7 +4433,11 @@ impl Tool for SpatialLagRegressionRasterTool {
                 description: "Estimate SAR and interpolate fitted values to raster.".to_string(),
                 args: example_args,
             }],
-            tags: vec!["raster".to_string(), "spatial-regression".to_string(), "sar".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "spatial-regression".to_string(),
+                "sar".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3727,8 +4451,8 @@ impl Tool for SpatialLagRegressionRasterTool {
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        use wbspatialstats::regression::SpatialLagRegression;
         use nalgebra::DMatrix;
+        use wbspatialstats::regression::SpatialLagRegression;
 
         let input = load_vector_arg(args, "input")?;
         let response_field = parse_string_arg(args, "response_field")?;
@@ -3743,7 +4467,8 @@ impl Tool for SpatialLagRegressionRasterTool {
 
         let predictor_fields: Vec<&str> = predictor_str.split(',').map(|s| s.trim()).collect();
 
-        ctx.progress.info("Extracting response and predictor variables");
+        ctx.progress
+            .info("Extracting response and predictor variables");
         let (observations, dropped) = collect_spatial_observations(&input, &response_field)?;
         if observations.is_empty() {
             return Err(ToolError::Execution(format!(
@@ -3757,7 +4482,7 @@ impl Tool for SpatialLagRegressionRasterTool {
 
         // Extract predictor fields - build design matrix column by column
         let mut x_data: Vec<f64> = Vec::with_capacity(n * (1 + predictor_fields.len()));
-        
+
         // Intercept column
         for _ in 0..n {
             x_data.push(1.0);
@@ -3768,7 +4493,9 @@ impl Tool for SpatialLagRegressionRasterTool {
             if pred_obs.len() != n {
                 return Err(ToolError::Execution(format!(
                     "Predictor '{}' has {} observations vs {} for response",
-                    pred_field, pred_obs.len(), n
+                    pred_field,
+                    pred_obs.len(),
+                    n
                 )));
             }
             for obs in pred_obs {
@@ -3794,8 +4521,15 @@ impl Tool for SpatialLagRegressionRasterTool {
             .map_err(|e| ToolError::Execution(format!("SAR estimation failed: {}", e)))?;
 
         ctx.progress.info("Building output raster");
-        let samples: Vec<(f64, f64, f64)> = observations.iter().map(|o| (o.x, o.y, o.value)).collect();
-        let mut output = super::build_point_interpolation_output(&input, &samples, cell_size, None, DataType::F64)?;
+        let samples: Vec<(f64, f64, f64)> =
+            observations.iter().map(|o| (o.x, o.y, o.value)).collect();
+        let mut output = super::build_point_interpolation_output(
+            &input,
+            &samples,
+            cell_size,
+            None,
+            DataType::F64,
+        )?;
 
         let rows = output.rows;
         let cols = output.cols;
@@ -3804,7 +4538,8 @@ impl Tool for SpatialLagRegressionRasterTool {
         let cell_x = output.cell_size_x;
         let cell_y = output.cell_size_y;
 
-        ctx.progress.info("Interpolating fitted values to raster grid");
+        ctx.progress
+            .info("Interpolating fitted values to raster grid");
         for row in 0..rows {
             for col in 0..cols {
                 let x = x_min + (col as f64 + 0.5) * cell_x;
@@ -3853,15 +4588,51 @@ impl Tool for SpatialErrorRegressionRasterTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector layer.", required: true },
-                ToolParamSpec { name: "response_field", description: "Response variable.", required: true },
-                ToolParamSpec { name: "predictor_fields", description: "Comma-separated predictor fields.", required: true },
-                ToolParamSpec { name: "weights_mode", description: "Neighborhood mode: queen, rook, k_nearest, distance_band.", required: false },
-                ToolParamSpec { name: "k", description: "k value for k_nearest mode (default 8).", required: false },
-                ToolParamSpec { name: "distance", description: "Distance threshold for distance_band mode.", required: false },
-                ToolParamSpec { name: "row_standardize", description: "Apply row standardization to weights (default true).", required: false },
-                ToolParamSpec { name: "cell_size", description: "Output raster cell size (optional; uses input extent).", required: false },
-                ToolParamSpec { name: "output", description: "Output raster (fitted values).", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "response_field",
+                    description: "Response variable.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "predictor_fields",
+                    description: "Comma-separated predictor fields.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "weights_mode",
+                    description: "Neighborhood mode: queen, rook, k_nearest, distance_band.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "k",
+                    description: "k value for k_nearest mode (default 8).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "distance",
+                    description: "Distance threshold for distance_band mode.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "row_standardize",
+                    description: "Apply row standardization to weights (default true).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "cell_size",
+                    description: "Output raster cell size (optional; uses input extent).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster (fitted values).",
+                    required: true,
+                },
             ],
         }
     }
@@ -3885,15 +4656,51 @@ impl Tool for SpatialErrorRegressionRasterTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input vector layer.".to_string(), required: true },
-                ToolParamDescriptor { name: "response_field".to_string(), description: "Response variable.".to_string(), required: true },
-                ToolParamDescriptor { name: "predictor_fields".to_string(), description: "Predictor fields.".to_string(), required: true },
-                ToolParamDescriptor { name: "weights_mode".to_string(), description: "Neighborhood mode.".to_string(), required: false },
-                ToolParamDescriptor { name: "k".to_string(), description: "k for k_nearest.".to_string(), required: false },
-                ToolParamDescriptor { name: "distance".to_string(), description: "Distance threshold.".to_string(), required: false },
-                ToolParamDescriptor { name: "row_standardize".to_string(), description: "Row standardize weights.".to_string(), required: false },
-                ToolParamDescriptor { name: "cell_size".to_string(), description: "Output raster cell size.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Output raster.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input vector layer.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "response_field".to_string(),
+                    description: "Response variable.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "predictor_fields".to_string(),
+                    description: "Predictor fields.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "weights_mode".to_string(),
+                    description: "Neighborhood mode.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "k".to_string(),
+                    description: "k for k_nearest.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "distance".to_string(),
+                    description: "Distance threshold.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "row_standardize".to_string(),
+                    description: "Row standardize weights.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "cell_size".to_string(),
+                    description: "Output raster cell size.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Output raster.".to_string(),
+                    required: true,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -3901,7 +4708,11 @@ impl Tool for SpatialErrorRegressionRasterTool {
                 description: "Estimate SEM and interpolate fitted values to raster.".to_string(),
                 args: example_args,
             }],
-            tags: vec!["raster".to_string(), "spatial-regression".to_string(), "sem".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "spatial-regression".to_string(),
+                "sem".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3915,8 +4726,8 @@ impl Tool for SpatialErrorRegressionRasterTool {
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        use wbspatialstats::regression::SpatialErrorRegression;
         use nalgebra::DMatrix;
+        use wbspatialstats::regression::SpatialErrorRegression;
 
         let input = load_vector_arg(args, "input")?;
         let response_field = parse_string_arg(args, "response_field")?;
@@ -3931,7 +4742,8 @@ impl Tool for SpatialErrorRegressionRasterTool {
 
         let predictor_fields: Vec<&str> = predictor_str.split(',').map(|s| s.trim()).collect();
 
-        ctx.progress.info("Extracting response and predictor variables");
+        ctx.progress
+            .info("Extracting response and predictor variables");
         let (observations, dropped) = collect_spatial_observations(&input, &response_field)?;
         if observations.is_empty() {
             return Err(ToolError::Execution(format!(
@@ -3945,7 +4757,7 @@ impl Tool for SpatialErrorRegressionRasterTool {
 
         // Extract predictor fields - build design matrix column by column
         let mut x_data: Vec<f64> = Vec::with_capacity(n * (1 + predictor_fields.len()));
-        
+
         // Intercept column
         for _ in 0..n {
             x_data.push(1.0);
@@ -3956,7 +4768,9 @@ impl Tool for SpatialErrorRegressionRasterTool {
             if pred_obs.len() != n {
                 return Err(ToolError::Execution(format!(
                     "Predictor '{}' has {} observations vs {} for response",
-                    pred_field, pred_obs.len(), n
+                    pred_field,
+                    pred_obs.len(),
+                    n
                 )));
             }
             for obs in pred_obs {
@@ -3982,8 +4796,15 @@ impl Tool for SpatialErrorRegressionRasterTool {
             .map_err(|e| ToolError::Execution(format!("SEM estimation failed: {}", e)))?;
 
         ctx.progress.info("Building output raster");
-        let samples: Vec<(f64, f64, f64)> = observations.iter().map(|o| (o.x, o.y, o.value)).collect();
-        let mut output = super::build_point_interpolation_output(&input, &samples, cell_size, None, DataType::F64)?;
+        let samples: Vec<(f64, f64, f64)> =
+            observations.iter().map(|o| (o.x, o.y, o.value)).collect();
+        let mut output = super::build_point_interpolation_output(
+            &input,
+            &samples,
+            cell_size,
+            None,
+            DataType::F64,
+        )?;
 
         let rows = output.rows;
         let cols = output.cols;
@@ -3992,7 +4813,8 @@ impl Tool for SpatialErrorRegressionRasterTool {
         let cell_x = output.cell_size_x;
         let cell_y = output.cell_size_y;
 
-        ctx.progress.info("Interpolating fitted values to raster grid");
+        ctx.progress
+            .info("Interpolating fitted values to raster grid");
         for row in 0..rows {
             for col in 0..cols {
                 let x = x_min + (col as f64 + 0.5) * cell_x;
@@ -4041,13 +4863,42 @@ impl Tool for GeographicallyWeightedRegressionRasterTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector layer.", required: true },
-                ToolParamSpec { name: "response_field", description: "Response variable.", required: true },
-                ToolParamSpec { name: "predictor_fields", description: "Comma-separated predictor fields.", required: true },
-                ToolParamSpec { name: "bandwidth", description: "Bandwidth for kernel (default: adaptive).", required: false },
-                ToolParamSpec { name: "kernel", description: "Kernel type: gaussian, bisquare (default: bisquare).", required: false },
-                ToolParamSpec { name: "cell_size", description: "Output raster cell size (optional; uses input extent).", required: false },
-                ToolParamSpec { name: "output_prefix", description: "Output raster filename prefix (adds _coef_X suffix per predictor).", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "response_field",
+                    description: "Response variable.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "predictor_fields",
+                    description: "Comma-separated predictor fields.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "bandwidth",
+                    description: "Bandwidth for kernel (default: adaptive).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "kernel",
+                    description: "Kernel type: gaussian, bisquare (default: bisquare).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "cell_size",
+                    description: "Output raster cell size (optional; uses input extent).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output_prefix",
+                    description:
+                        "Output raster filename prefix (adds _coef_X suffix per predictor).",
+                    required: true,
+                },
             ],
         }
     }
@@ -4069,13 +4920,41 @@ impl Tool for GeographicallyWeightedRegressionRasterTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input vector layer.".to_string(), required: true },
-                ToolParamDescriptor { name: "response_field".to_string(), description: "Response variable.".to_string(), required: true },
-                ToolParamDescriptor { name: "predictor_fields".to_string(), description: "Predictor fields.".to_string(), required: true },
-                ToolParamDescriptor { name: "bandwidth".to_string(), description: "Kernel bandwidth.".to_string(), required: false },
-                ToolParamDescriptor { name: "kernel".to_string(), description: "Kernel type.".to_string(), required: false },
-                ToolParamDescriptor { name: "cell_size".to_string(), description: "Output raster cell size.".to_string(), required: false },
-                ToolParamDescriptor { name: "output_prefix".to_string(), description: "Output raster prefix.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input vector layer.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "response_field".to_string(),
+                    description: "Response variable.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "predictor_fields".to_string(),
+                    description: "Predictor fields.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "bandwidth".to_string(),
+                    description: "Kernel bandwidth.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "kernel".to_string(),
+                    description: "Kernel type.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "cell_size".to_string(),
+                    description: "Output raster cell size.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output_prefix".to_string(),
+                    description: "Output raster prefix.".to_string(),
+                    required: true,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -4083,7 +4962,11 @@ impl Tool for GeographicallyWeightedRegressionRasterTool {
                 description: "Estimate GWR and output local coefficient surfaces.".to_string(),
                 args: example_args,
             }],
-            tags: vec!["raster".to_string(), "spatial-regression".to_string(), "gwr".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "spatial-regression".to_string(),
+                "gwr".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -4097,8 +4980,8 @@ impl Tool for GeographicallyWeightedRegressionRasterTool {
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        use wbspatialstats::regression::GeographicallyWeightedRegression;
         use nalgebra::DMatrix;
+        use wbspatialstats::regression::GeographicallyWeightedRegression;
 
         let input = load_vector_arg(args, "input")?;
         let response_field = parse_string_arg(args, "response_field")?;
@@ -4109,7 +4992,8 @@ impl Tool for GeographicallyWeightedRegressionRasterTool {
 
         let predictor_fields: Vec<&str> = predictor_str.split(',').map(|s| s.trim()).collect();
 
-        ctx.progress.info("Extracting response and predictor variables");
+        ctx.progress
+            .info("Extracting response and predictor variables");
         let (observations, dropped) = collect_spatial_observations(&input, &response_field)?;
         if observations.is_empty() {
             return Err(ToolError::Execution(format!(
@@ -4123,7 +5007,7 @@ impl Tool for GeographicallyWeightedRegressionRasterTool {
 
         // Extract predictor fields
         let mut x_data: Vec<f64> = Vec::with_capacity(n * (1 + predictor_fields.len()));
-        
+
         // Intercept column
         for _ in 0..n {
             x_data.push(1.0);
@@ -4134,7 +5018,9 @@ impl Tool for GeographicallyWeightedRegressionRasterTool {
             if pred_obs.len() != n {
                 return Err(ToolError::Execution(format!(
                     "Predictor '{}' has {} observations vs {} for response",
-                    pred_field, pred_obs.len(), n
+                    pred_field,
+                    pred_obs.len(),
+                    n
                 )));
             }
             for obs in pred_obs {
@@ -4151,16 +5037,29 @@ impl Tool for GeographicallyWeightedRegressionRasterTool {
             .map_err(|e| ToolError::Execution(format!("GWR estimation failed: {}", e)))?;
 
         ctx.progress.info("Building output rasters");
-        let samples: Vec<(f64, f64, f64)> = observations.iter().map(|o| (o.x, o.y, o.value)).collect();
-        let base_raster = super::build_point_interpolation_output(&input, &samples, cell_size, None, DataType::F64)?;
+        let samples: Vec<(f64, f64, f64)> =
+            observations.iter().map(|o| (o.x, o.y, o.value)).collect();
+        let base_raster = super::build_point_interpolation_output(
+            &input,
+            &samples,
+            cell_size,
+            None,
+            DataType::F64,
+        )?;
 
         // For each predictor + intercept, create a coefficient raster
         let mut outputs = ToolArgs::new();
         let n_coefs = 1 + predictor_fields.len();
-        
+
         // Handle optional output prefix
-        let prefix_str = output_prefix.as_ref().map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "gwr_coef".to_string());
-        let prefix_base = prefix_str.trim_end_matches(".tif").trim_end_matches(".img").trim_end_matches(".hdf");
+        let prefix_str = output_prefix
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "gwr_coef".to_string());
+        let prefix_base = prefix_str
+            .trim_end_matches(".tif")
+            .trim_end_matches(".img")
+            .trim_end_matches(".hdf");
 
         for coef_idx in 0..n_coefs {
             let coef_label = if coef_idx == 0 {
@@ -4177,7 +5076,10 @@ impl Tool for GeographicallyWeightedRegressionRasterTool {
             let cell_x = output.cell_size_x;
             let cell_y = output.cell_size_y;
 
-            ctx.progress.info(&format!("Interpolating coefficient {} to raster grid", coef_label));
+            ctx.progress.info(&format!(
+                "Interpolating coefficient {} to raster grid",
+                coef_label
+            ));
             for row in 0..rows {
                 for col in 0..cols {
                     let x = x_min + (col as f64 + 0.5) * cell_x;
@@ -4214,7 +5116,11 @@ impl Tool for GeographicallyWeightedRegressionRasterTool {
             };
 
             ctx.progress.info(&format!("Writing raster {}", coef_label));
-            let locator = GisOverlayCore::store_or_write_output(output, Some(std::path::PathBuf::from(&coef_output_path)), ctx)?;
+            let locator = GisOverlayCore::store_or_write_output(
+                output,
+                Some(std::path::PathBuf::from(&coef_output_path)),
+                ctx,
+            )?;
             outputs.insert(format!("coef_{}", coef_label), json!(locator));
         }
 
@@ -4240,11 +5146,31 @@ Applications: Disease risk mapping (spatially variable incidence), species distr
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector layer.", required: true },
-                ToolParamSpec { name: "bandwidth", description: "Kernel bandwidth (default: auto-computed).", required: false },
-                ToolParamSpec { name: "kernel", description: "Kernel type: gaussian, epanechnikov (default: gaussian).", required: false },
-                ToolParamSpec { name: "cell_size", description: "Output raster cell size (optional).", required: false },
-                ToolParamSpec { name: "output", description: "Output intensity raster.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "bandwidth",
+                    description: "Kernel bandwidth (default: auto-computed).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "kernel",
+                    description: "Kernel type: gaussian, epanechnikov (default: gaussian).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "cell_size",
+                    description: "Output raster cell size (optional).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output intensity raster.",
+                    required: true,
+                },
             ],
         }
     }
@@ -4305,10 +5231,13 @@ Applications: Disease risk mapping (spatially variable incidence), species distr
         }
 
         if points.is_empty() {
-            return Err(ToolError::Execution("No valid point features found".to_string()));
+            return Err(ToolError::Execution(
+                "No valid point features found".to_string(),
+            ));
         }
 
-        ctx.progress.info(&format!("Extracted {} points for KDE", points.len()));
+        ctx.progress
+            .info(&format!("Extracted {} points for KDE", points.len()));
 
         // Auto-compute bandwidth if not provided (Scott's rule)
         let h = if let Some(bw) = bandwidth {
@@ -4323,7 +5252,13 @@ Applications: Disease risk mapping (spatially variable incidence), species distr
 
         // Build output raster with same extent as input layer
         let samples: Vec<(f64, f64, f64)> = points.iter().map(|(x, y)| (*x, *y, 1.0)).collect();
-        let mut output = super::build_point_interpolation_output(&input, &samples, cell_size, None, DataType::F64)?;
+        let mut output = super::build_point_interpolation_output(
+            &input,
+            &samples,
+            cell_size,
+            None,
+            DataType::F64,
+        )?;
 
         let rows = output.rows;
         let cols = output.cols;
@@ -4395,10 +5330,26 @@ Applications: Ecology (animal territory or resource clustering detection across 
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector layer.", required: true },
-                ToolParamSpec { name: "max_distance", description: "Maximum analysis distance.", required: false },
-                ToolParamSpec { name: "step_size", description: "Distance step size for computation.", required: false },
-                ToolParamSpec { name: "output", description: "Output vector with K statistics.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "max_distance",
+                    description: "Maximum analysis distance.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "step_size",
+                    description: "Distance step size for computation.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector with K statistics.",
+                    required: true,
+                },
             ],
         }
     }
@@ -4461,10 +5412,16 @@ Applications: Ecology (animal territory or resource clustering detection across 
             ));
         }
 
-        ctx.progress.info(&format!("Computing Ripley's K for {} points", points.len()));
+        ctx.progress
+            .info(&format!("Computing Ripley's K for {} points", points.len()));
 
         // Compute bounding box
-        let (mut min_x, mut max_x, mut min_y, mut max_y) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+        let (mut min_x, mut max_x, mut min_y, mut max_y) = (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        );
         for (x, y) in &points {
             min_x = min_x.min(*x);
             max_x = max_x.max(*x);
@@ -4503,7 +5460,10 @@ Applications: Ecology (animal territory or resource clustering detection across 
         let mut r = step_size;
         while r <= max_dist {
             let field_name = format!("k_r_{:.2}", r);
-            schema.add_field(wbvector::FieldDef::new(&field_name, wbvector::FieldType::Float));
+            schema.add_field(wbvector::FieldDef::new(
+                &field_name,
+                wbvector::FieldType::Float,
+            ));
             distance_vals.push(r);
             r += step_size;
         }
@@ -4524,10 +5484,9 @@ Applications: Ecology (animal territory or resource clustering detection across 
         feature.geometry = Some(wbvector::Geometry::point(min_x, min_y)); // Dummy geometry
 
         for (i, &k_val) in k_values.iter().enumerate() {
-            feature.attributes.insert(
-                i,
-                wbvector::FieldValue::Float(k_val as f64),
-            );
+            feature
+                .attributes
+                .insert(i, wbvector::FieldValue::Float(k_val as f64));
         }
 
         output_layer.features.push(feature);
@@ -4555,10 +5514,26 @@ Applications: Testing whether observed clustering is statistically significant o
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector layer.", required: true },
-                ToolParamSpec { name: "num_simulations", description: "Number of Monte Carlo simulations (default 99).", required: false },
-                ToolParamSpec { name: "max_distance", description: "Maximum analysis distance.", required: false },
-                ToolParamSpec { name: "output", description: "Output vector with envelope bounds.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "num_simulations",
+                    description: "Number of Monte Carlo simulations (default 99).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "max_distance",
+                    description: "Maximum analysis distance.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector with envelope bounds.",
+                    required: true,
+                },
             ],
         }
     }
@@ -4632,7 +5607,12 @@ Applications: Testing whether observed clustering is statistically significant o
         ));
 
         // Compute bounding box
-        let (mut min_x, mut max_x, mut min_y, mut max_y) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+        let (mut min_x, mut max_x, mut min_y, mut max_y) = (
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        );
         for (x, y) in &points {
             min_x = min_x.min(*x);
             max_x = max_x.max(*x);
@@ -4710,10 +5690,22 @@ Applications: Testing whether observed clustering is statistically significant o
         let mut output_layer = input.clone();
         let mut schema = wbvector::Schema::new();
 
-        schema.add_field(wbvector::FieldDef::new("distance", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("k_observed", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("k_lower", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("k_upper", wbvector::FieldType::Float));
+        schema.add_field(wbvector::FieldDef::new(
+            "distance",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "k_observed",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "k_lower",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "k_upper",
+            wbvector::FieldType::Float,
+        ));
 
         output_layer.schema = schema;
 
@@ -4748,10 +5740,18 @@ Applications: Testing whether observed clustering is statistically significant o
             let mut feature = wbvector::Feature::new();
             feature.geometry = Some(wbvector::Geometry::point(min_x, min_y));
 
-            feature.attributes.insert(0, wbvector::FieldValue::Float(r as f64));
-            feature.attributes.insert(1, wbvector::FieldValue::Float(k_obs as f64));
-            feature.attributes.insert(2, wbvector::FieldValue::Float(k_lower as f64));
-            feature.attributes.insert(3, wbvector::FieldValue::Float(k_upper as f64));
+            feature
+                .attributes
+                .insert(0, wbvector::FieldValue::Float(r as f64));
+            feature
+                .attributes
+                .insert(1, wbvector::FieldValue::Float(k_obs as f64));
+            feature
+                .attributes
+                .insert(2, wbvector::FieldValue::Float(k_lower as f64));
+            feature
+                .attributes
+                .insert(3, wbvector::FieldValue::Float(k_upper as f64));
 
             output_layer.features.push(feature);
             r += step_size;
@@ -4780,9 +5780,21 @@ Applications: Validating fitted Poisson point process models, diagnosing geostat
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input point vector layer.", required: true },
-                ToolParamSpec { name: "intensity_field", description: "Fitted intensity field (optional; computes residuals).", required: false },
-                ToolParamSpec { name: "output", description: "Output vector with residual values.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input point vector layer.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "intensity_field",
+                    description: "Fitted intensity field (optional; computes residuals).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output vector with residual values.",
+                    required: true,
+                },
             ],
         }
     }
@@ -4865,7 +5877,9 @@ Applications: Validating fitted Poisson point process models, diagnosing geostat
         }
 
         if points.is_empty() {
-            return Err(ToolError::Execution("No valid point features found".to_string()));
+            return Err(ToolError::Execution(
+                "No valid point features found".to_string(),
+            ));
         }
 
         ctx.progress.info(&format!(
@@ -4876,7 +5890,12 @@ Applications: Validating fitted Poisson point process models, diagnosing geostat
         // If intensity field not provided, compute KDE as intensity estimate
         if intensity_field.is_none() {
             // Compute bounding box
-            let (mut min_x, mut max_x, mut min_y, mut max_y) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+            let (mut min_x, mut max_x, mut min_y, mut max_y) = (
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+                f64::INFINITY,
+                f64::NEG_INFINITY,
+            );
             for (x, y) in &points {
                 min_x = min_x.min(*x);
                 max_x = max_x.max(*x);
@@ -4911,9 +5930,18 @@ Applications: Validating fitted Poisson point process models, diagnosing geostat
         let mut output_layer = input.clone();
         let mut schema = output_layer.schema.clone();
 
-        schema.add_field(wbvector::FieldDef::new("fitted_intensity", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("raw_residual", wbvector::FieldType::Float));
-        schema.add_field(wbvector::FieldDef::new("std_residual", wbvector::FieldType::Float));
+        schema.add_field(wbvector::FieldDef::new(
+            "fitted_intensity",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "raw_residual",
+            wbvector::FieldType::Float,
+        ));
+        schema.add_field(wbvector::FieldDef::new(
+            "std_residual",
+            wbvector::FieldType::Float,
+        ));
 
         output_layer.schema = schema;
 

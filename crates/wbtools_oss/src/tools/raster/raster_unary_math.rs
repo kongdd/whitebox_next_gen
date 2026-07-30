@@ -4,9 +4,8 @@ use std::sync::Arc;
 
 use serde_json::{json, Value};
 use wbcore::{
-    LicenseTier, Tool, ToolArgs, ToolCategory, ToolContext, ToolError,
-    ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSpec, ToolRunResult,
-    ToolStability,
+    LicenseTier, Tool, ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest,
+    ToolMetadata, ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
 };
 use wbraster::{memory_store, Raster, RasterFormat};
 
@@ -17,10 +16,9 @@ struct UnaryRasterMathSpec {
 }
 
 fn parse_input(args: &ToolArgs) -> Result<&str, ToolError> {
-    let input = args
-        .get("input")
-        .and_then(Value::as_str)
-        .ok_or_else(|| ToolError::Validation("missing required string parameter 'input'".to_string()))?;
+    let input = args.get("input").and_then(Value::as_str).ok_or_else(|| {
+        ToolError::Validation("missing required string parameter 'input'".to_string())
+    })?;
     Ok(input)
 }
 
@@ -52,8 +50,9 @@ fn write_or_store_output(output: Raster, output_path: Option<&str>) -> Result<St
     if let Some(output_path) = output_path {
         if let Some(parent) = Path::new(output_path).parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    ToolError::Execution(format!("failed creating output directory: {e}"))
+                })?;
             }
         }
 
@@ -85,7 +84,8 @@ fn metadata_for(spec: &UnaryRasterMathSpec) -> ToolMetadata {
             },
             ToolParamSpec {
                 name: "output",
-                description: "Optional output raster file path. If omitted, the result is stored in memory.",
+                description:
+                    "Optional output raster file path. If omitted, the result is stored in memory.",
                 required: false,
             },
         ],
@@ -105,7 +105,7 @@ fn manifest_for(spec: &UnaryRasterMathSpec) -> ToolManifest {
         id: spec.id.to_string(),
         display_name: spec.display_name.to_string(),
         summary: spec.summary.to_string(),
-            category: ToolCategory::Raster,
+        category: ToolCategory::Raster,
         license_tier: LicenseTier::Open,
         params: vec![
             ToolParamDescriptor {
@@ -115,7 +115,9 @@ fn manifest_for(spec: &UnaryRasterMathSpec) -> ToolManifest {
             },
             ToolParamDescriptor {
                 name: "output".to_string(),
-                description: "Optional output raster file path. If omitted, the result is stored in memory.".to_string(),
+                description:
+                    "Optional output raster file path. If omitted, the result is stored in memory."
+                        .to_string(),
                 required: false,
             },
         ],
@@ -125,12 +127,21 @@ fn manifest_for(spec: &UnaryRasterMathSpec) -> ToolManifest {
             description: format!("Apply {} transform to each non-nodata cell.", spec.id),
             args: example_args,
         }],
-        tags: vec!["raster".to_string(), "math".to_string(), spec.id.to_string()],
+        tags: vec![
+            "raster".to_string(),
+            "math".to_string(),
+            spec.id.to_string(),
+        ],
         stability: ToolStability::Stable,
     }
 }
 
-fn run_unary_math<Op>(spec: &UnaryRasterMathSpec, op: Op, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError>
+fn run_unary_math<Op>(
+    spec: &UnaryRasterMathSpec,
+    op: Op,
+    args: &ToolArgs,
+    ctx: &ToolContext,
+) -> Result<ToolRunResult, ToolError>
 where
     Op: Fn(f64) -> f64 + Send + Sync,
 {
@@ -144,9 +155,9 @@ where
     let len = output.data.len();
 
     // Use shared kernel: read from input, write to output.
-    output.apply_unary_math_from(op, &input).map_err(|e| {
-        ToolError::Execution(format!("apply_unary_math_from failed: {e}"))
-    })?;
+    output
+        .apply_unary_math_from(op, &input)
+        .map_err(|e| ToolError::Execution(format!("apply_unary_math_from failed: {e}")))?;
 
     ctx.progress.progress(0.9);
 
@@ -204,32 +215,188 @@ macro_rules! define_unary_tool {
     };
 }
 
-define_unary_tool!(RasterAbsTool, "abs", "Abs", "Calculates the absolute value of each raster cell.", |z: f64| z.abs());
-define_unary_tool!(RasterCeilTool, "ceil", "Ceil", "Rounds each raster cell upward to the nearest integer.", |z: f64| z.ceil());
-define_unary_tool!(RasterFloorTool, "floor", "Floor", "Rounds each raster cell downward to the nearest integer.", |z: f64| z.floor());
-define_unary_tool!(RasterRoundTool, "round", "Round", "Rounds each raster cell to the nearest integer.", |z: f64| z.round());
-define_unary_tool!(RasterSqrtTool, "sqrt", "Sqrt", "Computes the square-root of each raster cell.", |z: f64| z.sqrt());
-define_unary_tool!(RasterSquareTool, "square", "Square", "Squares each raster cell value.", |z: f64| z * z);
-define_unary_tool!(RasterLnTool, "ln", "Ln", "Computes the natural logarithm of each raster cell.", |z: f64| z.ln());
-define_unary_tool!(RasterLog10Tool, "log10", "Log10", "Computes the base-10 logarithm of each raster cell.", |z: f64| z.log10());
-define_unary_tool!(RasterSinTool, "sin", "Sin", "Computes the sine of each raster cell value.", |z: f64| z.sin());
-define_unary_tool!(RasterCosTool, "cos", "Cos", "Computes the cosine of each raster cell value.", |z: f64| z.cos());
-define_unary_tool!(RasterTanTool, "tan", "Tan", "Computes the tangent of each raster cell value.", |z: f64| z.tan());
-define_unary_tool!(RasterArcsinTool, "arcsin", "Arcsin", "Computes the inverse sine (arcsin) of each raster cell.", |z: f64| z.asin());
-define_unary_tool!(RasterArccosTool, "arccos", "Arccos", "Computes the inverse cosine (arccos) of each raster cell.", |z: f64| z.acos());
-define_unary_tool!(RasterArctanTool, "arctan", "Arctan", "Computes the inverse tangent (arctan) of each raster cell.", |z: f64| z.atan());
-define_unary_tool!(RasterSinhTool, "sinh", "Sinh", "Computes the hyperbolic sine of each raster cell.", |z: f64| z.sinh());
-define_unary_tool!(RasterCoshTool, "cosh", "Cosh", "Computes the hyperbolic cosine of each raster cell.", |z: f64| z.cosh());
-define_unary_tool!(RasterTanhTool, "tanh", "Tanh", "Computes the hyperbolic tangent of each raster cell.", |z: f64| z.tanh());
-define_unary_tool!(RasterArsinhTool, "arsinh", "Arsinh", "Computes the inverse hyperbolic sine of each raster cell.", |z: f64| z.asinh());
-define_unary_tool!(RasterArcoshTool, "arcosh", "Arcosh", "Computes the inverse hyperbolic cosine of each raster cell.", |z: f64| z.acosh());
-define_unary_tool!(RasterArtanhTool, "artanh", "Artanh", "Computes the inverse hyperbolic tangent of each raster cell.", |z: f64| z.atanh());
-define_unary_tool!(RasterExpTool, "exp", "Exp", "Computes e raised to the power of each raster cell.", |z: f64| z.exp());
-define_unary_tool!(RasterExp2Tool, "exp2", "Exp2", "Computes 2 raised to the power of each raster cell.", |z: f64| z.exp2());
-define_unary_tool!(RasterLog2Tool, "log2", "Log2", "Computes the base-2 logarithm of each raster cell.", |z: f64| z.log2());
-define_unary_tool!(RasterNegateTool, "negate", "Negate", "Negates each non-nodata raster cell value.", |z: f64| -z);
-define_unary_tool!(RasterReciprocalTool, "reciprocal", "Reciprocal", "Computes the reciprocal (1/x) of each raster cell.", |z: f64| 1.0 / z);
-define_unary_tool!(RasterTruncateTool, "truncate", "Truncate", "Truncates each raster cell value to its integer part.", |z: f64| z.trunc());
+define_unary_tool!(
+    RasterAbsTool,
+    "abs",
+    "Abs",
+    "Calculates the absolute value of each raster cell.",
+    |z: f64| z.abs()
+);
+define_unary_tool!(
+    RasterCeilTool,
+    "ceil",
+    "Ceil",
+    "Rounds each raster cell upward to the nearest integer.",
+    |z: f64| z.ceil()
+);
+define_unary_tool!(
+    RasterFloorTool,
+    "floor",
+    "Floor",
+    "Rounds each raster cell downward to the nearest integer.",
+    |z: f64| z.floor()
+);
+define_unary_tool!(
+    RasterRoundTool,
+    "round",
+    "Round",
+    "Rounds each raster cell to the nearest integer.",
+    |z: f64| z.round()
+);
+define_unary_tool!(
+    RasterSqrtTool,
+    "sqrt",
+    "Sqrt",
+    "Computes the square-root of each raster cell.",
+    |z: f64| z.sqrt()
+);
+define_unary_tool!(
+    RasterSquareTool,
+    "square",
+    "Square",
+    "Squares each raster cell value.",
+    |z: f64| z * z
+);
+define_unary_tool!(
+    RasterLnTool,
+    "ln",
+    "Ln",
+    "Computes the natural logarithm of each raster cell.",
+    |z: f64| z.ln()
+);
+define_unary_tool!(
+    RasterLog10Tool,
+    "log10",
+    "Log10",
+    "Computes the base-10 logarithm of each raster cell.",
+    |z: f64| z.log10()
+);
+define_unary_tool!(
+    RasterSinTool,
+    "sin",
+    "Sin",
+    "Computes the sine of each raster cell value.",
+    |z: f64| z.sin()
+);
+define_unary_tool!(
+    RasterCosTool,
+    "cos",
+    "Cos",
+    "Computes the cosine of each raster cell value.",
+    |z: f64| z.cos()
+);
+define_unary_tool!(
+    RasterTanTool,
+    "tan",
+    "Tan",
+    "Computes the tangent of each raster cell value.",
+    |z: f64| z.tan()
+);
+define_unary_tool!(
+    RasterArcsinTool,
+    "arcsin",
+    "Arcsin",
+    "Computes the inverse sine (arcsin) of each raster cell.",
+    |z: f64| z.asin()
+);
+define_unary_tool!(
+    RasterArccosTool,
+    "arccos",
+    "Arccos",
+    "Computes the inverse cosine (arccos) of each raster cell.",
+    |z: f64| z.acos()
+);
+define_unary_tool!(
+    RasterArctanTool,
+    "arctan",
+    "Arctan",
+    "Computes the inverse tangent (arctan) of each raster cell.",
+    |z: f64| z.atan()
+);
+define_unary_tool!(
+    RasterSinhTool,
+    "sinh",
+    "Sinh",
+    "Computes the hyperbolic sine of each raster cell.",
+    |z: f64| z.sinh()
+);
+define_unary_tool!(
+    RasterCoshTool,
+    "cosh",
+    "Cosh",
+    "Computes the hyperbolic cosine of each raster cell.",
+    |z: f64| z.cosh()
+);
+define_unary_tool!(
+    RasterTanhTool,
+    "tanh",
+    "Tanh",
+    "Computes the hyperbolic tangent of each raster cell.",
+    |z: f64| z.tanh()
+);
+define_unary_tool!(
+    RasterArsinhTool,
+    "arsinh",
+    "Arsinh",
+    "Computes the inverse hyperbolic sine of each raster cell.",
+    |z: f64| z.asinh()
+);
+define_unary_tool!(
+    RasterArcoshTool,
+    "arcosh",
+    "Arcosh",
+    "Computes the inverse hyperbolic cosine of each raster cell.",
+    |z: f64| z.acosh()
+);
+define_unary_tool!(
+    RasterArtanhTool,
+    "artanh",
+    "Artanh",
+    "Computes the inverse hyperbolic tangent of each raster cell.",
+    |z: f64| z.atanh()
+);
+define_unary_tool!(
+    RasterExpTool,
+    "exp",
+    "Exp",
+    "Computes e raised to the power of each raster cell.",
+    |z: f64| z.exp()
+);
+define_unary_tool!(
+    RasterExp2Tool,
+    "exp2",
+    "Exp2",
+    "Computes 2 raised to the power of each raster cell.",
+    |z: f64| z.exp2()
+);
+define_unary_tool!(
+    RasterLog2Tool,
+    "log2",
+    "Log2",
+    "Computes the base-2 logarithm of each raster cell.",
+    |z: f64| z.log2()
+);
+define_unary_tool!(
+    RasterNegateTool,
+    "negate",
+    "Negate",
+    "Negates each non-nodata raster cell value.",
+    |z: f64| -z
+);
+define_unary_tool!(
+    RasterReciprocalTool,
+    "reciprocal",
+    "Reciprocal",
+    "Computes the reciprocal (1/x) of each raster cell.",
+    |z: f64| 1.0 / z
+);
+define_unary_tool!(
+    RasterTruncateTool,
+    "truncate",
+    "Truncate",
+    "Truncates each raster cell value to its integer part.",
+    |z: f64| z.trunc()
+);
 pub struct RasterIncrementTool;
 
 impl Tool for RasterIncrementTool {
@@ -310,7 +477,9 @@ impl Tool for RasterIncrementTool {
         let _ = parse_optional_output(args)?;
         if let Some(v) = args.get("value") {
             if !v.is_null() && v.as_f64().is_none() {
-                return Err(ToolError::Validation("parameter 'value' must be a number".to_string()));
+                return Err(ToolError::Validation(
+                    "parameter 'value' must be a number".to_string(),
+                ));
             }
         }
         Ok(())
@@ -319,10 +488,7 @@ impl Tool for RasterIncrementTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_input(args)?;
         let output_path = parse_optional_output(args)?;
-        let increment_by = args
-            .get("value")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(1.0);
+        let increment_by = args.get("value").and_then(|v| v.as_f64()).unwrap_or(1.0);
 
         ctx.progress.info("running increment");
 
@@ -330,9 +496,9 @@ impl Tool for RasterIncrementTool {
         let mut output = Raster::new_like_uninit(&input);
         let len = output.data.len();
 
-        output.apply_scalar_add(&input, increment_by).map_err(|e| {
-            ToolError::Execution(format!("apply_scalar_add failed: {e}"))
-        })?;
+        output
+            .apply_scalar_add(&input, increment_by)
+            .map_err(|e| ToolError::Execution(format!("apply_scalar_add failed: {e}")))?;
 
         ctx.progress.progress(0.9);
 
@@ -430,7 +596,9 @@ impl Tool for RasterDecrementTool {
         let _ = parse_optional_output(args)?;
         if let Some(v) = args.get("value") {
             if !v.is_null() && v.as_f64().is_none() {
-                return Err(ToolError::Validation("parameter 'value' must be a number".to_string()));
+                return Err(ToolError::Validation(
+                    "parameter 'value' must be a number".to_string(),
+                ));
             }
         }
         Ok(())
@@ -439,10 +607,7 @@ impl Tool for RasterDecrementTool {
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_input(args)?;
         let output_path = parse_optional_output(args)?;
-        let decrement_by = args
-            .get("value")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(1.0);
+        let decrement_by = args.get("value").and_then(|v| v.as_f64()).unwrap_or(1.0);
 
         ctx.progress.info("running decrement");
 
@@ -450,9 +615,9 @@ impl Tool for RasterDecrementTool {
         let mut output = Raster::new_like_uninit(&input);
         let len = output.data.len();
 
-        output.apply_scalar_sub(&input, decrement_by).map_err(|e| {
-            ToolError::Execution(format!("apply_scalar_sub failed: {e}"))
-        })?;
+        output
+            .apply_scalar_sub(&input, decrement_by)
+            .map_err(|e| ToolError::Execution(format!("apply_scalar_sub failed: {e}")))?;
 
         ctx.progress.progress(0.9);
 
@@ -470,8 +635,20 @@ impl Tool for RasterDecrementTool {
     }
 }
 
-define_unary_tool!(RasterToDegTool, "to_degrees", "ToDegrees", "Converts each raster cell from radians to degrees.", |z: f64| z.to_degrees());
-define_unary_tool!(RasterToRadTool, "to_radians", "ToRadians", "Converts each raster cell from degrees to radians.", |z: f64| z.to_radians());
+define_unary_tool!(
+    RasterToDegTool,
+    "to_degrees",
+    "ToDegrees",
+    "Converts each raster cell from radians to degrees.",
+    |z: f64| z.to_degrees()
+);
+define_unary_tool!(
+    RasterToRadTool,
+    "to_radians",
+    "ToRadians",
+    "Converts each raster cell from degrees to radians.",
+    |z: f64| z.to_radians()
+);
 define_unary_tool!(RasterBoolNotTool, "bool_not", "BoolNot", "Computes a logical NOT of each raster cell, outputting 1 for zero-valued cells and 0 otherwise.", |z: f64| if z == 0.0 { 1.0 } else { 0.0 });
 
 // is_nodata: special kernel — outputs 1.0 where input is nodata, 0.0 where input is valid.
@@ -546,7 +723,11 @@ impl Tool for RasterIsNodataTool {
         let len = output.data.len();
         output.par_fill_with(|i| {
             let z = input.data.get_f64(i);
-            if input.is_nodata(z) { 1.0 } else { 0.0 }
+            if input.is_nodata(z) {
+                1.0
+            } else {
+                0.0
+            }
         });
         ctx.progress.progress(0.9);
 
@@ -683,14 +864,23 @@ mod tests {
 
         let percents = progress.percents();
         assert!(!percents.is_empty(), "expected at least one progress event");
-        assert!(percents.len() <= 101, "progress events should be bounded to percent buckets");
+        assert!(
+            percents.len() <= 101,
+            "progress events should be bounded to percent buckets"
+        );
 
         for window in percents.windows(2) {
-            assert!(window[1] >= window[0], "progress should be monotonic non-decreasing");
+            assert!(
+                window[1] >= window[0],
+                "progress should be monotonic non-decreasing"
+            );
         }
 
         let final_pct = *percents.last().unwrap();
-        assert!((final_pct - 1.0).abs() < 1e-9, "final progress should be 100%");
+        assert!(
+            (final_pct - 1.0).abs() < 1e-9,
+            "final progress should be 100%"
+        );
     }
 
     #[test]
@@ -714,13 +904,22 @@ mod tests {
 
         let percents = progress.percents();
         assert!(!percents.is_empty(), "expected at least one progress event");
-        assert!(percents.len() <= 101, "progress events should be bounded to percent buckets");
+        assert!(
+            percents.len() <= 101,
+            "progress events should be bounded to percent buckets"
+        );
 
         for window in percents.windows(2) {
-            assert!(window[1] >= window[0], "progress should be monotonic non-decreasing");
+            assert!(
+                window[1] >= window[0],
+                "progress should be monotonic non-decreasing"
+            );
         }
 
         let final_pct = *percents.last().unwrap();
-        assert!((final_pct - 1.0).abs() < 1e-9, "final progress should be 100%");
+        assert!(
+            (final_pct - 1.0).abs() < 1e-9,
+            "final progress should be 100%"
+        );
     }
 }

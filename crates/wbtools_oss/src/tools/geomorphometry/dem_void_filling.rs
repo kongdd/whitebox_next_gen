@@ -1,11 +1,12 @@
 use rayon::prelude::*;
 use serde_json::json;
-use wbcore::{PercentCoalescer, 
-    parse_optional_output_path, parse_raster_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolManifest, ToolMetadata, ToolParamSpec, ToolRunResult, ToolStability,
+use wbcore::{
+    parse_optional_output_path, parse_raster_path_arg, LicenseTier, PercentCoalescer, Tool,
+    ToolArgs, ToolCategory, ToolContext, ToolError, ToolManifest, ToolMetadata, ToolParamSpec,
+    ToolRunResult, ToolStability,
 };
-use wbraster::{Raster, RasterFormat};
 use wbraster::memory_store;
+use wbraster::{Raster, RasterFormat};
 
 pub struct DemVoidFillingTool;
 
@@ -32,14 +33,18 @@ impl DemVoidFillingCore {
             let id = memory_store::raster_path_to_id(path).ok_or_else(|| {
                 ToolError::Validation("malformed in-memory raster path".to_string())
             })?;
-            return memory_store::get_raster_by_id(id)
-                .ok_or_else(|| ToolError::Validation(format!("unknown in-memory raster id '{}'", id)));
+            return memory_store::get_raster_by_id(id).ok_or_else(|| {
+                ToolError::Validation(format!("unknown in-memory raster id '{}'", id))
+            });
         }
         Raster::read(path)
             .map_err(|e| ToolError::Execution(format!("failed reading raster: {}", e)))
     }
 
-    fn write_or_store_output(output: Raster, output_path: Option<std::path::PathBuf>) -> Result<String, ToolError> {
+    fn write_or_store_output(
+        output: Raster,
+        output_path: Option<std::path::PathBuf>,
+    ) -> Result<String, ToolError> {
         if let Some(path) = output_path {
             if let Some(parent) = path.parent() {
                 if !parent.as_os_str().is_empty() {
@@ -51,9 +56,9 @@ impl DemVoidFillingCore {
             let output_path = path.to_string_lossy().to_string();
             let fmt = RasterFormat::for_output_path(&output_path)
                 .map_err(|e| ToolError::Validation(format!("unsupported output path: {e}")))?;
-            output
-                .write(&output_path, fmt)
-                .map_err(|e| ToolError::Execution(format!("failed writing output raster: {}", e)))?;
+            output.write(&output_path, fmt).map_err(|e| {
+                ToolError::Execution(format!("failed writing output raster: {}", e))
+            })?;
             Ok(output_path)
         } else {
             let id = memory_store::put_raster(output);
@@ -77,7 +82,11 @@ impl DemVoidFillingCore {
         let z10 = input.get(band, r1, c0);
         let z01 = input.get(band, r0, c1);
         let z11 = input.get(band, r1, c1);
-        if input.is_nodata(z00) || input.is_nodata(z10) || input.is_nodata(z01) || input.is_nodata(z11) {
+        if input.is_nodata(z00)
+            || input.is_nodata(z10)
+            || input.is_nodata(z01)
+            || input.is_nodata(z11)
+        {
             return None;
         }
 
@@ -157,7 +166,10 @@ impl DemVoidFillingCore {
         }
     }
 
-    fn run_dem_void_filling(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_dem_void_filling(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let dem_path = Self::parse_input(args)?;
         let fill_path = Self::parse_fill(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
@@ -195,7 +207,9 @@ impl DemVoidFillingCore {
         let band = 0isize;
 
         if rows == 0 || cols == 0 {
-            return Err(ToolError::Validation("input DEM has zero rows or columns".to_string()));
+            return Err(ToolError::Validation(
+                "input DEM has zero rows or columns".to_string(),
+            ));
         }
 
         ctx.progress.info("resampling fill DEM to input grid");
@@ -351,7 +365,8 @@ impl DemVoidFillingCore {
             }
         }
 
-        ctx.progress.info("interpolating offsets and writing output");
+        ctx.progress
+            .info("interpolating offsets and writing output");
         let coalescer = PercentCoalescer::new(1, 99);
 
         let out_rows: Vec<Vec<f64>> = (0..rows)
@@ -392,7 +407,11 @@ impl DemVoidFillingCore {
                                 }
                             }
                         }
-                        off = if sum_w > 0.0 { sum_off / sum_w } else { mean_offset };
+                        off = if sum_w > 0.0 {
+                            sum_off / sum_w
+                        } else {
+                            mean_offset
+                        };
                     }
 
                     row_out[c] = fill_z + off;
@@ -487,16 +506,27 @@ mod tests {
         let fill_id = memory_store::put_raster(fill);
 
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&dem_id)));
-        args.insert("fill".to_string(), json!(memory_store::make_raster_memory_path(&fill_id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&dem_id)),
+        );
+        args.insert(
+            "fill".to_string(),
+            json!(memory_store::make_raster_memory_path(&fill_id)),
+        );
         args.insert("mean_plane_dist".to_string(), json!(2));
         args.insert("edge_treatment".to_string(), json!("dem"));
         args.insert("weight_value".to_string(), json!(2.0));
 
         let result = DemVoidFillingTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         let center = out.get(0, 3, 3);
-        assert!((center - 10.0).abs() < 1e-6, "expected center near 10.0, got {center}");
+        assert!(
+            (center - 10.0).abs() < 1e-6,
+            "expected center near 10.0, got {center}"
+        );
     }
 }

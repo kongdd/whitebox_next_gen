@@ -1,13 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
-use evalexpr::{build_operator_tree, ContextWithMutableVariables, DefaultNumericTypes, HashMapContext, Value as EvalValue};
-use nalgebra::{DMatrix, DVector};
+use evalexpr::{
+    build_operator_tree, ContextWithMutableVariables, DefaultNumericTypes, HashMapContext,
+    Value as EvalValue,
+};
 use kdtree::distance::squared_euclidean;
 use kdtree::KdTree;
-use rayon::prelude::*;
+use nalgebra::{DMatrix, DVector};
 use rand::seq::SliceRandom;
 use rand::RngExt;
+use rayon::prelude::*;
 use rustfft::num_complex::Complex;
 use rustfft::FftPlanner;
 use serde_json::json;
@@ -27,12 +30,7 @@ use crate::tools::raster_stack_validator::{
 
 const PCA_SIMD_CHUNK: usize = 2048;
 
-fn weighted_sum_chunked(
-    inputs: &[Raster],
-    weights: &[f64],
-    nodata: f64,
-    n: usize,
-) -> Vec<f64> {
+fn weighted_sum_chunked(inputs: &[Raster], weights: &[f64], nodata: f64, n: usize) -> Vec<f64> {
     let mut output = vec![nodata; n];
     output
         .par_chunks_mut(PCA_SIMD_CHUNK)
@@ -74,9 +72,8 @@ fn load_raster(path: &str, param_name: &str) -> Result<Raster, ToolError> {
         });
     }
 
-    Raster::read(path).map_err(|e| {
-        ToolError::Execution(format!("failed reading {} raster: {}", param_name, e))
-    })
+    Raster::read(path)
+        .map_err(|e| ToolError::Execution(format!("failed reading {} raster: {}", param_name, e)))
 }
 
 fn load_raster_arc(path: &str, param_name: &str) -> Result<Arc<Raster>, ToolError> {
@@ -97,9 +94,7 @@ fn load_raster_arc(path: &str, param_name: &str) -> Result<Arc<Raster>, ToolErro
 
     Raster::read(path)
         .map(Arc::new)
-        .map_err(|e| {
-            ToolError::Execution(format!("failed reading {} raster: {}", param_name, e))
-        })
+        .map_err(|e| ToolError::Execution(format!("failed reading {} raster: {}", param_name, e)))
 }
 
 fn load_vector(path: &str, param_name: &str) -> Result<wbvector::Layer, ToolError> {
@@ -124,12 +119,16 @@ fn load_vector(path: &str, param_name: &str) -> Result<wbvector::Layer, ToolErro
         .map_err(|e| ToolError::Execution(format!("failed reading {} vector: {}", param_name, e)))
 }
 
-fn write_or_store_output(output: Raster, output_path: Option<std::path::PathBuf>) -> Result<String, ToolError> {
+fn write_or_store_output(
+    output: Raster,
+    output_path: Option<std::path::PathBuf>,
+) -> Result<String, ToolError> {
     if let Some(output_path) = output_path {
         if let Some(parent) = output_path.parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    ToolError::Execution(format!("failed creating output directory: {e}"))
+                })?;
             }
         }
 
@@ -165,7 +164,9 @@ fn parse_optional_html_report_path(args: &ToolArgs) -> Result<Option<String>, To
                 .trim();
 
             if path.is_empty() {
-                return Err(ToolError::Validation("HTML output path cannot be empty".to_string()));
+                return Err(ToolError::Validation(
+                    "HTML output path cannot be empty".to_string(),
+                ));
             }
 
             if path.to_lowercase().ends_with(".html") {
@@ -181,8 +182,9 @@ fn write_html_report(path: &str, html: &str) -> Result<String, ToolError> {
     let output_path = std::path::Path::new(path);
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| ToolError::Execution(format!("failed creating HTML output directory: {e}")))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ToolError::Execution(format!("failed creating HTML output directory: {e}"))
+            })?;
         }
     }
 
@@ -195,8 +197,9 @@ fn write_html_report(path: &str, html: &str) -> Result<String, ToolError> {
 fn write_text_report(path: &std::path::Path, text: &str, label: &str) -> Result<String, ToolError> {
     if let Some(parent) = path.parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| ToolError::Execution(format!("failed creating {} output directory: {}", label, e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ToolError::Execution(format!("failed creating {} output directory: {}", label, e))
+            })?;
         }
     }
 
@@ -438,7 +441,11 @@ fn starts_with_ascii_keyword_at(input: &str, start: usize, keyword: &str) -> boo
     }
 
     let slice = &bytes[start..(start + kw.len())];
-    if !slice.iter().zip(kw.iter()).all(|(a, b)| a.eq_ignore_ascii_case(b)) {
+    if !slice
+        .iter()
+        .zip(kw.iter())
+        .all(|(a, b)| a.eq_ignore_ascii_case(b))
+    {
         return false;
     }
 
@@ -650,7 +657,11 @@ fn write_inplace_raster(raster: Raster, input1_path: &str) -> Result<String, Too
     Ok(input1_path.to_string())
 }
 
-fn run_inplace_binary_op<F>(args: &ToolArgs, tool_id: &str, op: F) -> Result<ToolRunResult, ToolError>
+fn run_inplace_binary_op<F>(
+    args: &ToolArgs,
+    tool_id: &str,
+    op: F,
+) -> Result<ToolRunResult, ToolError>
 where
     F: Fn(f64, f64, f64, bool) -> Option<f64> + Sync,
 {
@@ -661,7 +672,9 @@ where
     match input2 {
         RasterOrConstant::Constant(c) => {
             if tool_id == "inplace_divide" && c == 0.0 {
-                return Err(ToolError::Validation("illegal division by zero".to_string()));
+                return Err(ToolError::Validation(
+                    "illegal division by zero".to_string(),
+                ));
             }
             let out_values: Vec<f64> = (0..in1.data.len())
                 .into_par_iter()
@@ -720,7 +733,11 @@ fn normal_cdf(x: f64) -> f64 {
                 + t * (1.781_477_937 + t * (-1.821_255_978 + t * 1.330_274_429))));
     let pdf = (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt();
     let cdf = 1.0 - pdf * poly;
-    if x >= 0.0 { cdf } else { 1.0 - cdf }
+    if x >= 0.0 {
+        cdf
+    } else {
+        1.0 - cdf
+    }
 }
 
 fn two_tailed_normal_p(z: f64) -> f64 {
@@ -799,8 +816,12 @@ fn anova_f_spin(f: f64, df1: usize, df2: usize) -> f64 {
     }
 
     let mut c =
-        4.0 * anova_lj_spin(sat * sat, df2 as f64 + 1.0, df1 as f64 + df2 as f64 - 4.0, df2 as f64 - 2.0)
-            * sat
+        4.0 * anova_lj_spin(
+            sat * sat,
+            df2 as f64 + 1.0,
+            df1 as f64 + df2 as f64 - 4.0,
+            df2 as f64 - 2.0,
+        ) * sat
             * cot.powf(df2 as f64)
             / std::f64::consts::PI;
     if df2 == 1 {
@@ -1032,7 +1053,12 @@ fn kendall_tau_b_from_pairs(x: &[f64], y: &[f64]) -> Option<(f64, usize)> {
                     local_discordant += 1;
                 }
             }
-            (local_concordant, local_discordant, local_ties_x, local_ties_y)
+            (
+                local_concordant,
+                local_discordant,
+                local_ties_x,
+                local_ties_y,
+            )
         })
         .reduce(
             || (0usize, 0usize, 0usize, 0usize),
@@ -1104,7 +1130,12 @@ impl Tool for RasterSummaryStatsTool {
                 description: "Compute summary statistics for a raster.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -1154,15 +1185,7 @@ impl Tool for RasterSummaryStatsTool {
             )
             .reduce(
                 || (0usize, f64::INFINITY, f64::NEG_INFINITY, 0.0f64, 0.0f64),
-                |a, b| {
-                    (
-                        a.0 + b.0,
-                        a.1.min(b.1),
-                        a.2.max(b.2),
-                        a.3 + b.3,
-                        a.4 + b.4,
-                    )
-                },
+                |a, b| (a.0 + b.0, a.1.min(b.1), a.2.max(b.2), a.3 + b.3, a.4 + b.4),
             );
 
         if count == 0 {
@@ -1263,12 +1286,14 @@ impl Tool for RasterHistogramTool {
                 },
                 ToolParamDescriptor {
                     name: "output".to_string(),
-                    description: "Optional HTML report output path (alias: output_html_file).".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
                     required: false,
                 },
                 ToolParamDescriptor {
                     name: "bins".to_string(),
-                    description: "Number of histogram bins (default log2(rows*cols)+1).".to_string(),
+                    description: "Number of histogram bins (default log2(rows*cols)+1)."
+                        .to_string(),
                     required: false,
                 },
             ],
@@ -1278,7 +1303,12 @@ impl Tool for RasterHistogramTool {
                 description: "Compute a histogram of raster values.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -1310,14 +1340,8 @@ impl Tool for RasterHistogramTool {
             ));
         }
 
-        let min_val = values
-            .iter()
-            .copied()
-            .fold(f64::INFINITY, f64::min);
-        let max_val = values
-            .iter()
-            .copied()
-            .fold(f64::NEG_INFINITY, f64::max);
+        let min_val = values.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_val = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
         let range = (max_val - min_val).max(1e-12);
         let counts = values
@@ -1471,7 +1495,9 @@ impl Tool for ListUniqueValuesRasterTool {
                 .map(|s| s.eq_ignore_ascii_case("csv"))
                 .unwrap_or(false);
             if !is_csv {
-                return Err(ToolError::Validation("output must be a .csv path".to_string()));
+                return Err(ToolError::Validation(
+                    "output must be a .csv path".to_string(),
+                ));
             }
         }
         Ok(())
@@ -1497,26 +1523,20 @@ impl Tool for ListUniqueValuesRasterTool {
         if strict_parity {
             let freqs_hash = (0..input.data.len())
                 .into_par_iter()
-                .fold(
-                    HashMap::<i64, usize>::new,
-                    |mut local, i| {
-                        let z = input.data.get_f64(i);
-                        if !input.is_nodata(z) {
-                            let category = z as i64;
-                            *local.entry(category).or_insert(0) += 1;
-                        }
-                        local
-                    },
-                )
-                .reduce(
-                    HashMap::<i64, usize>::new,
-                    |mut acc, local| {
-                        for (k, v) in local {
-                            *acc.entry(k).or_insert(0) += v;
-                        }
-                        acc
-                    },
-                );
+                .fold(HashMap::<i64, usize>::new, |mut local, i| {
+                    let z = input.data.get_f64(i);
+                    if !input.is_nodata(z) {
+                        let category = z as i64;
+                        *local.entry(category).or_insert(0) += 1;
+                    }
+                    local
+                })
+                .reduce(HashMap::<i64, usize>::new, |mut acc, local| {
+                    for (k, v) in local {
+                        *acc.entry(k).or_insert(0) += v;
+                    }
+                    acc
+                });
 
             let mut freqs = BTreeMap::<i64, usize>::new();
             for (k, v) in freqs_hash {
@@ -1586,7 +1606,8 @@ impl Tool for ZScoresTool {
         ToolMetadata {
             id: "z_scores",
             display_name: "Z Scores",
-            summary: "Standardizes raster values to z-scores using global mean and standard deviation.",
+            summary:
+                "Standardizes raster values to z-scores using global mean and standard deviation.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
@@ -1615,7 +1636,9 @@ impl Tool for ZScoresTool {
         ToolManifest {
             id: "z_scores".to_string(),
             display_name: "Z Scores".to_string(),
-            summary: "Standardizes raster values to z-scores using global mean and standard deviation.".to_string(),
+            summary:
+                "Standardizes raster values to z-scores using global mean and standard deviation."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
@@ -1636,7 +1659,12 @@ impl Tool for ZScoresTool {
                 description: "Compute z-scores for a raster.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -1679,7 +1707,10 @@ impl Tool for ZScoresTool {
             ));
         }
         let mean = sum / count as f64;
-        let stdev = (sum2 / count as f64 - mean * mean).max(0.0).sqrt().max(1e-12);
+        let stdev = (sum2 / count as f64 - mean * mean)
+            .max(0.0)
+            .sqrt()
+            .max(1e-12);
 
         let mut output = Raster::new(RasterConfig {
             rows: input.rows,
@@ -1820,7 +1851,12 @@ impl Tool for RescaleValueRangeTool {
                 description: "Rescale raster values to 0-255.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -1960,8 +1996,16 @@ impl Tool for RandomFieldTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "base", description: "Base raster path used for grid geometry.", required: true },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "base",
+                    description: "Base raster path used for grid geometry.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -2048,13 +2092,26 @@ impl Tool for FftRandomFieldTool {
         ToolMetadata {
             id: "fft_random_field",
             display_name: "FFT Random Field",
-            summary: "Creates a spatially-autocorrelated random field using FFT spectral synthesis.",
+            summary:
+                "Creates a spatially-autocorrelated random field using FFT spectral synthesis.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "base_raster", description: "Base raster path used for grid geometry.", required: true },
-                ToolParamSpec { name: "range", description: "Approximate correlation range in map units. Default: 1.0.", required: false },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "base_raster",
+                    description: "Base raster path used for grid geometry.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "range",
+                    description: "Approximate correlation range in map units. Default: 1.0.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -2071,21 +2128,41 @@ impl Tool for FftRandomFieldTool {
         ToolManifest {
             id: "fft_random_field".to_string(),
             display_name: "FFT Random Field".to_string(),
-            summary: "Creates a spatially-autocorrelated random field using FFT spectral synthesis.".to_string(),
+            summary:
+                "Creates a spatially-autocorrelated random field using FFT spectral synthesis."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "base_raster".to_string(), description: "Base raster path used for grid geometry.".to_string(), required: true },
-                ToolParamDescriptor { name: "range".to_string(), description: "Approximate correlation range in map units. Default: 1.0.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "base_raster".to_string(),
+                    description: "Base raster path used for grid geometry.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "range".to_string(),
+                    description: "Approximate correlation range in map units. Default: 1.0."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_fft_random_field".to_string(),
-                description: "Create an autocorrelated random raster using FFT spectral filtering.".to_string(),
+                description: "Create an autocorrelated random raster using FFT spectral filtering."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "simulation".to_string(), "fft".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "simulation".to_string(),
+                "fft".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2098,7 +2175,11 @@ impl Tool for FftRandomFieldTool {
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let base_path = parse_raster_path_arg(args, "base_raster")?;
-        let range = args.get("range").and_then(|v| v.as_f64()).unwrap_or(1.0).max(0.0);
+        let range = args
+            .get("range")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0)
+            .max(0.0);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let base = load_raster(&base_path, "base_raster")?;
@@ -2107,7 +2188,9 @@ impl Tool for FftRandomFieldTool {
         let n = rows * cols;
 
         if rows == 0 || cols == 0 {
-            return Err(ToolError::Validation("base_raster must have non-zero rows and columns".to_string()));
+            return Err(ToolError::Validation(
+                "base_raster must have non-zero rows and columns".to_string(),
+            ));
         }
 
         let mut spectral = vec![Complex::new(0.0, 0.0); n];
@@ -2123,28 +2206,25 @@ impl Tool for FftRandomFieldTool {
             let sigma_cells = (range / cell_size).max(f64::MIN_POSITIVE);
             let two_pi = 2.0 * std::f64::consts::PI;
 
-            spectral
-                .par_iter_mut()
-                .enumerate()
-                .for_each(|(idx, z)| {
-                    let row = idx / cols;
-                    let col = idx % cols;
-                    let fy = if row <= rows / 2 {
-                        row as f64 / rows as f64
-                    } else {
-                        (rows - row) as f64 / rows as f64
-                    };
-                    let fx = if col <= cols / 2 {
-                        col as f64 / cols as f64
-                    } else {
-                        (cols - col) as f64 / cols as f64
-                    };
-                    let wy = two_pi * fy;
-                    let wx = two_pi * fx;
-                    let k2 = wx * wx + wy * wy;
-                    let gain = (-0.5 * sigma_cells * sigma_cells * k2).exp();
-                    *z *= gain;
-                });
+            spectral.par_iter_mut().enumerate().for_each(|(idx, z)| {
+                let row = idx / cols;
+                let col = idx % cols;
+                let fy = if row <= rows / 2 {
+                    row as f64 / rows as f64
+                } else {
+                    (rows - row) as f64 / rows as f64
+                };
+                let fx = if col <= cols / 2 {
+                    col as f64 / cols as f64
+                } else {
+                    (cols - col) as f64 / cols as f64
+                };
+                let wy = two_pi * fy;
+                let wx = two_pi * fx;
+                let k2 = wx * wx + wy * wy;
+                let gain = (-0.5 * sigma_cells * sigma_cells * k2).exp();
+                *z *= gain;
+            });
         }
 
         fft2_in_place(&mut spectral, rows, cols, true);
@@ -2215,9 +2295,21 @@ impl Tool for RandomSampleTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "base", description: "Base raster path used for grid geometry and valid-cell mask.", required: true },
-                ToolParamSpec { name: "num_samples", description: "Number of sample cells to generate.", required: true },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "base",
+                    description: "Base raster path used for grid geometry and valid-cell mask.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "num_samples",
+                    description: "Number of sample cells to generate.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -2235,21 +2327,41 @@ impl Tool for RandomSampleTool {
         ToolManifest {
             id: "random_sample".to_string(),
             display_name: "Random Sample".to_string(),
-            summary: "Creates a raster containing randomly located sample cells with unique IDs.".to_string(),
+            summary: "Creates a raster containing randomly located sample cells with unique IDs."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "base".to_string(), description: "Base raster path used for grid geometry and valid-cell mask.".to_string(), required: true },
-                ToolParamDescriptor { name: "num_samples".to_string(), description: "Number of sample cells to generate.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "base".to_string(),
+                    description: "Base raster path used for grid geometry and valid-cell mask."
+                        .to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "num_samples".to_string(),
+                    description: "Number of sample cells to generate.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_random_sample".to_string(),
-                description: "Create a random sample raster using valid cells from a base raster.".to_string(),
+                description: "Create a random sample raster using valid cells from a base raster."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "random".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "random".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2259,7 +2371,9 @@ impl Tool for RandomSampleTool {
         let _ = args
             .get("num_samples")
             .and_then(|v| v.as_u64())
-            .ok_or_else(|| ToolError::Validation("parameter 'num_samples' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'num_samples' is required".to_string())
+            })?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
@@ -2270,7 +2384,9 @@ impl Tool for RandomSampleTool {
             .get("num_samples")
             .and_then(|v| v.as_u64())
             .map(|v| v as usize)
-            .ok_or_else(|| ToolError::Validation("parameter 'num_samples' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'num_samples' is required".to_string())
+            })?;
         let output_path = parse_optional_output_path(args, "output")?;
         let base = load_raster(&base_path, "base")?;
 
@@ -2337,8 +2453,16 @@ impl Tool for CumulativeDistributionTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input raster path.", required: true },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -2358,8 +2482,16 @@ impl Tool for CumulativeDistributionTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -2367,7 +2499,12 @@ impl Tool for CumulativeDistributionTool {
                 description: "Transform a raster into cumulative probabilities.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2403,7 +2540,9 @@ impl Tool for CumulativeDistributionTool {
             );
 
         if num_cells == 0 {
-            return Err(ToolError::Validation("input raster contains no valid cells".to_string()));
+            return Err(ToolError::Validation(
+                "input raster contains no valid cells".to_string(),
+            ));
         }
 
         let mut output = Raster::new(RasterConfig {
@@ -2425,7 +2564,11 @@ impl Tool for CumulativeDistributionTool {
                 .into_par_iter()
                 .map(|i| {
                     let z = input.data.get_f64(i);
-                    if input.is_nodata(z) { input.nodata } else { 1.0 }
+                    if input.is_nodata(z) {
+                        input.nodata
+                    } else {
+                        1.0
+                    }
                 })
                 .collect();
             for (i, out) in out_values.into_iter().enumerate() {
@@ -2501,8 +2644,16 @@ impl Tool for CrispnessIndexTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input raster path.", required: true },
-                ToolParamSpec { name: "output", description: "Optional HTML report output path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional HTML report output path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -2518,25 +2669,36 @@ impl Tool for CrispnessIndexTool {
         ToolManifest {
             id: "crispness_index".to_string(),
             display_name: "Crispness Index".to_string(),
-            summary: "Calculates the crispness index for a membership probability raster.".to_string(),
+            summary: "Calculates the crispness index for a membership probability raster."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
-            params: vec![ToolParamDescriptor {
-                name: "input".to_string(),
-                description: "Input raster path.".to_string(),
-                required: true,
-            }, ToolParamDescriptor {
-                name: "output".to_string(),
-                description: "Optional HTML report output path (alias: output_html_file).".to_string(),
-                required: false,
-            }],
+            params: vec![
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
+                    required: false,
+                },
+            ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_crispness_index".to_string(),
-                description: "Compute the crispness index for a membership probability raster.".to_string(),
+                description: "Compute the crispness index for a membership probability raster."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2568,7 +2730,9 @@ impl Tool for CrispnessIndexTool {
             );
 
         if count == 0 {
-            return Err(ToolError::Validation("input raster contains no valid cells".to_string()));
+            return Err(ToolError::Validation(
+                "input raster contains no valid cells".to_string(),
+            ));
         }
 
         let mean = sum / count as f64;
@@ -2585,7 +2749,11 @@ impl Tool for CrispnessIndexTool {
             .sum::<f64>();
 
         let ss_b = sum * (1.0 - mean) * (1.0 - mean) + (count as f64 - sum) * mean * mean;
-        let crispness = if ss_b.abs() < 1.0e-12 { 0.0 } else { ss_mp / ss_b };
+        let crispness = if ss_b.abs() < 1.0e-12 {
+            0.0
+        } else {
+            ss_mp / ss_b
+        };
 
         let report = json!({
             "input": input_path,
@@ -2633,9 +2801,21 @@ impl Tool for KsNormalityTestTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input raster path.", required: true },
-                ToolParamSpec { name: "num_samples", description: "Optional random sample size. Omit to use all valid cells.", required: false },
-                ToolParamSpec { name: "output", description: "Optional HTML report output path (alias: output_html_file).", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "num_samples",
+                    description: "Optional random sample size. Omit to use all valid cells.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional HTML report output path (alias: output_html_file).",
+                    required: false,
+                },
             ],
         }
     }
@@ -2651,21 +2831,42 @@ impl Tool for KsNormalityTestTool {
         ToolManifest {
             id: "ks_normality_test".to_string(),
             display_name: "K-S Normality Test".to_string(),
-            summary: "Evaluates whether raster values are drawn from a normal distribution.".to_string(),
+            summary: "Evaluates whether raster values are drawn from a normal distribution."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "num_samples".to_string(), description: "Optional random sample size. Omit to use all valid cells.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional HTML report output path (alias: output_html_file).".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "num_samples".to_string(),
+                    description: "Optional random sample size. Omit to use all valid cells."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_ks_normality_test".to_string(),
-                description: "Run a Kolmogorov-Smirnov normality test on raster values.".to_string(),
+                description: "Run a Kolmogorov-Smirnov normality test on raster values."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2679,18 +2880,25 @@ impl Tool for KsNormalityTestTool {
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_raster_path_arg(args, "input")?;
         let html_output_path = parse_optional_html_report_path(args)?;
-        let requested_samples = args.get("num_samples").and_then(|v| v.as_u64()).map(|v| v as usize);
+        let requested_samples = args
+            .get("num_samples")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
         let input = load_raster(&input_path, "input")?;
 
         let valid_values = collect_valid_values(&input);
 
         if valid_values.is_empty() {
-            return Err(ToolError::Validation("input raster contains no valid cells".to_string()));
+            return Err(ToolError::Validation(
+                "input raster contains no valid cells".to_string(),
+            ));
         }
 
         let values = if let Some(num_samples) = requested_samples {
             if num_samples == 0 {
-                return Err(ToolError::Validation("num_samples must be greater than zero when provided".to_string()));
+                return Err(ToolError::Validation(
+                    "num_samples must be greater than zero when provided".to_string(),
+                ));
             }
             let mut rng = rand::rng();
             let mut sampled = Vec::with_capacity(num_samples);
@@ -2727,7 +2935,8 @@ impl Tool for KsNormalityTestTool {
                     || vec![0usize; num_bins],
                     |mut local, z| {
                         let idx = (((*z - min_value) / bin_size).floor() as isize)
-                            .clamp(0, num_bins as isize - 1) as usize;
+                            .clamp(0, num_bins as isize - 1)
+                            as usize;
                         local[idx] += 1;
                         local
                     },
@@ -2858,8 +3067,16 @@ impl Tool for InPlaceAddTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "Input raster to modify.", required: true },
-                ToolParamSpec { name: "input2", description: "Input raster path or numeric constant.", required: true },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "Input raster to modify.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Input raster path or numeric constant.",
+                    required: true,
+                },
             ],
         }
     }
@@ -2878,12 +3095,28 @@ impl Tool for InPlaceAddTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "Input raster to modify.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Input raster path or numeric constant.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "Input raster to modify.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Input raster path or numeric constant.".to_string(),
+                    required: true,
+                },
             ],
             defaults,
-            examples: vec![ToolExample { name: "basic_inplace_add".to_string(), description: "Modify input1 by adding input2.".to_string(), args: example }],
-            tags: vec!["raster".to_string(), "math".to_string(), "legacy-port".to_string()],
+            examples: vec![ToolExample {
+                name: "basic_inplace_add".to_string(),
+                description: "Modify input1 by adding input2.".to_string(),
+                args: example,
+            }],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2895,7 +3128,9 @@ impl Tool for InPlaceAddTool {
     }
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        run_inplace_binary_op(args, "inplace_add", |a, b, _nodata, _is_raster_rhs| Some(a + b))
+        run_inplace_binary_op(args, "inplace_add", |a, b, _nodata, _is_raster_rhs| {
+            Some(a + b)
+        })
     }
 }
 
@@ -2908,8 +3143,16 @@ impl Tool for InPlaceSubtractTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "Input raster to modify.", required: true },
-                ToolParamSpec { name: "input2", description: "Input raster path or numeric constant.", required: true },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "Input raster to modify.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Input raster path or numeric constant.",
+                    required: true,
+                },
             ],
         }
     }
@@ -2928,12 +3171,28 @@ impl Tool for InPlaceSubtractTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "Input raster to modify.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Input raster path or numeric constant.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "Input raster to modify.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Input raster path or numeric constant.".to_string(),
+                    required: true,
+                },
             ],
             defaults,
-            examples: vec![ToolExample { name: "basic_inplace_subtract".to_string(), description: "Modify input1 by subtracting input2.".to_string(), args: example }],
-            tags: vec!["raster".to_string(), "math".to_string(), "legacy-port".to_string()],
+            examples: vec![ToolExample {
+                name: "basic_inplace_subtract".to_string(),
+                description: "Modify input1 by subtracting input2.".to_string(),
+                args: example,
+            }],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2945,7 +3204,9 @@ impl Tool for InPlaceSubtractTool {
     }
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        run_inplace_binary_op(args, "inplace_subtract", |a, b, _nodata, _is_raster_rhs| Some(a - b))
+        run_inplace_binary_op(args, "inplace_subtract", |a, b, _nodata, _is_raster_rhs| {
+            Some(a - b)
+        })
     }
 }
 
@@ -2958,8 +3219,16 @@ impl Tool for InPlaceMultiplyTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "Input raster to modify.", required: true },
-                ToolParamSpec { name: "input2", description: "Input raster path or numeric constant.", required: true },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "Input raster to modify.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Input raster path or numeric constant.",
+                    required: true,
+                },
             ],
         }
     }
@@ -2974,16 +3243,33 @@ impl Tool for InPlaceMultiplyTool {
         ToolManifest {
             id: "inplace_multiply".to_string(),
             display_name: "InPlace Multiply".to_string(),
-            summary: "Performs an in-place multiplication operation (input1 *= input2).".to_string(),
+            summary: "Performs an in-place multiplication operation (input1 *= input2)."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "Input raster to modify.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Input raster path or numeric constant.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "Input raster to modify.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Input raster path or numeric constant.".to_string(),
+                    required: true,
+                },
             ],
             defaults,
-            examples: vec![ToolExample { name: "basic_inplace_multiply".to_string(), description: "Modify input1 by multiplying with input2.".to_string(), args: example }],
-            tags: vec!["raster".to_string(), "math".to_string(), "legacy-port".to_string()],
+            examples: vec![ToolExample {
+                name: "basic_inplace_multiply".to_string(),
+                description: "Modify input1 by multiplying with input2.".to_string(),
+                args: example,
+            }],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2995,7 +3281,9 @@ impl Tool for InPlaceMultiplyTool {
     }
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        run_inplace_binary_op(args, "inplace_multiply", |a, b, _nodata, _is_raster_rhs| Some(a * b))
+        run_inplace_binary_op(args, "inplace_multiply", |a, b, _nodata, _is_raster_rhs| {
+            Some(a * b)
+        })
     }
 }
 
@@ -3008,8 +3296,16 @@ impl Tool for InPlaceDivideTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "Input raster to modify.", required: true },
-                ToolParamSpec { name: "input2", description: "Input raster path or non-zero numeric constant.", required: true },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "Input raster to modify.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Input raster path or non-zero numeric constant.",
+                    required: true,
+                },
             ],
         }
     }
@@ -3028,12 +3324,28 @@ impl Tool for InPlaceDivideTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "Input raster to modify.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Input raster path or non-zero numeric constant.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "Input raster to modify.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Input raster path or non-zero numeric constant.".to_string(),
+                    required: true,
+                },
             ],
             defaults,
-            examples: vec![ToolExample { name: "basic_inplace_divide".to_string(), description: "Modify input1 by dividing by input2.".to_string(), args: example }],
-            tags: vec!["raster".to_string(), "math".to_string(), "legacy-port".to_string()],
+            examples: vec![ToolExample {
+                name: "basic_inplace_divide".to_string(),
+                description: "Modify input1 by dividing by input2.".to_string(),
+                args: example,
+            }],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3064,9 +3376,21 @@ impl Tool for AttributeHistogramTool {
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector path.", required: true },
-                ToolParamSpec { name: "field", description: "Numeric attribute field name.", required: true },
-                ToolParamSpec { name: "output", description: "Optional HTML report output path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Numeric attribute field name.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional HTML report output path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -3082,13 +3406,27 @@ impl Tool for AttributeHistogramTool {
         ToolManifest {
             id: "attribute_histogram".to_string(),
             display_name: "Attribute Histogram".to_string(),
-            summary: "Creates a histogram for numeric field values in a vector attribute table.".to_string(),
+            summary: "Creates a histogram for numeric field values in a vector attribute table."
+                .to_string(),
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input vector path.".to_string(), required: true },
-                ToolParamDescriptor { name: "field".to_string(), description: "Numeric attribute field name.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional HTML report output path (alias: output_html_file).".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input vector path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "field".to_string(),
+                    description: "Numeric attribute field name.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -3096,7 +3434,12 @@ impl Tool for AttributeHistogramTool {
                 description: "Generate histogram counts for a numeric vector field.".to_string(),
                 args: example,
             }],
-            tags: vec!["vector".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "vector".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3125,8 +3468,14 @@ impl Tool for AttributeHistogramTool {
             .field_index(field)
             .ok_or_else(|| ToolError::Validation(format!("field '{}' not found", field)))?;
         let field_type = layer.schema.fields()[field_idx].field_type;
-        if !matches!(field_type, wbvector::FieldType::Integer | wbvector::FieldType::Float) {
-            return Err(ToolError::Validation(format!("field '{}' must be numeric", field)));
+        if !matches!(
+            field_type,
+            wbvector::FieldType::Integer | wbvector::FieldType::Float
+        ) {
+            return Err(ToolError::Validation(format!(
+                "field '{}' must be numeric",
+                field
+            )));
         }
 
         let mut min = f64::INFINITY;
@@ -3140,7 +3489,9 @@ impl Tool for AttributeHistogramTool {
             }
         }
         if valid_count == 0 {
-            return Err(ToolError::Validation("field contains no numeric values".to_string()));
+            return Err(ToolError::Validation(
+                "field contains no numeric values".to_string(),
+            ));
         }
 
         let num_bins = (valid_count as f64).log2().ceil().max(1.0) as usize + 1;
@@ -3148,7 +3499,8 @@ impl Tool for AttributeHistogramTool {
         let mut counts = vec![0usize; num_bins];
         for feat in &layer.features {
             if let Some(v) = feat.attributes.get(field_idx).and_then(|v| v.as_f64()) {
-                let idx = (((v - min) / width).floor() as isize).clamp(0, num_bins as isize - 1) as usize;
+                let idx =
+                    (((v - min) / width).floor() as isize).clamp(0, num_bins as isize - 1) as usize;
                 counts[idx] += 1;
             }
         }
@@ -3202,11 +3554,31 @@ impl Tool for AttributeScattergramTool {
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector path.", required: true },
-                ToolParamSpec { name: "fieldx", description: "Numeric x-axis field name.", required: true },
-                ToolParamSpec { name: "fieldy", description: "Numeric y-axis field name.", required: true },
-                ToolParamSpec { name: "trendline", description: "Include trendline summary (default false).", required: false },
-                ToolParamSpec { name: "output", description: "Optional HTML report output path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "fieldx",
+                    description: "Numeric x-axis field name.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "fieldy",
+                    description: "Numeric y-axis field name.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "trendline",
+                    description: "Include trendline summary (default false).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional HTML report output path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -3226,15 +3598,37 @@ impl Tool for AttributeScattergramTool {
         ToolManifest {
             id: "attribute_scattergram".to_string(),
             display_name: "Attribute Scattergram".to_string(),
-            summary: "Computes scatterplot summary statistics between two numeric vector fields.".to_string(),
+            summary: "Computes scatterplot summary statistics between two numeric vector fields."
+                .to_string(),
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input vector path.".to_string(), required: true },
-                ToolParamDescriptor { name: "fieldx".to_string(), description: "Numeric x-axis field name.".to_string(), required: true },
-                ToolParamDescriptor { name: "fieldy".to_string(), description: "Numeric y-axis field name.".to_string(), required: true },
-                ToolParamDescriptor { name: "trendline".to_string(), description: "Include trendline summary (default false).".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional HTML report output path (alias: output_html_file).".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input vector path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "fieldx".to_string(),
+                    description: "Numeric x-axis field name.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "fieldy".to_string(),
+                    description: "Numeric y-axis field name.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "trendline".to_string(),
+                    description: "Include trendline summary (default false).".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -3242,15 +3636,26 @@ impl Tool for AttributeScattergramTool {
                 description: "Compute scatter summary for two vector attributes.".to_string(),
                 args: example,
             }],
-            tags: vec!["vector".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "vector".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = parse_vector_path_arg(args, "input")?;
-        let _ = args.get("fieldx").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'fieldx' is required".to_string()))?;
-        let _ = args.get("fieldy").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'fieldy' is required".to_string()))?;
+        let _ = args
+            .get("fieldx")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::Validation("parameter 'fieldx' is required".to_string()))?;
+        let _ = args
+            .get("fieldy")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::Validation("parameter 'fieldy' is required".to_string()))?;
         let _ = parse_optional_html_report_path(args)?;
         Ok(())
     }
@@ -3258,9 +3663,18 @@ impl Tool for AttributeScattergramTool {
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_vector_path_arg(args, "input")?;
         let html_output_path = parse_optional_html_report_path(args)?;
-        let fieldx = args.get("fieldx").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'fieldx' is required".to_string()))?;
-        let fieldy = args.get("fieldy").and_then(|v| v.as_str()).ok_or_else(|| ToolError::Validation("parameter 'fieldy' is required".to_string()))?;
-        let trendline = args.get("trendline").and_then(|v| v.as_bool()).unwrap_or(false);
+        let fieldx = args
+            .get("fieldx")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::Validation("parameter 'fieldx' is required".to_string()))?;
+        let fieldy = args
+            .get("fieldy")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::Validation("parameter 'fieldy' is required".to_string()))?;
+        let trendline = args
+            .get("trendline")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         let layer = load_vector(&input_path, "input")?;
         let ix = layer
@@ -3272,11 +3686,23 @@ impl Tool for AttributeScattergramTool {
             .field_index(fieldy)
             .ok_or_else(|| ToolError::Validation(format!("field '{}' not found", fieldy)))?;
 
-        if !matches!(layer.schema.fields()[ix].field_type, wbvector::FieldType::Integer | wbvector::FieldType::Float) {
-            return Err(ToolError::Validation(format!("field '{}' must be numeric", fieldx)));
+        if !matches!(
+            layer.schema.fields()[ix].field_type,
+            wbvector::FieldType::Integer | wbvector::FieldType::Float
+        ) {
+            return Err(ToolError::Validation(format!(
+                "field '{}' must be numeric",
+                fieldx
+            )));
         }
-        if !matches!(layer.schema.fields()[iy].field_type, wbvector::FieldType::Integer | wbvector::FieldType::Float) {
-            return Err(ToolError::Validation(format!("field '{}' must be numeric", fieldy)));
+        if !matches!(
+            layer.schema.fields()[iy].field_type,
+            wbvector::FieldType::Integer | wbvector::FieldType::Float
+        ) {
+            return Err(ToolError::Validation(format!(
+                "field '{}' must be numeric",
+                fieldy
+            )));
         }
 
         let mut xs = Vec::<f64>::new();
@@ -3290,15 +3716,15 @@ impl Tool for AttributeScattergramTool {
             }
         }
         if xs.is_empty() {
-            return Err(ToolError::Validation("no valid paired numeric values found".to_string()));
+            return Err(ToolError::Validation(
+                "no valid paired numeric values found".to_string(),
+            ));
         }
 
         let (n, sum_x, sum_y, sum_x2, sum_y2, sum_xy, x_min, x_max, y_min, y_max) = xs
             .par_iter()
             .zip(ys.par_iter())
-            .map(|(x, y)| {
-                (1usize, *x, *y, *x * *x, *y * *y, *x * *y, *x, *x, *y, *y)
-            })
+            .map(|(x, y)| (1usize, *x, *y, *x * *x, *y * *y, *x * *y, *x, *x, *y, *y))
             .reduce(
                 || {
                     (
@@ -3407,15 +3833,18 @@ impl Tool for AttributeCorrelationTool {
             summary: "Performs Pearson correlation analysis on numeric vector attribute fields.",
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
-            params: vec![ToolParamSpec {
-                name: "input",
-                description: "Input vector path.",
-                required: true,
-            }, ToolParamSpec {
-                name: "output",
-                description: "Optional HTML report output path.",
-                required: false,
-            }],
+            params: vec![
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional HTML report output path.",
+                    required: false,
+                },
+            ],
         }
     }
 
@@ -3428,25 +3857,35 @@ impl Tool for AttributeCorrelationTool {
         ToolManifest {
             id: "attribute_correlation".to_string(),
             display_name: "Attribute Correlation".to_string(),
-            summary: "Performs Pearson correlation analysis on numeric vector attribute fields.".to_string(),
+            summary: "Performs Pearson correlation analysis on numeric vector attribute fields."
+                .to_string(),
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
-            params: vec![ToolParamDescriptor {
-                name: "input".to_string(),
-                description: "Input vector path.".to_string(),
-                required: true,
-            }, ToolParamDescriptor {
-                name: "output".to_string(),
-                description: "Optional HTML report output path (alias: output_html_file).".to_string(),
-                required: false,
-            }],
+            params: vec![
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input vector path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
+                    required: false,
+                },
+            ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_attribute_correlation".to_string(),
                 description: "Compute correlation matrix for numeric vector fields.".to_string(),
                 args: example,
             }],
-            tags: vec!["vector".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "vector".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3465,19 +3904,29 @@ impl Tool for AttributeCorrelationTool {
         let mut numeric_indices = Vec::<usize>::new();
         let mut field_names = Vec::<String>::new();
         for (i, fd) in layer.schema.fields().iter().enumerate() {
-            if matches!(fd.field_type, wbvector::FieldType::Integer | wbvector::FieldType::Float) {
+            if matches!(
+                fd.field_type,
+                wbvector::FieldType::Integer | wbvector::FieldType::Float
+            ) {
                 numeric_indices.push(i);
                 field_names.push(fd.name.clone());
             }
         }
         if numeric_indices.len() < 2 {
-            return Err(ToolError::Validation("input vector must contain at least two numeric fields".to_string()));
+            return Err(ToolError::Validation(
+                "input vector must contain at least two numeric fields".to_string(),
+            ));
         }
 
         let mut columns = vec![Vec::<f64>::new(); numeric_indices.len()];
         for feat in &layer.features {
             for (j, idx) in numeric_indices.iter().enumerate() {
-                columns[j].push(feat.attributes.get(*idx).and_then(|v| v.as_f64()).unwrap_or(f64::NAN));
+                columns[j].push(
+                    feat.attributes
+                        .get(*idx)
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(f64::NAN),
+                );
             }
         }
 
@@ -3527,7 +3976,10 @@ impl Tool for AttributeCorrelationTool {
             table.push_str("</tr>");
 
             for (row_idx, row) in matrix.iter().enumerate() {
-                table.push_str(&format!("<tr><td><strong>Field {}</strong></td>", row_idx + 1));
+                table.push_str(&format!(
+                    "<tr><td><strong>Field {}</strong></td>",
+                    row_idx + 1
+                ));
                 for value in row {
                     if value.is_finite() {
                         table.push_str(&format!("<td>{:.4}</td>", value));
@@ -3562,9 +4014,21 @@ impl Tool for CrossTabulationTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "Input raster 1 path.", required: true },
-                ToolParamSpec { name: "input2", description: "Input raster 2 path.", required: true },
-                ToolParamSpec { name: "output", description: "Optional HTML report output path.", required: false },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "Input raster 1 path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Input raster 2 path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional HTML report output path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -3584,17 +4048,36 @@ impl Tool for CrossTabulationTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "Input raster 1 path.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Input raster 2 path.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional HTML report output path (alias: output_html_file).".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "Input raster 1 path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Input raster 2 path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_cross_tabulation".to_string(),
-                description: "Generate contingency counts between two classified rasters.".to_string(),
+                description: "Generate contingency counts between two classified rasters."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3614,7 +4097,9 @@ impl Tool for CrossTabulationTool {
         let in1 = load_raster(&input1_path, "input1")?;
         let in2 = load_raster(&input2_path, "input2")?;
         if in1.rows != in2.rows || in1.cols != in2.cols || in1.bands != in2.bands {
-            return Err(ToolError::Validation("input rasters must have identical rows, columns, and bands".to_string()));
+            return Err(ToolError::Validation(
+                "input rasters must have identical rows, columns, and bands".to_string(),
+            ));
         }
 
         let counts = (0..in1.data.len())
@@ -3713,9 +4198,21 @@ impl Tool for AnovaTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Measurement raster path.", required: true },
-                ToolParamSpec { name: "features", description: "Class/category raster path.", required: true },
-                ToolParamSpec { name: "output", description: "Optional HTML report output path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Measurement raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "features",
+                    description: "Class/category raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional HTML report output path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -3732,13 +4229,27 @@ impl Tool for AnovaTool {
         ToolManifest {
             id: "anova".to_string(),
             display_name: "ANOVA".to_string(),
-            summary: "Performs one-way ANOVA on raster values grouped by class raster categories.".to_string(),
+            summary: "Performs one-way ANOVA on raster values grouped by class raster categories."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Measurement raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "features".to_string(), description: "Class/category raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional HTML report output path (alias: output_html_file).".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Measurement raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "features".to_string(),
+                    description: "Class/category raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -3746,7 +4257,12 @@ impl Tool for AnovaTool {
                 description: "Compare class means of a raster using one-way ANOVA.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3765,16 +4281,27 @@ impl Tool for AnovaTool {
 
         let input = load_raster(&input_path, "input")?;
         let features = load_raster(&feature_path, "features")?;
-        if input.rows != features.rows || input.cols != features.cols || input.bands != features.bands {
+        if input.rows != features.rows
+            || input.cols != features.cols
+            || input.bands != features.bands
+        {
             return Err(ToolError::Validation(
-                "input and features rasters must have identical rows, columns, and bands".to_string(),
+                "input and features rasters must have identical rows, columns, and bands"
+                    .to_string(),
             ));
         }
 
         let (class_stats_raw, overall_n, overall_sum, overall_sum_sqr) = (0..input.data.len())
             .into_par_iter()
             .fold(
-                || (HashMap::<i64, (usize, f64, f64)>::new(), 0usize, 0.0f64, 0.0f64),
+                || {
+                    (
+                        HashMap::<i64, (usize, f64, f64)>::new(),
+                        0usize,
+                        0.0f64,
+                        0.0f64,
+                    )
+                },
                 |mut acc, i| {
                     let z = input.data.get_f64(i);
                     let cls = features.data.get_f64(i);
@@ -3795,7 +4322,14 @@ impl Tool for AnovaTool {
                 },
             )
             .reduce(
-                || (HashMap::<i64, (usize, f64, f64)>::new(), 0usize, 0.0f64, 0.0f64),
+                || {
+                    (
+                        HashMap::<i64, (usize, f64, f64)>::new(),
+                        0usize,
+                        0.0f64,
+                        0.0f64,
+                    )
+                },
                 |mut a, b| {
                     for (class_id, (n, sum, sum_sqr)) in b.0 {
                         let entry = a.0.entry(class_id).or_insert((0usize, 0.0, 0.0));
@@ -3810,14 +4344,17 @@ impl Tool for AnovaTool {
                 },
             );
 
-        let class_stats: BTreeMap<i64, (usize, f64, f64)> =
-            class_stats_raw.into_iter().collect();
+        let class_stats: BTreeMap<i64, (usize, f64, f64)> = class_stats_raw.into_iter().collect();
 
         if overall_n < 2 {
-            return Err(ToolError::Validation("insufficient valid cells for ANOVA".to_string()));
+            return Err(ToolError::Validation(
+                "insufficient valid cells for ANOVA".to_string(),
+            ));
         }
         if class_stats.len() < 2 {
-            return Err(ToolError::Validation("ANOVA requires at least two populated classes".to_string()));
+            return Err(ToolError::Validation(
+                "ANOVA requires at least two populated classes".to_string(),
+            ));
         }
 
         let overall_mean = overall_sum / overall_n as f64;
@@ -3853,7 +4390,9 @@ impl Tool for AnovaTool {
         let df_b = num_classes - 1;
         let df_w = overall_n - num_classes;
         if df_w == 0 {
-            return Err(ToolError::Validation("ANOVA requires within-group degrees of freedom > 0".to_string()));
+            return Err(ToolError::Validation(
+                "ANOVA requires within-group degrees of freedom > 0".to_string(),
+            ));
         }
         let df_t = overall_n - 1;
         let ms_b = ss_b / df_b as f64;
@@ -3967,13 +4506,26 @@ impl Tool for PhiCoefficientTool {
         ToolMetadata {
             id: "phi_coefficient",
             display_name: "Phi Coefficient",
-            summary: "Performs binary classification agreement assessment using the phi coefficient.",
+            summary:
+                "Performs binary classification agreement assessment using the phi coefficient.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "First binary raster path.", required: true },
-                ToolParamSpec { name: "input2", description: "Second binary raster path.", required: true },
-                ToolParamSpec { name: "output", description: "Optional HTML report output path (alias: output_html_file).", required: false },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "First binary raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Second binary raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional HTML report output path (alias: output_html_file).",
+                    required: false,
+                },
             ],
         }
     }
@@ -3989,21 +4541,43 @@ impl Tool for PhiCoefficientTool {
         ToolManifest {
             id: "phi_coefficient".to_string(),
             display_name: "Phi Coefficient".to_string(),
-            summary: "Performs binary classification agreement assessment using the phi coefficient.".to_string(),
+            summary:
+                "Performs binary classification agreement assessment using the phi coefficient."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "First binary raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Second binary raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional HTML report output path (alias: output_html_file).".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "First binary raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Second binary raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_phi_coefficient".to_string(),
-                description: "Compute binary agreement metrics and phi coefficient for two rasters.".to_string(),
+                description:
+                    "Compute binary agreement metrics and phi coefficient for two rasters."
+                        .to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -4059,7 +4633,9 @@ impl Tool for PhiCoefficientTool {
 
         let n = a + b + c + d;
         if n == 0 {
-            return Err(ToolError::Validation("no overlapping valid cells were found".to_string()));
+            return Err(ToolError::Validation(
+                "no overlapping valid cells were found".to_string(),
+            ));
         }
 
         let num = (a * d) as f64 - (b * c) as f64;
@@ -4067,8 +4643,16 @@ impl Tool for PhiCoefficientTool {
         let phi = if den > 0.0 { num / den } else { 0.0 };
 
         let overall_accuracy = (a + d) as f64 / n as f64;
-        let precision = if (a + b) > 0 { a as f64 / (a + b) as f64 } else { f64::NAN };
-        let recall = if (a + c) > 0 { a as f64 / (a + c) as f64 } else { f64::NAN };
+        let precision = if (a + b) > 0 {
+            a as f64 / (a + b) as f64
+        } else {
+            f64::NAN
+        };
+        let recall = if (a + c) > 0 {
+            a as f64 / (a + c) as f64
+        } else {
+            f64::NAN
+        };
 
         let report = json!({
             "input1": input1_path,
@@ -4170,7 +4754,8 @@ impl Tool for ImageCorrelationTool {
         ToolManifest {
             id: "image_correlation".to_string(),
             display_name: "Image Correlation".to_string(),
-            summary: "Computes Pearson correlation matrix for two or more raster images.".to_string(),
+            summary: "Computes Pearson correlation matrix for two or more raster images."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![ToolParamDescriptor {
@@ -4184,7 +4769,12 @@ impl Tool for ImageCorrelationTool {
                 description: "Compute pairwise image correlations for a raster set.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -4237,10 +4827,7 @@ impl Tool for ImageCorrelationTool {
                         (z, 1usize)
                     }
                 })
-                .reduce(
-                    || (0.0f64, 0usize),
-                    |a, b| (a.0 + b.0, a.1 + b.1),
-                );
+                .reduce(|| (0.0f64, 0usize), |a, b| (a.0 + b.0, a.1 + b.1));
             if n == 0 {
                 return Err(ToolError::Validation(format!(
                     "input raster '{}' contains no valid cells",
@@ -4360,10 +4947,16 @@ impl Tool for ImageAutocorrelationTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_image_autocorrelation".to_string(),
-                description: "Compute Moran's I for multiple rasters under a contiguity rule.".to_string(),
+                description: "Compute Moran's I for multiple rasters under a contiguity rule."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -4398,7 +4991,9 @@ impl Tool for ImageAutocorrelationTool {
         }
 
         if rasters.is_empty() {
-            return Err(ToolError::Validation("no input rasters provided".to_string()));
+            return Err(ToolError::Validation(
+                "no input rasters provided".to_string(),
+            ));
         }
 
         let rows = rasters[0].rows;
@@ -4424,10 +5019,7 @@ impl Tool for ImageAutocorrelationTool {
                         (z, 1usize)
                     }
                 })
-                .reduce(
-                    || (0.0f64, 0usize),
-                    |a, b| (a.0 + b.0, a.1 + b.1),
-                );
+                .reduce(|| (0.0f64, 0usize), |a, b| (a.0 + b.0, a.1 + b.1));
             let n = n_count as f64;
 
             if n <= 3.0 {
@@ -4488,15 +5080,7 @@ impl Tool for ImageAutocorrelationTool {
                 })
                 .reduce(
                     || (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64),
-                    |a, b| {
-                        (
-                            a.0 + b.0,
-                            a.1 + b.1,
-                            a.2 + b.2,
-                            a.3 + b.3,
-                            a.4 + b.4,
-                        )
-                    },
+                    |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2, a.3 + b.3, a.4 + b.4),
                 );
 
             if w <= 0.0 || total_deviation <= 0.0 {
@@ -4514,8 +5098,7 @@ impl Tool for ImageAutocorrelationTool {
             let morans_i = n * numerator / (total_deviation * w);
             let expected_i = -1.0 / (n - 1.0);
 
-            let var_normality =
-                (n * n * s1 - n * s2 + 3.0 * w * w) / ((w * w) * (n * n - 1.0));
+            let var_normality = (n * n * s1 - n * s2 + 3.0 * w * w) / ((w * w) * (n * n - 1.0));
             let z_n = if var_normality > 0.0 {
                 (morans_i - expected_i) / var_normality.sqrt()
             } else {
@@ -4529,8 +5112,7 @@ impl Tool for ImageAutocorrelationTool {
                 0.0
             };
 
-            let var_randomization = (n
-                * ((n * n - 3.0 * n + 3.0) * s1 - n * s2 + 3.0 * w * w)
+            let var_randomization = (n * ((n * n - 3.0 * n + 3.0) * s1 - n * s2 + 3.0 * w * w)
                 - k * (n * n - n) * s1
                 - 2.0 * n * s1
                 + 6.0 * w * w)
@@ -4854,7 +5436,10 @@ impl Tool for ImageCorrelationNeighbourhoodAnalysisTool {
             })
             .unzip();
 
-        if let (Some(corr_slice), Some(sig_slice)) = (out_corr.data.as_f32_slice_mut(), out_sig.data.as_f32_slice_mut()) {
+        if let (Some(corr_slice), Some(sig_slice)) = (
+            out_corr.data.as_f32_slice_mut(),
+            out_sig.data.as_f32_slice_mut(),
+        ) {
             corr_slice
                 .par_iter_mut()
                 .zip(sig_slice.par_iter_mut())
@@ -4923,7 +5508,10 @@ impl Tool for ImageRegressionTool {
         example.insert("input1".to_string(), json!("elevation.tif"));
         example.insert("input2".to_string(), json!("soil_moisture.tif"));
         example.insert("standardize_residuals".to_string(), json!(true));
-        example.insert("output".to_string(), json!("image_regression_residuals.tif"));
+        example.insert(
+            "output".to_string(),
+            json!("image_regression_residuals.tif"),
+        );
 
         ToolManifest {
             id: "image_regression".to_string(),
@@ -5062,10 +5650,7 @@ impl Tool for ImageRegressionTool {
                     acc
                 },
             )
-            .reduce(
-                || (0.0f64, 0.0f64),
-                |a, b| (a.0 + b.0, a.1 + b.1),
-            );
+            .reduce(|| (0.0f64, 0.0f64), |a, b| (a.0 + b.0, a.1 + b.1));
 
         let df_reg = 1.0f64;
         let df_error = n - 2.0;
@@ -5076,7 +5661,11 @@ impl Tool for ImageRegressionTool {
         } else {
             0.0
         };
-        let f_stat = if ms_error > 0.0 { ms_reg / ms_error } else { 0.0 };
+        let f_stat = if ms_error > 0.0 {
+            ms_reg / ms_error
+        } else {
+            0.0
+        };
         let f_pvalue = if df_error >= 1.0 {
             anova_f_spin(f_stat.max(0.0), 1, df_error as usize).clamp(0.0, 1.0)
         } else {
@@ -5088,8 +5677,16 @@ impl Tool for ImageRegressionTool {
         let msse = (sum_yy - (sum_xy * sum_xy) / sum_xx).max(0.0) / (n - 2.0);
         let intercept_se = (msse * ((1.0 / n) + (x_mean * x_mean) / sum_xx)).sqrt();
         let slope_se = (msse / sum_xx).sqrt();
-        let intercept_t = if intercept_se > 0.0 { intercept / intercept_se } else { 0.0 };
-        let slope_t = if slope_se > 0.0 { slope / slope_se } else { 0.0 };
+        let intercept_t = if intercept_se > 0.0 {
+            intercept / intercept_se
+        } else {
+            0.0
+        };
+        let slope_t = if slope_se > 0.0 {
+            slope / slope_se
+        } else {
+            0.0
+        };
         let intercept_pvalue = two_tailed_normal_p(intercept_t);
         let slope_pvalue = two_tailed_normal_p(slope_t);
 
@@ -5229,7 +5826,10 @@ impl Tool for DbscanTool {
         defaults.insert("min_points".to_string(), json!(5));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         example.insert("scaling_method".to_string(), json!("normalize"));
         example.insert("search_distance".to_string(), json!(0.1));
         example.insert("min_points".to_string(), json!(10));
@@ -5282,7 +5882,9 @@ impl Tool for DbscanTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.is_empty() {
-            return Err(ToolError::Validation("parameter 'inputs' must contain at least one raster path".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'inputs' must contain at least one raster path".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
@@ -5435,8 +6037,11 @@ impl Tool for DbscanTool {
                 }
                 cluster_id += 1;
                 labels[i] = cluster_id;
-                let mut seed_set: Vec<usize> =
-                    neighbors.into_iter().map(|(_, &j)| j).filter(|&j| j != i).collect();
+                let mut seed_set: Vec<usize> = neighbors
+                    .into_iter()
+                    .map(|(_, &j)| j)
+                    .filter(|&j| j != i)
+                    .collect();
                 let mut si = 0;
                 while si < seed_set.len() {
                     let q = seed_set[si];
@@ -5452,7 +6057,9 @@ impl Tool for DbscanTool {
                     labels[q] = cluster_id;
                     let q_neighbors = tree
                         .within(&points[q], eps_sq, &squared_euclidean)
-                        .map_err(|e| ToolError::Execution(format!("kdtree range query failed: {e}")))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!("kdtree range query failed: {e}"))
+                        })?;
                     if q_neighbors.len() >= min_points {
                         for (_, &r) in &q_neighbors {
                             if labels[r] == -1 || labels[r] == 0 {
@@ -5481,7 +6088,9 @@ impl Tool for DbscanTool {
         });
 
         if let Some(data_slice) = output.data.as_i16_slice_mut() {
-            data_slice.par_iter_mut().for_each(|cell| *cell = OUT_NODATA as i16);
+            data_slice
+                .par_iter_mut()
+                .for_each(|cell| *cell = OUT_NODATA as i16);
             for (pt_idx, &flat_idx) in pixel_map.iter().enumerate() {
                 let lbl = labels[pt_idx];
                 if lbl > 0 {
@@ -5533,11 +6142,31 @@ impl Tool for ConditionalEvaluationTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input raster path.", required: true },
-                ToolParamSpec { name: "statement", description: "Conditional expression evaluated per cell.", required: true },
-                ToolParamSpec { name: "true", description: "Value or raster/expression used when condition is true.", required: false },
-                ToolParamSpec { name: "false", description: "Value or raster/expression used when condition is false.", required: false },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "statement",
+                    description: "Conditional expression evaluated per cell.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "true",
+                    description: "Value or raster/expression used when condition is true.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "false",
+                    description: "Value or raster/expression used when condition is false.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -5563,11 +6192,33 @@ impl Tool for ConditionalEvaluationTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "statement".to_string(), description: "Conditional expression evaluated per cell.".to_string(), required: true },
-                ToolParamDescriptor { name: "true".to_string(), description: "Value or raster/expression used when condition is true.".to_string(), required: false },
-                ToolParamDescriptor { name: "false".to_string(), description: "Value or raster/expression used when condition is false.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "statement".to_string(),
+                    description: "Conditional expression evaluated per cell.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "true".to_string(),
+                    description: "Value or raster/expression used when condition is true."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "false".to_string(),
+                    description: "Value or raster/expression used when condition is false."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -5575,7 +6226,12 @@ impl Tool for ConditionalEvaluationTool {
                 description: "Assign values based on a per-cell condition.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "conditional".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "conditional".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -5586,9 +6242,13 @@ impl Tool for ConditionalEvaluationTool {
             .get("statement")
             .and_then(|v| v.as_str())
             .map(|s| s.trim())
-            .ok_or_else(|| ToolError::Validation("parameter 'statement' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'statement' is required".to_string())
+            })?;
         if statement.is_empty() {
-            return Err(ToolError::Validation("statement must be non-empty".to_string()));
+            return Err(ToolError::Validation(
+                "statement must be non-empty".to_string(),
+            ));
         }
         let normalized = normalize_conditional_expression(statement);
         build_operator_tree::<DefaultNumericTypes>(&normalized)
@@ -5603,7 +6263,9 @@ impl Tool for ConditionalEvaluationTool {
             .get("statement")
             .and_then(|v| v.as_str())
             .map(|s| s.trim())
-            .ok_or_else(|| ToolError::Validation("parameter 'statement' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'statement' is required".to_string())
+            })?;
         let output_path = parse_optional_output_path(args, "output")?;
 
         let input = load_raster(&input_path, "input")?;
@@ -5664,12 +6326,12 @@ impl Tool for ConditionalEvaluationTool {
                     continue;
                 }
 
-                let condition_val = condition_tree
-                    .eval_with_context(&context)
-                    .map_err(|e| ToolError::Execution(format!(
+                let condition_val = condition_tree.eval_with_context(&context).map_err(|e| {
+                    ToolError::Execution(format!(
                         "statement evaluation failed at row {}, col {}: {}",
                         row, col, e
-                    )))?;
+                    ))
+                })?;
                 let condition = eval_value_to_bool(condition_val)?;
 
                 let out_val = if condition {
@@ -5693,13 +6355,26 @@ impl Tool for KappaIndexTool {
         ToolMetadata {
             id: "kappa_index",
             display_name: "Kappa Index",
-            summary: "Computes Cohen's kappa and agreement metrics between two categorical rasters.",
+            summary:
+                "Computes Cohen's kappa and agreement metrics between two categorical rasters.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "Input classification raster path.", required: true },
-                ToolParamSpec { name: "input2", description: "Input reference raster path.", required: true },
-                ToolParamSpec { name: "output", description: "Optional HTML report output path (alias: output_html_file).", required: false },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "Input classification raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Input reference raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional HTML report output path (alias: output_html_file).",
+                    required: false,
+                },
             ],
         }
     }
@@ -5715,21 +6390,43 @@ impl Tool for KappaIndexTool {
         ToolManifest {
             id: "kappa_index".to_string(),
             display_name: "Kappa Index".to_string(),
-            summary: "Computes Cohen's kappa and agreement metrics between two categorical rasters.".to_string(),
+            summary:
+                "Computes Cohen's kappa and agreement metrics between two categorical rasters."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "Input classification raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Input reference raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional HTML report output path (alias: output_html_file).".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "Input classification raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Input reference raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_kappa_index".to_string(),
-                description: "Compute kappa and confusion matrix metrics for two classified rasters.".to_string(),
+                description:
+                    "Compute kappa and confusion matrix metrics for two classified rasters."
+                        .to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -5749,7 +6446,9 @@ impl Tool for KappaIndexTool {
         let in1 = load_raster(&input1_path, "input1")?;
         let in2 = load_raster(&input2_path, "input2")?;
         if in1.rows != in2.rows || in1.cols != in2.cols || in1.bands != in2.bands {
-            return Err(ToolError::Validation("input rasters must have identical rows, columns, and bands".to_string()));
+            return Err(ToolError::Validation(
+                "input rasters must have identical rows, columns, and bands".to_string(),
+            ));
         }
 
         let counts = (0..in1.data.len())
@@ -5788,7 +6487,9 @@ impl Tool for KappaIndexTool {
 
         let classes: Vec<i64> = classes.into_iter().collect();
         if classes.is_empty() {
-            return Err(ToolError::Validation("no overlapping valid categorical cells were found".to_string()));
+            return Err(ToolError::Validation(
+                "no overlapping valid categorical cells were found".to_string(),
+            ));
         }
 
         let matrix: Vec<Vec<usize>> = classes
@@ -5816,7 +6517,9 @@ impl Tool for KappaIndexTool {
             .sum();
 
         if total == 0 {
-            return Err(ToolError::Validation("no overlapping valid cells were found".to_string()));
+            return Err(ToolError::Validation(
+                "no overlapping valid cells were found".to_string(),
+            ));
         }
 
         let expected: f64 = row_totals
@@ -5881,7 +6584,10 @@ impl Tool for KappaIndexTool {
                 }
                 table_html.push_str(&format!("<td class=\"numberCell\">{}</td>", row_totals[ri]));
                 if users_accuracy[ri].is_finite() {
-                    table_html.push_str(&format!("<td class=\"numberCell\">{:.2}%</td>", users_accuracy[ri] * 100.0));
+                    table_html.push_str(&format!(
+                        "<td class=\"numberCell\">{:.2}%</td>",
+                        users_accuracy[ri] * 100.0
+                    ));
                 } else {
                     table_html.push_str("<td class=\"numberCell\"></td>");
                 }
@@ -5892,17 +6598,25 @@ impl Tool for KappaIndexTool {
             for value in &col_totals {
                 table_html.push_str(&format!("<td class=\"numberCell\">{}</td>", value));
             }
-            table_html.push_str(&format!("<td class=\"numberCell\">{}</td><td class=\"numberCell\"></td></tr>", total));
+            table_html.push_str(&format!(
+                "<td class=\"numberCell\">{}</td><td class=\"numberCell\"></td></tr>",
+                total
+            ));
 
             table_html.push_str("<tr><th class=\"headerCell\">Producer's Accuracy</th>");
             for acc in &producers_accuracy {
                 if acc.is_finite() {
-                    table_html.push_str(&format!("<td class=\"numberCell\">{:.2}%</td>", acc * 100.0));
+                    table_html.push_str(&format!(
+                        "<td class=\"numberCell\">{:.2}%</td>",
+                        acc * 100.0
+                    ));
                 } else {
                     table_html.push_str("<td class=\"numberCell\"></td>");
                 }
             }
-            table_html.push_str("<td class=\"numberCell\"></td><td class=\"numberCell\"></td></tr></table>");
+            table_html.push_str(
+                "<td class=\"numberCell\"></td><td class=\"numberCell\"></td></tr></table>",
+            );
 
             let body = format!(
                 "<h1>Kappa Index of Agreement</h1><p><strong>Classification Data</strong>: {}</p><p><strong>Reference Data</strong>: {}</p>{}<p><strong>Overall Accuracy</strong>: {:.2}%</p><p><strong>Kappa</strong>: {:.4}</p>",
@@ -5930,10 +6644,26 @@ impl Tool for PairedSampleTTestTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "First input raster path.", required: true },
-                ToolParamSpec { name: "input2", description: "Second input raster path.", required: true },
-                ToolParamSpec { name: "num_samples", description: "Optional sample size with replacement.", required: false },
-                ToolParamSpec { name: "output", description: "Optional HTML report output path (alias: output_html_file).", required: false },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "First input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Second input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "num_samples",
+                    description: "Optional sample size with replacement.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional HTML report output path (alias: output_html_file).",
+                    required: false,
+                },
             ],
         }
     }
@@ -5952,14 +6682,32 @@ impl Tool for PairedSampleTTestTool {
         ToolManifest {
             id: "paired_sample_t_test".to_string(),
             display_name: "Paired Sample T Test".to_string(),
-            summary: "Performs a paired-sample t-test on two rasters using paired valid cells.".to_string(),
+            summary: "Performs a paired-sample t-test on two rasters using paired valid cells."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "First input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Second input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "num_samples".to_string(), description: "Optional sample size with replacement.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional HTML report output path (alias: output_html_file).".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "First input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Second input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "num_samples".to_string(),
+                    description: "Optional sample size with replacement.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional HTML report output path (alias: output_html_file)."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -5967,7 +6715,12 @@ impl Tool for PairedSampleTTestTool {
                 description: "Run a paired t-test on two rasters.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -5982,23 +6735,32 @@ impl Tool for PairedSampleTTestTool {
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input1_path = parse_raster_path_arg(args, "input1")?;
         let input2_path = parse_raster_path_arg(args, "input2")?;
-        let requested_samples = args.get("num_samples").and_then(|v| v.as_u64()).map(|v| v as usize);
+        let requested_samples = args
+            .get("num_samples")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
         let html_output_path = parse_optional_html_report_path(args)?;
 
         let in1 = load_raster(&input1_path, "input1")?;
         let in2 = load_raster(&input2_path, "input2")?;
         if in1.rows != in2.rows || in1.cols != in2.cols || in1.bands != in2.bands {
-            return Err(ToolError::Validation("input rasters must have identical rows, columns, and bands".to_string()));
+            return Err(ToolError::Validation(
+                "input rasters must have identical rows, columns, and bands".to_string(),
+            ));
         }
 
         let paired_diffs = collect_paired_differences(&in1, &in2);
         if paired_diffs.len() < 2 {
-            return Err(ToolError::Validation("fewer than two valid paired cells were found".to_string()));
+            return Err(ToolError::Validation(
+                "fewer than two valid paired cells were found".to_string(),
+            ));
         }
 
         let diffs = if let Some(n) = requested_samples {
             if n == 0 {
-                return Err(ToolError::Validation("num_samples must be greater than zero when provided".to_string()));
+                return Err(ToolError::Validation(
+                    "num_samples must be greater than zero when provided".to_string(),
+                ));
             }
             sample_with_replacement(&paired_diffs, n)
         } else {
@@ -6105,13 +6867,26 @@ impl Tool for TwoSampleKsTestTool {
         ToolMetadata {
             id: "two_sample_ks_test",
             display_name: "Two Sample K-S Test",
-            summary: "Performs a two-sample Kolmogorov-Smirnov test on two raster value distributions.",
+            summary:
+                "Performs a two-sample Kolmogorov-Smirnov test on two raster value distributions.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "First input raster path.", required: true },
-                ToolParamSpec { name: "input2", description: "Second input raster path.", required: true },
-                ToolParamSpec { name: "num_samples", description: "Optional sample size with replacement per raster.", required: false },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "First input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Second input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "num_samples",
+                    description: "Optional sample size with replacement per raster.",
+                    required: false,
+                },
             ],
         }
     }
@@ -6129,13 +6904,27 @@ impl Tool for TwoSampleKsTestTool {
         ToolManifest {
             id: "two_sample_ks_test".to_string(),
             display_name: "Two Sample K-S Test".to_string(),
-            summary: "Performs a two-sample Kolmogorov-Smirnov test on two raster value distributions.".to_string(),
+            summary:
+                "Performs a two-sample Kolmogorov-Smirnov test on two raster value distributions."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "First input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Second input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "num_samples".to_string(), description: "Optional sample size with replacement per raster.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "First input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Second input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "num_samples".to_string(),
+                    description: "Optional sample size with replacement per raster.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -6143,7 +6932,12 @@ impl Tool for TwoSampleKsTestTool {
                 description: "Run a two-sample K-S test on two rasters.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6157,25 +6951,37 @@ impl Tool for TwoSampleKsTestTool {
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input1_path = parse_raster_path_arg(args, "input1")?;
         let input2_path = parse_raster_path_arg(args, "input2")?;
-        let requested_samples = args.get("num_samples").and_then(|v| v.as_u64()).map(|v| v as usize);
+        let requested_samples = args
+            .get("num_samples")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
 
         let in1 = load_raster(&input1_path, "input1")?;
         let in2 = load_raster(&input2_path, "input2")?;
         if in1.rows != in2.rows || in1.cols != in2.cols || in1.bands != in2.bands {
-            return Err(ToolError::Validation("input rasters must have identical rows, columns, and bands".to_string()));
+            return Err(ToolError::Validation(
+                "input rasters must have identical rows, columns, and bands".to_string(),
+            ));
         }
 
         let values1 = collect_valid_values(&in1);
         let values2 = collect_valid_values(&in2);
         if values1.is_empty() || values2.is_empty() {
-            return Err(ToolError::Validation("one or both input rasters contain no valid cells".to_string()));
+            return Err(ToolError::Validation(
+                "one or both input rasters contain no valid cells".to_string(),
+            ));
         }
 
         let (sample1, sample2) = if let Some(n) = requested_samples {
             if n == 0 {
-                return Err(ToolError::Validation("num_samples must be greater than zero when provided".to_string()));
+                return Err(ToolError::Validation(
+                    "num_samples must be greater than zero when provided".to_string(),
+                ));
             }
-            (sample_with_replacement(&values1, n), sample_with_replacement(&values2, n))
+            (
+                sample_with_replacement(&values1, n),
+                sample_with_replacement(&values2, n),
+            )
         } else {
             (values1, values2)
         };
@@ -6209,9 +7015,21 @@ impl Tool for WilcoxonSignedRankTestTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "First input raster path.", required: true },
-                ToolParamSpec { name: "input2", description: "Second input raster path.", required: true },
-                ToolParamSpec { name: "num_samples", description: "Optional sample size with replacement.", required: false },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "First input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Second input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "num_samples",
+                    description: "Optional sample size with replacement.",
+                    required: false,
+                },
             ],
         }
     }
@@ -6229,13 +7047,26 @@ impl Tool for WilcoxonSignedRankTestTool {
         ToolManifest {
             id: "wilcoxon_signed_rank_test".to_string(),
             display_name: "Wilcoxon Signed-Rank Test".to_string(),
-            summary: "Performs a Wilcoxon signed-rank test on paired raster differences.".to_string(),
+            summary: "Performs a Wilcoxon signed-rank test on paired raster differences."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "First input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Second input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "num_samples".to_string(), description: "Optional sample size with replacement.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "First input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Second input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "num_samples".to_string(),
+                    description: "Optional sample size with replacement.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -6243,7 +7074,12 @@ impl Tool for WilcoxonSignedRankTestTool {
                 description: "Run a Wilcoxon signed-rank test on two rasters.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6257,22 +7093,31 @@ impl Tool for WilcoxonSignedRankTestTool {
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input1_path = parse_raster_path_arg(args, "input1")?;
         let input2_path = parse_raster_path_arg(args, "input2")?;
-        let requested_samples = args.get("num_samples").and_then(|v| v.as_u64()).map(|v| v as usize);
+        let requested_samples = args
+            .get("num_samples")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize);
 
         let in1 = load_raster(&input1_path, "input1")?;
         let in2 = load_raster(&input2_path, "input2")?;
         if in1.rows != in2.rows || in1.cols != in2.cols || in1.bands != in2.bands {
-            return Err(ToolError::Validation("input rasters must have identical rows, columns, and bands".to_string()));
+            return Err(ToolError::Validation(
+                "input rasters must have identical rows, columns, and bands".to_string(),
+            ));
         }
 
         let paired_diffs = collect_paired_differences(&in1, &in2);
         if paired_diffs.len() < 2 {
-            return Err(ToolError::Validation("fewer than two valid paired cells were found".to_string()));
+            return Err(ToolError::Validation(
+                "fewer than two valid paired cells were found".to_string(),
+            ));
         }
 
         let diffs = if let Some(n) = requested_samples {
             if n == 0 {
-                return Err(ToolError::Validation("num_samples must be greater than zero when provided".to_string()));
+                return Err(ToolError::Validation(
+                    "num_samples must be greater than zero when provided".to_string(),
+                ));
             }
             sample_with_replacement(&paired_diffs, n)
         } else {
@@ -6281,11 +7126,19 @@ impl Tool for WilcoxonSignedRankTestTool {
 
         let mut signed_abs: Vec<(f64, f64)> = diffs
             .into_par_iter()
-            .filter_map(|d| if d == 0.0 { None } else { Some((d.signum(), d.abs())) })
+            .filter_map(|d| {
+                if d == 0.0 {
+                    None
+                } else {
+                    Some((d.signum(), d.abs()))
+                }
+            })
             .collect();
 
         if signed_abs.len() < 2 {
-            return Err(ToolError::Validation("insufficient non-zero differences for Wilcoxon test".to_string()));
+            return Err(ToolError::Validation(
+                "insufficient non-zero differences for Wilcoxon test".to_string(),
+            ));
         }
 
         signed_abs.par_sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
@@ -6347,9 +7200,21 @@ impl Tool for MaxTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "First raster path or numeric constant.", required: true },
-                ToolParamSpec { name: "input2", description: "Second raster path or numeric constant.", required: true },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "First raster path or numeric constant.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Second raster path or numeric constant.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -6367,21 +7232,40 @@ impl Tool for MaxTool {
         ToolManifest {
             id: "max".to_string(),
             display_name: "Max".to_string(),
-            summary: "Performs a MAX operation on two rasters or a raster and a constant value.".to_string(),
+            summary: "Performs a MAX operation on two rasters or a raster and a constant value."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "First raster path or numeric constant.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Second raster path or numeric constant.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "First raster path or numeric constant.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Second raster path or numeric constant.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_max".to_string(),
-                description: "Compute cellwise maximum between a raster and a constant.".to_string(),
+                description: "Compute cellwise maximum between a raster and a constant."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "max".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "max".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6403,7 +7287,9 @@ impl Tool for MaxTool {
                 let r1 = load_raster(&p1, "input1")?;
                 let r2 = load_raster(&p2, "input2")?;
                 if r1.rows != r2.rows || r1.cols != r2.cols || r1.bands != r2.bands {
-                    return Err(ToolError::Validation("input rasters must have identical rows, columns, and bands".to_string()));
+                    return Err(ToolError::Validation(
+                        "input rasters must have identical rows, columns, and bands".to_string(),
+                    ));
                 }
                 let mut out = r1.clone();
                 let out_values: Vec<f64> = (0..out.data.len())
@@ -6467,9 +7353,21 @@ impl Tool for MinTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input1", description: "First raster path or numeric constant.", required: true },
-                ToolParamSpec { name: "input2", description: "Second raster path or numeric constant.", required: true },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "input1",
+                    description: "First raster path or numeric constant.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input2",
+                    description: "Second raster path or numeric constant.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -6487,21 +7385,40 @@ impl Tool for MinTool {
         ToolManifest {
             id: "min".to_string(),
             display_name: "Min".to_string(),
-            summary: "Performs a MIN operation on two rasters or a raster and a constant value.".to_string(),
+            summary: "Performs a MIN operation on two rasters or a raster and a constant value."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input1".to_string(), description: "First raster path or numeric constant.".to_string(), required: true },
-                ToolParamDescriptor { name: "input2".to_string(), description: "Second raster path or numeric constant.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input1".to_string(),
+                    description: "First raster path or numeric constant.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "input2".to_string(),
+                    description: "Second raster path or numeric constant.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_min".to_string(),
-                description: "Compute cellwise minimum between a raster and a constant.".to_string(),
+                description: "Compute cellwise minimum between a raster and a constant."
+                    .to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "min".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "min".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6523,7 +7440,9 @@ impl Tool for MinTool {
                 let r1 = load_raster(&p1, "input1")?;
                 let r2 = load_raster(&p2, "input2")?;
                 if r1.rows != r2.rows || r1.cols != r2.cols || r1.bands != r2.bands {
-                    return Err(ToolError::Validation("input rasters must have identical rows, columns, and bands".to_string()));
+                    return Err(ToolError::Validation(
+                        "input rasters must have identical rows, columns, and bands".to_string(),
+                    ));
                 }
                 let mut out = r1.clone();
                 let out_values: Vec<f64> = (0..out.data.len())
@@ -6587,9 +7506,21 @@ impl Tool for QuantilesTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input raster path.", required: true },
-                ToolParamSpec { name: "num_quantiles", description: "Number of quantiles (default 5).", required: false },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "num_quantiles",
+                    description: "Number of quantiles (default 5).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -6609,9 +7540,21 @@ impl Tool for QuantilesTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "num_quantiles".to_string(), description: "Number of quantiles (default 5).".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "num_quantiles".to_string(),
+                    description: "Number of quantiles (default 5).".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -6619,7 +7562,12 @@ impl Tool for QuantilesTool {
                 description: "Assign each raster cell to a quantile class.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6649,8 +7597,12 @@ impl Tool for QuantilesTool {
                 |(mut mn, mut mx, mut n), i| {
                     let z = input.data.get_f64(i);
                     if !input.is_nodata(z) {
-                        if z < mn { mn = z; }
-                        if z > mx { mx = z; }
+                        if z < mn {
+                            mn = z;
+                        }
+                        if z > mx {
+                            mx = z;
+                        }
                         n += 1;
                     }
                     (mn, mx, n)
@@ -6662,7 +7614,9 @@ impl Tool for QuantilesTool {
             );
 
         if n_valid == 0 {
-            return Err(ToolError::Validation("input raster contains no valid cells".to_string()));
+            return Err(ToolError::Validation(
+                "input raster contains no valid cells".to_string(),
+            ));
         }
 
         // Adaptive bin count.
@@ -6715,7 +7669,8 @@ impl Tool for QuantilesTool {
         let mut bin_class = vec![0u8; num_bins];
         for b in 0..num_bins {
             cumulative += histo[b];
-            let klass = ((cumulative as f64 / n_valid as f64) * num_quantiles as f64).ceil() as usize;
+            let klass =
+                ((cumulative as f64 / n_valid as f64) * num_quantiles as f64).ceil() as usize;
             bin_class[b] = klass.clamp(1, num_quantiles) as u8;
         }
 
@@ -6766,9 +7721,21 @@ impl Tool for ListUniqueValuesTool {
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector path.", required: true },
-                ToolParamSpec { name: "field", description: "Attribute field name.", required: true },
-                ToolParamSpec { name: "output", description: "Optional output CSV path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Attribute field name.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output CSV path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -6788,9 +7755,21 @@ impl Tool for ListUniqueValuesTool {
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input vector path.".to_string(), required: true },
-                ToolParamDescriptor { name: "field".to_string(), description: "Attribute field name.".to_string(), required: true },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output CSV path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input vector path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "field".to_string(),
+                    description: "Attribute field name.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output CSV path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -6798,7 +7777,12 @@ impl Tool for ListUniqueValuesTool {
                 description: "List frequencies for a vector field.".to_string(),
                 args: example,
             }],
-            tags: vec!["vector".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "vector".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6816,7 +7800,9 @@ impl Tool for ListUniqueValuesTool {
                 .map(|s| s.eq_ignore_ascii_case("csv"))
                 .unwrap_or(false);
             if !is_csv {
-                return Err(ToolError::Validation("output must be a .csv path".to_string()));
+                return Err(ToolError::Validation(
+                    "output must be a .csv path".to_string(),
+                ));
             }
         }
         Ok(())
@@ -6839,27 +7825,21 @@ impl Tool for ListUniqueValuesTool {
         let freq_hash = layer
             .features
             .par_iter()
-            .fold(
-                HashMap::<String, usize>::new,
-                |mut acc, f| {
-                    let key = f
-                        .attributes
-                        .get(idx)
-                        .map(|v| v.to_string())
-                        .unwrap_or_else(|| "null".to_string());
-                    *acc.entry(key).or_insert(0) += 1;
-                    acc
-                },
-            )
-            .reduce(
-                HashMap::<String, usize>::new,
-                |mut a, b| {
-                    for (k, v) in b {
-                        *a.entry(k).or_insert(0) += v;
-                    }
-                    a
-                },
-            );
+            .fold(HashMap::<String, usize>::new, |mut acc, f| {
+                let key = f
+                    .attributes
+                    .get(idx)
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "null".to_string());
+                *acc.entry(key).or_insert(0) += 1;
+                acc
+            })
+            .reduce(HashMap::<String, usize>::new, |mut a, b| {
+                for (k, v) in b {
+                    *a.entry(k).or_insert(0) += v;
+                }
+                a
+            });
 
         let freq: BTreeMap<String, usize> = freq_hash.into_iter().collect();
 
@@ -6890,8 +7870,16 @@ impl Tool for RootMeanSquareErrorTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Comparison raster path.", required: true },
-                ToolParamSpec { name: "base", description: "Base raster path.", required: true },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Comparison raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "base",
+                    description: "Base raster path.",
+                    required: true,
+                },
             ],
         }
     }
@@ -6907,12 +7895,21 @@ impl Tool for RootMeanSquareErrorTool {
         ToolManifest {
             id: "root_mean_square_error".to_string(),
             display_name: "Root Mean Square Error".to_string(),
-            summary: "Calculates RMSE and related accuracy statistics between two rasters.".to_string(),
+            summary: "Calculates RMSE and related accuracy statistics between two rasters."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Comparison raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "base".to_string(), description: "Base raster path.".to_string(), required: true },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Comparison raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "base".to_string(),
+                    description: "Base raster path.".to_string(),
+                    required: true,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -6920,7 +7917,12 @@ impl Tool for RootMeanSquareErrorTool {
                 description: "Compute vertical accuracy metrics between two DEMs.".to_string(),
                 args: example,
             }],
-            tags: vec!["raster".to_string(), "math".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "math".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6978,17 +7980,16 @@ impl Tool for RootMeanSquareErrorTool {
                     }
                     local
                 })
-                .reduce(
-                    Vec::new,
-                    |mut a, mut b| {
-                        a.append(&mut b);
-                        a
-                    },
-                );
+                .reduce(Vec::new, |mut a, mut b| {
+                    a.append(&mut b);
+                    a
+                });
         }
 
         if diffs.is_empty() {
-            return Err(ToolError::Validation("no overlapping valid cells found for comparison".to_string()));
+            return Err(ToolError::Validation(
+                "no overlapping valid cells found for comparison".to_string(),
+            ));
         }
 
         let n = diffs.len() as f64;
@@ -7087,16 +8088,32 @@ impl Tool for ZonalStatisticsTool {
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_raster_path_arg(args, "input")?;
         let features_path = parse_raster_path_arg(args, "features")?;
-        let raw_stat = args.get("stat_type").and_then(|v| v.as_str()).unwrap_or("mean").to_lowercase();
-        let stat_type = if raw_stat.contains("med") { "median" }
-            else if raw_stat.contains("min") { "min" }
-            else if raw_stat.contains("max") { "max" }
-            else if raw_stat.contains("ran") { "range" }
-            else if raw_stat.contains("dev") { "standard deviation" }
-            else if raw_stat.contains("div") { "diversity" }
-            else if raw_stat.contains("tot") || raw_stat.contains("sum") { "total" }
-            else { "mean" };
-        let zero_is_background = args.get("zero_is_background").and_then(|v| v.as_bool()).unwrap_or(false);
+        let raw_stat = args
+            .get("stat_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("mean")
+            .to_lowercase();
+        let stat_type = if raw_stat.contains("med") {
+            "median"
+        } else if raw_stat.contains("min") {
+            "min"
+        } else if raw_stat.contains("max") {
+            "max"
+        } else if raw_stat.contains("ran") {
+            "range"
+        } else if raw_stat.contains("dev") {
+            "standard deviation"
+        } else if raw_stat.contains("div") {
+            "diversity"
+        } else if raw_stat.contains("tot") || raw_stat.contains("sum") {
+            "total"
+        } else {
+            "mean"
+        };
+        let zero_is_background = args
+            .get("zero_is_background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let input = load_raster(&input_path, "input")?;
@@ -7175,12 +8192,15 @@ impl Tool for ZonalStatisticsTool {
                             0.0
                         } else {
                             let mean = data.iter().sum::<f64>() / cnt;
-                            let var = data.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (cnt - 1.0);
+                            let var =
+                                data.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (cnt - 1.0);
                             var.sqrt()
                         }
                     }
                     "median" => {
-                        data.par_sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                        data.par_sort_by(|a, b| {
+                            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                        });
                         let mid = data.len() / 2;
                         if data.len() % 2 == 0 {
                             (data[mid - 1] + data[mid]) / 2.0
@@ -7195,11 +8215,17 @@ impl Tool for ZonalStatisticsTool {
             .collect();
 
         let mut output = Raster::new(RasterConfig {
-            rows: input.rows, cols: input.cols, bands: 1,
-            x_min: input.x_min, y_min: input.y_min,
-            cell_size: input.cell_size_x, cell_size_y: Some(input.cell_size_y),
-            nodata: input.nodata, data_type: DataType::F32,
-            crs: input.crs.clone(), metadata: input.metadata.clone(),
+            rows: input.rows,
+            cols: input.cols,
+            bands: 1,
+            x_min: input.x_min,
+            y_min: input.y_min,
+            cell_size: input.cell_size_x,
+            cell_size_y: Some(input.cell_size_y),
+            nodata: input.nodata,
+            data_type: DataType::F32,
+            crs: input.crs.clone(),
+            metadata: input.metadata.clone(),
             ..Default::default()
         });
         let out_vals: Vec<f64> = (0..n)
@@ -7251,14 +8277,31 @@ impl Tool for TurningBandsSimulationTool {
         ToolMetadata {
             id: "turning_bands_simulation",
             display_name: "Turning Bands Simulation",
-            summary: "Creates a spatially-autocorrelated random field using the turning bands algorithm.",
+            summary:
+                "Creates a spatially-autocorrelated random field using the turning bands algorithm.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Base raster (provides grid geometry).", required: true },
-                ToolParamSpec { name: "range", description: "Correlation range in map units. Default: 1.0.", required: false },
-                ToolParamSpec { name: "iterations", description: "Number of band directions (≥5). Default: 1000.", required: false },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Base raster (provides grid geometry).",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "range",
+                    description: "Correlation range in map units. Default: 1.0.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "iterations",
+                    description: "Number of band directions (≥5). Default: 1000.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -7275,18 +8318,44 @@ impl Tool for TurningBandsSimulationTool {
         ToolManifest {
             id: "turning_bands_simulation".to_string(),
             display_name: "Turning Bands Simulation".to_string(),
-            summary: "Creates a spatially-autocorrelated random field using the turning bands algorithm.".to_string(),
+            summary:
+                "Creates a spatially-autocorrelated random field using the turning bands algorithm."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Base raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "range".to_string(), description: "Correlation range in map units. Default: 1.0.".to_string(), required: false },
-                ToolParamDescriptor { name: "iterations".to_string(), description: "Number of band directions. Default: 1000.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Base raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "range".to_string(),
+                    description: "Correlation range in map units. Default: 1.0.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "iterations".to_string(),
+                    description: "Number of band directions. Default: 1000.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
-            examples: vec![ToolExample { name: "basic".to_string(), description: "Simulate a correlated random field.".to_string(), args: example }],
-            tags: vec!["raster".to_string(), "simulation".to_string(), "legacy-port".to_string()],
+            examples: vec![ToolExample {
+                name: "basic".to_string(),
+                description: "Simulate a correlated random field.".to_string(),
+                args: example,
+            }],
+            tags: vec![
+                "raster".to_string(),
+                "simulation".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -7299,31 +8368,43 @@ impl Tool for TurningBandsSimulationTool {
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_raster_path_arg(args, "input")?;
-        let range = args.get("range").and_then(|v| v.as_f64()).unwrap_or(1.0).max(0.0);
-        let iterations = args.get("iterations").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(1000).max(5);
+        let range = args
+            .get("range")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0)
+            .max(0.0);
+        let iterations = args
+            .get("iterations")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(1000)
+            .max(5);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let input = load_raster(&input_path, "input")?;
         let rows = input.rows;
         let cols = input.cols;
 
-        let diagonal_size = ((rows as f64 * rows as f64 + cols as f64 * cols as f64).sqrt()) as usize + 1;
+        let diagonal_size =
+            ((rows as f64 * rows as f64 + cols as f64 * cols as f64).sqrt()) as usize + 1;
         let filter_half_size = ((range / (2.0 * input.cell_size_x)) as usize).max(1);
         let filter_size = filter_half_size * 2 + 1;
-        let cell_offsets: Vec<isize> = (0..filter_size as isize).map(|i| i - filter_half_size as isize).collect();
-        let w = (36.0 / (filter_half_size as f64 * (filter_half_size as f64 + 1.0) * filter_size as f64)).sqrt();
+        let cell_offsets: Vec<isize> = (0..filter_size as isize)
+            .map(|i| i - filter_half_size as isize)
+            .collect();
+        let w = (36.0
+            / (filter_half_size as f64 * (filter_half_size as f64 + 1.0) * filter_size as f64))
+            .sqrt();
 
         let mut accum = vec![0.0f32; rows * cols];
         let mut rng = rand::rng();
 
         for _ in 0..iterations {
             let mut t = vec![0.0f64; diagonal_size + 2 * filter_half_size];
-            t[..diagonal_size]
-                .par_iter_mut()
-                .for_each(|cell| {
-                    let mut local_rng = rand::rng();
-                    *cell = sample_standard_normal(&mut local_rng);
-                });
+            t[..diagonal_size].par_iter_mut().for_each(|cell| {
+                let mut local_rng = rand::rng();
+                *cell = sample_standard_normal(&mut local_rng);
+            });
 
             let mut y: Vec<f32> = (0..diagonal_size)
                 .into_par_iter()
@@ -7371,7 +8452,8 @@ impl Tool for TurningBandsSimulationTool {
                 .for_each(|(row, row_accum)| {
                     let mut proj = row as f64 * dir_y - min_proj;
                     for cell in row_accum.iter_mut() {
-                        let p = (proj.round() as isize).clamp(0, (diagonal_size - 1) as isize) as usize;
+                        let p =
+                            (proj.round() as isize).clamp(0, (diagonal_size - 1) as isize) as usize;
                         *cell += y[p];
                         proj += dir_x;
                     }
@@ -7380,14 +8462,20 @@ impl Tool for TurningBandsSimulationTool {
 
         let iter_sqrt = (iterations as f32).sqrt();
         let mut output = Raster::new(RasterConfig {
-            rows, cols, bands: 1,
-            x_min: input.x_min, y_min: input.y_min,
-            cell_size: input.cell_size_x, cell_size_y: Some(input.cell_size_y),
-            nodata: input.nodata, data_type: DataType::F32,
-            crs: input.crs.clone(), metadata: input.metadata.clone(),
+            rows,
+            cols,
+            bands: 1,
+            x_min: input.x_min,
+            y_min: input.y_min,
+            cell_size: input.cell_size_x,
+            cell_size_y: Some(input.cell_size_y),
+            nodata: input.nodata,
+            data_type: DataType::F32,
+            crs: input.crs.clone(),
+            metadata: input.metadata.clone(),
             ..Default::default()
         });
-        
+
         // Parallel normalized accumulation into typed F32 buffer (avoids per-cell dispatch overhead)
         if let Some(data_slice) = output.data.as_f32_slice_mut() {
             use rayon::prelude::*;
@@ -7396,7 +8484,9 @@ impl Tool for TurningBandsSimulationTool {
             });
         } else {
             // Fallback: shouldn't happen since we just created F32 output above
-            for i in 0..rows * cols { output.data.set_f64(i, (accum[i] / iter_sqrt) as f64); }
+            for i in 0..rows * cols {
+                output.data.set_f64(i, (accum[i] / iter_sqrt) as f64);
+            }
         }
 
         let loc = write_or_store_output(output, output_path)?;
@@ -7412,12 +8502,18 @@ impl Tool for TurningBandsSimulationTool {
 
 fn poly_num_coefficients(order: usize) -> usize {
     let mut n = 0;
-    for j in 0..=order { for _k in 0..=(order - j) { n += 1; } }
+    for j in 0..=order {
+        for _k in 0..=(order - j) {
+            n += 1;
+        }
+    }
     n
 }
 
 fn fit_polynomial_surface(
-    x: &[f64], y: &[f64], z: &[f64],
+    x: &[f64],
+    y: &[f64],
+    z: &[f64],
     order: usize,
 ) -> Result<(Vec<f64>, f64), ToolError> {
     let n = z.len();
@@ -7439,10 +8535,14 @@ fn fit_polynomial_surface(
     let qr = mat.clone().qr();
     let r = qr.r();
     if !r.is_invertible() {
-        return Err(ToolError::Execution("polynomial regression matrix is not invertible".to_string()));
+        return Err(ToolError::Execution(
+            "polynomial regression matrix is not invertible".to_string(),
+        ));
     }
     let b = DVector::from_row_slice(z);
-    let coeffs = (r.try_inverse().unwrap() * qr.q().transpose() * b).as_slice().to_vec();
+    let coeffs = (r.try_inverse().unwrap() * qr.q().transpose() * b)
+        .as_slice()
+        .to_vec();
 
     let (ss_resid, z_sum, z_ss) = (0..n)
         .into_par_iter()
@@ -7463,7 +8563,11 @@ fn fit_polynomial_surface(
         );
     let variance = (z_ss - z_sum * z_sum / n as f64) / n as f64;
     let ss_total = (n - 1) as f64 * variance;
-    let r_sqr = if ss_total.abs() < 1.0e-15 { 1.0 } else { 1.0 - ss_resid / ss_total };
+    let r_sqr = if ss_total.abs() < 1.0e-15 {
+        1.0
+    } else {
+        1.0 - ss_resid / ss_total
+    };
     Ok((coeffs, r_sqr))
 }
 
@@ -7473,7 +8577,9 @@ fn eval_poly(x_val: f64, y_val: f64, coeffs: &[f64], order: usize, z_offset: f64
     let mut m = 0usize;
     for j in 0..=order {
         for k in 0..=(order - j) {
-            if m < num_coeff { z += x_val.powf(j as f64) * y_val.powf(k as f64) * coeffs[m]; }
+            if m < num_coeff {
+                z += x_val.powf(j as f64) * y_val.powf(k as f64) * coeffs[m];
+            }
             m += 1;
         }
     }
@@ -7493,9 +8599,21 @@ impl Tool for TrendSurfaceTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input raster path.", required: true },
-                ToolParamSpec { name: "polynomial_order", description: "Polynomial order 1–10. Default: 1.", required: false },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input raster path.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "polynomial_order",
+                    description: "Polynomial order 1–10. Default: 1.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -7510,17 +8628,38 @@ impl Tool for TrendSurfaceTool {
         ToolManifest {
             id: "trend_surface".to_string(),
             display_name: "Trend Surface".to_string(),
-            summary: "Fits a polynomial trend surface to a raster using least-squares regression.".to_string(),
+            summary: "Fits a polynomial trend surface to a raster using least-squares regression."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input raster path.".to_string(), required: true },
-                ToolParamDescriptor { name: "polynomial_order".to_string(), description: "Polynomial order 1–10. Default: 1.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input raster path.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "polynomial_order".to_string(),
+                    description: "Polynomial order 1–10. Default: 1.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
-            examples: vec![ToolExample { name: "basic".to_string(), description: "Fit a 2nd-order trend surface to a DEM.".to_string(), args: example }],
-            tags: vec!["raster".to_string(), "statistics".to_string(), "legacy-port".to_string()],
+            examples: vec![ToolExample {
+                name: "basic".to_string(),
+                description: "Fit a 2nd-order trend surface to a DEM.".to_string(),
+                args: example,
+            }],
+            tags: vec![
+                "raster".to_string(),
+                "statistics".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -7533,7 +8672,11 @@ impl Tool for TrendSurfaceTool {
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_raster_path_arg(args, "input")?;
-        let order = args.get("polynomial_order").and_then(|v| v.as_u64()).map(|v| (v as usize).clamp(1, 10)).unwrap_or(1);
+        let order = args
+            .get("polynomial_order")
+            .and_then(|v| v.as_u64())
+            .map(|v| (v as usize).clamp(1, 10))
+            .unwrap_or(1);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let input = load_raster(&input_path, "input")?;
@@ -7573,11 +8716,17 @@ impl Tool for TrendSurfaceTool {
         let (coeffs, r_sqr) = fit_polynomial_surface(&x_data, &y_data, &z_data, order)?;
 
         let mut output = Raster::new(RasterConfig {
-            rows, cols, bands: 1,
-            x_min: input.x_min, y_min: input.y_min,
-            cell_size: input.cell_size_x, cell_size_y: Some(input.cell_size_y),
-            nodata: input.nodata, data_type: DataType::F32,
-            crs: input.crs.clone(), metadata: input.metadata.clone(),
+            rows,
+            cols,
+            bands: 1,
+            x_min: input.x_min,
+            y_min: input.y_min,
+            cell_size: input.cell_size_x,
+            cell_size_y: Some(input.cell_size_y),
+            nodata: input.nodata,
+            data_type: DataType::F32,
+            crs: input.crs.clone(),
+            metadata: input.metadata.clone(),
             ..Default::default()
         });
         let fitted_values: Vec<f64> = (0..rows * cols)
@@ -7609,7 +8758,8 @@ impl Tool for TrendSurfaceTool {
             "min_y": min_y,
             "min_z": min_z,
             "coefficients": coeffs,
-        }).to_string();
+        })
+        .to_string();
         let mut outputs = BTreeMap::new();
         outputs.insert("output".to_string(), typed_raster_output(loc));
         outputs.insert("report".to_string(), json!(report));
@@ -7671,9 +8821,14 @@ impl Tool for TrendSurfaceVectorPointsTool {
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = parse_vector_path_arg(args, "input")?;
-        let cell_size = args.get("cell_size").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let cell_size = args
+            .get("cell_size")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
         if cell_size <= 0.0 {
-            return Err(ToolError::Validation("'cell_size' must be greater than 0".to_string()));
+            return Err(ToolError::Validation(
+                "'cell_size' must be greater than 0".to_string(),
+            ));
         }
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
@@ -7681,19 +8836,30 @@ impl Tool for TrendSurfaceVectorPointsTool {
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = parse_vector_path_arg(args, "input")?;
-        let cell_size = args.get("cell_size").and_then(|v| v.as_f64())
+        let cell_size = args
+            .get("cell_size")
+            .and_then(|v| v.as_f64())
             .ok_or_else(|| ToolError::Validation("'cell_size' is required".to_string()))?;
         if cell_size <= 0.0 {
             return Err(ToolError::Validation("'cell_size' must be > 0".to_string()));
         }
-        let field_name = args.get("field_name").and_then(|v| v.as_str()).unwrap_or("FID").to_string();
-        let order = args.get("polynomial_order").and_then(|v| v.as_u64()).map(|v| (v as usize).clamp(1, 10)).unwrap_or(1);
+        let field_name = args
+            .get("field_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("FID")
+            .to_string();
+        let order = args
+            .get("polynomial_order")
+            .and_then(|v| v.as_u64())
+            .map(|v| (v as usize).clamp(1, 10))
+            .unwrap_or(1);
         let output_path = parse_optional_output_path(args, "output")?;
 
         let layer = load_vector(&input_path, "input")?;
 
-        let field_idx = layer.schema.field_index(&field_name)
-            .ok_or_else(|| ToolError::Validation(format!("field '{}' not found in vector layer", field_name)))?;
+        let field_idx = layer.schema.field_index(&field_name).ok_or_else(|| {
+            ToolError::Validation(format!("field '{}' not found in vector layer", field_name))
+        })?;
 
         let mut min_x = f64::INFINITY;
         let mut min_y = f64::INFINITY;
@@ -7724,7 +8890,9 @@ impl Tool for TrendSurfaceVectorPointsTool {
         }
 
         if x_pts.is_empty() {
-            return Err(ToolError::Execution("no valid point features with numeric field values found".to_string()));
+            return Err(ToolError::Execution(
+                "no valid point features with numeric field values found".to_string(),
+            ));
         }
 
         let x_offset = min_x;
@@ -7747,9 +8915,14 @@ impl Tool for TrendSurfaceVectorPointsTool {
         let out_y_min = max_y - out_rows as f64 * cell_size;
 
         let mut output = Raster::new(RasterConfig {
-            rows: out_rows, cols: out_cols, bands: 1,
-            x_min: min_x, y_min: out_y_min,
-            cell_size, nodata: -32768.0, data_type: DataType::F32,
+            rows: out_rows,
+            cols: out_cols,
+            bands: 1,
+            x_min: min_x,
+            y_min: out_y_min,
+            cell_size,
+            nodata: -32768.0,
+            data_type: DataType::F32,
             ..Default::default()
         });
         let fitted_values: Vec<f64> = (0..out_rows * out_cols)
@@ -7781,7 +8954,8 @@ impl Tool for TrendSurfaceVectorPointsTool {
             "y_offset": y_offset,
             "z_offset": z_offset,
             "coefficients": coeffs,
-        }).to_string();
+        })
+        .to_string();
         let mut outputs = BTreeMap::new();
         outputs.insert("output".to_string(), typed_raster_output(loc));
         outputs.insert("report".to_string(), json!(report));
@@ -7817,7 +8991,10 @@ impl Tool for RasterCalculatorTool {
 
     fn manifest(&self) -> ToolManifest {
         let mut example = ToolArgs::new();
-        example.insert("expression".to_string(), json!("('nir' - 'red') / ('nir' + 'red')"));
+        example.insert(
+            "expression".to_string(),
+            json!("('nir' - 'red') / ('nir' + 'red')"),
+        );
         example.insert("inputs".to_string(), json!(["nir.tif", "red.tif"]));
         example.insert("output".to_string(), json!("ndvi.tif"));
         ToolManifest {
@@ -7841,10 +9018,16 @@ impl Tool for RasterCalculatorTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let expression = args.get("expression").and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'expression' is required".to_string()))?;
+        let expression = args
+            .get("expression")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'expression' is required".to_string())
+            })?;
         if expression.trim().is_empty() {
-            return Err(ToolError::Validation("'expression' must be non-empty".to_string()));
+            return Err(ToolError::Validation(
+                "'expression' must be non-empty".to_string(),
+            ));
         }
         if let Some(method) = args.get("auto_reproject_method").and_then(|v| v.as_str()) {
             let method = method.trim();
@@ -7859,8 +9042,11 @@ impl Tool for RasterCalculatorTool {
     }
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let expression = args.get("expression").and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'expression' is required".to_string()))?.to_string();
+        let expression = args
+            .get("expression")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| ToolError::Validation("parameter 'expression' is required".to_string()))?
+            .to_string();
         let input_paths = parse_raster_list_arg(args, "inputs")?;
         let output_path = parse_optional_output_path(args, "output")?;
         let auto_reproject = args
@@ -7877,7 +9063,9 @@ impl Tool for RasterCalculatorTool {
         let delimiter = if expression.contains('"') { '"' } else { '\'' };
         let parts: Vec<&str> = expression.split(delimiter).collect();
         if parts.len() < 3 {
-            return Err(ToolError::Validation("expression must contain at least one quoted raster name".to_string()));
+            return Err(ToolError::Validation(
+                "expression must contain at least one quoted raster name".to_string(),
+            ));
         }
         let mut seen = std::collections::HashSet::new();
         let mut var_names: Vec<String> = Vec::new();
@@ -7893,7 +9081,9 @@ impl Tool for RasterCalculatorTool {
         let num_inputs = var_names.len();
         if input_paths.len() != num_inputs {
             return Err(ToolError::Validation(format!(
-                "expression has {} raster variable(s) but 'inputs' has {} path(s)", num_inputs, input_paths.len()
+                "expression has {} raster variable(s) but 'inputs' has {} path(s)",
+                num_inputs,
+                input_paths.len()
             )));
         }
 
@@ -7903,7 +9093,9 @@ impl Tool for RasterCalculatorTool {
             stmt = stmt.replace(&quoted, &format!("value{}", i));
         }
 
-        let mut inputs: Vec<Raster> = input_paths.iter().enumerate()
+        let mut inputs: Vec<Raster> = input_paths
+            .iter()
+            .enumerate()
             .map(|(i, p)| load_raster(p, &format!("inputs[{}]", i)))
             .collect::<Result<_, _>>()?;
         let stack_config = RasterStackConfig {
@@ -7917,7 +9109,10 @@ impl Tool for RasterCalculatorTool {
         let cols = inputs[0].cols;
         for (i, r) in inputs.iter().enumerate() {
             if r.rows != rows || r.cols != cols {
-                return Err(ToolError::Validation(format!("inputs[{}] has different dimensions from inputs[0]", i)));
+                return Err(ToolError::Validation(format!(
+                    "inputs[{}] has different dimensions from inputs[0]",
+                    i
+                )));
             }
         }
 
@@ -7937,7 +9132,8 @@ impl Tool for RasterCalculatorTool {
         stmt = stmt.replace("minvalue()", &stats[0].min.to_string());
         stmt = stmt.replace("maxvalue()", &stats[0].max.to_string());
 
-        let statement_contains_nodata = expression.contains("nodata") || expression.contains("null");
+        let statement_contains_nodata =
+            expression.contains("nodata") || expression.contains("null");
         let normalized = normalize_conditional_expression(&stmt);
         let expr_tree = build_operator_tree::<DefaultNumericTypes>(&normalized)
             .map_err(|e| ToolError::Validation(format!("invalid expression: {e}")))?;
@@ -7950,11 +9146,17 @@ impl Tool for RasterCalculatorTool {
         let value_keys: Vec<String> = (0..num_inputs).map(|i| format!("value{}", i)).collect();
 
         let mut output = Raster::new(RasterConfig {
-            rows, cols, bands: 1,
-            x_min: inputs[0].x_min, y_min: inputs[0].y_min,
-            cell_size: inputs[0].cell_size_x, cell_size_y: Some(inputs[0].cell_size_y),
-            nodata: out_nodata, data_type: DataType::F32,
-            crs: inputs[0].crs.clone(), metadata: inputs[0].metadata.clone(),
+            rows,
+            cols,
+            bands: 1,
+            x_min: inputs[0].x_min,
+            y_min: inputs[0].y_min,
+            cell_size: inputs[0].cell_size_x,
+            cell_size_y: Some(inputs[0].cell_size_y),
+            nodata: out_nodata,
+            data_type: DataType::F32,
+            crs: inputs[0].crs.clone(),
+            metadata: inputs[0].metadata.clone(),
             ..Default::default()
         });
 
@@ -7968,24 +9170,44 @@ impl Tool for RasterCalculatorTool {
                 let _ = row_context.set_value("south".to_string(), EvalValue::Float(south));
                 let _ = row_context.set_value("east".to_string(), EvalValue::Float(east));
                 let _ = row_context.set_value("west".to_string(), EvalValue::Float(west));
-                let _ = row_context.set_value("cellsizex".to_string(), EvalValue::Float(inputs[0].cell_size_x));
-                let _ = row_context.set_value("cellsizey".to_string(), EvalValue::Float(inputs[0].cell_size_y));
-                let _ = row_context.set_value("cellsize".to_string(), EvalValue::Float(0.5 * (inputs[0].cell_size_x + inputs[0].cell_size_y)));
+                let _ = row_context.set_value(
+                    "cellsizex".to_string(),
+                    EvalValue::Float(inputs[0].cell_size_x),
+                );
+                let _ = row_context.set_value(
+                    "cellsizey".to_string(),
+                    EvalValue::Float(inputs[0].cell_size_y),
+                );
+                let _ = row_context.set_value(
+                    "cellsize".to_string(),
+                    EvalValue::Float(0.5 * (inputs[0].cell_size_x + inputs[0].cell_size_y)),
+                );
                 let _ = row_context.set_value("nodata".to_string(), EvalValue::Float(nodatas[0]));
                 let _ = row_context.set_value("null".to_string(), EvalValue::Float(nodatas[0]));
-                let _ = row_context.set_value("minvalue".to_string(), EvalValue::Float(stats[0].min));
-                let _ = row_context.set_value("maxvalue".to_string(), EvalValue::Float(stats[0].max));
-                let _ = row_context.set_value("pi".to_string(), EvalValue::Float(std::f64::consts::PI));
-                let _ = row_context.set_value("e".to_string(), EvalValue::Float(std::f64::consts::E));
+                let _ =
+                    row_context.set_value("minvalue".to_string(), EvalValue::Float(stats[0].min));
+                let _ =
+                    row_context.set_value("maxvalue".to_string(), EvalValue::Float(stats[0].max));
+                let _ =
+                    row_context.set_value("pi".to_string(), EvalValue::Float(std::f64::consts::PI));
+                let _ =
+                    row_context.set_value("e".to_string(), EvalValue::Float(std::f64::consts::E));
 
                 let _ = row_context.set_value("row".to_string(), EvalValue::Float(row as f64));
-                let _ = row_context.set_value("rowy".to_string(), EvalValue::Float(inputs[0].row_center_y(row as isize)));
+                let _ = row_context.set_value(
+                    "rowy".to_string(),
+                    EvalValue::Float(inputs[0].row_center_y(row as isize)),
+                );
 
                 let mut row_vals = Vec::with_capacity(cols);
                 for col in 0..cols {
                     let idx = row * cols + col;
-                    let _ = row_context.set_value("column".to_string(), EvalValue::Float(col as f64));
-                    let _ = row_context.set_value("columnx".to_string(), EvalValue::Float(inputs[0].col_center_x(col as isize)));
+                    let _ =
+                        row_context.set_value("column".to_string(), EvalValue::Float(col as f64));
+                    let _ = row_context.set_value(
+                        "columnx".to_string(),
+                        EvalValue::Float(inputs[0].col_center_x(col as isize)),
+                    );
 
                     let mut any_nodata = false;
                     for (key, inp) in value_keys.iter().zip(inputs.iter()) {
@@ -8005,7 +9227,11 @@ impl Tool for RasterCalculatorTool {
                         Ok(EvalValue::Float(v)) => v,
                         Ok(EvalValue::Int(v)) => v as f64,
                         Ok(EvalValue::Boolean(b)) => {
-                            if b { 1.0 } else { 0.0 }
+                            if b {
+                                1.0
+                            } else {
+                                0.0
+                            }
                         }
                         _ => out_nodata,
                     };
@@ -8085,7 +9311,9 @@ impl Tool for PrincipalComponentAnalysisTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let paths = parse_raster_list_arg(args, "inputs")?;
         if paths.len() < 3 {
-            return Err(ToolError::Validation("'inputs' must contain at least 3 rasters for PCA".to_string()));
+            return Err(ToolError::Validation(
+                "'inputs' must contain at least 3 rasters for PCA".to_string(),
+            ));
         }
         if let Some(method) = args.get("auto_reproject_method").and_then(|v| v.as_str()) {
             let method = method.trim();
@@ -8101,7 +9329,10 @@ impl Tool for PrincipalComponentAnalysisTool {
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_paths = parse_raster_list_arg(args, "inputs")?;
-        let standardized = args.get("standardized").and_then(|v| v.as_bool()).unwrap_or(false);
+        let standardized = args
+            .get("standardized")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let output_path = parse_optional_output_path(args, "output")?;
         let auto_reproject = args
             .get("auto_reproject")
@@ -8114,7 +9345,9 @@ impl Tool for PrincipalComponentAnalysisTool {
             .filter(|s| !s.is_empty())
             .map(str::to_string);
 
-        let mut inputs: Vec<Raster> = input_paths.iter().enumerate()
+        let mut inputs: Vec<Raster> = input_paths
+            .iter()
+            .enumerate()
             .map(|(i, p)| load_raster(p, &format!("inputs[{}]", i)))
             .collect::<Result<_, _>>()?;
         let stack_config = RasterStackConfig {
@@ -8126,17 +9359,25 @@ impl Tool for PrincipalComponentAnalysisTool {
             .map_err(ToolError::Validation)?;
         let num_images = inputs.len();
         if num_images < 3 {
-            return Err(ToolError::Validation("at least 3 input rasters required for PCA".to_string()));
+            return Err(ToolError::Validation(
+                "at least 3 input rasters required for PCA".to_string(),
+            ));
         }
         let rows = inputs[0].rows;
         let cols = inputs[0].cols;
         for (i, r) in inputs.iter().enumerate() {
             if r.rows != rows || r.cols != cols {
-                return Err(ToolError::Validation(format!("inputs[{}] has different dimensions from inputs[0]", i)));
+                return Err(ToolError::Validation(format!(
+                    "inputs[{}] has different dimensions from inputs[0]",
+                    i
+                )));
             }
         }
-        let num_comp = args.get("num_components").and_then(|v| v.as_u64())
-            .map(|v| (v as usize).clamp(1, num_images)).unwrap_or(num_images);
+        let num_comp = args
+            .get("num_components")
+            .and_then(|v| v.as_u64())
+            .map(|v| (v as usize).clamp(1, num_images))
+            .unwrap_or(num_images);
 
         let per_band_stats: Vec<(f64, f64)> = inputs
             .par_iter()
@@ -8194,14 +9435,17 @@ impl Tool for PrincipalComponentAnalysisTool {
             );
 
         let mut corr = vec![vec![0.0f64; num_images]; num_images];
-        corr
-            .par_iter_mut()
+        corr.par_iter_mut()
             .zip(covariances.par_iter_mut())
             .enumerate()
             .for_each(|(i, (corr_row, cov_row))| {
                 for a in 0..num_images {
                     let denom = (total_dev[i] * total_dev[a]).sqrt();
-                    corr_row[a] = if denom.abs() < 1.0e-15 { 0.0 } else { cov_row[a] / denom };
+                    corr_row[a] = if denom.abs() < 1.0e-15 {
+                        0.0
+                    } else {
+                        cov_row[a] / denom
+                    };
                     cov_row[a] /= (num_cells[i] - 1.0).max(1.0);
                 }
             });
@@ -8259,22 +9503,47 @@ impl Tool for PrincipalComponentAnalysisTool {
             .collect();
 
         let base_path = output_path.as_ref();
-        let (base_stem, base_ext, base_parent) = base_path.map(|bp| {
-            let stem = bp.file_stem().and_then(|s| s.to_str()).unwrap_or("pca").to_string();
-            let ext = bp.extension().and_then(|s| s.to_str()).unwrap_or("tif").to_string();
-            let parent = bp.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| std::path::PathBuf::from("."));
-            (stem, ext, parent)
-        }).unwrap_or_else(|| ("pca".to_string(), "tif".to_string(), std::path::PathBuf::from(".")));
+        let (base_stem, base_ext, base_parent) = base_path
+            .map(|bp| {
+                let stem = bp
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("pca")
+                    .to_string();
+                let ext = bp
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("tif")
+                    .to_string();
+                let parent = bp
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                (stem, ext, parent)
+            })
+            .unwrap_or_else(|| {
+                (
+                    "pca".to_string(),
+                    "tif".to_string(),
+                    std::path::PathBuf::from("."),
+                )
+            });
 
         let mut comp_locators: Vec<serde_json::Value> = Vec::new();
         for a in 0..num_comp {
             let pc = component_order[a];
             let mut comp_raster = Raster::new(RasterConfig {
-                rows, cols, bands: 1,
-                x_min: inputs[0].x_min, y_min: inputs[0].y_min,
-                cell_size: inputs[0].cell_size_x, cell_size_y: Some(inputs[0].cell_size_y),
-                nodata: inputs[0].nodata, data_type: DataType::F32,
-                crs: inputs[0].crs.clone(), metadata: inputs[0].metadata.clone(),
+                rows,
+                cols,
+                bands: 1,
+                x_min: inputs[0].x_min,
+                y_min: inputs[0].y_min,
+                cell_size: inputs[0].cell_size_x,
+                cell_size_y: Some(inputs[0].cell_size_y),
+                nodata: inputs[0].nodata,
+                data_type: DataType::F32,
+                crs: inputs[0].crs.clone(),
+                metadata: inputs[0].metadata.clone(),
                 ..Default::default()
             });
             let comp_weights: Vec<f64> = (0..num_images)
@@ -8291,7 +9560,9 @@ impl Tool for PrincipalComponentAnalysisTool {
                     comp_raster.data.set_f64(idx, val);
                 }
             }
-            let comp_path = output_path.as_ref().map(|_| base_parent.join(format!("{}_comp{}.{}", base_stem, a + 1, base_ext)));
+            let comp_path = output_path
+                .as_ref()
+                .map(|_| base_parent.join(format!("{}_comp{}.{}", base_stem, a + 1, base_ext)));
             let loc = write_or_store_output(comp_raster, comp_path)?;
             comp_locators.push(typed_raster_output(loc));
         }
@@ -8305,7 +9576,13 @@ impl Tool for PrincipalComponentAnalysisTool {
             .map(|i| eigenvalues[component_order[i]])
             .collect();
         let mut cum = 0.0f64;
-        let cum_variances: Vec<f64> = sorted_explained.iter().map(|&v| { cum += v; cum }).collect();
+        let cum_variances: Vec<f64> = sorted_explained
+            .iter()
+            .map(|&v| {
+                cum += v;
+                cum
+            })
+            .collect();
 
         let report = json!({
             "num_images": num_images,
@@ -8316,7 +9593,8 @@ impl Tool for PrincipalComponentAnalysisTool {
             "eigenvalues": sorted_eigenvalues,
             "eigenvectors": sorted_eigenvectors,
             "factor_loadings": factor_loadings,
-        }).to_string();
+        })
+        .to_string();
 
         let mut outputs = BTreeMap::new();
         outputs.insert("outputs".to_string(), json!(comp_locators));
@@ -8349,8 +9627,14 @@ impl Tool for InversePcaTool {
 
     fn manifest(&self) -> ToolManifest {
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["pca_comp1.tif", "pca_comp2.tif", "pca_comp3.tif"]));
-        example.insert("pca_report".to_string(), json!("<JSON string from PCA tool>"));
+        example.insert(
+            "inputs".to_string(),
+            json!(["pca_comp1.tif", "pca_comp2.tif", "pca_comp3.tif"]),
+        );
+        example.insert(
+            "pca_report".to_string(),
+            json!("<JSON string from PCA tool>"),
+        );
         example.insert("output".to_string(), json!("inv.tif"));
         ToolManifest {
             id: "inverse_pca".to_string(),
@@ -8375,7 +9659,9 @@ impl Tool for InversePcaTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let paths = parse_raster_list_arg(args, "inputs")?;
         if paths.len() < 2 {
-            return Err(ToolError::Validation("'inputs' must contain at least 2 component rasters".to_string()));
+            return Err(ToolError::Validation(
+                "'inputs' must contain at least 2 component rasters".to_string(),
+            ));
         }
         if let Some(method) = args.get("auto_reproject_method").and_then(|v| v.as_str()) {
             let method = method.trim();
@@ -8385,16 +9671,24 @@ impl Tool for InversePcaTool {
                 ));
             }
         }
-        let _ = args.get("pca_report").and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'pca_report' is required".to_string()))?;
+        let _ = args
+            .get("pca_report")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'pca_report' is required".to_string())
+            })?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_paths = parse_raster_list_arg(args, "inputs")?;
-        let pca_report_str = args.get("pca_report").and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'pca_report' is required".to_string()))?;
+        let pca_report_str = args
+            .get("pca_report")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'pca_report' is required".to_string())
+            })?;
         let output_path = parse_optional_output_path(args, "output")?;
         let auto_reproject = args
             .get("auto_reproject")
@@ -8409,20 +9703,25 @@ impl Tool for InversePcaTool {
 
         let report_val: serde_json::Value = serde_json::from_str(pca_report_str)
             .map_err(|e| ToolError::Validation(format!("invalid PCA report JSON: {e}")))?;
-        let eigenvectors: Vec<Vec<f64>> = serde_json::from_value(
-            report_val.get("eigenvectors").cloned()
-                .ok_or_else(|| ToolError::Validation("PCA report missing 'eigenvectors' field".to_string()))?
-        ).map_err(|e| ToolError::Validation(format!("failed parsing eigenvectors: {e}")))?;
+        let eigenvectors: Vec<Vec<f64>> =
+            serde_json::from_value(report_val.get("eigenvectors").cloned().ok_or_else(|| {
+                ToolError::Validation("PCA report missing 'eigenvectors' field".to_string())
+            })?)
+            .map_err(|e| ToolError::Validation(format!("failed parsing eigenvectors: {e}")))?;
 
         if eigenvectors.is_empty() {
-            return Err(ToolError::Validation("eigenvectors array is empty".to_string()));
+            return Err(ToolError::Validation(
+                "eigenvectors array is empty".to_string(),
+            ));
         }
         let num_images = eigenvectors[0].len();
         if num_images == 0 {
             return Err(ToolError::Validation("eigenvector length is 0".to_string()));
         }
 
-        let mut inputs: Vec<Raster> = input_paths.iter().enumerate()
+        let mut inputs: Vec<Raster> = input_paths
+            .iter()
+            .enumerate()
             .map(|(i, p)| load_raster(p, &format!("inputs[{}]", i)))
             .collect::<Result<_, _>>()?;
         let stack_config = RasterStackConfig {
@@ -8437,34 +9736,63 @@ impl Tool for InversePcaTool {
         let cols = inputs[0].cols;
         for (i, r) in inputs.iter().enumerate() {
             if r.rows != rows || r.cols != cols {
-                return Err(ToolError::Validation(format!("inputs[{}] has different dimensions", i)));
+                return Err(ToolError::Validation(format!(
+                    "inputs[{}] has different dimensions",
+                    i
+                )));
             }
         }
 
         let base_path = output_path.as_ref();
-        let (base_stem, base_ext, base_parent) = base_path.map(|bp| {
-            let stem = bp.file_stem().and_then(|s| s.to_str()).unwrap_or("inv_pca").to_string();
-            let ext = bp.extension().and_then(|s| s.to_str()).unwrap_or("tif").to_string();
-            let parent = bp.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| std::path::PathBuf::from("."));
-            (stem, ext, parent)
-        }).unwrap_or_else(|| ("inv_pca".to_string(), "tif".to_string(), std::path::PathBuf::from(".")));
+        let (base_stem, base_ext, base_parent) = base_path
+            .map(|bp| {
+                let stem = bp
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("inv_pca")
+                    .to_string();
+                let ext = bp
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("tif")
+                    .to_string();
+                let parent = bp
+                    .parent()
+                    .map(|p| p.to_path_buf())
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                (stem, ext, parent)
+            })
+            .unwrap_or_else(|| {
+                (
+                    "inv_pca".to_string(),
+                    "tif".to_string(),
+                    std::path::PathBuf::from("."),
+                )
+            });
 
         let n = rows * cols;
         let mut img_locators: Vec<serde_json::Value> = Vec::new();
         for image_num in 0..num_images {
             let mut out_raster = Raster::new(RasterConfig {
-                rows, cols, bands: 1,
-                x_min: inputs[0].x_min, y_min: inputs[0].y_min,
-                cell_size: inputs[0].cell_size_x, cell_size_y: Some(inputs[0].cell_size_y),
-                nodata: inputs[0].nodata, data_type: DataType::F32,
-                crs: inputs[0].crs.clone(), metadata: inputs[0].metadata.clone(),
+                rows,
+                cols,
+                bands: 1,
+                x_min: inputs[0].x_min,
+                y_min: inputs[0].y_min,
+                cell_size: inputs[0].cell_size_x,
+                cell_size_y: Some(inputs[0].cell_size_y),
+                nodata: inputs[0].nodata,
+                data_type: DataType::F32,
+                crs: inputs[0].crs.clone(),
+                metadata: inputs[0].metadata.clone(),
                 ..Default::default()
             });
             let valid_comp = num_comp.min(eigenvectors.len());
             let comp_weights: Vec<f64> = (0..valid_comp)
                 .map(|k| eigenvectors[k].get(image_num).copied().unwrap_or(0.0))
                 .collect();
-            let out_values = weighted_sum_chunked(&inputs[..valid_comp], &comp_weights, inputs[0].nodata, n);
+            let out_values =
+                weighted_sum_chunked(&inputs[..valid_comp], &comp_weights, inputs[0].nodata, n);
             if let Some(data_slice) = out_raster.data.as_f32_slice_mut() {
                 data_slice
                     .par_iter_mut()
@@ -8475,7 +9803,9 @@ impl Tool for InversePcaTool {
                     out_raster.data.set_f64(idx, val);
                 }
             }
-            let img_path = output_path.as_ref().map(|_| base_parent.join(format!("{}_img{}.{}", base_stem, image_num + 1, base_ext)));
+            let img_path = output_path.as_ref().map(|_| {
+                base_parent.join(format!("{}_img{}.{}", base_stem, image_num + 1, base_ext))
+            });
             let loc = write_or_store_output(out_raster, img_path)?;
             img_locators.push(typed_raster_output(loc));
         }

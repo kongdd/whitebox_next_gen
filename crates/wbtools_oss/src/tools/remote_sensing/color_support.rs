@@ -40,13 +40,15 @@ fn explicit_rgb_mode(input: &Raster) -> Option<RgbMode> {
 }
 
 fn metadata_says_multiband(input: &Raster) -> bool {
-    let color_interp_multiband = metadata_value_case_insensitive(&input.metadata, "color_interpretation")
-        .map(|v| v.eq_ignore_ascii_case("multiband"))
-        .unwrap_or(false);
+    let color_interp_multiband =
+        metadata_value_case_insensitive(&input.metadata, "color_interpretation")
+            .map(|v| v.eq_ignore_ascii_case("multiband"))
+            .unwrap_or(false);
 
-    let jpeg2000_multiband = metadata_value_case_insensitive(&input.metadata, "jpeg2000_color_space")
-        .map(|v| v.eq_ignore_ascii_case("multiband"))
-        .unwrap_or(false);
+    let jpeg2000_multiband =
+        metadata_value_case_insensitive(&input.metadata, "jpeg2000_color_space")
+            .map(|v| v.eq_ignore_ascii_case("multiband"))
+            .unwrap_or(false);
 
     color_interp_multiband || jpeg2000_multiband
 }

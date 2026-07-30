@@ -41,7 +41,9 @@ fn make_input(rows: usize, cols: usize, categorical: bool) -> String {
             } else {
                 ((r * 37 + c * 19).rem_euclid(1000) as f64) / 10.0
             };
-            raster.set(0, r, c, value).expect("failed to populate benchmark raster");
+            raster
+                .set(0, r, c, value)
+                .expect("failed to populate benchmark raster");
         }
     }
 
@@ -170,7 +172,8 @@ fn run_rank_kernel_optimized(
     for r in 0..rows as isize {
         for c in 0..cols as isize {
             bins.clear();
-            let center_bin_rank = (values[r as usize * cols + c as usize] * multiplier_rank).floor() as i64;
+            let center_bin_rank =
+                (values[r as usize * cols + c as usize] * multiplier_rank).floor() as i64;
             let mut count = 0usize;
             let mut n_less = 0usize;
 
@@ -382,7 +385,11 @@ fn bench_rank_filters(c: &mut Criterion) {
     group.bench_function("percentile_11x11", |b| {
         b.iter(|| {
             let out = registry
-                .run_tool("percentile_filter", black_box(&percentile_args), black_box(&ctx))
+                .run_tool(
+                    "percentile_filter",
+                    black_box(&percentile_args),
+                    black_box(&ctx),
+                )
                 .expect("percentile_filter benchmark run failed");
             black_box(out);
         })
@@ -392,7 +399,11 @@ fn bench_rank_filters(c: &mut Criterion) {
     group.bench_function("majority_11x11", |b| {
         b.iter(|| {
             let out = registry
-                .run_tool("majority_filter", black_box(&majority_args), black_box(&ctx))
+                .run_tool(
+                    "majority_filter",
+                    black_box(&majority_args),
+                    black_box(&ctx),
+                )
                 .expect("majority_filter benchmark run failed");
             black_box(out);
         })
@@ -402,7 +413,11 @@ fn bench_rank_filters(c: &mut Criterion) {
     group.bench_function("diversity_11x11", |b| {
         b.iter(|| {
             let out = registry
-                .run_tool("diversity_filter", black_box(&diversity_args), black_box(&ctx))
+                .run_tool(
+                    "diversity_filter",
+                    black_box(&diversity_args),
+                    black_box(&ctx),
+                )
                 .expect("diversity_filter benchmark run failed");
             black_box(out);
         })
@@ -411,5 +426,9 @@ fn bench_rank_filters(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_rank_filters, bench_rank_filters_kernel_compare);
+criterion_group!(
+    benches,
+    bench_rank_filters,
+    bench_rank_filters_kernel_compare
+);
 criterion_main!(benches);

@@ -1,10 +1,10 @@
-use serde_json::json;
 use rayon::prelude::*;
+use serde_json::json;
 use std::sync::Arc;
 use wbcore::{
-    parse_optional_output_path, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
-    ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
+    parse_optional_output_path, LicenseTier, Tool, ToolArgs, ToolCategory, ToolContext, ToolError,
+    ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSpec, ToolRunResult,
+    ToolStability,
 };
 use wbraster::{Raster, RasterFormat};
 
@@ -59,7 +59,10 @@ fn write_or_store(
         let mem_path = memory_store::make_raster_memory_path(&id);
         outputs.insert("path".to_string(), json!(mem_path));
     }
-    Ok(ToolRunResult { outputs, ..Default::default() })
+    Ok(ToolRunResult {
+        outputs,
+        ..Default::default()
+    })
 }
 
 impl Tool for NibbleTool {
@@ -97,11 +100,31 @@ impl Tool for NibbleTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input raster to be nibbled.".to_string(), required: true },
-                ToolParamDescriptor { name: "mask".to_string(), description: "Binary mask raster.".to_string(), required: true },
-                ToolParamDescriptor { name: "use_nodata".to_string(), description: "Treat input nodata as class value (not background).".to_string(), required: false },
-                ToolParamDescriptor { name: "nibble_nodata".to_string(), description: "Also nibble into mask-off nodata areas.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input raster to be nibbled.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "mask".to_string(),
+                    description: "Binary mask raster.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "use_nodata".to_string(),
+                    description: "Treat input nodata as class value (not background).".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "nibble_nodata".to_string(),
+                    description: "Also nibble into mask-off nodata areas.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -109,27 +132,45 @@ impl Tool for NibbleTool {
                 description: "Fill background using nearest class.".to_string(),
                 args: example_args,
             }],
-            tags: vec!["raster".to_string(), "gis".to_string(), "nibble".to_string(), "allocation".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "gis".to_string(),
+                "nibble".to_string(),
+                "allocation".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        args.get("input").and_then(|v| v.as_str())
+        args.get("input")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'input' is required".to_string()))?;
-        args.get("mask").and_then(|v| v.as_str())
+        args.get("mask")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'mask' is required".to_string()))?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = args.get("input").and_then(|v| v.as_str())
+        let input_path = args
+            .get("input")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'input' is required".to_string()))?;
-        let mask_path = args.get("mask").and_then(|v| v.as_str())
+        let mask_path = args
+            .get("mask")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'mask' is required".to_string()))?;
-        let use_nodata = args.get("use_nodata").and_then(|v| v.as_bool()).unwrap_or(false);
-        let nibble_nodata = args.get("nibble_nodata").and_then(|v| v.as_bool()).unwrap_or(true);
+        let use_nodata = args
+            .get("use_nodata")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let nibble_nodata = args
+            .get("nibble_nodata")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
         let output_path = parse_optional_output_path(args, "output")?;
 
         ctx.progress.info("nibble: loading input");
@@ -177,7 +218,11 @@ impl Tool for NibbleTool {
                     }
                 })
                 .reduce(|| f64::NEG_INFINITY, f64::max);
-            if m == f64::NEG_INFINITY { 0.0 } else { m }
+            if m == f64::NEG_INFINITY {
+                0.0
+            } else {
+                m
+            }
         };
 
         let mut source = input.as_ref().clone();
@@ -205,7 +250,9 @@ impl Tool for NibbleTool {
         ea_args.insert("input".to_string(), json!(source_mem));
         let ea_result = EuclideanAllocationTool.run(&ea_args, ctx)?;
         let ea_path = get_path(&ea_result)?;
-        let mut nibbled = load_raster(&ea_path, "euclidean_allocation")?.as_ref().clone();
+        let mut nibbled = load_raster(&ea_path, "euclidean_allocation")?
+            .as_ref()
+            .clone();
         nibbled.nodata = input_nodata;
 
         if use_nodata {
@@ -283,10 +330,26 @@ impl Tool for SieveTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input categorical raster.".to_string(), required: true },
-                ToolParamDescriptor { name: "threshold".to_string(), description: "Minimum patch size in cells to keep.".to_string(), required: false },
-                ToolParamDescriptor { name: "zero_background".to_string(), description: "Zero-out background (value 0) cells in output.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output raster path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input categorical raster.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "threshold".to_string(),
+                    description: "Minimum patch size in cells to keep.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "zero_background".to_string(),
+                    description: "Zero-out background (value 0) cells in output.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output raster path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -300,23 +363,38 @@ impl Tool for SieveTool {
                     a
                 },
             }],
-            tags: vec!["raster".to_string(), "gis".to_string(), "sieve".to_string(), "patch".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "raster".to_string(),
+                "gis".to_string(),
+                "sieve".to_string(),
+                "patch".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        args.get("input").and_then(|v| v.as_str())
+        args.get("input")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'input' is required".to_string()))?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = args.get("input").and_then(|v| v.as_str())
+        let input_path = args
+            .get("input")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'input' is required".to_string()))?;
-        let threshold = args.get("threshold").and_then(|v| v.as_f64()).unwrap_or(1.0);
-        let zero_background = args.get("zero_background").and_then(|v| v.as_bool()).unwrap_or(false);
+        let threshold = args
+            .get("threshold")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0);
+        let zero_background = args
+            .get("zero_background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let output_path = parse_optional_output_path(args, "output")?;
 
         ctx.progress.info("sieve: clumping input");

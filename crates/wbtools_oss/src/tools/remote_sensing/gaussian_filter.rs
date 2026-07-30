@@ -6,9 +6,9 @@ use super::color_support;
 use rayon::prelude::*;
 use serde_json::json;
 use wbcore::{
-    parse_optional_output_path, parse_raster_path_arg, LicenseTier, PercentCoalescer, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor,
-    ToolParamSpec, ToolRunResult, ToolStability,
+    parse_optional_output_path, parse_raster_path_arg, LicenseTier, PercentCoalescer, Tool,
+    ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
+    ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
 };
 use wbraster::color_math::{hsi2value, hsi_to_rgb_norm, rgb_to_hsi_norm, value2hsi, value2i};
 use wbraster::{DataType, Raster, RasterFormat};
@@ -75,7 +75,8 @@ impl GaussianFilterTool {
                 let y = row as isize - midpoint;
                 dx[a] = x;
                 dy[a] = y;
-                let w = recip_root_2_pi_times_sigma_d * (-(x * x + y * y) as f64 / two_sigma_sqr_d).exp();
+                let w = recip_root_2_pi_times_sigma_d
+                    * (-(x * x + y * y) as f64 / two_sigma_sqr_d).exp();
                 weights[a] = w;
                 weight_sum += w;
                 a += 1;
@@ -223,11 +224,8 @@ impl Tool for GaussianFilterTool {
         ctx.progress.info("reading input raster");
 
         let input = Self::load_raster(&input_path)?;
-        let rgb_mode = color_support::detect_rgb_mode(
-            &input,
-            treat_as_rgb_requested,
-            assume_three_band_rgb,
-        );
+        let rgb_mode =
+            color_support::detect_rgb_mode(&input, treat_as_rgb_requested, assume_three_band_rgb);
 
         let rows = input.rows;
         let cols = input.cols;
@@ -246,7 +244,11 @@ impl Tool for GaussianFilterTool {
         let compute_progress = PercentCoalescer::new(1, 90);
 
         if matches!(rgb_mode, color_support::RgbMode::ThreeBand) && bands >= 3 {
-            let max_val = if input.data_type == DataType::U8 { 255.0 } else { 65535.0 };
+            let max_val = if input.data_type == DataType::U8 {
+                255.0
+            } else {
+                65535.0
+            };
             let inp = input.as_ref();
             let dxv: &[isize] = &dx;
             let dyv: &[isize] = &dy;
@@ -292,7 +294,8 @@ impl Tool for GaussianFilterTool {
 
                         if sum > 0.0 {
                             let (h, s, _) = rgb_to_hsi_norm(rn0, gn0, bn0);
-                            let (ro, go, bo) = hsi_to_rgb_norm(h, s, (z_final / sum).clamp(0.0, 1.0));
+                            let (ro, go, bo) =
+                                hsi_to_rgb_norm(h, s, (z_final / sum).clamp(0.0, 1.0));
                             out_row[col_idx] = [ro * max_val, go * max_val, bo * max_val];
                         }
                     }
@@ -312,15 +315,31 @@ impl Tool for GaussianFilterTool {
                     }
                     output
                         .set_row_slice(0, row_idx as isize, &row_r)
-                        .map_err(|e| ToolError::Execution(format!("failed writing row {} band 0: {}", row_idx, e)))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!(
+                                "failed writing row {} band 0: {}",
+                                row_idx, e
+                            ))
+                        })?;
                     output
                         .set_row_slice(1, row_idx as isize, &row_g)
-                        .map_err(|e| ToolError::Execution(format!("failed writing row {} band 1: {}", row_idx, e)))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!(
+                                "failed writing row {} band 1: {}",
+                                row_idx, e
+                            ))
+                        })?;
                     output
                         .set_row_slice(2, row_idx as isize, &row_b)
-                        .map_err(|e| ToolError::Execution(format!("failed writing row {} band 2: {}", row_idx, e)))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!(
+                                "failed writing row {} band 2: {}",
+                                row_idx, e
+                            ))
+                        })?;
                 }
-                compute_progress.emit_unit_fraction(ctx.progress, row_end as f64 / rows.max(1) as f64);
+                compute_progress
+                    .emit_unit_fraction(ctx.progress, row_end as f64 / rows.max(1) as f64);
             }
         } else {
             let packed_rgb = matches!(rgb_mode, color_support::RgbMode::Packed) && bands == 1;
@@ -401,7 +420,8 @@ impl Tool for GaussianFilterTool {
                         })?;
                 }
 
-                compute_progress.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands.max(1) as f64);
+                compute_progress
+                    .emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands.max(1) as f64);
             }
         }
 
@@ -500,7 +520,13 @@ mod tests {
         args.insert("sigma".to_string(), json!(1.0));
 
         let result = GaussianFilterTool.run(&args, &make_ctx()).unwrap();
-        let out_path = result.outputs.get("path").unwrap().as_str().unwrap().to_string();
+        let out_path = result
+            .outputs
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         assert!(out_path.starts_with("memory://raster/"));
 
         let out_id = memory_store::raster_path_to_id(&out_path).unwrap();
@@ -556,7 +582,9 @@ mod tests {
 
         assert!(!values.is_empty(), "expected progress callbacks");
         assert!(
-            values.iter().all(|v| v.is_finite() && *v >= 0.0 && *v <= 1.0),
+            values
+                .iter()
+                .all(|v| v.is_finite() && *v >= 0.0 && *v <= 1.0),
             "progress values must be finite and within [0, 1]"
         );
         for win in values.windows(2) {

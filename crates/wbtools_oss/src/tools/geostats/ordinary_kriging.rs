@@ -1,5 +1,5 @@
 use super::*;
-use wbraster::{Raster, RasterFormat, raster::RasterData};
+use wbraster::{raster::RasterData, Raster, RasterFormat};
 use wbspatialstats::variogram::directional::AnisotropyModel;
 
 #[allow(dead_code)]
@@ -18,17 +18,66 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "training_points", description: "Training point layer", required: true },
-                ToolParamSpec { name: "field", description: "Field with values", required: true },
-                ToolParamSpec { name: "variogram_json", description: "Fitted variogram JSON", required: true },
-                ToolParamSpec { name: "template_raster", description: "Template raster defining grid", required: true },
-                ToolParamSpec { name: "output", description: "Output kriged raster", required: true },
-                ToolParamSpec { name: "output_intervals", description: "Compute prediction intervals", required: false },
-                ToolParamSpec { name: "confidence_level", description: "Confidence level (0.8-0.99)", required: false },
-                ToolParamSpec { name: "interval_method", description: "Interval method: gaussian or posterior", required: false },
-                ToolParamSpec { name: "anisotropy", description: "Enable anisotropic distance metric", required: false },
-                ToolParamSpec { name: "major_azimuth", description: "Azimuth of maximum continuity (0-180)", required: false },
-                ToolParamSpec { name: "anisotropy_ratio", description: "Anisotropy ratio (minor/major range, 0-1)", required: false },
+                ToolParamSpec {
+                    name: "training_points",
+                    description: "Training point layer",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Field with values",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "variogram_json",
+                    description: "Fitted variogram JSON",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "template_raster",
+                    description: "Template raster defining grid",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output kriged raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output_variance",
+                    description: "If true, write kriging variance raster alongside predictions",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output_intervals",
+                    description: "Compute prediction intervals",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "confidence_level",
+                    description: "Confidence level (0.8-0.99)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "interval_method",
+                    description: "Interval method: gaussian or posterior",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "anisotropy",
+                    description: "Enable anisotropic distance metric",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "major_azimuth",
+                    description: "Azimuth of maximum continuity (0-180)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "anisotropy_ratio",
+                    description: "Anisotropy ratio (minor/major range, 0-1)",
+                    required: false,
+                },
             ],
         }
     }
@@ -40,6 +89,7 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
         defaults.insert("variogram_json".to_string(), json!("{}"));
         defaults.insert("template_raster".to_string(), json!("template.tif"));
         defaults.insert("output".to_string(), json!("kriged.tif"));
+        defaults.insert("output_variance".to_string(), json!(false));
         defaults.insert("output_intervals".to_string(), json!(false));
         defaults.insert("confidence_level".to_string(), json!(0.95));
         defaults.insert("interval_method".to_string(), json!("gaussian"));
@@ -68,6 +118,7 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
                 ToolParamDescriptor { name: "variogram_json".to_string(), description: "Fitted variogram model as JSON".to_string(), required: true },
                 ToolParamDescriptor { name: "template_raster".to_string(), description: "Raster template defining output grid and CRS".to_string(), required: true },
                 ToolParamDescriptor { name: "output".to_string(), description: "Output kriged raster path".to_string(), required: true },
+                ToolParamDescriptor { name: "output_variance".to_string(), description: "If true, write kriging variance raster (predictions uncertainty) alongside the prediction raster".to_string(), required: false },
                 ToolParamDescriptor { name: "output_intervals".to_string(), description: "If true, output additional rasters with confidence interval bounds".to_string(), required: false },
                 ToolParamDescriptor { name: "confidence_level".to_string(), description: "Confidence level for prediction intervals (0.80-0.99)".to_string(), required: false },
                 ToolParamDescriptor { name: "interval_method".to_string(), description: "Method for intervals: 'gaussian' or 'posterior'".to_string(), required: false },
@@ -104,54 +155,61 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
         let _vario_json = parse_string_arg(args, "variogram_json")?;
         let _template = parse_string_arg(args, "template_raster")?;
         let _output = parse_string_arg(args, "output")?;
-        
+
         // Validate optional parameters
         let output_intervals = parse_bool_arg(args, "output_intervals", false);
         let confidence = parse_optional_f64_arg(args, "confidence_level").unwrap_or(0.95);
         if output_intervals && (confidence <= 0.5 || confidence >= 1.0) {
             return Err(ToolError::Validation(
-                "confidence_level must be in (0.5, 1.0) when output_intervals=true".to_string()
+                "confidence_level must be in (0.5, 1.0) when output_intervals=true".to_string(),
             ));
         }
-        
-        let interval_method = args.get("interval_method")
+
+        let interval_method = args
+            .get("interval_method")
             .and_then(|v| v.as_str())
             .unwrap_or("gaussian")
             .to_ascii_lowercase();
         if output_intervals && interval_method != "gaussian" && interval_method != "posterior" {
             return Err(ToolError::Validation(
-                "interval_method must be 'gaussian' or 'posterior'".to_string()
+                "interval_method must be 'gaussian' or 'posterior'".to_string(),
             ));
         }
-        
+
         let anisotropy = parse_bool_arg(args, "anisotropy", false);
         if anisotropy {
             let azimuth = parse_optional_f64_arg(args, "major_azimuth").unwrap_or(0.0);
             let ratio = parse_optional_f64_arg(args, "anisotropy_ratio").unwrap_or(1.0);
             if azimuth < 0.0 || azimuth > 180.0 {
-                return Err(ToolError::Validation("major_azimuth must be in [0, 180]".to_string()));
+                return Err(ToolError::Validation(
+                    "major_azimuth must be in [0, 180]".to_string(),
+                ));
             }
             if ratio <= 0.0 || ratio > 1.0 {
-                return Err(ToolError::Validation("anisotropy_ratio must be in (0, 1]".to_string()));
+                return Err(ToolError::Validation(
+                    "anisotropy_ratio must be in (0, 1]".to_string(),
+                ));
             }
         }
-        
+
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         ctx.progress.info("Ordinary Kriging Interpolation (Raster)");
-        
+
         let training = load_vector_arg(args, "training_points")?;
         let field_name = parse_string_arg(args, "field")?;
         let vario_json_str = parse_string_arg(args, "variogram_json")?;
         let template_path = parse_string_arg(args, "template_raster")?;
         let output_path = parse_string_arg(args, "output")?;
-        
+
         // New parameters
+        let output_variance = parse_bool_arg(args, "output_variance", false);
         let output_intervals = parse_bool_arg(args, "output_intervals", false);
         let confidence_level = parse_optional_f64_arg(args, "confidence_level").unwrap_or(0.95);
-        let interval_method = args.get("interval_method")
+        let interval_method = args
+            .get("interval_method")
             .and_then(|v| v.as_str())
             .unwrap_or("gaussian")
             .to_ascii_lowercase();
@@ -163,10 +221,11 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
         let vario_obj: Value = serde_json::from_str(&vario_json_str)
             .map_err(|e| ToolError::Execution(format!("Variogram JSON parse error: {}", e)))?;
 
-        let family_str = vario_obj.get("family")
+        let family_str = vario_obj
+            .get("family")
             .and_then(|v| v.as_str())
             .unwrap_or("exponential");
-        
+
         let family = match family_str {
             "spherical" => VariogramModelFamily::Spherical,
             "exponential" => VariogramModelFamily::Exponential,
@@ -174,11 +233,26 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
             _ => return Err(ToolError::Execution("Invalid variogram family".to_string())),
         };
 
-        let nugget = vario_obj.get("nugget").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let partial_sill = vario_obj.get("partial_sill").and_then(|v| v.as_f64()).unwrap_or(1.0);
-        let range = vario_obj.get("range").and_then(|v| v.as_f64()).unwrap_or(100.0);
-        let wrss = vario_obj.get("wrss").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let condition_number = vario_obj.get("condition_number").and_then(|v| v.as_f64()).unwrap_or(1.0);
+        let nugget = vario_obj
+            .get("nugget")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let partial_sill = vario_obj
+            .get("partial_sill")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0);
+        let range = vario_obj
+            .get("range")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(100.0);
+        let wrss = vario_obj
+            .get("wrss")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let condition_number = vario_obj
+            .get("condition_number")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0);
 
         let vario = wbspatialstats::variogram::VariogramModel {
             family,
@@ -191,8 +265,9 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
 
         // Extract training points
         ctx.progress.info("Loading training points...");
-        let field_idx = training.schema.field_index(&field_name)
-            .ok_or_else(|| ToolError::Validation(format!("field '{}' does not exist", field_name)))?;
+        let field_idx = training.schema.field_index(&field_name).ok_or_else(|| {
+            ToolError::Validation(format!("field '{}' does not exist", field_name))
+        })?;
 
         let mut coords = Vec::new();
         let mut values = Vec::new();
@@ -217,30 +292,35 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
 
         if coords.len() < 3 {
             return Err(ToolError::Execution(
-                "At least 3 training points required for kriging".to_string()
+                "At least 3 training points required for kriging".to_string(),
             ));
         }
 
-        ctx.progress.info(&format!("Loaded {} training points", coords.len()));
+        ctx.progress
+            .info(&format!("Loaded {} training points", coords.len()));
 
         // Load template raster
         ctx.progress.info("Loading template raster...");
         let mut template = Raster::read(template_path)
             .map_err(|e| ToolError::Execution(format!("Failed to read template raster: {}", e)))?;
 
-        ctx.progress.info(&format!("Template grid: {} x {} cells", template.rows, template.cols));
+        ctx.progress.info(&format!(
+            "Template grid: {} x {} cells",
+            template.rows, template.cols
+        ));
 
         // Compute residual std for posterior intervals if needed (before moving values)
         let residual_std = if output_intervals && interval_method == "posterior" {
             let mean_val = values.iter().sum::<f64>() / values.len() as f64;
-            (values.iter().map(|v| (v - mean_val).powi(2)).sum::<f64>() / values.len() as f64).sqrt()
+            (values.iter().map(|v| (v - mean_val).powi(2)).sum::<f64>() / values.len() as f64)
+                .sqrt()
         } else {
             0.0
         };
 
         // Build kriging engine
         ctx.progress.info("Building kriging system...");
-        
+
         // Create anisotropy model if needed
         let anisotropy_model = if anisotropy {
             ctx.progress.info(&format!(
@@ -249,10 +329,10 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
             ));
             Some(AnisotropyModel {
                 major_azimuth,
-                major_range: 0.0,  // Not used in distance calculation
-                minor_range: 0.0,  // Not used in distance calculation
+                major_range: 0.0, // Not used in distance calculation
+                minor_range: 0.0, // Not used in distance calculation
                 ratio: anisotropy_ratio,
-                angle_tolerance: 22.5,  // Default tolerance for directional analysis
+                angle_tolerance: 22.5, // Default tolerance for directional analysis
                 method: "kriging".to_string(),
             })
         } else {
@@ -261,7 +341,8 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
 
         // Transform coordinates to anisotropic space if needed
         let transformed_coords = if let Some(ref anis) = anisotropy_model {
-            coords.iter()
+            coords
+                .iter()
                 .map(|(x, y)| {
                     let dx = *x;
                     let dy = *y;
@@ -269,15 +350,15 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
                     let az_rad = anis.major_azimuth * std::f64::consts::PI / 180.0;
                     let cos_az = az_rad.cos();
                     let sin_az = az_rad.sin();
-                    
+
                     // Rotate
                     let x_rot = dx * cos_az + dy * sin_az;
                     let y_rot = -dx * sin_az + dy * cos_az;
-                    
+
                     // Scale
                     let x_scaled = x_rot;
                     let y_scaled = y_rot / anis.ratio;
-                    
+
                     (x_scaled, y_scaled)
                 })
                 .collect::<Vec<_>>()
@@ -291,10 +372,11 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
         // Extract grid coordinates from template raster (parallelized generation)
         ctx.progress.info("Generating prediction grid...");
         let grid_coords = generate_raster_grid(&template);
-        
+
         // Transform grid coordinates to anisotropic space if needed
         let transformed_grid = if let Some(ref anis) = anisotropy_model {
-            grid_coords.iter()
+            grid_coords
+                .iter()
                 .map(|(x, y)| {
                     let dx = *x;
                     let dy = *y;
@@ -302,41 +384,47 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
                     let az_rad = anis.major_azimuth * std::f64::consts::PI / 180.0;
                     let cos_az = az_rad.cos();
                     let sin_az = az_rad.sin();
-                    
+
                     // Rotate
                     let x_rot = dx * cos_az + dy * sin_az;
                     let y_rot = -dx * sin_az + dy * cos_az;
-                    
+
                     // Scale
                     let x_scaled = x_rot;
                     let y_scaled = y_rot / anis.ratio;
-                    
+
                     (x_scaled, y_scaled)
                 })
                 .collect::<Vec<_>>()
         } else {
             grid_coords.clone()
         };
-        
-        ctx.progress.info(&format!("Predicting {} grid cells...", transformed_grid.len()));
+
+        ctx.progress.info(&format!(
+            "Predicting {} grid cells...",
+            transformed_grid.len()
+        ));
 
         // Parallel batch prediction - uses rayon internally
-        let predictions = kriging.predict_batch(&transformed_grid)
+        let predictions = kriging
+            .predict_batch(&transformed_grid)
             .map_err(|e| ToolError::Execution(format!("Kriging prediction error: {}", e)))?;
 
         // Create output raster with predictions
         ctx.progress.info("Building output raster...");
-        
+
         // Replace template data with kriging predictions
         let mut output_data = vec![0.0; template.data.len()];
+        let mut output_var_data = vec![0.0; template.data.len()];
         let mut output_lower = vec![0.0; template.data.len()];
         let mut output_upper = vec![0.0; template.data.len()];
-        
+
         // Map predictions to raster grid (band-major, then row-major order)
         for (idx, result) in predictions.iter().enumerate() {
             if idx < output_data.len() {
                 output_data[idx] = result.prediction;
-                
+                output_var_data[idx] = result.variance;
+
                 // Compute prediction intervals if requested
                 if output_intervals {
                     let interval = if interval_method == "posterior" {
@@ -354,40 +442,71 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
                             result.variance,
                             confidence_level,
                         )
-                    }.map_err(|e| ToolError::Execution(format!("Interval computation error: {}", e)))?;
-                    
+                    }
+                    .map_err(|e| {
+                        ToolError::Execution(format!("Interval computation error: {}", e))
+                    })?;
+
                     output_lower[idx] = interval.lower;
                     output_upper[idx] = interval.upper;
                 }
             }
         }
-        
+
         template.data = RasterData::F64(output_data);
 
         // Write output raster
-        ctx.progress.info(&format!("Writing output to {}", output_path));
+        ctx.progress
+            .info(&format!("Writing output to {}", output_path));
         let format = RasterFormat::for_output_path(output_path)
             .map_err(|e| ToolError::Execution(format!("Invalid output format: {}", e)))?;
-        
-        template.write(output_path, format)
+
+        template
+            .write(output_path, format)
             .map_err(|e| ToolError::Execution(format!("Failed to write raster: {}", e)))?;
+
+        // Write variance raster if requested
+        let variance_path = if output_variance {
+            let vpath = output_path
+                .replace(".tif", "_variance.tif")
+                .replace(".TIF", "_variance.TIF");
+            ctx.progress
+                .info(&format!("Writing kriging variance to {}", vpath));
+            template.data = RasterData::F64(output_var_data);
+            template.write(&vpath, format).map_err(|e| {
+                ToolError::Execution(format!("Failed to write variance raster: {}", e))
+            })?;
+            Some(vpath)
+        } else {
+            None
+        };
 
         // Write interval rasters if requested
         if output_intervals {
-            let lower_path = output_path.replace(".tif", "_lower.tif").replace(".TIF", "_lower.TIF");
-            let upper_path = output_path.replace(".tif", "_upper.tif").replace(".TIF", "_upper.TIF");
-            
-            ctx.progress.info(&format!("Writing prediction interval bounds..."));
-            
+            let lower_path = output_path
+                .replace(".tif", "_lower.tif")
+                .replace(".TIF", "_lower.TIF");
+            let upper_path = output_path
+                .replace(".tif", "_upper.tif")
+                .replace(".TIF", "_upper.TIF");
+
+            ctx.progress
+                .info(&format!("Writing prediction interval bounds..."));
+
             template.data = RasterData::F64(output_lower);
-            template.write(&lower_path, format)
-                .map_err(|e| ToolError::Execution(format!("Failed to write lower bound raster: {}", e)))?;
-            
+            template.write(&lower_path, format).map_err(|e| {
+                ToolError::Execution(format!("Failed to write lower bound raster: {}", e))
+            })?;
+
             template.data = RasterData::F64(output_upper);
-            template.write(&upper_path, format)
-                .map_err(|e| ToolError::Execution(format!("Failed to write upper bound raster: {}", e)))?;
-            
-            ctx.progress.info(&format!("Wrote interval bounds to {} and {}", lower_path, upper_path));
+            template.write(&upper_path, format).map_err(|e| {
+                ToolError::Execution(format!("Failed to write upper bound raster: {}", e))
+            })?;
+
+            ctx.progress.info(&format!(
+                "Wrote interval bounds to {} and {}",
+                lower_path, upper_path
+            ));
         }
 
         let mut outputs = BTreeMap::new();
@@ -397,6 +516,7 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
                 "training_points": kriging.training_coords.len(),
                 "grid_cells": grid_coords.len(),
                 "output_path": output_path,
+                "variance_path": variance_path,
                 "output_intervals": output_intervals,
                 "confidence_level": if output_intervals { Some(confidence_level) } else { None },
                 "interval_method": if output_intervals { Some(&interval_method) } else { None },
@@ -407,36 +527,9 @@ Ordinary kriging is most general-purpose variant (stationary random function, co
 
         ctx.progress.info("Ordinary Kriging interpolation complete");
 
-        Ok(ToolRunResult { outputs, ..Default::default() })
+        Ok(ToolRunResult {
+            outputs,
+            ..Default::default()
+        })
     }
 }
-
-/// Generate grid coordinates from raster template
-/// Uses rayon for parallel coordinate generation
-#[allow(dead_code)]
-fn generate_raster_grid(raster: &Raster) -> Vec<(f64, f64)> {
-    use rayon::prelude::*;
-
-    let rows = raster.rows;
-    let cols = raster.cols;
-    let x_min = raster.x_min;
-    let y_min = raster.y_min;
-    let cell_size_x = raster.cell_size_x;
-    let cell_size_y = raster.cell_size_y;
-
-    // Generate all (row, col) pairs and convert to (x, y) coordinates
-    // Raster origin is top-left (x_min, y_max), grid extends right and down
-    (0..rows)
-        .into_par_iter()
-        .flat_map(move |row| {
-            (0..cols).into_par_iter().map(move |col| {
-                // Convert raster (row, col) to geographic (x, y)
-                // x increases to the right, y decreases downward
-                let x = x_min + (col as f64 + 0.5) * cell_size_x;
-                let y = y_min + (row as f64 + 0.5) * cell_size_y; // y_min is south edge, y increases upward
-                (x, y)
-            })
-        })
-        .collect()
-}
-

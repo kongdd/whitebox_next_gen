@@ -1,20 +1,20 @@
-use rayon::prelude::*;
-use serde_json::{json, Value};
-use std::fs::File;
-use std::io::BufWriter;
-use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, VecDeque};
-use std::path::Path;
 use image::codecs::gif::{GifEncoder, Repeat};
 use image::{Delay, Frame, Rgba, RgbaImage};
-use wide::{f32x8, CmpGt, CmpNe};
-use wbcore::{PercentCoalescer, 
-    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier, Tool,
-    ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
-    ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
+use rayon::prelude::*;
+use serde_json::{json, Value};
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, VecDeque};
+use std::fs::File;
+use std::io::BufWriter;
+use std::path::Path;
+use wbcore::{
+    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier,
+    PercentCoalescer, Tool, ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample,
+    ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
 };
 use wbraster::{DataType, Raster, RasterConfig, RasterFormat};
 use wbtopology::{DistanceMetric, FixedRadiusSearch2D};
+use wide::{f32x8, CmpGt, CmpNe};
 
 use crate::memory_store;
 use crate::palettes::LegacyPalette;
@@ -85,6 +85,10 @@ struct PoissonSmoothingSettings {
     normal_smoothing_strength: f32,
     edge_sensitivity: f32,
     lambda: f32,
+    /// Coarse-guidance weight for the two-anchor screened reconstruction used by
+    /// the multiscale tool.  Set to 0.0 in all single-scale paths so their
+    /// Jacobi update is identical to the current behaviour.
+    lambda_coarse: f32,
     convergence_threshold: f32,
     outer_convergence_threshold: f32,
     z_factor: f32,
@@ -308,7 +312,11 @@ impl TerrainWindowCore {
         (min_scale, max_scale, step_size)
     }
 
-    fn parse_prefixed_scale_settings(args: &ToolArgs, prefix: &str, defaults: (usize, usize, usize)) -> (usize, usize, usize) {
+    fn parse_prefixed_scale_settings(
+        args: &ToolArgs,
+        prefix: &str,
+        defaults: (usize, usize, usize),
+    ) -> (usize, usize, usize) {
         let min_key = format!("{}_min_scale", prefix);
         let max_key = format!("{}_max_scale", prefix);
         let step_key = format!("{}_step_size", prefix);
@@ -361,6 +369,11 @@ impl TerrainWindowCore {
     }
 
     fn topographic_position_confidence(value: f64, threshold: f64, class_code: i16) -> f64 {
+        // Guard against NaN propagation: a NaN DEVmax means no valid deviation
+        // was computed, so confidence is undefined — treat as 0.
+        if !value.is_finite() {
+            return 0.0;
+        }
         let threshold = threshold.abs().max(1.0e-12);
         let abs_value = value.abs();
         let confidence = if class_code == 1 {
@@ -372,9 +385,7 @@ impl TerrainWindowCore {
     }
 
     fn arg_f64(args: &ToolArgs, key: &str, default: f64) -> f64 {
-        args.get(key)
-            .and_then(|v| v.as_f64())
-            .unwrap_or(default)
+        args.get(key).and_then(|v| v.as_f64()).unwrap_or(default)
     }
 
     fn arg_usize(args: &ToolArgs, key: &str, default: usize) -> usize {
@@ -399,7 +410,11 @@ impl TerrainWindowCore {
         let rows = input.rows;
         let cols = input.cols;
         let nodata = input.nodata;
-        let mut response = vec![nodata; rows * cols];
+        // Use a non-NaN internal sentinel so equality checks work regardless of
+        // whether the raster's nodata is NaN.  Cells that remain at this value
+        // after all scales are written back as the original nodata before return.
+        let sentinel = f64::NEG_INFINITY;
+        let mut response = vec![sentinel; rows * cols];
 
         for midpoint in scales {
             let midpoint = *midpoint;
@@ -425,9 +440,14 @@ impl TerrainWindowCore {
                         let local_sum = Self::rect_sum(sum, cols, y1, x1, y2, x2);
                         let local_sum_sq = Self::rect_sum(sum_sq, cols, y1, x1, y2, x2);
                         let mean = local_sum / n_f;
-                        let variance = ((local_sum_sq - (local_sum * local_sum) / n_f) / n_f).max(0.0);
+                        let variance =
+                            ((local_sum_sq - (local_sum * local_sum) / n_f) / n_f).max(0.0);
                         let std_dev = variance.sqrt();
-                        row_out[c] = if std_dev > 0.0 { (z - mean) / std_dev } else { 0.0 };
+                        row_out[c] = if std_dev > 0.0 {
+                            (z - mean) / std_dev
+                        } else {
+                            0.0
+                        };
                     }
                     row_out
                 })
@@ -435,25 +455,40 @@ impl TerrainWindowCore {
 
             for (r, row) in row_data.iter().enumerate() {
                 for (c, value) in row.iter().enumerate() {
-                    if *value == nodata {
+                    if input.is_nodata(*value) {
                         continue;
                     }
                     let idx = r * cols + c;
                     let current = response[idx];
-                    if current == nodata || value * value > current * current {
+                    if current == sentinel || value * value > current * current {
                         response[idx] = *value;
                     }
                 }
             }
 
             *completed_steps += 1;
-            coalescer.emit_unit_fraction(ctx.progress, *completed_steps as f64 / total_steps as f64);
+            coalescer
+                .emit_unit_fraction(ctx.progress, *completed_steps as f64 / total_steps as f64);
+        }
+
+        // Translate the internal sentinel back to the raster's nodata value so
+        // callers see a consistent nodata marker.
+        for v in &mut response {
+            if *v == sentinel {
+                *v = nodata;
+            }
         }
 
         Ok(response)
     }
 
-    fn apply_min_patch_filter(class_data: &mut [i16], rows: usize, cols: usize, nodata: i16, min_patch_size: usize) {
+    fn apply_min_patch_filter(
+        class_data: &mut [i16],
+        rows: usize,
+        cols: usize,
+        nodata: i16,
+        min_patch_size: usize,
+    ) {
         if min_patch_size <= 1 {
             return;
         }
@@ -507,9 +542,7 @@ impl TerrainWindowCore {
             let replacement = bordering
                 .into_iter()
                 .max_by(|(class_a, count_a), (class_b, count_b)| {
-                    count_a
-                        .cmp(count_b)
-                        .then_with(|| class_b.cmp(class_a))
+                    count_a.cmp(count_b).then_with(|| class_b.cmp(class_a))
                 })
                 .map(|(class_value, _)| class_value)
                 .unwrap_or(class_value);
@@ -608,6 +641,7 @@ impl TerrainWindowCore {
             input.cell_size_y as f32,
             &settings,
             None,
+            None,
         );
 
         coalescer.emit_unit_fraction(ctx.progress, 0.9);
@@ -659,13 +693,41 @@ impl TerrainWindowCore {
             category: ToolCategory::Terrain,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input DEM raster path or typed raster object.", required: true },
-                ToolParamSpec { name: "normal_smoothing_strength", description: "Normal-field smoothing strength in [0,1] (default 0.6).", required: false },
-                ToolParamSpec { name: "edge_sensitivity", description: "Edge preservation sensitivity in [0,1] (default 0.7).", required: false },
-                ToolParamSpec { name: "outer_iterations", description: "Number of full outer passes (default 3).", required: false },
-                ToolParamSpec { name: "lambda", description: "Data-fidelity weight in screened Poisson solve (default 0.5).", required: false },
-                ToolParamSpec { name: "z_factor", description: "Optional z conversion factor (default 1.0).", required: false },
-                ToolParamSpec { name: "output", description: "Optional output path. If omitted, result stays in memory.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input DEM raster path or typed raster object.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "normal_smoothing_strength",
+                    description: "Normal-field smoothing strength in [0,1] (default 0.6).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "edge_sensitivity",
+                    description: "Edge preservation sensitivity in [0,1] (default 0.7).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "outer_iterations",
+                    description: "Number of full outer passes (default 3).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "lambda",
+                    description: "Data-fidelity weight in screened Poisson solve (default 0.5).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "z_factor",
+                    description: "Optional z conversion factor (default 1.0).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output path. If omitted, result stays in memory.",
+                    required: false,
+                },
             ],
         }
     }
@@ -683,7 +745,7 @@ impl TerrainWindowCore {
             id: "feature_preserving_smoothing_multiscale".to_string(),
             display_name: "Feature Preserving Smoothing (Multiscale)".to_string(),
             summary:
-                "Smooths DEM roughness with a multiscale coarse-to-fine continuation. Each scale re-derives normals, applies adaptive robust normal-field diffusion, and reconstructs elevations with a screened Poisson solve."
+                "Smooths DEM roughness with a multiscale coarse-to-fine continuation. Each scale re-derives normals, applies adaptive edge-aware normal-field diffusion, and reconstructs elevations with a two-anchor screened Poisson solve guided by both the current-level DEM and the generalized surface from the coarser level."
                     .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
@@ -713,15 +775,15 @@ impl TerrainWindowCore {
             id: "feature_preserving_smoothing_multiscale",
             display_name: "Feature Preserving Smoothing (Multiscale)",
             summary:
-                "Coarse-to-fine hierarchical DEM smoothing: multi-scale pyramid diffusion; each scale re-derives normals and applies adaptive normal-field regularization. Progressive refinement smoothing. Applications: hierarchical smoothing, multi-resolution processing, progressive de-noising.",
+                "Coarse-to-fine hierarchical DEM smoothing using a two-anchor screened Poisson reconstruction: each pyramid level re-derives normals, applies adaptive edge-aware normal-field diffusion, and reconstructs elevations constrained by both the current-level DEM and the generalized surface propagated from the coarser level. Applications: hierarchical smoothing, multi-resolution processing, progressive de-noising.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
                 ToolParamSpec { name: "input", description: "Input DEM raster path or typed raster object.", required: true },
                 ToolParamSpec { name: "smoothing_amount", description: "Overall smoothing amount in [0,1] (default 0.65).", required: false },
                 ToolParamSpec { name: "edge_preservation", description: "Edge preservation strength in [0,1] (default 0.75).", required: false },
-                ToolParamSpec { name: "scale_levels", description: "Number of pyramid levels for coarse-to-fine smoothing (default 3).", required: false },
-                ToolParamSpec { name: "fidelity", description: "Data-fidelity weight in screened Poisson reconstruction (default 0.45).", required: false },
+                ToolParamSpec { name: "scale_levels", description: "Number of pyramid levels for coarse-to-fine smoothing (default 3). Higher values produce stronger broad-scale generalization.", required: false },
+                ToolParamSpec { name: "fidelity", description: "Data-fidelity weight in screened Poisson reconstruction (default 0.45). Controls attachment to the source DEM at each level.", required: false },
                 ToolParamSpec { name: "z_factor", description: "Optional z conversion factor (default 1.0).", required: false },
                 ToolParamSpec { name: "output", description: "Optional output path. If omitted, result stays in memory.", required: false },
             ],
@@ -798,6 +860,17 @@ impl TerrainWindowCore {
         let mut prev_surface: Option<Vec<f32>> = None;
         let mut prev_rows = 0usize;
         let mut prev_cols = 0usize;
+        // Running coarse guide: seeded from the coarsest-level Poisson result
+        // and stepped up one pyramid level (~2x) at a time.  Progressive
+        // upsampling avoids the bilinear patch artifacts that appear in a
+        // hillshade when a single large-factor upsample is used (e.g. 32x32
+        // directly to 1000x1000 creates ~31-pixel-wide slope-discontinuity
+        // patches).  The guide remains anchored to the coarsest-origin surface,
+        // so scale_levels=6 (32x32 origin) and scale_levels=8 (8x8 origin)
+        // still produce meaningfully different guides at every finer level.
+        let mut running_coarse_guide: Option<Vec<f32>> = None;
+        let mut running_guide_rows = 0usize;
+        let mut running_guide_cols = 0usize;
 
         for (level_idx, level) in pyramid.iter().rev().enumerate() {
             let level_frac = if total_levels > 1 {
@@ -806,14 +879,10 @@ impl TerrainWindowCore {
                 1.0
             };
 
+            // Warm-start from the adjacent coarser result (unchanged).
             let initial_surface = if let Some(prev) = prev_surface.as_ref() {
                 let mut upsampled = Self::bilinear_upsample_dem(
-                    prev,
-                    prev_rows,
-                    prev_cols,
-                    level.rows,
-                    level.cols,
-                    nodata,
+                    prev, prev_rows, prev_cols, level.rows, level.cols, nodata,
                 );
                 for idx in 0..upsampled.len() {
                     if level.dem[idx] == nodata {
@@ -827,9 +896,52 @@ impl TerrainWindowCore {
                 level.dem.clone()
             };
 
+            // Step the running coarse guide up ~2x to the current level.
+            // Each step is a small bilinear upsample, so patch boundaries
+            // do not accumulate into visible grid artifacts.
+            let coarse_guide_vec: Option<Vec<f32>> = running_coarse_guide.as_ref().map(|guide| {
+                let mut upsampled = Self::bilinear_upsample_dem(
+                    guide, running_guide_rows, running_guide_cols,
+                    level.rows, level.cols, nodata,
+                );
+                for idx in 0..upsampled.len() {
+                    if level.dem[idx] == nodata {
+                        upsampled[idx] = nodata;
+                    } else if upsampled[idx] == nodata || !upsampled[idx].is_finite() {
+                        upsampled[idx] = level.dem[idx];
+                    }
+                }
+                upsampled
+            });
+
+            // lambda for this pyramid level.
+            let lambda_at_level = (fidelity * (0.70 + 0.60 * level_frac)).max(f32::EPSILON);
+            // Coarse-guidance weight: decoupled from fidelity so scale_levels
+            // has a visible effect at all normal fidelity settings.  Zero at
+            // the coarsest level where no guide exists yet.
+            let lambda_coarse = if running_coarse_guide.is_some() {
+                smoothing_amount
+            } else {
+                0.0
+            };
+
+            // At the coarsest pyramid level (when it serves as a guide source
+            // for finer levels, not as the final output), detach the solve
+            // from the user's fidelity setting.  Box-filter downsampling
+            // introduces aliasing at coarse resolutions; a near-zero lambda
+            // lets the Poisson solve converge to a smooth Laplacian solution
+            // driven by the normal field alone, producing a guide free of
+            // boxy downsampling artifacts.  The user's fidelity controls the
+            // output-level attachment to the source DEM, which is meaningless
+            // at an intermediate guide level.
+            let lambda_for_level = if level_idx == 0 && total_levels > 1 {
+                lambda_at_level * 0.05
+            } else {
+                lambda_at_level
+            };
+
             let level_settings = PoissonSmoothingSettings {
-                outer_iterations: ((2.0
-                    + 4.0 * smoothing_amount * (1.10 - 0.30 * level_frac))
+                outer_iterations: ((2.0 + 4.0 * smoothing_amount * (1.10 - 0.30 * level_frac))
                     .round() as usize)
                     .max(1),
                 normal_smoothing_strength: (smoothing_amount * (1.20 - 0.35 * level_frac))
@@ -837,7 +949,8 @@ impl TerrainWindowCore {
                 edge_sensitivity: (edge_preservation
                     + (1.0 - edge_preservation) * 0.20 * level_frac)
                     .clamp(0.0, 1.0),
-                lambda: (fidelity * (0.70 + 0.60 * level_frac)).max(f32::EPSILON),
+                lambda: lambda_for_level,
+                lambda_coarse,
                 convergence_threshold,
                 outer_convergence_threshold,
                 z_factor,
@@ -855,7 +968,20 @@ impl TerrainWindowCore {
                 level.res_y,
                 &level_settings,
                 Some(&initial_surface),
+                coarse_guide_vec.as_deref(),
             );
+
+            // Seed the running guide after the coarsest solve; advance it at
+            // every subsequent level (the progressive step-up).
+            if level_idx == 0 && total_levels > 1 {
+                running_coarse_guide = Some(result.clone());
+                running_guide_rows = level.rows;
+                running_guide_cols = level.cols;
+            } else if let Some(guide) = coarse_guide_vec {
+                running_coarse_guide = Some(guide);
+                running_guide_rows = level.rows;
+                running_guide_cols = level.cols;
+            }
 
             prev_rows = level.rows;
             prev_cols = level.cols;
@@ -931,10 +1057,7 @@ impl TerrainWindowCore {
             })
             .unwrap_or(f32::INFINITY);
 
-        let z_factor = args
-            .get("z_factor")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(1.0) as f32;
+        let z_factor = args.get("z_factor").and_then(|v| v.as_f64()).unwrap_or(1.0) as f32;
 
         let input = Self::load_raster(&input_path)?;
         let rows = input.rows;
@@ -972,7 +1095,11 @@ impl TerrainWindowCore {
                             z
                         } else {
                             let v = dem[Self::idx(r as usize, c as usize, cols)];
-                            if v == nodata { z } else { v }
+                            if v == nodata {
+                                z
+                            } else {
+                                v
+                            }
                         }
                     };
 
@@ -986,7 +1113,7 @@ impl TerrainWindowCore {
                     let z7 = sample(row as isize, col as isize - 1) * z_factor;
 
                     row_a[col] = -((z2 - z6) + 2.0 * (z3 - z7) + (z4 - z0)) / eight_res_x;
-                    row_b[col] = -((z6 - z0) + 2.0 * (z5 - z1) + (z4 - z2)) / eight_res_y;
+                    row_b[col] = -((z0 - z6) + 2.0 * (z1 - z5) + (z2 - z4)) / eight_res_y;
                 }
             });
         coalescer.emit_unit_fraction(ctx.progress, 0.2);
@@ -999,11 +1126,11 @@ impl TerrainWindowCore {
         let midp = midpoint as usize;
 
         // Pre-compute f32x8 constants (broadcast) for use inside the parallel closure.
-        let thr_v   = f32x8::splat(threshold);
-        let nd_v    = f32x8::splat(nodata);
-        let zero_v  = f32x8::splat(0.0_f32);
-        let one_v   = f32x8::splat(1.0_f32);
-        let eps_v   = f32x8::splat(f32::EPSILON);
+        let thr_v = f32x8::splat(threshold);
+        let nd_v = f32x8::splat(nodata);
+        let zero_v = f32x8::splat(0.0_f32);
+        let one_v = f32x8::splat(1.0_f32);
+        let eps_v = f32x8::splat(f32::EPSILON);
 
         smooth_a
             .par_chunks_mut(cols)
@@ -1035,7 +1162,8 @@ impl TerrainWindowCore {
                             if dem[n_idx] == nodata {
                                 continue;
                             }
-                            let cosine = Self::normal_angle_cos(ca, cb, normals_a[n_idx], normals_b[n_idx]);
+                            let cosine =
+                                Self::normal_angle_cos(ca, cb, normals_a[n_idx], normals_b[n_idx]);
                             if cosine > threshold {
                                 let w = (cosine - threshold) * (cosine - threshold);
                                 sum_w += w;
@@ -1044,7 +1172,11 @@ impl TerrainWindowCore {
                             }
                         }
                     }
-                    if sum_w > 0.0 { (sum_a / sum_w, sum_b / sum_w) } else { (0.0, 0.0) }
+                    if sum_w > 0.0 {
+                        (sum_a / sum_w, sum_b / sum_w)
+                    } else {
+                        (0.0, 0.0)
+                    }
                 };
 
                 // SIMD path only when every neighbour in the filter window is guaranteed in-bounds.
@@ -1055,7 +1187,11 @@ impl TerrainWindowCore {
                 // SIMD-eligible column range: col such that col + 8 <= cols - midp.
                 // (ensures col + 7 + midp < cols, i.e. rightmost neighbour always in-bounds)
                 // and col >= midp (leftmost neighbour always in-bounds).
-                let simd_end = if cols >= midp * 2 + 8 { cols - midp } else { midp };
+                let simd_end = if cols >= midp * 2 + 8 {
+                    cols - midp
+                } else {
+                    midp
+                };
 
                 if row_interior && simd_end > midp {
                     // Leading edge: columns [0, midp) — scalar
@@ -1071,15 +1207,11 @@ impl TerrainWindowCore {
                         let cbase = row * cols + col;
 
                         // Load 8 centre normals and DEM values
-                        let ca_v: f32x8 = f32x8::new(
-                            normals_a[cbase..cbase + 8].try_into().unwrap(),
-                        );
-                        let cb_v: f32x8 = f32x8::new(
-                            normals_b[cbase..cbase + 8].try_into().unwrap(),
-                        );
-                        let cdem: f32x8 = f32x8::new(
-                            dem[cbase..cbase + 8].try_into().unwrap(),
-                        );
+                        let ca_v: f32x8 =
+                            f32x8::new(normals_a[cbase..cbase + 8].try_into().unwrap());
+                        let cb_v: f32x8 =
+                            f32x8::new(normals_b[cbase..cbase + 8].try_into().unwrap());
+                        let cdem: f32x8 = f32x8::new(dem[cbase..cbase + 8].try_into().unwrap());
                         // Mask: lane is "live" when centre DEM ≠ nodata
                         let c_valid = cdem.simd_ne(nd_v);
                         // |n_centre|² = a²+b²+1 (implicit c=1)
@@ -1095,28 +1227,25 @@ impl TerrainWindowCore {
                                 // nbase maps each of the 8 centre columns to its neighbour column
                                 let nbase = rr * cols + (col as isize + ox) as usize;
 
-                                let na: f32x8 = f32x8::new(
-                                    normals_a[nbase..nbase + 8].try_into().unwrap(),
-                                );
-                                let nb: f32x8 = f32x8::new(
-                                    normals_b[nbase..nbase + 8].try_into().unwrap(),
-                                );
-                                let ndem: f32x8 = f32x8::new(
-                                    dem[nbase..nbase + 8].try_into().unwrap(),
-                                );
+                                let na: f32x8 =
+                                    f32x8::new(normals_a[nbase..nbase + 8].try_into().unwrap());
+                                let nb: f32x8 =
+                                    f32x8::new(normals_b[nbase..nbase + 8].try_into().unwrap());
+                                let ndem: f32x8 =
+                                    f32x8::new(dem[nbase..nbase + 8].try_into().unwrap());
                                 let n_valid = ndem.simd_ne(nd_v);
 
                                 // Cosine similarity between centre and neighbour normals
-                                let n_mag  = na * na + nb * nb + one_v;
-                                let dot    = ca_v * na + cb_v * nb + one_v;
-                                let denom  = (c_mag * n_mag).sqrt().max(eps_v);
+                                let n_mag = na * na + nb * nb + one_v;
+                                let dot = ca_v * na + cb_v * nb + one_v;
+                                let denom = (c_mag * n_mag).sqrt().max(eps_v);
                                 let cosine = dot / denom;
 
                                 // Weight: (cosine − threshold)² where cosine > threshold AND both valid
-                                let above  = cosine.simd_gt(thr_v);
-                                let mask   = above & c_valid & n_valid;
-                                let diff   = cosine - thr_v;
-                                let w      = mask.blend(diff * diff, zero_v);
+                                let above = cosine.simd_gt(thr_v);
+                                let mask = above & c_valid & n_valid;
+                                let diff = cosine - thr_v;
+                                let w = mask.blend(diff * diff, zero_v);
 
                                 sw += w;
                                 sa += na * w;
@@ -1125,10 +1254,10 @@ impl TerrainWindowCore {
                         }
 
                         // Divide and zero-out nodata centre lanes
-                        let has_w  = sw.simd_gt(zero_v);
+                        let has_w = sw.simd_gt(zero_v);
                         let inv_sw = one_v / sw.max(eps_v);
-                        let out_a  = c_valid.blend(has_w.blend(sa * inv_sw, zero_v), zero_v);
-                        let out_b  = c_valid.blend(has_w.blend(sb * inv_sw, zero_v), zero_v);
+                        let out_a = c_valid.blend(has_w.blend(sa * inv_sw, zero_v), zero_v);
+                        let out_b = c_valid.blend(has_w.blend(sb * inv_sw, zero_v), zero_v);
 
                         row_sa[col..col + 8].copy_from_slice(&<[f32; 8]>::from(out_a));
                         row_sb[col..col + 8].copy_from_slice(&<[f32; 8]>::from(out_b));
@@ -1191,18 +1320,24 @@ impl TerrainWindowCore {
                             if original[n_idx] == nodata {
                                 continue;
                             }
-                            let cosine = Self::normal_angle_cos(ca, cb, smooth_a[n_idx], smooth_b[n_idx]);
+                            let cosine =
+                                Self::normal_angle_cos(ca, cb, smooth_a[n_idx], smooth_b[n_idx]);
                             if cosine > threshold {
                                 let w = (cosine - threshold).powi(2);
                                 sum_w += w;
-                                sum_z +=
-                                    (-(smooth_a[n_idx] * x[n] + smooth_b[n_idx] * y[n] - current_ref[n_idx])) * w;
+                                sum_z += (-(smooth_a[n_idx] * x[n] + smooth_b[n_idx] * y[n]
+                                    - current_ref[n_idx]))
+                                    * w;
                             }
                         }
 
                         row_next[col] = if sum_w > 0.0 {
                             let z_new = sum_z / sum_w;
-                            if (z_new - z0).abs() <= max_z_diff { z_new } else { z0 }
+                            if (z_new - z0).abs() <= max_z_diff {
+                                z_new
+                            } else {
+                                z0
+                            }
                         } else {
                             z0
                         };
@@ -1602,7 +1737,8 @@ impl TerrainWindowCore {
         ctx: &ToolContext,
     ) -> Result<ToolRunResult, ToolError> {
         let coalescer = PercentCoalescer::new(1, 99);
-        let dem_path = parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
+        let dem_path =
+            parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
         let roads_path = parse_vector_path_arg(args, "roads_vector")
             .or_else(|_| parse_vector_path_arg(args, "road_vec"))
             .or_else(|_| parse_vector_path_arg(args, "roads"))?;
@@ -1686,7 +1822,14 @@ impl TerrainWindowCore {
                 Self::collect_line_strings(geom, &mut parts);
                 for part in parts {
                     for i in 0..part.len() - 1 {
-                        Self::rasterize_line_to_grid(&mut roads, rows, cols, &dem, &part[i], &part[i + 1]);
+                        Self::rasterize_line_to_grid(
+                            &mut roads,
+                            rows,
+                            cols,
+                            &dem,
+                            &part[i],
+                            &part[i + 1],
+                        );
                     }
                 }
             }
@@ -1695,7 +1838,9 @@ impl TerrainWindowCore {
         let res_x = dem.cell_size_x.abs();
         let res_y = dem.cell_size_y.abs();
         let res_diag = (res_x * res_x + res_y * res_y).sqrt();
-        let dist_array = [res_diag, res_x, res_diag, res_y, res_diag, res_x, res_diag, res_y];
+        let dist_array = [
+            res_diag, res_x, res_diag, res_y, res_diag, res_x, res_diag, res_y,
+        ];
         let dx = [1isize, 1, 1, 0, -1, -1, -1, 0];
         let dy = [-1isize, 0, 1, 1, 1, 0, -1, -1];
 
@@ -1788,10 +1933,7 @@ impl TerrainWindowCore {
                     let embankment_height = seed_z - zn;
                     let embankment_slope = (embankment_height / dist.max(f64::EPSILON)).atan();
                     let pi = Self::idx(r as usize, c as usize, cols);
-                    max_abs_slope[ni] = embankment_slope
-                        .abs()
-                        .to_degrees()
-                        .max(max_abs_slope[pi]);
+                    max_abs_slope[ni] = embankment_slope.abs().to_degrees().max(max_abs_slope[pi]);
                     pqueue_dist.push(EmbankmentCell {
                         row: rr,
                         col: cc,
@@ -1834,15 +1976,15 @@ impl TerrainWindowCore {
                 } else {
                     let seed_z = seed_elev[ni];
                     let embankment_height = seed_z - zn;
-                    let embankment_slope = (embankment_height / dist.max(f64::EPSILON)).atan().to_degrees();
+                    let embankment_slope = (embankment_height / dist.max(f64::EPSILON))
+                        .atan()
+                        .to_degrees();
 
                     if dist <= typical_width
                         && z - zn > -max_increment
                         && embankment_height <= max_height
                     {
-                        if zn <= z
-                            || (zn > z && max_abs_slope[ni] < spillout_slope)
-                        {
+                        if zn <= z || (zn > z && max_abs_slope[ni] < spillout_slope) {
                             accept = true;
                         }
                     } else if max_abs_slope[ni] - embankment_slope.abs() <= 1.0
@@ -1869,7 +2011,9 @@ impl TerrainWindowCore {
             let end = start + cols;
             output_mask
                 .set_row_slice(0, r as isize, &mask[start..end])
-                .map_err(|e| ToolError::Execution(format!("failed writing embankment mask row {}: {}", r, e)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed writing embankment mask row {}: {}", r, e))
+                })?;
             coalescer.emit_unit_fraction(ctx.progress, (r + 1) as f64 / rows as f64);
         }
 
@@ -1984,8 +2128,9 @@ impl TerrainWindowCore {
         ToolManifest {
             id: "fill_missing_data".to_string(),
             display_name: "Fill Missing Data".to_string(),
-            summary: "Fills NoData gaps using inverse-distance weighting from valid gap-edge cells."
-                .to_string(),
+            summary:
+                "Fills NoData gaps using inverse-distance weighting from valid gap-edge cells."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
@@ -2029,7 +2174,10 @@ impl TerrainWindowCore {
         example_args.insert("max_scale".to_string(), json!(30));
         example_args.insert("dev_threshold".to_string(), json!(1.0));
         example_args.insert("scale_threshold".to_string(), json!(5));
-        example_args.insert("output".to_string(), json!("smooth_vegetation_residual.tif"));
+        example_args.insert(
+            "output".to_string(),
+            json!("smooth_vegetation_residual.tif"),
+        );
 
         ToolManifest {
             id: "smooth_vegetation_residual".to_string(),
@@ -2061,7 +2209,10 @@ impl TerrainWindowCore {
         }
     }
 
-    fn run_fill_missing_data(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_fill_missing_data(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let coalescer = PercentCoalescer::new(1, 99);
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
@@ -2071,10 +2222,7 @@ impl TerrainWindowCore {
             .map(|v| v as isize)
             .unwrap_or(11)
             .max(1);
-        let mut weight = args
-            .get("weight")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(2.0);
+        let mut weight = args.get("weight").and_then(|v| v.as_f64()).unwrap_or(2.0);
         if !weight.is_finite() || weight <= 0.0 {
             weight = 2.0;
         }
@@ -2215,7 +2363,8 @@ impl TerrainWindowCore {
                         out_vals[i] = sum_z / sum_w;
                     }
                 }
-                coalescer.emit_unit_fraction(ctx.progress, 
+                coalescer.emit_unit_fraction(
+                    ctx.progress,
                     (band_idx as f64 + (row + 1) as f64 / rows as f64) / bands as f64,
                 );
             }
@@ -2394,7 +2543,8 @@ impl TerrainWindowCore {
                                     if rr < 0 || rr >= rows as isize {
                                         continue;
                                     }
-                                    let ev = erosion[Self::idx(rr as usize, new_col as usize, cols)];
+                                    let ev =
+                                        erosion[Self::idx(rr as usize, new_col as usize, cols)];
                                     if ev != nodata && ev > max_val {
                                         max_val = ev;
                                     }
@@ -2509,9 +2659,9 @@ impl TerrainWindowCore {
                         frs.insert(c as f64, r as f64, opening[i] + tophat[i]);
                     }
                 }
-                coalescer.emit_unit_fraction(ctx.progress, 
-                    (band_idx as f64 + 0.4 + ((r + 1) as f64 / rows as f64) * 0.2)
-                        / bands as f64,
+                coalescer.emit_unit_fraction(
+                    ctx.progress,
+                    (band_idx as f64 + 0.4 + ((r + 1) as f64 / rows as f64) * 0.2) / bands as f64,
                 );
             }
 
@@ -2558,7 +2708,9 @@ impl TerrainWindowCore {
                 }
                 output
                     .set_row_slice(band, r as isize, &row_out)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                    })?;
             }
         }
 
@@ -2598,7 +2750,9 @@ impl TerrainWindowCore {
         let res_diag = (res_x * res_x + res_y * res_y).sqrt();
         let dx = [1isize, 1, 1, 0, -1, -1, -1, 0];
         let dy = [-1isize, 0, 1, 1, 1, 0, -1, -1];
-        let cell_size = [res_diag, res_x, res_diag, res_y, res_diag, res_x, res_diag, res_y];
+        let cell_size = [
+            res_diag, res_x, res_diag, res_y, res_diag, res_x, res_diag, res_y,
+        ];
 
         let mut output = input.clone();
         output.data_type = DataType::F64;
@@ -2662,7 +2816,8 @@ impl TerrainWindowCore {
                         fid += 1.0;
                     }
                 }
-                coalescer.emit_unit_fraction(ctx.progress, 
+                coalescer.emit_unit_fraction(
+                    ctx.progress,
                     (band_idx as f64 + (row + 1) as f64 / rows as f64) / bands as f64,
                 );
             }
@@ -2673,7 +2828,9 @@ impl TerrainWindowCore {
                 let end = start + cols;
                 output
                     .set_row_slice(band, row as isize, &labels[start..end])
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", row, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing row {}: {}", row, e))
+                    })?;
             }
         }
 
@@ -2869,7 +3026,8 @@ impl TerrainWindowCore {
                     out_vals[idx] = if sum_w > 0.0 { sum_z / sum_w } else { nodata };
                 }
 
-                coalescer.emit_unit_fraction(ctx.progress, 
+                coalescer.emit_unit_fraction(
+                    ctx.progress,
                     (band_idx as f64 + (row + 1) as f64 / rows as f64) / bands as f64,
                 );
             }
@@ -3045,7 +3203,10 @@ impl TerrainWindowCore {
         example_args.insert("step_size".to_string(), json!(1));
         example_args.insert("num_steps".to_string(), json!(10));
         example_args.insert("step_nonlinearity".to_string(), json!(1.0));
-        example_args.insert("output".to_string(), json!("local_hypsometric_analysis.tif"));
+        example_args.insert(
+            "output".to_string(),
+            json!("local_hypsometric_analysis.tif"),
+        );
         example_args.insert(
             "output_scale".to_string(),
             json!("local_hypsometric_analysis_scale.tif"),
@@ -3137,23 +3298,58 @@ impl TerrainWindowCore {
         example_args.insert("input".to_string(), json!("dem.tif"));
         example_args.insert("filter_size_x".to_string(), json!(11));
         example_args.insert("filter_size_y".to_string(), json!(11));
-        example_args.insert("output".to_string(), json!("difference_from_mean_elevation.tif"));
+        example_args.insert(
+            "output".to_string(),
+            json!("difference_from_mean_elevation.tif"),
+        );
 
         ToolManifest {
             id: "difference_from_mean_elevation".to_string(),
             display_name: "Difference From Mean Elevation".to_string(),
-            summary: "Calculates the difference between each elevation and the local mean elevation.".to_string(),
+            summary:
+                "Calculates the difference between each elevation and the local mean elevation."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input DEM raster path or typed raster object.".to_string(), required: true },
-                ToolParamDescriptor { name: "filter_size_x".to_string(), description: "Odd filter width in cells (default 11). Alias: filterx.".to_string(), required: false },
-                ToolParamDescriptor { name: "filter_size_y".to_string(), description: "Odd filter height in cells (default filter_size_x). Alias: filtery.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output path. If omitted, result stays in memory.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input DEM raster path or typed raster object.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "filter_size_x".to_string(),
+                    description: "Odd filter width in cells (default 11). Alias: filterx."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "filter_size_y".to_string(),
+                    description:
+                        "Odd filter height in cells (default filter_size_x). Alias: filtery."
+                            .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output path. If omitted, result stays in memory."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
-            examples: vec![ToolExample { name: "basic_difference_from_mean_elevation".to_string(), description: "Compute local mean difference from a DEM.".to_string(), args: example_args }],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "local-relief".to_string(), "integral-image".to_string(), "legacy-port".to_string()],
+            examples: vec![ToolExample {
+                name: "basic_difference_from_mean_elevation".to_string(),
+                description: "Compute local mean difference from a DEM.".to_string(),
+                args: example_args,
+            }],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "local-relief".to_string(),
+                "integral-image".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3184,23 +3380,58 @@ impl TerrainWindowCore {
         example_args.insert("input".to_string(), json!("dem.tif"));
         example_args.insert("filter_size_x".to_string(), json!(11));
         example_args.insert("filter_size_y".to_string(), json!(11));
-        example_args.insert("output".to_string(), json!("deviation_from_mean_elevation.tif"));
+        example_args.insert(
+            "output".to_string(),
+            json!("deviation_from_mean_elevation.tif"),
+        );
 
         ToolManifest {
             id: "deviation_from_mean_elevation".to_string(),
             display_name: "Deviation From Mean Elevation".to_string(),
-            summary: "Calculates the local topographic z-score using local mean and standard deviation.".to_string(),
+            summary:
+                "Calculates the local topographic z-score using local mean and standard deviation."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "input".to_string(), description: "Input DEM raster path or typed raster object.".to_string(), required: true },
-                ToolParamDescriptor { name: "filter_size_x".to_string(), description: "Odd filter width in cells (default 11). Alias: filterx.".to_string(), required: false },
-                ToolParamDescriptor { name: "filter_size_y".to_string(), description: "Odd filter height in cells (default filter_size_x). Alias: filtery.".to_string(), required: false },
-                ToolParamDescriptor { name: "output".to_string(), description: "Optional output path. If omitted, result stays in memory.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "input".to_string(),
+                    description: "Input DEM raster path or typed raster object.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "filter_size_x".to_string(),
+                    description: "Odd filter width in cells (default 11). Alias: filterx."
+                        .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "filter_size_y".to_string(),
+                    description:
+                        "Odd filter height in cells (default filter_size_x). Alias: filtery."
+                            .to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output path. If omitted, result stays in memory."
+                        .to_string(),
+                    required: false,
+                },
             ],
             defaults,
-            examples: vec![ToolExample { name: "basic_deviation_from_mean_elevation".to_string(), description: "Compute local elevation deviation z-scores from a DEM.".to_string(), args: example_args }],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "local-relief".to_string(), "integral-image".to_string(), "legacy-port".to_string()],
+            examples: vec![ToolExample {
+                name: "basic_deviation_from_mean_elevation".to_string(),
+                description: "Compute local elevation deviation z-scores from a DEM.".to_string(),
+                args: example_args,
+            }],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "local-relief".to_string(),
+                "integral-image".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3232,7 +3463,10 @@ impl TerrainWindowCore {
         let mut example_args = ToolArgs::new();
         example_args.insert("input".to_string(), json!("dem.tif"));
         example_args.insert("filter_size".to_string(), json!(11));
-        example_args.insert("output".to_string(), json!("standard_deviation_of_slope.tif"));
+        example_args.insert(
+            "output".to_string(),
+            json!("standard_deviation_of_slope.tif"),
+        );
 
         ToolManifest {
             id: "standard_deviation_of_slope".to_string(),
@@ -3286,7 +3520,10 @@ impl TerrainWindowCore {
         example_args.insert("max_scale".to_string(), json!(100));
         example_args.insert("step_size".to_string(), json!(1));
         example_args.insert("output".to_string(), json!("max_difference_from_mean.tif"));
-        example_args.insert("output_scale".to_string(), json!("max_difference_from_mean_scale.tif"));
+        example_args.insert(
+            "output_scale".to_string(),
+            json!("max_difference_from_mean_scale.tif"),
+        );
 
         ToolManifest {
             id: "max_difference_from_mean".to_string(),
@@ -3375,8 +3612,14 @@ impl TerrainWindowCore {
         example_args.insert("broad_step_size".to_string(), json!(20));
         example_args.insert("local_threshold".to_string(), json!(0.5));
         example_args.insert("broad_threshold".to_string(), json!(0.5));
-        example_args.insert("output".to_string(), json!("multiscale_topographic_position_class.tif"));
-        example_args.insert("output_confidence".to_string(), json!("multiscale_topographic_position_class_confidence.tif"));
+        example_args.insert(
+            "output".to_string(),
+            json!("multiscale_topographic_position_class.tif"),
+        );
+        example_args.insert(
+            "output_confidence".to_string(),
+            json!("multiscale_topographic_position_class_confidence.tif"),
+        );
 
         ToolManifest {
             id: "multiscale_topographic_position_class".to_string(),
@@ -3430,7 +3673,10 @@ impl TerrainWindowCore {
         example_args.insert("step_size".to_string(), json!(1));
         example_args.insert("min_vertical".to_string(), json!(0.0));
         example_args.insert("output".to_string(), json!("max_elevation_deviation.tif"));
-        example_args.insert("output_scale".to_string(), json!("max_elevation_deviation_scale.tif"));
+        example_args.insert(
+            "output_scale".to_string(),
+            json!("max_elevation_deviation_scale.tif"),
+        );
 
         ToolManifest {
             id: "max_elevation_deviation".to_string(),
@@ -3479,7 +3725,10 @@ impl TerrainWindowCore {
     fn topographic_position_animation_manifest() -> ToolManifest {
         let mut defaults = ToolArgs::new();
         defaults.insert("input".to_string(), json!("dem.tif"));
-        defaults.insert("output".to_string(), json!("topographic_position_animation.html"));
+        defaults.insert(
+            "output".to_string(),
+            json!("topographic_position_animation.html"),
+        );
         defaults.insert("palette".to_string(), json!("soft"));
         defaults.insert("min_scale".to_string(), json!(1));
         defaults.insert("num_steps".to_string(), json!(10));
@@ -3491,7 +3740,10 @@ impl TerrainWindowCore {
 
         let mut example = ToolArgs::new();
         example.insert("input".to_string(), json!("dem.tif"));
-        example.insert("output".to_string(), json!("topographic_position_animation.html"));
+        example.insert(
+            "output".to_string(),
+            json!("topographic_position_animation.html"),
+        );
         example.insert("num_steps".to_string(), json!(8));
         example.insert("use_dev_max".to_string(), json!(true));
 
@@ -3549,7 +3801,10 @@ impl TerrainWindowCore {
         example_args.insert("local".to_string(), json!("dev_local.tif"));
         example_args.insert("meso".to_string(), json!("dev_meso.tif"));
         example_args.insert("broad".to_string(), json!("dev_broad.tif"));
-        example_args.insert("hillshade".to_string(), json!("multidirectional_hillshade.tif"));
+        example_args.insert(
+            "hillshade".to_string(),
+            json!("multidirectional_hillshade.tif"),
+        );
         example_args.insert("lightness".to_string(), json!(1.2));
         example_args.insert("output".to_string(), json!("mtp.tif"));
 
@@ -3610,8 +3865,14 @@ impl TerrainWindowCore {
         example_args.insert("step_size".to_string(), json!(1));
         example_args.insert("step_nonlinearity".to_string(), json!(1.0));
         example_args.insert("sig_digits".to_string(), json!(3));
-        example_args.insert("output".to_string(), json!("multiscale_elevation_percentile.tif"));
-        example_args.insert("output_scale".to_string(), json!("multiscale_elevation_percentile_scale.tif"));
+        example_args.insert(
+            "output".to_string(),
+            json!("multiscale_elevation_percentile.tif"),
+        );
+        example_args.insert(
+            "output_scale".to_string(),
+            json!("multiscale_elevation_percentile_scale.tif"),
+        );
 
         ToolManifest {
             id: "multiscale_elevation_percentile".to_string(),
@@ -3667,7 +3928,10 @@ impl TerrainWindowCore {
         example_args.insert("max_scale".to_string(), json!(100));
         example_args.insert("step_size".to_string(), json!(2));
         example_args.insert("output".to_string(), json!("max_anisotropy_dev.tif"));
-        example_args.insert("output_scale".to_string(), json!("max_anisotropy_dev_scale.tif"));
+        example_args.insert(
+            "output_scale".to_string(),
+            json!("max_anisotropy_dev_scale.tif"),
+        );
 
         ToolManifest {
             id: "max_anisotropy_dev".to_string(),
@@ -3723,7 +3987,10 @@ impl TerrainWindowCore {
         example_args.insert("max_scale".to_string(), json!(100));
         example_args.insert("step_size".to_string(), json!(2));
         example_args.insert("output".to_string(), json!("multiscale_roughness.tif"));
-        example_args.insert("output_scale".to_string(), json!("multiscale_roughness_scale.tif"));
+        example_args.insert(
+            "output_scale".to_string(),
+            json!("multiscale_roughness_scale.tif"),
+        );
 
         ToolManifest {
             id: "multiscale_roughness".to_string(),
@@ -3834,7 +4101,10 @@ impl TerrainWindowCore {
         example_args.insert("min_scale".to_string(), json!(1));
         example_args.insert("max_scale".to_string(), json!(150));
         example_args.insert("step_size".to_string(), json!(2));
-        example_args.insert("output".to_string(), json!("max_anisotropy_dev_signature.html"));
+        example_args.insert(
+            "output".to_string(),
+            json!("max_anisotropy_dev_signature.html"),
+        );
 
         ToolManifest {
             id: "max_anisotropy_dev_signature".to_string(),
@@ -3892,7 +4162,10 @@ impl TerrainWindowCore {
         example_args.insert("max_scale".to_string(), json!(150));
         example_args.insert("step_size".to_string(), json!(2));
         example_args.insert("z_factor".to_string(), json!(1.0));
-        example_args.insert("output".to_string(), json!("multiscale_roughness_signature.html"));
+        example_args.insert(
+            "output".to_string(),
+            json!("multiscale_roughness_signature.html"),
+        );
 
         ToolManifest {
             id: "multiscale_roughness_signature".to_string(),
@@ -3951,8 +4224,14 @@ impl TerrainWindowCore {
         example_args.insert("step".to_string(), json!(2));
         example_args.insert("num_steps".to_string(), json!(20));
         example_args.insert("step_nonlinearity".to_string(), json!(1.5));
-        example_args.insert("output".to_string(), json!("multiscale_std_dev_normals.tif"));
-        example_args.insert("output_scale".to_string(), json!("multiscale_std_dev_normals_scale.tif"));
+        example_args.insert(
+            "output".to_string(),
+            json!("multiscale_std_dev_normals.tif"),
+        );
+        example_args.insert(
+            "output_scale".to_string(),
+            json!("multiscale_std_dev_normals_scale.tif"),
+        );
 
         ToolManifest {
             id: "multiscale_std_dev_normals".to_string(),
@@ -4014,7 +4293,10 @@ impl TerrainWindowCore {
         example_args.insert("step".to_string(), json!(2));
         example_args.insert("num_steps".to_string(), json!(20));
         example_args.insert("step_nonlinearity".to_string(), json!(1.5));
-        example_args.insert("output".to_string(), json!("multiscale_std_dev_normals_signature.html"));
+        example_args.insert(
+            "output".to_string(),
+            json!("multiscale_std_dev_normals_signature.html"),
+        );
 
         ToolManifest {
             id: "multiscale_std_dev_normals_signature".to_string(),
@@ -4146,6 +4428,7 @@ impl TerrainWindowCore {
             normal_smoothing_strength,
             edge_sensitivity,
             lambda,
+            lambda_coarse: 0.0,
             convergence_threshold,
             outer_convergence_threshold,
             z_factor,
@@ -4159,7 +4442,8 @@ impl TerrainWindowCore {
         let mut dem = vec![input.nodata as f32; input.rows * input.cols];
         for row in 0..input.rows {
             for col in 0..input.cols {
-                dem[Self::idx(row, col, input.cols)] = input.get(0, row as isize, col as isize) as f32;
+                dem[Self::idx(row, col, input.cols)] =
+                    input.get(0, row as isize, col as isize) as f32;
             }
         }
         dem
@@ -4210,7 +4494,7 @@ impl TerrainWindowCore {
             let prev = levels.last().expect("pyramid should contain a base level");
             let next_rows = (prev.rows + 1) / 2;
             let next_cols = (prev.cols + 1) / 2;
-            if next_rows < 64 || next_cols < 64 {
+            if next_rows < 8 || next_cols < 8 {
                 break;
             }
             if next_rows == prev.rows && next_cols == prev.cols {
@@ -4329,9 +4613,19 @@ impl TerrainWindowCore {
         res_y: f32,
         settings: &PoissonSmoothingSettings,
         initial_surface: Option<&[f32]>,
+        coarse_guide: Option<&[f32]>,
     ) -> Vec<f32> {
         let eight_res_x = res_x * 8.0;
         let eight_res_y = res_y * 8.0;
+        // coarse_guide is the fixed two-anchor reference in the Jacobi update.
+        // It is kept separate from initial_surface so warm-start and
+        // reconstruction target are orthogonal: initial_surface seeds z_cur
+        // once; coarse_guide remains fixed for the entire solve.
+        let coarse_ref: Option<&[f32]> = if settings.lambda_coarse > 0.0 {
+            coarse_guide.filter(|s| s.len() == dem_orig.len())
+        } else {
+            None
+        };
         let mut z_cur = initial_surface
             .filter(|surface| surface.len() == dem_orig.len())
             .map(|surface| surface.to_vec())
@@ -4377,7 +4671,11 @@ impl TerrainWindowCore {
                                 z
                             } else {
                                 let v = z_cur[r as usize * cols + c as usize];
-                                if v == nodata { z } else { v }
+                                if v == nodata {
+                                    z
+                                } else {
+                                    v
+                                }
                             }
                         };
                         let z0 = sample(row as isize - 1, col as isize - 1) * settings.z_factor;
@@ -4389,7 +4687,7 @@ impl TerrainWindowCore {
                         let z6 = sample(row as isize + 1, col as isize - 1) * settings.z_factor;
                         let z7 = sample(row as isize, col as isize - 1) * settings.z_factor;
                         row_a[col] = -((z2 - z6) + 2.0 * (z3 - z7) + (z4 - z0)) / eight_res_x;
-                        row_b[col] = -((z6 - z0) + 2.0 * (z5 - z1) + (z4 - z2)) / eight_res_y;
+                        row_b[col] = -((z0 - z6) + 2.0 * (z1 - z5) + (z2 - z4)) / eight_res_y;
                     }
                 });
 
@@ -4531,8 +4829,8 @@ impl TerrainWindowCore {
                         if n <= 0 {
                             continue;
                         }
-                        let local_mean = (Self::rect_sum(&grad_sum, cols, y1, x1, y2, x2)
-                            / n as f64) as f32;
+                        let local_mean =
+                            (Self::rect_sum(&grad_sum, cols, y1, x1, y2, x2) / n as f64) as f32;
                         let local_sigma = local_mean.max(1.0e-6);
                         let blended_sigma =
                             ((1.0 - adaptivity) * sigma + adaptivity * local_sigma).max(1.0e-6);
@@ -4664,8 +4962,16 @@ impl TerrainWindowCore {
                             try_nbr!(row as isize, col as isize - 1);
                             try_nbr!(row as isize + 1, col as isize);
                             try_nbr!(row as isize - 1, col as isize);
-                            let new_z = (settings.lambda * dem_orig[idx] + sum_nbr + div[idx])
-                                / (settings.lambda + n_nbr as f32);
+                            let new_z = if let Some(coarse) = coarse_ref {
+                                (settings.lambda * dem_orig[idx]
+                                    + settings.lambda_coarse * coarse[idx]
+                                    + sum_nbr
+                                    + div[idx])
+                                    / (settings.lambda + settings.lambda_coarse + n_nbr as f32)
+                            } else {
+                                (settings.lambda * dem_orig[idx] + sum_nbr + div[idx])
+                                    / (settings.lambda + n_nbr as f32)
+                            };
                             row_nxt[col] = new_z;
                             local_max = local_max.max((new_z - z_cur[idx]).abs());
                         }
@@ -4697,17 +5003,41 @@ impl TerrainWindowCore {
 
     fn rect_sum(sum: &[f64], cols: usize, y1: usize, x1: usize, y2: usize, x2: usize) -> f64 {
         let a = sum[Self::idx(y2, x2, cols)];
-        let b = if y1 > 0 { sum[Self::idx(y1 - 1, x2, cols)] } else { 0.0 };
-        let c = if x1 > 0 { sum[Self::idx(y2, x1 - 1, cols)] } else { 0.0 };
-        let d = if y1 > 0 && x1 > 0 { sum[Self::idx(y1 - 1, x1 - 1, cols)] } else { 0.0 };
+        let b = if y1 > 0 {
+            sum[Self::idx(y1 - 1, x2, cols)]
+        } else {
+            0.0
+        };
+        let c = if x1 > 0 {
+            sum[Self::idx(y2, x1 - 1, cols)]
+        } else {
+            0.0
+        };
+        let d = if y1 > 0 && x1 > 0 {
+            sum[Self::idx(y1 - 1, x1 - 1, cols)]
+        } else {
+            0.0
+        };
         a - b - c + d
     }
 
     fn rect_count(count: &[i64], cols: usize, y1: usize, x1: usize, y2: usize, x2: usize) -> i64 {
         let a = count[Self::idx(y2, x2, cols)];
-        let b = if y1 > 0 { count[Self::idx(y1 - 1, x2, cols)] } else { 0 };
-        let c = if x1 > 0 { count[Self::idx(y2, x1 - 1, cols)] } else { 0 };
-        let d = if y1 > 0 && x1 > 0 { count[Self::idx(y1 - 1, x1 - 1, cols)] } else { 0 };
+        let b = if y1 > 0 {
+            count[Self::idx(y1 - 1, x2, cols)]
+        } else {
+            0
+        };
+        let c = if x1 > 0 {
+            count[Self::idx(y2, x1 - 1, cols)]
+        } else {
+            0
+        };
+        let d = if y1 > 0 && x1 > 0 {
+            count[Self::idx(y1 - 1, x1 - 1, cols)]
+        } else {
+            0
+        };
         a - b - c + d
     }
 
@@ -4796,9 +5126,14 @@ impl TerrainWindowCore {
                         let mean = local_sum / n_f;
                         if standardize {
                             let local_sum_sq = Self::rect_sum(&sum_sq, cols, y1, x1, y2, x2);
-                            let variance = ((local_sum_sq - (local_sum * local_sum) / n_f) / n_f).max(0.0);
+                            let variance =
+                                ((local_sum_sq - (local_sum * local_sum) / n_f) / n_f).max(0.0);
                             let std_dev = variance.sqrt();
-                            row_out[c] = if std_dev > 0.0 { (z - mean) / std_dev } else { 0.0 };
+                            row_out[c] = if std_dev > 0.0 {
+                                (z - mean) / std_dev
+                            } else {
+                                0.0
+                            };
                         } else {
                             row_out[c] = z - mean;
                         }
@@ -4808,7 +5143,9 @@ impl TerrainWindowCore {
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output.set_row_slice(band, r as isize, row).map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
@@ -4850,10 +5187,7 @@ impl TerrainWindowCore {
         let (filter_size_x, filter_size_y) = Self::parse_filter_sizes(&local_args);
         let mid_x = filter_size_x / 2;
         let mid_y = filter_size_y / 2;
-        let z_factor = args
-            .get("z_factor")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(1.0);
+        let z_factor = args.get("z_factor").and_then(|v| v.as_f64()).unwrap_or(1.0);
 
         let input = Self::load_raster(&input_path)?;
         let mut output = input.clone();
@@ -4881,7 +5215,11 @@ impl TerrainWindowCore {
                         }
                         let sample = |rr: isize, cc: isize| {
                             let v = input.get(band, rr, cc);
-                            if input.is_nodata(v) { z * z_factor } else { v * z_factor }
+                            if input.is_nodata(v) {
+                                z * z_factor
+                            } else {
+                                v * z_factor
+                            }
                         };
 
                         let n0 = sample(row - 1, col - 1);
@@ -4903,9 +5241,11 @@ impl TerrainWindowCore {
 
             let mut slope_raster = input.clone();
             for (r, row) in slope_rows.iter().enumerate() {
-                slope_raster.set_row_slice(band, r as isize, row).map_err(|e| {
-                    ToolError::Execution(format!("failed writing slope row {}: {}", r, e))
-                })?;
+                slope_raster
+                    .set_row_slice(band, r as isize, row)
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing slope row {}: {}", r, e))
+                    })?;
             }
 
             let (sum, sum_sq, count) = Self::build_integrals(&slope_raster, band);
@@ -4930,7 +5270,8 @@ impl TerrainWindowCore {
                         let n_f = n as f64;
                         let local_sum = Self::rect_sum(&sum, cols, y1, x1, y2, x2);
                         let local_sum_sq = Self::rect_sum(&sum_sq, cols, y1, x1, y2, x2);
-                        let variance = ((local_sum_sq - (local_sum * local_sum) / n_f) / n_f).max(0.0);
+                        let variance =
+                            ((local_sum_sq - (local_sum * local_sum) / n_f) / n_f).max(0.0);
                         row_out[c] = variance.sqrt();
                     }
                     row_out
@@ -4976,12 +5317,19 @@ impl TerrainWindowCore {
 
             for r in 0..rows {
                 let fill = vec![nodata; cols];
-                output_mag.set_row_slice(band, r as isize, &fill).map_err(|e| {
-                    ToolError::Execution(format!("failed initializing magnitude row {}: {}", r, e))
-                })?;
-                output_scale.set_row_slice(band, r as isize, &fill).map_err(|e| {
-                    ToolError::Execution(format!("failed initializing scale row {}: {}", r, e))
-                })?;
+                output_mag
+                    .set_row_slice(band, r as isize, &fill)
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed initializing magnitude row {}: {}",
+                            r, e
+                        ))
+                    })?;
+                output_scale
+                    .set_row_slice(band, r as isize, &fill)
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed initializing scale row {}: {}", r, e))
+                    })?;
             }
 
             let mut scales = Vec::new();
@@ -5031,18 +5379,27 @@ impl TerrainWindowCore {
                         }
                         let z1 = output_mag.get(band, r as isize, c as isize);
                         if z1 == nodata || z2 * z2 > z1 * z1 {
-                            output_mag.set(band, r as isize, c as isize, z2).map_err(|e| {
-                                ToolError::Execution(format!("failed writing max diff at row {} col {}: {}", r, c, e))
-                            })?;
+                            output_mag
+                                .set(band, r as isize, c as isize, z2)
+                                .map_err(|e| {
+                                    ToolError::Execution(format!(
+                                        "failed writing max diff at row {} col {}: {}",
+                                        r, c, e
+                                    ))
+                                })?;
                             output_scale
                                 .set(band, r as isize, c as isize, midpoint as f64)
                                 .map_err(|e| {
-                                    ToolError::Execution(format!("failed writing scale at row {} col {}: {}", r, c, e))
+                                    ToolError::Execution(format!(
+                                        "failed writing scale at row {} col {}: {}",
+                                        r, c, e
+                                    ))
                                 })?;
                         }
                     }
                 }
-                coalescer.emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
             }
         }
 
@@ -5114,9 +5471,14 @@ impl TerrainWindowCore {
                             let local_sum = Self::rect_sum(&sum, cols, y1, x1, y2, x2);
                             let local_sum_sq = Self::rect_sum(&sum_sq, cols, y1, x1, y2, x2);
                             let mean = local_sum / n_f;
-                            let variance = ((local_sum_sq - (local_sum * local_sum) / n_f) / n_f).max(0.0);
+                            let variance =
+                                ((local_sum_sq - (local_sum * local_sum) / n_f) / n_f).max(0.0);
                             let std_dev = variance.sqrt();
-                            row_out[c] = if std_dev > min_vertical { (z - mean) / std_dev } else { 0.0 };
+                            row_out[c] = if std_dev > min_vertical {
+                                (z - mean) / std_dev
+                            } else {
+                                0.0
+                            };
                         }
                         row_out
                     })
@@ -5136,7 +5498,8 @@ impl TerrainWindowCore {
                         }
                     }
                 }
-                coalescer.emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
             }
 
             for r in 0..rows {
@@ -5153,10 +5516,7 @@ impl TerrainWindowCore {
                 output_scale
                     .set_row_slice(band, r as isize, &scale_data[start..end])
                     .map_err(|e| {
-                        ToolError::Execution(format!(
-                            "failed writing scale row {}: {}",
-                            r, e
-                        ))
+                        ToolError::Execution(format!("failed writing scale row {}: {}", r, e))
                     })?;
             }
         }
@@ -5192,10 +5552,12 @@ impl TerrainWindowCore {
 
         let local_scales = Self::collect_scales(local_min_scale, local_max_scale, local_step_size);
         let broad_scales = Self::collect_scales(broad_min_scale, broad_max_scale, broad_step_size);
-        let total_steps = local_scales.len() + broad_scales.len() + if min_patch_size > 1 { 2 } else { 1 };
+        let total_steps =
+            local_scales.len() + broad_scales.len() + if min_patch_size > 1 { 2 } else { 1 };
         let mut completed_steps = 0usize;
 
-        ctx.progress.info("running multiscale_topographic_position_class");
+        ctx.progress
+            .info("running multiscale_topographic_position_class");
         let (sum, sum_sq, count) = Self::build_integrals(&input, 0);
         let local_dev = Self::compute_max_dev_response(
             &input,
@@ -5242,13 +5604,31 @@ impl TerrainWindowCore {
                         continue;
                     }
                     let idx = row * cols + col;
-                    let local_code = Self::classify_topographic_position(local_dev[idx], local_threshold);
-                    let broad_code = Self::classify_topographic_position(broad_dev[idx], broad_threshold);
+                    let local_val = local_dev[idx];
+                    let broad_val = broad_dev[idx];
+                    // Skip cells where DEVmax could not be computed (nodata propagated
+                    // through integral-image computation, e.g. edge cells with n<=1
+                    // at every scale or input cells outside the integral region).
+                    if input.is_nodata(local_val) || input.is_nodata(broad_val) {
+                        continue;
+                    }
+                    let local_code =
+                        Self::classify_topographic_position(local_val, local_threshold);
+                    let broad_code =
+                        Self::classify_topographic_position(broad_val, broad_threshold);
                     class_row[col] = local_code + broad_code * 3;
 
                     if let Some(conf_row) = confidence_row.as_mut() {
-                        let local_conf = Self::topographic_position_confidence(local_dev[idx], local_threshold, local_code);
-                        let broad_conf = Self::topographic_position_confidence(broad_dev[idx], broad_threshold, broad_code);
+                        let local_conf = Self::topographic_position_confidence(
+                            local_val,
+                            local_threshold,
+                            local_code,
+                        );
+                        let broad_conf = Self::topographic_position_confidence(
+                            broad_val,
+                            broad_threshold,
+                            broad_code,
+                        );
                         conf_row[col] = local_conf.min(broad_conf);
                     }
                 }
@@ -5303,8 +5683,14 @@ impl TerrainWindowCore {
             ("class_8_color", "#97BE7F"),
         ];
         let mut metadata = input.metadata.clone();
-        metadata.push(("color_interpretation".to_string(), "categorical".to_string()));
-        metadata.push(("classification_scheme".to_string(), "multiscale_topographic_position_class".to_string()));
+        metadata.push((
+            "color_interpretation".to_string(),
+            "categorical".to_string(),
+        ));
+        metadata.push((
+            "classification_scheme".to_string(),
+            "multiscale_topographic_position_class".to_string(),
+        ));
         for (key, value) in label_metadata {
             metadata.push((key.to_string(), value.to_string()));
         }
@@ -5331,14 +5717,21 @@ impl TerrainWindowCore {
                 .collect();
             output
                 .set_row_slice(0, row as isize, &row_vals)
-                .map_err(|e| ToolError::Execution(format!("failed writing class row {}: {}", row, e)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed writing class row {}: {}", row, e))
+                })?;
         }
 
         let output_locator = Self::write_or_store_output(output, output_path)?;
-        let confidence_locator = if let (Some(conf_path), Some(confidence_values)) = (confidence_path, confidence_data) {
+        let confidence_locator = if let (Some(conf_path), Some(confidence_values)) =
+            (confidence_path, confidence_data)
+        {
             let mut conf_metadata = input.metadata.clone();
             conf_metadata.push(("color_interpretation".to_string(), "continuous".to_string()));
-            conf_metadata.push(("confidence_metric".to_string(), "minimum ternary threshold margin".to_string()));
+            conf_metadata.push((
+                "confidence_metric".to_string(),
+                "minimum ternary threshold margin".to_string(),
+            ));
             let mut conf_raster = Raster::new(RasterConfig {
                 rows,
                 cols,
@@ -5357,7 +5750,12 @@ impl TerrainWindowCore {
                 let offset = row * cols;
                 conf_raster
                     .set_row_slice(0, row as isize, &confidence_values[offset..offset + cols])
-                    .map_err(|e| ToolError::Execution(format!("failed writing confidence row {}: {}", row, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed writing confidence row {}: {}",
+                            row, e
+                        ))
+                    })?;
             }
             Some(Self::write_or_store_output(conf_raster, Some(conf_path))?)
         } else {
@@ -5365,7 +5763,10 @@ impl TerrainWindowCore {
         };
 
         coalescer.finish(ctx.progress);
-        Ok(Self::build_result_with_optional_confidence(output_locator, confidence_locator))
+        Ok(Self::build_result_with_optional_confidence(
+            output_locator,
+            confidence_locator,
+        ))
     }
 
     fn validate_topographic_position_animation(args: &ToolArgs) -> Result<(), ToolError> {
@@ -5430,10 +5831,7 @@ impl TerrainWindowCore {
             .and_then(|v| v.as_u64())
             .unwrap_or(600)
             .max(50) as usize;
-        let delay_ms = args
-            .get("delay")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(250) as u32;
+        let delay_ms = args.get("delay").and_then(|v| v.as_u64()).unwrap_or(250) as u32;
         let label = args
             .get("label")
             .and_then(|v| v.as_str())
@@ -5468,7 +5866,9 @@ impl TerrainWindowCore {
         let rows = input.rows;
         let cols = input.cols;
         let nodata = input.nodata;
-        let width = ((image_height as f64) * (cols as f64 / rows as f64)).round().max(1.0) as usize;
+        let width = ((image_height as f64) * (cols as f64 / rows as f64))
+            .round()
+            .max(1.0) as usize;
 
         let palette_vals = palette.get_palette();
         let palette_vals: Vec<(f64, f64, f64)> = palette_vals
@@ -5484,7 +5884,11 @@ impl TerrainWindowCore {
         let p_last = (palette_vals.len().saturating_sub(1)).max(1) as f64;
 
         let mut z_factor = 1.0_f64;
-        if input.y_min >= -90.0 && input.y_max() <= 90.0 && input.x_min >= -180.0 && input.x_max() <= 180.0 {
+        if input.y_min >= -90.0
+            && input.y_max() <= 90.0
+            && input.x_min >= -180.0
+            && input.x_max() <= 180.0
+        {
             let mid_lat = ((input.y_min + input.y_max()) * 0.5).to_radians();
             z_factor = 1.0 / (111_320.0 * mid_lat.cos().abs().max(1.0e-8));
         }
@@ -5509,7 +5913,11 @@ impl TerrainWindowCore {
                 let mut n = [0.0_f64; 8];
                 for i in 0..8 {
                     let zn = input.get(0, row + dy[i], col + dx[i]);
-                    n[i] = if input.is_nodata(zn) { z_scaled } else { zn * z_factor };
+                    n[i] = if input.is_nodata(zn) {
+                        z_scaled
+                    } else {
+                        zn * z_factor
+                    };
                 }
                 let fy = (n[6] - n[4] + 2.0 * (n[7] - n[3]) + n[0] - n[2]) / eight_grid_res;
                 let fx = (n[2] - n[4] + 2.0 * (n[1] - n[5]) + n[0] - n[6]) / eight_grid_res;
@@ -5569,9 +5977,14 @@ impl TerrainWindowCore {
                         let local_sum = Self::rect_sum(&sum, cols, y1, x1, y2, x2);
                         let local_sum_sq = Self::rect_sum(&sum_sq, cols, y1, x1, y2, x2);
                         let mean = local_sum / n_f;
-                        let variance = ((local_sum_sq - (local_sum * local_sum) / n_f) / n_f).max(0.0);
+                        let variance =
+                            ((local_sum_sq - (local_sum * local_sum) / n_f) / n_f).max(0.0);
                         let std_dev = variance.sqrt();
-                        row_out[c] = if std_dev > 0.0 { (z - mean) / std_dev } else { 0.0 };
+                        row_out[c] = if std_dev > 0.0 {
+                            (z - mean) / std_dev
+                        } else {
+                            0.0
+                        };
                     }
                     row_out
                 })
@@ -5636,7 +6049,14 @@ impl TerrainWindowCore {
             image_height,
             &[
                 ("Input DEM", input_path.clone()),
-                ("Mode", if use_dev_max { "DEVmax".to_string() } else { "DEV".to_string() }),
+                (
+                    "Mode",
+                    if use_dev_max {
+                        "DEVmax".to_string()
+                    } else {
+                        "DEV".to_string()
+                    },
+                ),
                 ("Minimum scale", min_scale.to_string()),
                 ("Steps", frames_written.to_string()),
             ],
@@ -5675,7 +6095,11 @@ impl TerrainWindowCore {
         let local = Self::load_raster(&local_path)?;
         let meso = Self::load_raster(&meso_path)?;
         let broad = Self::load_raster(&broad_path)?;
-        if local.rows != meso.rows || local.cols != meso.cols || local.rows != broad.rows || local.cols != broad.cols {
+        if local.rows != meso.rows
+            || local.cols != meso.cols
+            || local.rows != broad.rows
+            || local.cols != broad.cols
+        {
             return Err(ToolError::Validation(
                 "local, meso, and broad rasters must share identical dimensions".to_string(),
             ));
@@ -5737,9 +6161,8 @@ impl TerrainWindowCore {
             }
         });
 
-        let logistic = |v: f64| -> f64 {
-            (512.0 / (1.0 + (-(lightness * v.abs())).exp())).floor() - 256.0
-        };
+        let logistic =
+            |v: f64| -> f64 { (512.0 / (1.0 + (-(lightness * v.abs())).exp())).floor() - 256.0 };
 
         let rows = local.rows as isize;
         let cols = local.cols as isize;
@@ -5747,7 +6170,8 @@ impl TerrainWindowCore {
         let n_meso = meso.nodata;
         let n_broad = broad.nodata;
 
-        ctx.progress.info("running multiscale_topographic_position_image");
+        ctx.progress
+            .info("running multiscale_topographic_position_image");
         for row in 0..rows {
             let mut row_data = vec![0.0; cols as usize];
             for col in 0..cols {
@@ -5762,7 +6186,8 @@ impl TerrainWindowCore {
                 let mut g = logistic(g_meso).clamp(0.0, 255.0);
                 let mut b = logistic(b_local).clamp(0.0, 255.0);
 
-                if let (Some(hs), Some((hs_min, hs_rng))) = (hillshade.as_ref(), hs_stats.as_ref()) {
+                if let (Some(hs), Some((hs_min, hs_rng))) = (hillshade.as_ref(), hs_stats.as_ref())
+                {
                     let h = hs.get(0, row, col);
                     if h != hs.nodata {
                         let shade = ((h - *hs_min) / *hs_rng).clamp(0.0, 1.0);
@@ -5772,12 +6197,8 @@ impl TerrainWindowCore {
                     }
                 }
 
-                row_data[col as usize] = Self::pack_rgba(
-                    r.round() as u32,
-                    g.round() as u32,
-                    b.round() as u32,
-                    255,
-                );
+                row_data[col as usize] =
+                    Self::pack_rgba(r.round() as u32, g.round() as u32, b.round() as u32, 255);
             }
             output
                 .set_row_slice(0, row, &row_data)
@@ -5907,104 +6328,108 @@ impl TerrainWindowCore {
                     .par_chunks_mut(cols)
                     .zip(scale_values.par_chunks_mut(cols))
                     .enumerate()
-                    .fold(|| vec![0i64; num_bins], |mut histo, (r, (mag_row, scale_row))| {
-                        let row = r as isize;
-                        let half = midpoint as isize;
-                        histo.fill(0);
-                        let mut old_center = bin_nodata;
-                        let mut n = 0i64;
-                        let mut n_less = 0i64;
-                        let start_row = row - half;
-                        let end_row = row + half;
-                        let rr0 = start_row.max(0) as usize;
-                        let rr1 = end_row.min(rows_isize - 1) as usize;
-                        let row_offset = r * cols;
+                    .fold(
+                        || vec![0i64; num_bins],
+                        |mut histo, (r, (mag_row, scale_row))| {
+                            let row = r as isize;
+                            let half = midpoint as isize;
+                            histo.fill(0);
+                            let mut old_center = bin_nodata;
+                            let mut n = 0i64;
+                            let mut n_less = 0i64;
+                            let start_row = row - half;
+                            let end_row = row + half;
+                            let rr0 = start_row.max(0) as usize;
+                            let rr1 = end_row.min(rows_isize - 1) as usize;
+                            let row_offset = r * cols;
 
-                        for c in 0..cols {
-                            let col = c as isize;
-                            let center_bin = binned[row_offset + c];
-                            if center_bin == bin_nodata {
-                                old_center = bin_nodata;
-                                continue;
-                            }
+                            for c in 0..cols {
+                                let col = c as isize;
+                                let center_bin = binned[row_offset + c];
+                                if center_bin == bin_nodata {
+                                    old_center = bin_nodata;
+                                    continue;
+                                }
 
-                            if old_center != bin_nodata {
-                                let trailing_col = col - half - 1;
-                                let leading_col = col + half;
+                                if old_center != bin_nodata {
+                                    let trailing_col = col - half - 1;
+                                    let leading_col = col + half;
 
-                                if trailing_col >= 0 && trailing_col < cols_isize {
-                                    let trailing_col_u = trailing_col as usize;
-                                    for rr in rr0..=rr1 {
-                                        let bv = binned[rr * cols + trailing_col_u];
-                                        if bv != bin_nodata {
-                                            histo[bv as usize] -= 1;
-                                            n -= 1;
-                                            if bv < old_center {
-                                                n_less -= 1;
+                                    if trailing_col >= 0 && trailing_col < cols_isize {
+                                        let trailing_col_u = trailing_col as usize;
+                                        for rr in rr0..=rr1 {
+                                            let bv = binned[rr * cols + trailing_col_u];
+                                            if bv != bin_nodata {
+                                                histo[bv as usize] -= 1;
+                                                n -= 1;
+                                                if bv < old_center {
+                                                    n_less -= 1;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if leading_col >= 0 && leading_col < cols_isize {
+                                        let leading_col_u = leading_col as usize;
+                                        for rr in rr0..=rr1 {
+                                            let bv = binned[rr * cols + leading_col_u];
+                                            if bv != bin_nodata {
+                                                histo[bv as usize] += 1;
+                                                n += 1;
+                                                if bv < old_center {
+                                                    n_less += 1;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if old_center < center_bin {
+                                        for i in old_center as usize..center_bin as usize {
+                                            n_less += histo[i];
+                                        }
+                                    } else if old_center > center_bin {
+                                        for i in center_bin as usize..old_center as usize {
+                                            n_less -= histo[i];
+                                        }
+                                    }
+                                } else {
+                                    histo.fill(0);
+                                    n = 0;
+                                    n_less = 0;
+                                    let start_col = (col - half).max(0) as usize;
+                                    let end_col = (col + half).min(cols_isize - 1) as usize;
+
+                                    for cc in start_col..=end_col {
+                                        for rr in rr0..=rr1 {
+                                            let bv = binned[rr * cols + cc];
+                                            if bv != bin_nodata {
+                                                histo[bv as usize] += 1;
+                                                n += 1;
+                                                if bv < center_bin {
+                                                    n_less += 1;
+                                                }
                                             }
                                         }
                                     }
                                 }
 
-                                if leading_col >= 0 && leading_col < cols_isize {
-                                    let leading_col_u = leading_col as usize;
-                                    for rr in rr0..=rr1 {
-                                        let bv = binned[rr * cols + leading_col_u];
-                                        if bv != bin_nodata {
-                                            histo[bv as usize] += 1;
-                                            n += 1;
-                                            if bv < old_center {
-                                                n_less += 1;
-                                            }
-                                        }
+                                if n > 0 {
+                                    let p2 = n_less as f64 / n as f64 * 100.0;
+                                    let p1 = mag_row[c];
+                                    if p1 == nodata || (p2 - 50.0).abs() > (p1 - 50.0).abs() {
+                                        mag_row[c] = p2;
+                                        scale_row[c] = midpoint as f64;
                                     }
                                 }
-
-                                if old_center < center_bin {
-                                    for i in old_center as usize..center_bin as usize {
-                                        n_less += histo[i];
-                                    }
-                                } else if old_center > center_bin {
-                                    for i in center_bin as usize..old_center as usize {
-                                        n_less -= histo[i];
-                                    }
-                                }
-                            } else {
-                                histo.fill(0);
-                                n = 0;
-                                n_less = 0;
-                                let start_col = (col - half).max(0) as usize;
-                                let end_col = (col + half).min(cols_isize - 1) as usize;
-
-                                for cc in start_col..=end_col {
-                                    for rr in rr0..=rr1 {
-                                        let bv = binned[rr * cols + cc];
-                                        if bv != bin_nodata {
-                                            histo[bv as usize] += 1;
-                                            n += 1;
-                                            if bv < center_bin {
-                                                n_less += 1;
-                                            }
-                                        }
-                                    }
-                                }
+                                old_center = center_bin;
                             }
 
-                            if n > 0 {
-                                let p2 = n_less as f64 / n as f64 * 100.0;
-                                let p1 = mag_row[c];
-                                if p1 == nodata || (p2 - 50.0).abs() > (p1 - 50.0).abs() {
-                                    mag_row[c] = p2;
-                                    scale_row[c] = midpoint as f64;
-                                }
-                            }
-                            old_center = center_bin;
-                        }
-
-                        histo
-                    })
+                            histo
+                        },
+                    )
                     .for_each(|_| {});
-                coalescer.emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
             }
 
             for r in 0..rows {
@@ -6018,7 +6443,11 @@ impl TerrainWindowCore {
                         ))
                     })?;
                 output_scale
-                    .set_row_slice(band, r as isize, &scale_values[row_offset..row_offset + cols])
+                    .set_row_slice(
+                        band,
+                        r as isize,
+                        &scale_values[row_offset..row_offset + cols],
+                    )
                     .map_err(|e| {
                         ToolError::Execution(format!(
                             "failed writing scale row {} for band {}: {}",
@@ -6140,10 +6569,17 @@ impl TerrainWindowCore {
             for r in 0..rows {
                 output_mag
                     .set_row_slice(band, r as isize, &vec![nodata; cols])
-                    .map_err(|e| ToolError::Execution(format!("failed initializing magnitude row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed initializing magnitude row {}: {}",
+                            r, e
+                        ))
+                    })?;
                 output_scale
                     .set_row_slice(band, r as isize, &vec![nodata; cols])
-                    .map_err(|e| ToolError::Execution(format!("failed initializing scale row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed initializing scale row {}: {}", r, e))
+                    })?;
             }
 
             for (loop_idx, midpoint) in scales.iter().enumerate() {
@@ -6185,49 +6621,34 @@ impl TerrainWindowCore {
                             let mut sq_sum = 0.0;
                             let mut valid = 0usize;
 
-                            if let Some(v) = Self::panel_dev(
-                                z, &sum, &sum_sq, &count, cols, oy1, ix1, oy2, ix2,
-                            ) {
+                            if let Some(v) =
+                                Self::panel_dev(z, &sum, &sum_sq, &count, cols, oy1, ix1, oy2, ix2)
+                            {
                                 let d = v - overall;
                                 sq_sum += d * d;
                                 valid += 1;
                             }
-                            if let Some(v) = Self::panel_dev(
-                                z, &sum, &sum_sq, &count, cols, iy1, ox1, iy2, ox2,
-                            ) {
+                            if let Some(v) =
+                                Self::panel_dev(z, &sum, &sum_sq, &count, cols, iy1, ox1, iy2, ox2)
+                            {
                                 let d = v - overall;
                                 sq_sum += d * d;
                                 valid += 1;
                             }
 
-                            let diag_center = Self::panel_dev(
-                                z, &sum, &sum_sq, &count, cols, iy1, ix1, iy2, ix2,
-                            );
+                            let diag_center =
+                                Self::panel_dev(z, &sum, &sum_sq, &count, cols, iy1, ix1, iy2, ix2);
 
                             let ne_sw = if oy1 <= iy1 && ix2 <= ox2 {
                                 let top_right = Self::panel_dev(
-                                    z,
-                                    &sum,
-                                    &sum_sq,
-                                    &count,
-                                    cols,
-                                    oy1,
-                                    ix2,
-                                    iy1,
-                                    ox2,
+                                    z, &sum, &sum_sq, &count, cols, oy1, ix2, iy1, ox2,
                                 );
                                 let bottom_left = Self::panel_dev(
-                                    z,
-                                    &sum,
-                                    &sum_sq,
-                                    &count,
-                                    cols,
-                                    iy2,
-                                    ox1,
-                                    oy2,
-                                    ix1,
+                                    z, &sum, &sum_sq, &count, cols, iy2, ox1, oy2, ix1,
                                 );
-                                if let (Some(a), Some(b), Some(cn)) = (top_right, diag_center, bottom_left) {
+                                if let (Some(a), Some(b), Some(cn)) =
+                                    (top_right, diag_center, bottom_left)
+                                {
                                     Some((a + cn + b) / 3.0)
                                 } else {
                                     None
@@ -6244,28 +6665,14 @@ impl TerrainWindowCore {
 
                             let nw_se = if oy1 <= iy1 && ox1 <= ix1 {
                                 let top_left = Self::panel_dev(
-                                    z,
-                                    &sum,
-                                    &sum_sq,
-                                    &count,
-                                    cols,
-                                    oy1,
-                                    ox1,
-                                    iy1,
-                                    ix1,
+                                    z, &sum, &sum_sq, &count, cols, oy1, ox1, iy1, ix1,
                                 );
                                 let bottom_right = Self::panel_dev(
-                                    z,
-                                    &sum,
-                                    &sum_sq,
-                                    &count,
-                                    cols,
-                                    iy2,
-                                    ix2,
-                                    oy2,
-                                    ox2,
+                                    z, &sum, &sum_sq, &count, cols, iy2, ix2, oy2, ox2,
                                 );
-                                if let (Some(a), Some(b), Some(cn)) = (top_left, diag_center, bottom_right) {
+                                if let (Some(a), Some(b), Some(cn)) =
+                                    (top_left, diag_center, bottom_right)
+                                {
                                     Some((a + cn + b) / 3.0)
                                 } else {
                                     None
@@ -6315,7 +6722,8 @@ impl TerrainWindowCore {
                         }
                     }
                 }
-                coalescer.emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
             }
         }
 
@@ -6325,7 +6733,13 @@ impl TerrainWindowCore {
         Ok(Self::build_result_with_scale(output_locator, scale_locator))
     }
 
-    fn normal_from_raster(input: &Raster, band: isize, row: isize, col: isize, z_factor: f64) -> Option<[f64; 3]> {
+    fn normal_from_raster(
+        input: &Raster,
+        band: isize,
+        row: isize,
+        col: isize,
+        z_factor: f64,
+    ) -> Option<[f64; 3]> {
         let z = input.get(band, row, col);
         if input.is_nodata(z) {
             return None;
@@ -6333,7 +6747,11 @@ impl TerrainWindowCore {
         let center = z * z_factor;
         let sample = |rr: isize, cc: isize| {
             let v = input.get(band, rr, cc);
-            if input.is_nodata(v) { center } else { v * z_factor }
+            if input.is_nodata(v) {
+                center
+            } else {
+                v * z_factor
+            }
         };
 
         let n0 = sample(row - 1, col - 1);
@@ -6400,7 +6818,11 @@ impl TerrainWindowCore {
                 return center;
             }
             let v = data[Self::idx(rr as usize, cc as usize, cols)];
-            if v == nodata { center } else { v * z_factor }
+            if v == nodata {
+                center
+            } else {
+                v * z_factor
+            }
         };
 
         let n0 = sample(row as isize - 1, col as isize - 1);
@@ -6547,7 +6969,11 @@ impl TerrainWindowCore {
                     let mut row_sum = 0.0;
                     for col in 0..cols {
                         let idx = Self::idx(row, col, cols);
-                        let val = if current[idx] == nodata { 0.0 } else { current[idx] };
+                        let val = if current[idx] == nodata {
+                            0.0
+                        } else {
+                            current[idx]
+                        };
                         row_sum += val;
                         integral[idx] = if row > 0 {
                             row_sum + integral[Self::idx(row - 1, col, cols)]
@@ -6704,10 +7130,20 @@ impl TerrainWindowCore {
                 }
                 output_mag
                     .set_row_slice(band, row as isize, &mag_row)
-                    .map_err(|e| ToolError::Execution(format!("failed initializing magnitude row {}: {}", row, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed initializing magnitude row {}: {}",
+                            row, e
+                        ))
+                    })?;
                 output_scale
                     .set_row_slice(band, row as isize, &scale_row)
-                    .map_err(|e| ToolError::Execution(format!("failed initializing scale row {}: {}", row, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed initializing scale row {}: {}",
+                            row, e
+                        ))
+                    })?;
             }
 
             for (loop_idx, midpoint) in scales.iter().enumerate() {
@@ -6754,23 +7190,44 @@ impl TerrainWindowCore {
                             if scaled > cur {
                                 output_mag
                                     .set(band, row as isize, col as isize, scaled)
-                                    .map_err(|e| ToolError::Execution(format!("failed writing MsEI at row {} col {}: {}", row, col, e)))?;
+                                    .map_err(|e| {
+                                        ToolError::Execution(format!(
+                                            "failed writing MsEI at row {} col {}: {}",
+                                            row, col, e
+                                        ))
+                                    })?;
                                 output_scale
                                     .set(band, row as isize, col as isize, midpoint as f64)
-                                    .map_err(|e| ToolError::Execution(format!("failed writing MsEI scale at row {} col {}: {}", row, col, e)))?;
+                                    .map_err(|e| {
+                                        ToolError::Execution(format!(
+                                            "failed writing MsEI scale at row {} col {}: {}",
+                                            row, col, e
+                                        ))
+                                    })?;
                             }
                         } else if scaled < 0.0 && -scaled > cur {
                             output_mag
                                 .set(band, row as isize, col as isize, -scaled)
-                                .map_err(|e| ToolError::Execution(format!("failed writing MsLLI at row {} col {}: {}", row, col, e)))?;
+                                .map_err(|e| {
+                                    ToolError::Execution(format!(
+                                        "failed writing MsLLI at row {} col {}: {}",
+                                        row, col, e
+                                    ))
+                                })?;
                             output_scale
                                 .set(band, row as isize, col as isize, midpoint as f64)
-                                .map_err(|e| ToolError::Execution(format!("failed writing MsLLI scale at row {} col {}: {}", row, col, e)))?;
+                                .map_err(|e| {
+                                    ToolError::Execution(format!(
+                                        "failed writing MsLLI scale at row {} col {}: {}",
+                                        row, col, e
+                                    ))
+                                })?;
                         }
                     }
                 }
 
-                coalescer.emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
             }
         }
 
@@ -6928,12 +7385,14 @@ impl TerrainWindowCore {
                         }
                         let cur = output_mag.get(band, r as isize, c as isize);
                         if cur == nodata || *v < cur {
-                            output_mag.set(band, r as isize, c as isize, *v).map_err(|e| {
-                                ToolError::Execution(format!(
-                                    "failed writing local HI at row {} col {}: {}",
-                                    r, c, e
-                                ))
-                            })?;
+                            output_mag
+                                .set(band, r as isize, c as isize, *v)
+                                .map_err(|e| {
+                                    ToolError::Execution(format!(
+                                        "failed writing local HI at row {} col {}: {}",
+                                        r, c, e
+                                    ))
+                                })?;
                             output_scale
                                 .set(band, r as isize, c as isize, filter_size as f64)
                                 .map_err(|e| {
@@ -6946,7 +7405,8 @@ impl TerrainWindowCore {
                     }
                 }
 
-                coalescer.emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
             }
         }
 
@@ -6974,13 +7434,9 @@ impl TerrainWindowCore {
             let mut row_sum_z = 0.0;
             let mut row_count = 0i64;
             for col in 0..cols {
-                if let Some(n) = Self::unit_normal_from_raster(
-                    input,
-                    band,
-                    row as isize,
-                    col as isize,
-                    z_factor,
-                ) {
+                if let Some(n) =
+                    Self::unit_normal_from_raster(input, band, row as isize, col as isize, z_factor)
+                {
                     row_sum_x += n[0];
                     row_sum_y += n[1];
                     row_sum_z += n[2];
@@ -7117,11 +7573,7 @@ impl TerrainWindowCore {
             for r in 0..rows {
                 for c in 0..cols {
                     base_normals.push(Self::normal_from_raster(
-                        &input,
-                        band,
-                        r as isize,
-                        c as isize,
-                        z_factor,
+                        &input, band, r as isize, c as isize, z_factor,
                     ));
                 }
             }
@@ -7130,10 +7582,17 @@ impl TerrainWindowCore {
             for r in 0..rows {
                 output_mag
                     .set_row_slice(band, r as isize, &fill)
-                    .map_err(|e| ToolError::Execution(format!("failed initializing magnitude row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed initializing magnitude row {}: {}",
+                            r, e
+                        ))
+                    })?;
                 output_scale
                     .set_row_slice(band, r as isize, &fill)
-                    .map_err(|e| ToolError::Execution(format!("failed initializing scale row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed initializing scale row {}: {}", r, e))
+                    })?;
             }
 
             for (loop_idx, midpoint) in scales.iter().enumerate() {
@@ -7170,7 +7629,12 @@ impl TerrainWindowCore {
                     let end = start + cols;
                     smooth
                         .set_row_slice(band, r as isize, &smooth_vec[start..end])
-                        .map_err(|e| ToolError::Execution(format!("failed writing smoothed row {}: {}", r, e)))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!(
+                                "failed writing smoothed row {}: {}",
+                                r, e
+                            ))
+                        })?;
                 }
 
                 let mut diff_vec = vec![0.0; rows * cols];
@@ -7185,11 +7649,7 @@ impl TerrainWindowCore {
                                 None => continue,
                             };
                             if let Some(smooth_n) = Self::normal_from_raster(
-                                &smooth,
-                                band,
-                                r as isize,
-                                c as isize,
-                                z_factor,
+                                &smooth, band, r as isize, c as isize, z_factor,
                             ) {
                                 *out_cell = Self::angle_between_normals(base, smooth_n);
                             }
@@ -7202,7 +7662,12 @@ impl TerrainWindowCore {
                     let end = start + cols;
                     diff_raster
                         .set_row_slice(band, r as isize, &diff_vec[start..end])
-                        .map_err(|e| ToolError::Execution(format!("failed writing roughness row {}: {}", r, e)))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!(
+                                "failed writing roughness row {}: {}",
+                                r, e
+                            ))
+                        })?;
                 }
                 let (diff_sum, _, diff_count) = Self::build_integrals(&diff_raster, band);
 
@@ -7258,7 +7723,8 @@ impl TerrainWindowCore {
                     }
                 }
 
-                coalescer.emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
             }
         }
 
@@ -7338,16 +7804,23 @@ impl TerrainWindowCore {
             .flat_map(|s| s.iter().map(|(_, y)| *y))
             .fold(f64::NEG_INFINITY, f64::max)
             .ceil();
-        let min_y = if min_y.is_finite() { min_y.min(0.0) } else { -1.0 };
-        let max_y = if max_y.is_finite() { max_y.max(0.0) } else { 1.0 };
+        let min_y = if min_y.is_finite() {
+            min_y.min(0.0)
+        } else {
+            -1.0
+        };
+        let max_y = if max_y.is_finite() {
+            max_y.max(0.0)
+        } else {
+            1.0
+        };
         let x_rng = (max_x - min_x).max(1.0);
         let y_rng = (max_y - min_y).max(1.0);
         let sx = |x: f64| pad + (x - min_x) / x_rng * (width - 2.0 * pad);
         let sy = |y: f64| height - pad - (y - min_y) / y_rng * (height - 2.0 * pad);
 
         let palette = [
-            "#bf616a", "#5e81ac", "#a3be8c", "#d08770", "#b48ead", "#88c0d0", "#ebcb8b",
-            "#2e3440",
+            "#bf616a", "#5e81ac", "#a3be8c", "#d08770", "#b48ead", "#88c0d0", "#ebcb8b", "#2e3440",
         ];
         let mut series_svg = String::new();
         let mut legend = String::new();
@@ -7430,16 +7903,23 @@ impl TerrainWindowCore {
             .flat_map(|s| s.iter().map(|(_, y)| *y))
             .fold(f64::NEG_INFINITY, f64::max)
             .ceil();
-        let min_y = if min_y.is_finite() { min_y.min(0.0) } else { -1.0 };
-        let max_y = if max_y.is_finite() { max_y.max(0.0) } else { 1.0 };
+        let min_y = if min_y.is_finite() {
+            min_y.min(0.0)
+        } else {
+            -1.0
+        };
+        let max_y = if max_y.is_finite() {
+            max_y.max(0.0)
+        } else {
+            1.0
+        };
         let x_rng = (max_x - min_x).max(1.0);
         let y_rng = (max_y - min_y).max(1.0);
         let sx = |x: f64| pad + (x - min_x) / x_rng * (width - 2.0 * pad);
         let sy = |y: f64| height - pad - (y - min_y) / y_rng * (height - 2.0 * pad);
 
         let palette = [
-            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2",
-            "#17becf",
+            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#17becf",
         ];
         let mut series_svg = String::new();
         for (i, series) in site_values.iter().enumerate() {
@@ -7586,10 +8066,12 @@ impl TerrainWindowCore {
                 }
                 site_values[site_idx].push(((midpoint * 2 + 1) as f64, dev));
             }
-            coalescer.emit_unit_fraction(ctx.progress, (scale_idx + 1) as f64 / scales.len() as f64);
+            coalescer
+                .emit_unit_fraction(ctx.progress, (scale_idx + 1) as f64 / scales.len() as f64);
         }
 
-        let out_path = output_path.unwrap_or_else(|| std::env::temp_dir().join("max_elev_dev_signature.html"));
+        let out_path =
+            output_path.unwrap_or_else(|| std::env::temp_dir().join("max_elev_dev_signature.html"));
         if let Some(parent) = out_path.parent() {
             if !parent.as_os_str().is_empty() {
                 std::fs::create_dir_all(parent).map_err(|e| {
@@ -7624,7 +8106,9 @@ impl TerrainWindowCore {
         let sx = |x: f64| pad + (x - min_x) / x_rng * (width - 2.0 * pad);
         let sy = |y: f64| height - pad - (y - min_y) / y_rng * (height - 2.0 * pad);
 
-        let palette = ["#bf616a", "#5e81ac", "#a3be8c", "#d08770", "#b48ead", "#88c0d0", "#ebcb8b", "#2e3440"];
+        let palette = [
+            "#bf616a", "#5e81ac", "#a3be8c", "#d08770", "#b48ead", "#88c0d0", "#ebcb8b", "#2e3440",
+        ];
         let mut series_svg = String::new();
         let mut legend = String::new();
         for (i, series) in site_values.iter().enumerate() {
@@ -7674,7 +8158,10 @@ impl TerrainWindowCore {
             .map_err(|e| ToolError::Execution(format!("failed writing HTML report: {e}")))?;
 
         let mut outputs = std::collections::BTreeMap::new();
-        outputs.insert("path".to_string(), json!(out_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
         coalescer.finish(ctx.progress);
         Ok(ToolRunResult {
             outputs,
@@ -7749,7 +8236,11 @@ impl TerrainWindowCore {
             let midpoint = *midpoint;
             let middle_radius = ((midpoint * 2 + 1) / 6).max(1);
             for (site_idx, (_sid, row, col)) in sites.iter().enumerate() {
-                if *row < midpoint || *row + midpoint >= rows || *col < midpoint || *col + midpoint >= cols {
+                if *row < midpoint
+                    || *row + midpoint >= rows
+                    || *col < midpoint
+                    || *col + midpoint >= cols
+                {
                     site_values[site_idx].push(((midpoint * 2 + 1) as f64, 0.0));
                     continue;
                 }
@@ -7768,35 +8259,39 @@ impl TerrainWindowCore {
                 let ix1 = col.saturating_sub(middle_radius);
                 let ix2 = (*col + middle_radius).min(cols - 1);
 
-                let overall = match Self::panel_dev(
-                    z, &sum, &sum_sq, &count, cols, oy1, ox1, oy2, ox2,
-                ) {
-                    Some(v) => v,
-                    None => {
-                        site_values[site_idx].push(((midpoint * 2 + 1) as f64, 0.0));
-                        continue;
-                    }
-                };
+                let overall =
+                    match Self::panel_dev(z, &sum, &sum_sq, &count, cols, oy1, ox1, oy2, ox2) {
+                        Some(v) => v,
+                        None => {
+                            site_values[site_idx].push(((midpoint * 2 + 1) as f64, 0.0));
+                            continue;
+                        }
+                    };
 
                 let mut sq_sum = 0.0;
                 let mut valid = 0usize;
 
-                if let Some(v) = Self::panel_dev(z, &sum, &sum_sq, &count, cols, oy1, ix1, oy2, ix2) {
+                if let Some(v) = Self::panel_dev(z, &sum, &sum_sq, &count, cols, oy1, ix1, oy2, ix2)
+                {
                     let d = v - overall;
                     sq_sum += d * d;
                     valid += 1;
                 }
-                if let Some(v) = Self::panel_dev(z, &sum, &sum_sq, &count, cols, iy1, ox1, iy2, ox2) {
+                if let Some(v) = Self::panel_dev(z, &sum, &sum_sq, &count, cols, iy1, ox1, iy2, ox2)
+                {
                     let d = v - overall;
                     sq_sum += d * d;
                     valid += 1;
                 }
 
-                let diag_center = Self::panel_dev(z, &sum, &sum_sq, &count, cols, iy1, ix1, iy2, ix2);
+                let diag_center =
+                    Self::panel_dev(z, &sum, &sum_sq, &count, cols, iy1, ix1, iy2, ix2);
 
                 let ne_sw = {
-                    let top_right = Self::panel_dev(z, &sum, &sum_sq, &count, cols, oy1, ix2, iy1, ox2);
-                    let bottom_left = Self::panel_dev(z, &sum, &sum_sq, &count, cols, iy2, ox1, oy2, ix1);
+                    let top_right =
+                        Self::panel_dev(z, &sum, &sum_sq, &count, cols, oy1, ix2, iy1, ox2);
+                    let bottom_left =
+                        Self::panel_dev(z, &sum, &sum_sq, &count, cols, iy2, ox1, oy2, ix1);
                     if let (Some(a), Some(cn), Some(b)) = (top_right, diag_center, bottom_left) {
                         Some((a + cn + b) / 3.0)
                     } else {
@@ -7810,8 +8305,10 @@ impl TerrainWindowCore {
                 }
 
                 let nw_se = {
-                    let top_left = Self::panel_dev(z, &sum, &sum_sq, &count, cols, oy1, ox1, iy1, ix1);
-                    let bottom_right = Self::panel_dev(z, &sum, &sum_sq, &count, cols, iy2, ix2, oy2, ox2);
+                    let top_left =
+                        Self::panel_dev(z, &sum, &sum_sq, &count, cols, oy1, ox1, iy1, ix1);
+                    let bottom_right =
+                        Self::panel_dev(z, &sum, &sum_sq, &count, cols, iy2, ix2, oy2, ox2);
                     if let (Some(a), Some(cn), Some(b)) = (top_left, diag_center, bottom_right) {
                         Some((a + cn + b) / 3.0)
                     } else {
@@ -7831,7 +8328,8 @@ impl TerrainWindowCore {
                 };
                 site_values[site_idx].push(((midpoint * 2 + 1) as f64, anis));
             }
-            coalescer.emit_unit_fraction(ctx.progress, (scale_idx + 1) as f64 / scales.len() as f64);
+            coalescer
+                .emit_unit_fraction(ctx.progress, (scale_idx + 1) as f64 / scales.len() as f64);
         }
 
         let out_path = output_path
@@ -7854,7 +8352,10 @@ impl TerrainWindowCore {
         )?;
 
         let mut outputs = std::collections::BTreeMap::new();
-        outputs.insert("path".to_string(), json!(out_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
         coalescer.finish(ctx.progress);
         Ok(ToolRunResult {
             outputs,
@@ -7917,11 +8418,7 @@ impl TerrainWindowCore {
         for r in 0..rows {
             for c in 0..cols {
                 base_normals.push(Self::normal_from_raster(
-                    &input,
-                    0,
-                    r as isize,
-                    c as isize,
-                    z_factor,
+                    &input, 0, r as isize, c as isize, z_factor,
                 ));
             }
         }
@@ -7968,7 +8465,9 @@ impl TerrainWindowCore {
                 let end = start + cols;
                 smooth
                     .set_row_slice(0, r as isize, &smooth_vec[start..end])
-                    .map_err(|e| ToolError::Execution(format!("failed writing smoothed row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing smoothed row {}: {}", r, e))
+                    })?;
             }
 
             let mut diff_vec = vec![0.0; rows * cols];
@@ -7982,13 +8481,9 @@ impl TerrainWindowCore {
                             Some(v) => v,
                             None => continue,
                         };
-                        if let Some(smooth_n) = Self::normal_from_raster(
-                            &smooth,
-                            0,
-                            r as isize,
-                            c as isize,
-                            z_factor,
-                        ) {
+                        if let Some(smooth_n) =
+                            Self::normal_from_raster(&smooth, 0, r as isize, c as isize, z_factor)
+                        {
                             *out_cell = Self::angle_between_normals(base, smooth_n);
                         }
                     }
@@ -8000,7 +8495,9 @@ impl TerrainWindowCore {
                 let end = start + cols;
                 diff_raster
                     .set_row_slice(0, r as isize, &diff_vec[start..end])
-                    .map_err(|e| ToolError::Execution(format!("failed writing roughness row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing roughness row {}: {}", r, e))
+                    })?;
             }
             let (diff_sum, _, diff_count) = Self::build_integrals(&diff_raster, 0);
 
@@ -8023,7 +8520,8 @@ impl TerrainWindowCore {
                 site_values[site_idx].push(((midpoint * 2 + 1) as f64, rough));
             }
 
-            coalescer.emit_unit_fraction(ctx.progress, (scale_idx + 1) as f64 / scales.len() as f64);
+            coalescer
+                .emit_unit_fraction(ctx.progress, (scale_idx + 1) as f64 / scales.len() as f64);
         }
 
         let out_path = output_path
@@ -8046,7 +8544,10 @@ impl TerrainWindowCore {
         )?;
 
         let mut outputs = std::collections::BTreeMap::new();
-        outputs.insert("path".to_string(), json!(out_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
         coalescer.finish(ctx.progress);
         Ok(ToolRunResult {
             outputs,
@@ -8124,10 +8625,17 @@ impl TerrainWindowCore {
             for r in 0..rows {
                 output_mag
                     .set_row_slice(band, r as isize, &fill)
-                    .map_err(|e| ToolError::Execution(format!("failed initializing magnitude row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed initializing magnitude row {}: {}",
+                            r, e
+                        ))
+                    })?;
                 output_scale
                     .set_row_slice(band, r as isize, &fill)
-                    .map_err(|e| ToolError::Execution(format!("failed initializing scale row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed initializing scale row {}: {}", r, e))
+                    })?;
             }
 
             for (loop_idx, midpoint) in scales.iter().enumerate() {
@@ -8143,7 +8651,12 @@ impl TerrainWindowCore {
                     let end = start + cols;
                     smooth
                         .set_row_slice(band, r as isize, &smooth_vec[start..end])
-                        .map_err(|e| ToolError::Execution(format!("failed writing smoothed row {}: {}", r, e)))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!(
+                                "failed writing smoothed row {}: {}",
+                                r, e
+                            ))
+                        })?;
                 }
 
                 let (sum_x, sum_y, sum_z, count_n) =
@@ -8187,12 +8700,14 @@ impl TerrainWindowCore {
                         }
                         let v1 = output_mag.get(band, r as isize, c as isize);
                         if v1 == nodata || v2 > v1 {
-                            output_mag.set(band, r as isize, c as isize, v2).map_err(|e| {
-                                ToolError::Execution(format!(
-                                    "failed writing std-dev value at row {} col {}: {}",
-                                    r, c, e
-                                ))
-                            })?;
+                            output_mag
+                                .set(band, r as isize, c as isize, v2)
+                                .map_err(|e| {
+                                    ToolError::Execution(format!(
+                                        "failed writing std-dev value at row {} col {}: {}",
+                                        r, c, e
+                                    ))
+                                })?;
                             output_scale
                                 .set(band, r as isize, c as isize, midpoint as f64)
                                 .map_err(|e| {
@@ -8204,7 +8719,8 @@ impl TerrainWindowCore {
                         }
                     }
                 }
-                coalescer.emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (loop_idx + 1) as f64 / scales.len() as f64);
             }
         }
 
@@ -8333,11 +8849,13 @@ impl TerrainWindowCore {
                 };
                 site_values[site_idx].push(((midpoint * 2 + 1) as f64, sigma));
             }
-            coalescer.emit_unit_fraction(ctx.progress, (scale_idx + 1) as f64 / scales.len() as f64);
+            coalescer
+                .emit_unit_fraction(ctx.progress, (scale_idx + 1) as f64 / scales.len() as f64);
         }
 
-        let out_path = output_path
-            .unwrap_or_else(|| std::env::temp_dir().join("multiscale_std_dev_normals_signature.html"));
+        let out_path = output_path.unwrap_or_else(|| {
+            std::env::temp_dir().join("multiscale_std_dev_normals_signature.html")
+        });
         if let Some(parent) = out_path.parent() {
             if !parent.as_os_str().is_empty() {
                 std::fs::create_dir_all(parent).map_err(|e| {
@@ -8356,7 +8874,10 @@ impl TerrainWindowCore {
         )?;
 
         let mut outputs = std::collections::BTreeMap::new();
-        outputs.insert("path".to_string(), json!(out_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
         coalescer.finish(ctx.progress);
         Ok(ToolRunResult {
             outputs,
@@ -8366,8 +8887,12 @@ impl TerrainWindowCore {
 }
 
 impl Tool for DifferenceFromMeanElevationTool {
-    fn metadata(&self) -> ToolMetadata { TerrainWindowCore::difference_from_mean_elevation_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainWindowCore::difference_from_mean_elevation_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainWindowCore::difference_from_mean_elevation_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainWindowCore::difference_from_mean_elevation_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainWindowCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8379,8 +8904,12 @@ impl Tool for DifferenceFromMeanElevationTool {
 }
 
 impl Tool for DeviationFromMeanElevationTool {
-    fn metadata(&self) -> ToolMetadata { TerrainWindowCore::deviation_from_mean_elevation_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainWindowCore::deviation_from_mean_elevation_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainWindowCore::deviation_from_mean_elevation_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainWindowCore::deviation_from_mean_elevation_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainWindowCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8392,8 +8921,12 @@ impl Tool for DeviationFromMeanElevationTool {
 }
 
 impl Tool for StandardDeviationOfSlopeTool {
-    fn metadata(&self) -> ToolMetadata { TerrainWindowCore::standard_deviation_of_slope_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainWindowCore::standard_deviation_of_slope_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainWindowCore::standard_deviation_of_slope_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainWindowCore::standard_deviation_of_slope_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainWindowCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8405,8 +8938,12 @@ impl Tool for StandardDeviationOfSlopeTool {
 }
 
 impl Tool for MaxDifferenceFromMeanTool {
-    fn metadata(&self) -> ToolMetadata { TerrainWindowCore::max_difference_from_mean_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainWindowCore::max_difference_from_mean_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainWindowCore::max_difference_from_mean_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainWindowCore::max_difference_from_mean_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainWindowCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8419,8 +8956,12 @@ impl Tool for MaxDifferenceFromMeanTool {
 }
 
 impl Tool for MaxElevationDeviationTool {
-    fn metadata(&self) -> ToolMetadata { TerrainWindowCore::max_elevation_deviation_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainWindowCore::max_elevation_deviation_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainWindowCore::max_elevation_deviation_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainWindowCore::max_elevation_deviation_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainWindowCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8443,17 +8984,25 @@ impl Tool for MaxElevationDeviationTool {
 }
 
 impl Tool for MultiscaleTopographicPositionClassTool {
-    fn metadata(&self) -> ToolMetadata { TerrainWindowCore::multiscale_topographic_position_class_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainWindowCore::multiscale_topographic_position_class_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainWindowCore::multiscale_topographic_position_class_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainWindowCore::multiscale_topographic_position_class_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainWindowCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
         let _ = parse_optional_output_path(args, "output_confidence")?;
         if TerrainWindowCore::arg_f64(args, "local_threshold", 0.5) < 0.0 {
-            return Err(ToolError::Validation("local_threshold must be non-negative".to_string()));
+            return Err(ToolError::Validation(
+                "local_threshold must be non-negative".to_string(),
+            ));
         }
         if TerrainWindowCore::arg_f64(args, "broad_threshold", 0.5) < 0.0 {
-            return Err(ToolError::Validation("broad_threshold must be non-negative".to_string()));
+            return Err(ToolError::Validation(
+                "broad_threshold must be non-negative".to_string(),
+            ));
         }
         Ok(())
     }
@@ -8489,9 +9038,9 @@ impl Tool for MultiscaleTopographicPositionImageTool {
         let _ = parse_raster_path_arg(args, "meso")?;
         let _ = parse_raster_path_arg(args, "broad")?;
         if let Some(v) = args.get("hillshade") {
-            let s = v
-                .as_str()
-                .ok_or_else(|| ToolError::Validation("parameter 'hillshade' must be a string path".to_string()))?;
+            let s = v.as_str().ok_or_else(|| {
+                ToolError::Validation("parameter 'hillshade' must be a string path".to_string())
+            })?;
             if s.trim().is_empty() {
                 return Err(ToolError::Validation(
                     "parameter 'hillshade' must not be empty when provided".to_string(),
@@ -8760,7 +9309,8 @@ impl Tool for EmbankmentMappingTool {
         TerrainWindowCore::embankment_mapping_manifest()
     }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
+        let _ =
+            parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
         let _ = parse_vector_path_arg(args, "roads_vector")
             .or_else(|_| parse_vector_path_arg(args, "road_vec"))
             .or_else(|_| parse_vector_path_arg(args, "roads"))?;
@@ -8856,25 +9406,40 @@ mod tests {
     fn make_ctx() -> ToolContext<'static> {
         static PROGRESS: NoopProgress = NoopProgress;
         static CAPS: AllowAllCapabilities = AllowAllCapabilities;
-        ToolContext { progress: &PROGRESS, capabilities: &CAPS }
+        ToolContext {
+            progress: &PROGRESS,
+            capabilities: &CAPS,
+        }
     }
 
     fn make_raster_with_center_peak(rows: usize, cols: usize, peak: f64) -> Raster {
-        let cfg = RasterConfig { rows, cols, bands: 1, nodata: -9999.0, cell_size: 10.0, ..Default::default() };
+        let cfg = RasterConfig {
+            rows,
+            cols,
+            bands: 1,
+            nodata: -9999.0,
+            cell_size: 10.0,
+            ..Default::default()
+        };
         let mut raster = Raster::new(cfg);
         for row in 0..rows as isize {
             for col in 0..cols as isize {
                 raster.set(0, row, col, 0.0).unwrap();
             }
         }
-        raster.set(0, (rows / 2) as isize, (cols / 2) as isize, peak).unwrap();
+        raster
+            .set(0, (rows / 2) as isize, (cols / 2) as isize, peak)
+            .unwrap();
         raster
     }
 
     fn run_window_tool(tool: &dyn Tool, input: Raster) -> Raster {
         let id = memory_store::put_raster(input);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("filter_size_x".to_string(), json!(3));
         args.insert("filter_size_y".to_string(), json!(3));
         let result = tool.run(&args, &make_ctx()).unwrap();
@@ -8885,25 +9450,39 @@ mod tests {
 
     #[test]
     fn difference_from_mean_elevation_center_peak_matches_expected() {
-        let out = run_window_tool(&DifferenceFromMeanElevationTool, make_raster_with_center_peak(5, 5, 8.0));
+        let out = run_window_tool(
+            &DifferenceFromMeanElevationTool,
+            make_raster_with_center_peak(5, 5, 8.0),
+        );
         let v = out.get(0, 2, 2);
         assert!((v - (64.0 / 9.0)).abs() < 1e-6, "expected 64/9, got {v}");
     }
 
     #[test]
     fn deviation_from_mean_elevation_center_peak_matches_expected() {
-        let out = run_window_tool(&DeviationFromMeanElevationTool, make_raster_with_center_peak(5, 5, 8.0));
+        let out = run_window_tool(
+            &DeviationFromMeanElevationTool,
+            make_raster_with_center_peak(5, 5, 8.0),
+        );
         let v = out.get(0, 2, 2);
-        assert!((v - 2.8284271247461903).abs() < 1e-6, "expected sqrt(8), got {v}");
+        assert!(
+            (v - 2.8284271247461903).abs() < 1e-6,
+            "expected sqrt(8), got {v}"
+        );
     }
 
     #[test]
     fn standard_deviation_of_slope_is_zero_for_flat_dem() {
         let mut args = ToolArgs::new();
         let id = memory_store::put_raster(make_raster_with_center_peak(5, 5, 0.0));
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("filter_size".to_string(), json!(3));
-        let result = StandardDeviationOfSlopeTool.run(&args, &make_ctx()).unwrap();
+        let result = StandardDeviationOfSlopeTool
+            .run(&args, &make_ctx())
+            .unwrap();
         let out_path = result.outputs.get("path").unwrap().as_str().unwrap();
         let out_id = memory_store::raster_path_to_id(out_path).unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
@@ -8914,7 +9493,10 @@ mod tests {
     fn max_difference_from_mean_returns_magnitude_and_scale() {
         let mut args = ToolArgs::new();
         let id = memory_store::put_raster(make_raster_with_center_peak(7, 7, 10.0));
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("min_scale".to_string(), json!(1));
         args.insert("max_scale".to_string(), json!(3));
         args.insert("step_size".to_string(), json!(1));
@@ -8936,25 +9518,36 @@ mod tests {
     fn smooth_vegetation_residual_removes_single_cell_spike() {
         let mut args = ToolArgs::new();
         let id = memory_store::put_raster(make_raster_with_center_peak(9, 9, 10.0));
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("max_scale".to_string(), json!(3));
         args.insert("dev_threshold".to_string(), json!(2.0));
         args.insert("scale_threshold".to_string(), json!(3));
 
-        let result = SmoothVegetationResidualTool.run(&args, &make_ctx()).unwrap();
+        let result = SmoothVegetationResidualTool
+            .run(&args, &make_ctx())
+            .unwrap();
         let out_path = result.outputs.get("path").unwrap().as_str().unwrap();
         let out_id = memory_store::raster_path_to_id(out_path).unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
 
         let center = out.get(0, 4, 4);
-        assert!(center < 1.0, "expected center spike to be smoothed, got {center}");
+        assert!(
+            center < 1.0,
+            "expected center spike to be smoothed, got {center}"
+        );
     }
 
     #[test]
     fn remove_off_terrain_objects_reduces_center_spike() {
         let mut args = ToolArgs::new();
         let id = memory_store::put_raster(make_raster_with_center_peak(9, 9, 20.0));
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("filter_size".to_string(), json!(5));
         args.insert("slope_threshold".to_string(), json!(10.0));
 
@@ -8964,14 +9557,20 @@ mod tests {
         let out = memory_store::get_raster_by_id(out_id).unwrap();
 
         let center = out.get(0, 4, 4);
-        assert!(center < 20.0, "expected center spike to be reduced, got {center}");
+        assert!(
+            center < 20.0,
+            "expected center spike to be reduced, got {center}"
+        );
     }
 
     #[test]
     fn map_off_terrain_objects_identifies_center_spike_segment() {
         let mut args = ToolArgs::new();
         let id = memory_store::put_raster(make_raster_with_center_peak(9, 9, 20.0));
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("max_slope".to_string(), json!(10.0));
         args.insert("min_feature_size".to_string(), json!(0));
 
@@ -9007,7 +9606,8 @@ mod tests {
         }
         let dem_id = memory_store::put_raster(dem);
 
-        let mut roads = wbvector::Layer::new("roads").with_geom_type(wbvector::GeometryType::LineString);
+        let mut roads =
+            wbvector::Layer::new("roads").with_geom_type(wbvector::GeometryType::LineString);
         roads
             .add_feature(
                 Some(wbvector::Geometry::line_string(vec![
@@ -9018,7 +9618,12 @@ mod tests {
             )
             .unwrap();
         let roads_path = std::env::temp_dir().join("embankment_mapping_roads_test.shp");
-        wbvector::write(&roads, roads_path.as_path(), wbvector::VectorFormat::Shapefile).unwrap();
+        wbvector::write(
+            &roads,
+            roads_path.as_path(),
+            wbvector::VectorFormat::Shapefile,
+        )
+        .unwrap();
 
         let mut args = ToolArgs::new();
         args.insert(
@@ -9048,13 +9653,18 @@ mod tests {
     fn local_hypsometric_analysis_center_peak_matches_expected() {
         let mut args = ToolArgs::new();
         let id = memory_store::put_raster(make_raster_with_center_peak(5, 5, 8.0));
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("min_scale".to_string(), json!(1));
         args.insert("step_size".to_string(), json!(1));
         args.insert("num_steps".to_string(), json!(1));
         args.insert("step_nonlinearity".to_string(), json!(1.0));
 
-        let result = LocalHypsometricAnalysisTool.run(&args, &make_ctx()).unwrap();
+        let result = LocalHypsometricAnalysisTool
+            .run(&args, &make_ctx())
+            .unwrap();
         let out_path = result.outputs.get("path").unwrap().as_str().unwrap();
         let out_id = memory_store::raster_path_to_id(out_path).unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
@@ -9078,20 +9688,38 @@ mod tests {
         let output_gif = tmp_dir.join("topographic_position_animation.gif");
 
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("palette".to_string(), json!("soft"));
         args.insert("min_scale".to_string(), json!(1u64));
         args.insert("num_steps".to_string(), json!(2u64));
         args.insert("step_nonlinearity".to_string(), json!(1.0));
         args.insert("image_height".to_string(), json!(50u64));
         args.insert("delay".to_string(), json!(250u64));
-        args.insert("output".to_string(), json!(output_html.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(output_html.to_string_lossy().to_string()),
+        );
 
-        let result = TopographicPositionAnimationTool.run(&args, &make_ctx()).unwrap();
+        let result = TopographicPositionAnimationTool
+            .run(&args, &make_ctx())
+            .unwrap();
         let html_path = result.outputs.get("path").and_then(|v| v.as_str()).unwrap();
-        let gif_path = result.outputs.get("gif_path").and_then(|v| v.as_str()).unwrap();
-        assert!(std::path::Path::new(html_path).exists(), "HTML file not found: {html_path}");
-        assert!(std::path::Path::new(gif_path).exists(), "GIF file not found: {gif_path}");
+        let gif_path = result
+            .outputs
+            .get("gif_path")
+            .and_then(|v| v.as_str())
+            .unwrap();
+        assert!(
+            std::path::Path::new(html_path).exists(),
+            "HTML file not found: {html_path}"
+        );
+        assert!(
+            std::path::Path::new(gif_path).exists(),
+            "GIF file not found: {gif_path}"
+        );
         assert_eq!(std::path::Path::new(gif_path), output_gif);
     }
 }

@@ -15,11 +15,31 @@ Lag parameters control variogram resolution: lag_distance sets bin size; lag_tol
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input vector points", required: true },
-                ToolParamSpec { name: "field", description: "Field with values", required: true },
-                ToolParamSpec { name: "lag_distance", description: "Lag distance (default: 100.0)", required: false },
-                ToolParamSpec { name: "lag_tolerance", description: "Lag tolerance (default: 50.0)", required: false },
-                ToolParamSpec { name: "max_lag_count", description: "Max lags (default: 20)", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input vector points",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Field with values",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "lag_distance",
+                    description: "Lag distance (default: 100.0)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "lag_tolerance",
+                    description: "Lag tolerance (default: 50.0)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "max_lag_count",
+                    description: "Max lags (default: 20)",
+                    required: false,
+                },
             ],
         }
     }
@@ -66,10 +86,10 @@ Lag parameters control variogram resolution: lag_distance sets bin size; lag_tol
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         ctx.progress.info("Loading point data");
-        
+
         let input = load_vector_arg(args, "input")?;
         let field_name = parse_string_arg(args, "field")?;
-        
+
         let lag_distance = parse_optional_f64_arg(args, "lag_distance").unwrap_or(100.0);
         let lag_tolerance = parse_optional_f64_arg(args, "lag_tolerance").unwrap_or(50.0);
         let max_lag_count = parse_optional_i64_arg(args, "max_lag_count")
@@ -80,8 +100,9 @@ Lag parameters control variogram resolution: lag_distance sets bin size; lag_tol
         let mut values = Vec::new();
 
         // Extract coordinates and field values
-        let field_idx = input.schema.field_index(&field_name)
-            .ok_or_else(|| ToolError::Validation(format!("field '{}' does not exist", field_name)))?;
+        let field_idx = input.schema.field_index(&field_name).ok_or_else(|| {
+            ToolError::Validation(format!("field '{}' does not exist", field_name))
+        })?;
 
         for feature in &input.features {
             if let Some(fv) = feature.attributes.get(field_idx) {
@@ -107,7 +128,8 @@ Lag parameters control variogram resolution: lag_distance sets bin size; lag_tol
             ));
         }
 
-        ctx.progress.info(&format!("Computing variogram from {} points", coords.len()));
+        ctx.progress
+            .info(&format!("Computing variogram from {} points", coords.len()));
 
         // Build empirical variogram
         let vario = EmpiricalVariogramBuilder::default()
@@ -143,6 +165,9 @@ Lag parameters control variogram resolution: lag_distance sets bin size; lag_tol
 
         ctx.progress.info("Variogram estimation complete");
 
-        Ok(ToolRunResult { outputs, ..Default::default() })
+        Ok(ToolRunResult {
+            outputs,
+            ..Default::default()
+        })
     }
 }

@@ -9,8 +9,8 @@ use wbcore::{
     ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor,
     ToolParamSpec, ToolRunResult, ToolStability,
 };
-use wbraster::{Raster, RasterConfig, RasterFormat};
 use wbraster::{LandsatBundle, Sentinel2SafePackage};
+use wbraster::{Raster, RasterConfig, RasterFormat};
 
 use crate::memory_store;
 use crate::tools::raster_stack_validator::{
@@ -40,9 +40,11 @@ fn parse_raster_list_arg(args: &ToolArgs, name: &str) -> Result<Vec<String>, Too
     let value = args
         .get(name)
         .ok_or_else(|| ToolError::Validation(format!("missing required parameter '{name}'")))?;
-    let arr = value
-        .as_array()
-        .ok_or_else(|| ToolError::Validation(format!("parameter '{name}' must be an array of raster paths")))?;
+    let arr = value.as_array().ok_or_else(|| {
+        ToolError::Validation(format!(
+            "parameter '{name}' must be an array of raster paths"
+        ))
+    })?;
     let mut out = Vec::with_capacity(arr.len());
     for item in arr {
         let Some(s) = item.as_str() else {
@@ -86,7 +88,10 @@ fn load_raster(path: &str) -> Result<Raster, ToolError> {
         .map_err(|e| ToolError::Execution(format!("failed reading raster '{}': {e}", path)))
 }
 
-fn write_or_store_output(output: Raster, output_path: Option<std::path::PathBuf>) -> Result<String, ToolError> {
+fn write_or_store_output(
+    output: Raster,
+    output_path: Option<std::path::PathBuf>,
+) -> Result<String, ToolError> {
     if let Some(output_path) = output_path {
         if let Some(parent) = output_path.parent() {
             if !parent.as_os_str().is_empty() {
@@ -178,7 +183,10 @@ fn parse_bandwise_f64_arg(
     )))
 }
 
-fn parse_class_remap_arg(args: &ToolArgs, key: &str) -> Result<Option<HashMap<i64, i64>>, ToolError> {
+fn parse_class_remap_arg(
+    args: &ToolArgs,
+    key: &str,
+) -> Result<Option<HashMap<i64, i64>>, ToolError> {
     let Some(value) = args.get(key) else {
         return Ok(None);
     };
@@ -305,13 +313,14 @@ fn parse_named_vectors_arg(
     let value = args
         .get(key)
         .ok_or_else(|| ToolError::Validation(format!("parameter '{}' is required", key)))?;
-    let arr = value.as_array().ok_or_else(|| {
-        ToolError::Validation(format!("parameter '{}' must be an array", key))
-    })?;
+    let arr = value
+        .as_array()
+        .ok_or_else(|| ToolError::Validation(format!("parameter '{}' must be an array", key)))?;
     if arr.is_empty() {
-        return Err(ToolError::Validation(
-            format!("parameter '{}' must contain at least one entry", key),
-        ));
+        return Err(ToolError::Validation(format!(
+            "parameter '{}' must contain at least one entry",
+            key
+        )));
     }
 
     let mut names = Vec::with_capacity(arr.len());
@@ -324,12 +333,15 @@ fn parse_named_vectors_arg(
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| format!("class_{}", i + 1));
-            let vals = obj.get("values").and_then(|v| v.as_array()).ok_or_else(|| {
-                ToolError::Validation(format!(
-                    "{}[{}] object must contain numeric array field 'values'",
-                    key, i
-                ))
-            })?;
+            let vals = obj
+                .get("values")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| {
+                    ToolError::Validation(format!(
+                        "{}[{}] object must contain numeric array field 'values'",
+                        key, i
+                    ))
+                })?;
             if vals.len() != num_bands {
                 return Err(ToolError::Validation(format!(
                     "{}[{}].values must have {} values (one per input raster)",
@@ -339,10 +351,7 @@ fn parse_named_vectors_arg(
             let mut vec = Vec::with_capacity(num_bands);
             for (j, v) in vals.iter().enumerate() {
                 let f = v.as_f64().ok_or_else(|| {
-                    ToolError::Validation(format!(
-                        "{}[{}].values[{}] must be numeric",
-                        key, i, j
-                    ))
+                    ToolError::Validation(format!("{}[{}].values[{}] must be numeric", key, i, j))
                 })?;
                 vec.push(f);
             }
@@ -375,9 +384,15 @@ fn parse_named_vectors_arg(
     Ok((names, vectors))
 }
 
-fn parse_named_vectors_csv(path: &Path, num_bands: usize) -> Result<(Vec<String>, Vec<Vec<f64>>), ToolError> {
+fn parse_named_vectors_csv(
+    path: &Path,
+    num_bands: usize,
+) -> Result<(Vec<String>, Vec<Vec<f64>>), ToolError> {
     let text = std::fs::read_to_string(path).map_err(|e| {
-        ToolError::Execution(format!("failed reading signatures CSV '{}': {e}", path.display()))
+        ToolError::Execution(format!(
+            "failed reading signatures CSV '{}': {e}",
+            path.display()
+        ))
     })?;
 
     let mut names = Vec::new();
@@ -545,7 +560,11 @@ fn parse_polsar_real_symmetric_inputs(
     let matrix_format = args
         .get("matrix_format")
         .and_then(|v| v.as_str())
-        .unwrap_or(if primary.len() == 9 { "full3x3" } else { "diag3" })
+        .unwrap_or(if primary.len() == 9 {
+            "full3x3"
+        } else {
+            "diag3"
+        })
         .to_ascii_lowercase();
 
     if matrix_format == "diag3" {
@@ -634,14 +653,20 @@ impl Tool for DarkObjectSubtractionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("percentile".to_string(), json!(1.0));
         defaults.insert("clamp_non_negative".to_string(), json!(true));
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["blue.tif", "green.tif", "red.tif", "nir.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["blue.tif", "green.tif", "red.tif", "nir.tif"]),
+        );
         example.insert("percentile".to_string(), json!(1.0));
         example.insert("clamp_non_negative".to_string(), json!(true));
         example.insert("output".to_string(), json!("dos_corrected.tif"));
@@ -668,7 +693,8 @@ impl Tool for DarkObjectSubtractionTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_dark_object_subtraction".to_string(),
-                description: "Apply DOS per-band using 1st percentile dark-object offsets.".to_string(),
+                description: "Apply DOS per-band using 1st percentile dark-object offsets."
+                    .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -712,7 +738,8 @@ impl Tool for DarkObjectSubtractionTool {
         let output_diagnostic_offsets_path =
             parse_optional_output_path(args, "output_diagnostic_offsets")?;
 
-        ctx.progress.info("dark_object_subtraction: reading input stack");
+        ctx.progress
+            .info("dark_object_subtraction: reading input stack");
         let mut rasters = input_paths
             .iter()
             .map(|p| load_raster(p))
@@ -730,7 +757,8 @@ impl Tool for DarkObjectSubtractionTool {
         let warnings = align_and_validate_raster_stack(&mut rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in warnings {
-            ctx.progress.info(&format!("dark_object_subtraction: {warning}"));
+            ctx.progress
+                .info(&format!("dark_object_subtraction: {warning}"));
         }
 
         let rows = rasters[0].rows;
@@ -813,15 +841,18 @@ impl Tool for DarkObjectSubtractionTool {
             for (r, (row, diag_row)) in band_rows.iter().enumerate() {
                 output
                     .set_row_slice(band_idx as isize, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing output row {}: {e}", r)))?;
-                if let (Some(diag), Some(drow)) = (diagnostic.as_mut(), diag_row.as_ref()) {
-                    diag.set_row_slice(band_idx as isize, r as isize, drow).map_err(|e| {
-                        ToolError::Execution(format!(
-                            "failed writing diagnostic row {} for band {}: {e}",
-                            r,
-                            band_idx + 1
-                        ))
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing output row {}: {e}", r))
                     })?;
+                if let (Some(diag), Some(drow)) = (diagnostic.as_mut(), diag_row.as_ref()) {
+                    diag.set_row_slice(band_idx as isize, r as isize, drow)
+                        .map_err(|e| {
+                            ToolError::Execution(format!(
+                                "failed writing diagnostic row {} for band {}: {e}",
+                                r,
+                                band_idx + 1
+                            ))
+                        })?;
                 }
                 done_rows += 1;
                 coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
@@ -916,17 +947,32 @@ impl Tool for DnToToaReflectanceTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["B2.tif", "B3.tif", "B4.tif", "B5.tif"]));
-        defaults.insert("reflectance_mult".to_string(), json!([2.0e-5, 2.0e-5, 2.0e-5, 2.0e-5]));
-        defaults.insert("reflectance_add".to_string(), json!([-0.1, -0.1, -0.1, -0.1]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["B2.tif", "B3.tif", "B4.tif", "B5.tif"]),
+        );
+        defaults.insert(
+            "reflectance_mult".to_string(),
+            json!([2.0e-5, 2.0e-5, 2.0e-5, 2.0e-5]),
+        );
+        defaults.insert(
+            "reflectance_add".to_string(),
+            json!([-0.1, -0.1, -0.1, -0.1]),
+        );
         defaults.insert("apply_solar_correction".to_string(), json!(true));
         defaults.insert("clamp_unit_interval".to_string(), json!(true));
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["LC09_B2.TIF", "LC09_B3.TIF", "LC09_B4.TIF", "LC09_B5.TIF"]));
-        example.insert("sensor_bundle_root".to_string(), json!("LC09_L1TP_017030_20240420_20240426_02_T1"));
+        example.insert(
+            "inputs".to_string(),
+            json!(["LC09_B2.TIF", "LC09_B3.TIF", "LC09_B4.TIF", "LC09_B5.TIF"]),
+        );
+        example.insert(
+            "sensor_bundle_root".to_string(),
+            json!("LC09_L1TP_017030_20240420_20240426_02_T1"),
+        );
         example.insert("apply_solar_correction".to_string(), json!(true));
         example.insert("output".to_string(), json!("toa_reflectance.tif"));
 
@@ -983,7 +1029,8 @@ impl Tool for DnToToaReflectanceTool {
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
 
-        ctx.progress.info("dn_to_toa_reflectance: reading input stack");
+        ctx.progress
+            .info("dn_to_toa_reflectance: reading input stack");
         let mut rasters = input_paths
             .iter()
             .map(|p| load_raster(p))
@@ -1001,7 +1048,8 @@ impl Tool for DnToToaReflectanceTool {
         let warnings = align_and_validate_raster_stack(&mut rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in warnings {
-            ctx.progress.info(&format!("dn_to_toa_reflectance: {warning}"));
+            ctx.progress
+                .info(&format!("dn_to_toa_reflectance: {warning}"));
         }
 
         let explicit_mult = parse_bandwise_f64_arg(args, "reflectance_mult", n)?;
@@ -1016,7 +1064,9 @@ impl Tool for DnToToaReflectanceTool {
                 derived_sun_elevation = bundle.sun_elevation_deg;
                 build_landsat_reflectance_coefficients(&input_paths, &bundle)?
             } else if let Ok(pkg) = Sentinel2SafePackage::open(bundle_root) {
-                derived_sun_elevation = pkg.mean_solar_zenith_deg.map(|z| (90.0 - z).clamp(0.0, 90.0));
+                derived_sun_elevation = pkg
+                    .mean_solar_zenith_deg
+                    .map(|z| (90.0 - z).clamp(0.0, 90.0));
                 // Prefer bundle quantification metadata when available; keep 1/10000 fallback.
                 let scale = pkg.reflectance_scale_factor().unwrap_or(1.0 / 10000.0);
                 (vec![scale; n], vec![0.0; n])
@@ -1059,7 +1109,8 @@ impl Tool for DnToToaReflectanceTool {
 
         let mut output = rasters[0].clone();
         output.bands = n;
-        output.data = wbraster::raster::RasterData::new_filled(output.data_type, n * rows * cols, nodata);
+        output.data =
+            wbraster::raster::RasterData::new_filled(output.data_type, n * rows * cols, nodata);
 
         let total_rows = (rows * n).max(1);
         let mut done_rows = 0usize;
@@ -1103,7 +1154,9 @@ impl Tool for DnToToaReflectanceTool {
             for (r, row) in band_rows.iter().enumerate() {
                 output
                     .set_row_slice(band_idx as isize, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing output row {}: {e}", r)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing output row {}: {e}", r))
+                    })?;
                 done_rows += 1;
                 coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
             }
@@ -1116,8 +1169,14 @@ impl Tool for DnToToaReflectanceTool {
         outputs.insert("__wbw_type__".to_string(), json!("raster"));
         outputs.insert("path".to_string(), json!(output_locator));
         outputs.insert("active_band".to_string(), json!(0));
-        outputs.insert("apply_solar_correction".to_string(), json!(apply_solar_correction));
-        outputs.insert("clamp_unit_interval".to_string(), json!(clamp_unit_interval));
+        outputs.insert(
+            "apply_solar_correction".to_string(),
+            json!(apply_solar_correction),
+        );
+        outputs.insert(
+            "clamp_unit_interval".to_string(),
+            json!(clamp_unit_interval),
+        );
         if let Some(sun) = sun_elevation_deg {
             outputs.insert("sun_elevation_deg".to_string(), json!(sun));
         }
@@ -1220,7 +1279,9 @@ impl Tool for NdviBasedEmissivityTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_ndvi_based_emissivity".to_string(),
-                description: "Compute emissivity from red/NIR NDVI and fractional vegetation cover.".to_string(),
+                description:
+                    "Compute emissivity from red/NIR NDVI and fractional vegetation cover."
+                        .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -1237,12 +1298,19 @@ impl Tool for NdviBasedEmissivityTool {
         let _ = args
             .get("red_input")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'red_input' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'red_input' is required".to_string())
+            })?;
         let _ = args
             .get("nir_input")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'nir_input' is required".to_string()))?;
-        let ndvi_soil = args.get("ndvi_soil").and_then(|v| v.as_f64()).unwrap_or(0.2);
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'nir_input' is required".to_string())
+            })?;
+        let ndvi_soil = args
+            .get("ndvi_soil")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.2);
         let ndvi_vegetation = args
             .get("ndvi_vegetation")
             .and_then(|v| v.as_f64())
@@ -1260,12 +1328,19 @@ impl Tool for NdviBasedEmissivityTool {
         let red_input = args
             .get("red_input")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'red_input' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'red_input' is required".to_string())
+            })?;
         let nir_input = args
             .get("nir_input")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'nir_input' is required".to_string()))?;
-        let ndvi_soil = args.get("ndvi_soil").and_then(|v| v.as_f64()).unwrap_or(0.2);
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'nir_input' is required".to_string())
+            })?;
+        let ndvi_soil = args
+            .get("ndvi_soil")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.2);
         let ndvi_vegetation = args
             .get("ndvi_vegetation")
             .and_then(|v| v.as_f64())
@@ -1280,7 +1355,8 @@ impl Tool for NdviBasedEmissivityTool {
             .unwrap_or(0.99);
         let output_path = parse_optional_output_path(args, "output")?;
 
-        ctx.progress.info("ndvi_based_emissivity: reading red/nir rasters");
+        ctx.progress
+            .info("ndvi_based_emissivity: reading red/nir rasters");
         let mut rasters = vec![load_raster(red_input)?, load_raster(nir_input)?];
 
         let stack_cfg = RasterStackConfig {
@@ -1295,7 +1371,8 @@ impl Tool for NdviBasedEmissivityTool {
         let warnings = align_and_validate_raster_stack(&mut rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in warnings {
-            ctx.progress.info(&format!("ndvi_based_emissivity: {warning}"));
+            ctx.progress
+                .info(&format!("ndvi_based_emissivity: {warning}"));
         }
 
         let red = &rasters[0];
@@ -1342,9 +1419,9 @@ impl Tool for NdviBasedEmissivityTool {
             .collect();
 
         for (r, row) in out_rows.iter().enumerate() {
-            output
-                .set_row_slice(0, r as isize, row)
-                .map_err(|e| ToolError::Execution(format!("failed writing output row {}: {e}", r)))?;
+            output.set_row_slice(0, r as isize, row).map_err(|e| {
+                ToolError::Execution(format!("failed writing output row {}: {e}", r))
+            })?;
             done_rows += 1;
             coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
         }
@@ -1358,7 +1435,10 @@ impl Tool for NdviBasedEmissivityTool {
         outputs.insert("ndvi_soil".to_string(), json!(ndvi_soil));
         outputs.insert("ndvi_vegetation".to_string(), json!(ndvi_vegetation));
         outputs.insert("emissivity_soil".to_string(), json!(emissivity_soil));
-        outputs.insert("emissivity_vegetation".to_string(), json!(emissivity_vegetation));
+        outputs.insert(
+            "emissivity_vegetation".to_string(),
+            json!(emissivity_vegetation),
+        );
         Ok(ToolRunResult { outputs })
     }
 }
@@ -1429,8 +1509,14 @@ impl Tool for PcaBasedChangeDetectionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("t1_inputs".to_string(), json!(["t1_b2.tif", "t1_b3.tif", "t1_b4.tif"]));
-        defaults.insert("t2_inputs".to_string(), json!(["t2_b2.tif", "t2_b3.tif", "t2_b4.tif"]));
+        defaults.insert(
+            "t1_inputs".to_string(),
+            json!(["t1_b2.tif", "t1_b3.tif", "t1_b4.tif"]),
+        );
+        defaults.insert(
+            "t2_inputs".to_string(),
+            json!(["t2_b2.tif", "t2_b3.tif", "t2_b4.tif"]),
+        );
         defaults.insert("component".to_string(), json!(1));
         defaults.insert("standardized".to_string(), json!(false));
         defaults.insert("threshold_sigma".to_string(), json!(2.0));
@@ -1438,8 +1524,14 @@ impl Tool for PcaBasedChangeDetectionTool {
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("t1_inputs".to_string(), json!(["pre_b2.tif", "pre_b3.tif", "pre_b4.tif", "pre_b8.tif"]));
-        example.insert("t2_inputs".to_string(), json!(["post_b2.tif", "post_b3.tif", "post_b4.tif", "post_b8.tif"]));
+        example.insert(
+            "t1_inputs".to_string(),
+            json!(["pre_b2.tif", "pre_b3.tif", "pre_b4.tif", "pre_b8.tif"]),
+        );
+        example.insert(
+            "t2_inputs".to_string(),
+            json!(["post_b2.tif", "post_b3.tif", "post_b4.tif", "post_b8.tif"]),
+        );
         example.insert("component".to_string(), json!(1));
         example.insert("threshold_sigma".to_string(), json!(2.0));
         example.insert("output".to_string(), json!("pca_change_pc1_abs.tif"));
@@ -1526,7 +1618,8 @@ impl Tool for PcaBasedChangeDetectionTool {
         let output_mask_path = parse_optional_output_path(args, "output_mask")?;
         let output_report_path = parse_optional_output_path(args, "output_report")?;
 
-        ctx.progress.info("pca_based_change_detection: reading and aligning input stacks");
+        ctx.progress
+            .info("pca_based_change_detection: reading and aligning input stacks");
         let mut all_rasters: Vec<Raster> = t1_paths
             .iter()
             .chain(t2_paths.iter())
@@ -1544,7 +1637,8 @@ impl Tool for PcaBasedChangeDetectionTool {
         let warnings = align_and_validate_raster_stack(&mut all_rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in warnings {
-            ctx.progress.info(&format!("pca_based_change_detection: {warning}"));
+            ctx.progress
+                .info(&format!("pca_based_change_detection: {warning}"));
         }
 
         let (t1_rasters, t2_rasters) = all_rasters.split_at(bands);
@@ -1553,11 +1647,19 @@ impl Tool for PcaBasedChangeDetectionTool {
         let n = rows * cols;
         let nodata = t1_rasters[0].nodata;
 
-        ctx.progress.info("pca_based_change_detection: estimating covariance of spectral change vectors");
+        ctx.progress
+            .info("pca_based_change_detection: estimating covariance of spectral change vectors");
         let (sum, sum_sq, valid_count, _scratch) = (0..n)
             .into_par_iter()
             .fold(
-                || (vec![0.0_f64; bands], vec![0.0_f64; bands * bands], 0_u64, vec![0.0_f64; bands]),
+                || {
+                    (
+                        vec![0.0_f64; bands],
+                        vec![0.0_f64; bands * bands],
+                        0_u64,
+                        vec![0.0_f64; bands],
+                    )
+                },
                 |(mut local_sum, mut local_sq, mut local_count, mut dv), idx| {
                     let mut valid = true;
                     for b in 0..bands {
@@ -1587,7 +1689,14 @@ impl Tool for PcaBasedChangeDetectionTool {
                 },
             )
             .reduce(
-                || (vec![0.0_f64; bands], vec![0.0_f64; bands * bands], 0_u64, vec![0.0_f64; bands]),
+                || {
+                    (
+                        vec![0.0_f64; bands],
+                        vec![0.0_f64; bands * bands],
+                        0_u64,
+                        vec![0.0_f64; bands],
+                    )
+                },
                 |(mut sum_a, mut sq_a, cnt_a, dv_a), (sum_b, sq_b, cnt_b, _dv_b)| {
                     for i in 0..bands {
                         sum_a[i] += sum_b[i];
@@ -1622,7 +1731,8 @@ impl Tool for PcaBasedChangeDetectionTool {
             let mut corr = cov.clone();
             for i in 0..bands {
                 for j in 0..bands {
-                    let denom = (cov[i * bands + i].max(0.0).sqrt()) * (cov[j * bands + j].max(0.0).sqrt());
+                    let denom =
+                        (cov[i * bands + i].max(0.0).sqrt()) * (cov[j * bands + j].max(0.0).sqrt());
                     corr[i * bands + j] = if denom > 1.0e-15 {
                         cov[i * bands + j] / denom
                     } else {
@@ -1650,9 +1760,7 @@ impl Tool for PcaBasedChangeDetectionTool {
             .filter(|v| v.is_finite() && *v > 0.0)
             .sum::<f64>();
         let pc = order[component_idx];
-        let weights: Vec<f64> = (0..bands)
-            .map(|k| evec_flat[pc * bands + k])
-            .collect();
+        let weights: Vec<f64> = (0..bands).map(|k| evec_flat[pc * bands + k]).collect();
 
         let sigma_pc = eigenvalues[pc].max(0.0).sqrt();
 
@@ -1687,7 +1795,11 @@ impl Tool for PcaBasedChangeDetectionTool {
                             let dv = (v2 - v1) - means[b];
                             score += dv * weights[b];
                         }
-                        if valid { score.abs() } else { nodata }
+                        if valid {
+                            score.abs()
+                        } else {
+                            nodata
+                        }
                     })
                     .collect::<Vec<f64>>()
             })
@@ -1695,7 +1807,8 @@ impl Tool for PcaBasedChangeDetectionTool {
 
         let mut out = t1_rasters[0].clone();
         out.bands = 1;
-        let mut mask = if output_mask_path.is_some() && threshold_sigma.is_some() && sigma_pc > 0.0 {
+        let mut mask = if output_mask_path.is_some() && threshold_sigma.is_some() && sigma_pc > 0.0
+        {
             let mut m = t1_rasters[0].clone();
             m.bands = 1;
             Some(m)
@@ -1705,8 +1818,9 @@ impl Tool for PcaBasedChangeDetectionTool {
         let threshold = threshold_sigma.map(|th| th.abs() * sigma_pc);
 
         for (r, row) in out_rows.iter().enumerate() {
-            out.set_row_slice(0, r as isize, row)
-                .map_err(|e| ToolError::Execution(format!("failed writing output row {}: {e}", r)))?;
+            out.set_row_slice(0, r as isize, row).map_err(|e| {
+                ToolError::Execution(format!("failed writing output row {}: {e}", r))
+            })?;
             if let (Some(mask_raster), Some(th)) = (mask.as_mut(), threshold) {
                 let mut mask_row = vec![nodata; cols];
                 for (c, v) in row.iter().copied().enumerate() {
@@ -1717,7 +1831,9 @@ impl Tool for PcaBasedChangeDetectionTool {
                 }
                 mask_raster
                     .set_row_slice(0, r as isize, &mask_row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing mask row {}: {e}", r)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing mask row {}: {e}", r))
+                    })?;
             }
             done_rows += 1;
             coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
@@ -1733,11 +1849,16 @@ impl Tool for PcaBasedChangeDetectionTool {
         outputs.insert("valid_pixel_count".to_string(), json!(valid_count));
         outputs.insert("sigma_pc".to_string(), json!(sigma_pc));
 
-        if let (Some(mask_path), Some(th_sigma), Some(mask)) = (output_mask_path, threshold_sigma, mask) {
+        if let (Some(mask_path), Some(th_sigma), Some(mask)) =
+            (output_mask_path, threshold_sigma, mask)
+        {
             if sigma_pc > 0.0 {
                 let threshold = th_sigma.abs() * sigma_pc;
                 let mask_locator = write_or_store_output(mask, Some(mask_path))?;
-                outputs.insert("mask".to_string(), json!({"__wbw_type__": "raster", "path": mask_locator, "active_band": 0}));
+                outputs.insert(
+                    "mask".to_string(),
+                    json!({"__wbw_type__": "raster", "path": mask_locator, "active_band": 0}),
+                );
                 outputs.insert("threshold_sigma".to_string(), json!(th_sigma));
                 outputs.insert("threshold_value".to_string(), json!(threshold));
             }
@@ -1747,7 +1868,9 @@ impl Tool for PcaBasedChangeDetectionTool {
             if let Some(parent) = report_path.parent() {
                 if !parent.as_os_str().is_empty() {
                     std::fs::create_dir_all(parent).map_err(|e| {
-                        ToolError::Execution(format!("failed creating report output directory: {e}"))
+                        ToolError::Execution(format!(
+                            "failed creating report output directory: {e}"
+                        ))
                     })?;
                 }
             }
@@ -1868,22 +1991,43 @@ impl Tool for ImageDifferenceChangeDetectionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("t1_inputs".to_string(), json!(["t1_b2.tif", "t1_b3.tif", "t1_b4.tif"]));
-        defaults.insert("t2_inputs".to_string(), json!(["t2_b2.tif", "t2_b3.tif", "t2_b4.tif"]));
+        defaults.insert(
+            "t1_inputs".to_string(),
+            json!(["t1_b2.tif", "t1_b3.tif", "t1_b4.tif"]),
+        );
+        defaults.insert(
+            "t2_inputs".to_string(),
+            json!(["t2_b2.tif", "t2_b3.tif", "t2_b4.tif"]),
+        );
         defaults.insert("mode".to_string(), json!("magnitude"));
         defaults.insert("threshold_sigma".to_string(), json!(2.0));
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("t1_inputs".to_string(), json!(["pre_b2.tif", "pre_b3.tif", "pre_b4.tif", "pre_b8.tif"]));
-        example.insert("t2_inputs".to_string(), json!(["post_b2.tif", "post_b3.tif", "post_b4.tif", "post_b8.tif"]));
+        example.insert(
+            "t1_inputs".to_string(),
+            json!(["pre_b2.tif", "pre_b3.tif", "pre_b4.tif", "pre_b8.tif"]),
+        );
+        example.insert(
+            "t2_inputs".to_string(),
+            json!(["post_b2.tif", "post_b3.tif", "post_b4.tif", "post_b8.tif"]),
+        );
         example.insert("mode".to_string(), json!("magnitude"));
         example.insert("threshold_sigma".to_string(), json!(2.0));
         example.insert("output".to_string(), json!("image_difference.tif"));
-        example.insert("output_absolute".to_string(), json!("image_difference_absolute.tif"));
-        example.insert("output_signed".to_string(), json!("image_difference_signed.tif"));
-        example.insert("output_mask".to_string(), json!("image_difference_mask.tif"));
+        example.insert(
+            "output_absolute".to_string(),
+            json!("image_difference_absolute.tif"),
+        );
+        example.insert(
+            "output_signed".to_string(),
+            json!("image_difference_signed.tif"),
+        );
+        example.insert(
+            "output_mask".to_string(),
+            json!("image_difference_mask.tif"),
+        );
 
         ToolManifest {
             id: meta.id.to_string(),
@@ -1903,7 +2047,8 @@ impl Tool for ImageDifferenceChangeDetectionTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_image_differencing".to_string(),
-                description: "Compute multiband image-difference magnitude with threshold mask.".to_string(),
+                description: "Compute multiband image-difference magnitude with threshold mask."
+                    .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -1962,7 +2107,8 @@ impl Tool for ImageDifferenceChangeDetectionTool {
         let output_signed_path = parse_optional_output_path(args, "output_signed")?;
         let output_mask_path = parse_optional_output_path(args, "output_mask")?;
 
-        ctx.progress.info("image_difference_change_detection: reading and aligning input stacks");
+        ctx.progress
+            .info("image_difference_change_detection: reading and aligning input stacks");
         let mut all_rasters: Vec<Raster> = t1_paths
             .iter()
             .chain(t2_paths.iter())
@@ -1980,7 +2126,8 @@ impl Tool for ImageDifferenceChangeDetectionTool {
         let warnings = align_and_validate_raster_stack(&mut all_rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in warnings {
-            ctx.progress.info(&format!("image_difference_change_detection: {warning}"));
+            ctx.progress
+                .info(&format!("image_difference_change_detection: {warning}"));
         }
 
         let (t1_rasters, t2_rasters) = all_rasters.split_at(bands);
@@ -2064,7 +2211,9 @@ impl Tool for ImageDifferenceChangeDetectionTool {
             let start = r * cols;
             let end = start + cols;
             out.set_row_slice(0, r as isize, &diff_values[start..end])
-                .map_err(|e| ToolError::Execution(format!("failed writing output row {}: {e}", r)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed writing output row {}: {e}", r))
+                })?;
             done_rows += 1;
             coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
         }
@@ -2074,7 +2223,10 @@ impl Tool for ImageDifferenceChangeDetectionTool {
         outputs.insert("__wbw_type__".to_string(), json!("raster"));
         outputs.insert("path".to_string(), json!(out_locator));
         outputs.insert("active_band".to_string(), json!(0));
-        outputs.insert("mode".to_string(), json!(if signed { "signed" } else { "magnitude" }));
+        outputs.insert(
+            "mode".to_string(),
+            json!(if signed { "signed" } else { "magnitude" }),
+        );
         outputs.insert("mean".to_string(), json!(mean_diff));
         outputs.insert("sigma".to_string(), json!(sigma_diff));
 
@@ -2109,10 +2261,7 @@ impl Tool for ImageDifferenceChangeDetectionTool {
                 signed_out
                     .set_row_slice(0, r as isize, &signed_values[start..end])
                     .map_err(|e| {
-                        ToolError::Execution(format!(
-                            "failed writing signed output row {}: {e}",
-                            r
-                        ))
+                        ToolError::Execution(format!("failed writing signed output row {}: {e}", r))
                     })?;
             }
             let signed_locator = write_or_store_output(signed_out, Some(signed_path))?;
@@ -2134,7 +2283,11 @@ impl Tool for ImageDifferenceChangeDetectionTool {
                     .map(|v| {
                         if (*v - nodata).abs() <= f64::EPSILON || v.is_nan() {
                             nodata
-                        } else if if signed { *v >= threshold } else { v.abs() >= threshold } {
+                        } else if if signed {
+                            *v >= threshold
+                        } else {
+                            v.abs() >= threshold
+                        } {
                             1.0
                         } else {
                             0.0
@@ -2147,10 +2300,15 @@ impl Tool for ImageDifferenceChangeDetectionTool {
                     let start = r * cols;
                     let end = start + cols;
                     mask.set_row_slice(0, r as isize, &mask_values[start..end])
-                        .map_err(|e| ToolError::Execution(format!("failed writing mask row {}: {e}", r)))?;
+                        .map_err(|e| {
+                            ToolError::Execution(format!("failed writing mask row {}: {e}", r))
+                        })?;
                 }
                 let mask_locator = write_or_store_output(mask, Some(mask_path))?;
-                outputs.insert("mask".to_string(), json!({"__wbw_type__": "raster", "path": mask_locator, "active_band": 0}));
+                outputs.insert(
+                    "mask".to_string(),
+                    json!({"__wbw_type__": "raster", "path": mask_locator, "active_band": 0}),
+                );
                 outputs.insert("threshold_sigma".to_string(), json!(th_sigma));
                 outputs.insert("threshold_value".to_string(), json!(threshold));
             }
@@ -2227,7 +2385,10 @@ impl Tool for PostClassificationChangeTool {
         example.insert("t1_classified".to_string(), json!("landcover_2018.tif"));
         example.insert("t2_classified".to_string(), json!("landcover_2024.tif"));
         example.insert("transition_scale".to_string(), json!(1000));
-        example.insert("t1_class_remap".to_string(), json!({"11": 1, "12": 1, "21": 2}));
+        example.insert(
+            "t1_class_remap".to_string(),
+            json!({"11": 1, "12": 1, "21": 2}),
+        );
         example.insert("t2_class_remap".to_string(), json!({"41": 4, "42": 4}));
         example.insert("output".to_string(), json!("class_transition.tif"));
 
@@ -2249,7 +2410,9 @@ impl Tool for PostClassificationChangeTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_post_classification_change".to_string(),
-                description: "Compute transition raster and transition matrix from two classified dates.".to_string(),
+                description:
+                    "Compute transition raster and transition matrix from two classified dates."
+                        .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -2265,11 +2428,15 @@ impl Tool for PostClassificationChangeTool {
         let _ = args
             .get("t1_classified")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 't1_classified' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 't1_classified' is required".to_string())
+            })?;
         let _ = args
             .get("t2_classified")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 't2_classified' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 't2_classified' is required".to_string())
+            })?;
         let _ = parse_class_remap_arg(args, "t1_class_remap")?;
         let _ = parse_class_remap_arg(args, "t2_class_remap")?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -2280,11 +2447,15 @@ impl Tool for PostClassificationChangeTool {
         let t1_path = args
             .get("t1_classified")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 't1_classified' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 't1_classified' is required".to_string())
+            })?;
         let t2_path = args
             .get("t2_classified")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 't2_classified' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 't2_classified' is required".to_string())
+            })?;
         let transition_scale = args
             .get("transition_scale")
             .and_then(|v| v.as_i64())
@@ -2294,20 +2465,23 @@ impl Tool for PostClassificationChangeTool {
         let t2_class_remap = parse_class_remap_arg(args, "t2_class_remap")?;
         let output_path = parse_optional_output_path(args, "output")?;
 
-        ctx.progress.info("post_classification_change: reading and aligning classified rasters");
+        ctx.progress
+            .info("post_classification_change: reading and aligning classified rasters");
         let mut rasters = vec![load_raster(t1_path)?, load_raster(t2_path)?];
         let stack_cfg = RasterStackConfig {
             auto_reproject: args
                 .get("auto_reproject")
                 .and_then(|v| v.as_bool())
                 .unwrap_or(true),
-            resampling_method: parse_resampling_override(args).or_else(|| Some("nearest".to_string())),
+            resampling_method: parse_resampling_override(args)
+                .or_else(|| Some("nearest".to_string())),
             allow_no_overlap: false,
         };
         let warnings = align_and_validate_raster_stack(&mut rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in warnings {
-            ctx.progress.info(&format!("post_classification_change: {warning}"));
+            ctx.progress
+                .info(&format!("post_classification_change: {warning}"));
         }
 
         let t1 = &rasters[0];
@@ -2344,39 +2518,33 @@ impl Tool for PostClassificationChangeTool {
 
         let transition_counts: HashMap<String, u64> = (0..n)
             .into_par_iter()
-            .fold(
-                HashMap::new,
-                |mut local, idx| {
-                    let c1 = t1.data.get_f64(idx);
-                    let c2 = t2.data.get_f64(idx);
-                    if !(t1.is_nodata(c1) || t2.is_nodata(c2) || c1.is_nan() || c2.is_nan()) {
-                        let c1_raw = c1.round() as i64;
-                        let c2_raw = c2.round() as i64;
-                        let c1_mapped = t1_class_remap
-                            .as_ref()
-                            .and_then(|m| m.get(&c1_raw))
-                            .copied()
-                            .unwrap_or(c1_raw);
-                        let c2_mapped = t2_class_remap
-                            .as_ref()
-                            .and_then(|m| m.get(&c2_raw))
-                            .copied()
-                            .unwrap_or(c2_raw);
-                        let key = format!("{}->{}", c1_mapped, c2_mapped);
-                        *local.entry(key).or_insert(0) += 1;
-                    }
-                    local
-                },
-            )
-            .reduce(
-                HashMap::new,
-                |mut a, b| {
-                    for (k, v) in b {
-                        *a.entry(k).or_insert(0) += v;
-                    }
-                    a
-                },
-            );
+            .fold(HashMap::new, |mut local, idx| {
+                let c1 = t1.data.get_f64(idx);
+                let c2 = t2.data.get_f64(idx);
+                if !(t1.is_nodata(c1) || t2.is_nodata(c2) || c1.is_nan() || c2.is_nan()) {
+                    let c1_raw = c1.round() as i64;
+                    let c2_raw = c2.round() as i64;
+                    let c1_mapped = t1_class_remap
+                        .as_ref()
+                        .and_then(|m| m.get(&c1_raw))
+                        .copied()
+                        .unwrap_or(c1_raw);
+                    let c2_mapped = t2_class_remap
+                        .as_ref()
+                        .and_then(|m| m.get(&c2_raw))
+                        .copied()
+                        .unwrap_or(c2_raw);
+                    let key = format!("{}->{}", c1_mapped, c2_mapped);
+                    *local.entry(key).or_insert(0) += 1;
+                }
+                local
+            })
+            .reduce(HashMap::new, |mut a, b| {
+                for (k, v) in b {
+                    *a.entry(k).or_insert(0) += v;
+                }
+                a
+            });
 
         let mut out = t1.clone();
         out.bands = 1;
@@ -2387,7 +2555,9 @@ impl Tool for PostClassificationChangeTool {
             let start = r * cols;
             let end = start + cols;
             out.set_row_slice(0, r as isize, &transition_values[start..end])
-                .map_err(|e| ToolError::Execution(format!("failed writing output row {}: {e}", r)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed writing output row {}: {e}", r))
+                })?;
             done_rows += 1;
             coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
         }
@@ -2540,7 +2710,10 @@ impl Tool for LandSurfaceTemperatureSingleChannelTool {
 
         let mut example = ToolArgs::new();
         example.insert("thermal_input".to_string(), json!("LC09_B10.TIF"));
-        example.insert("sensor_bundle_root".to_string(), json!("LC09_L1TP_017030_20240420_20240426_02_T1"));
+        example.insert(
+            "sensor_bundle_root".to_string(),
+            json!("LC09_L1TP_017030_20240420_20240426_02_T1"),
+        );
         example.insert("emissivity_input".to_string(), json!("emissivity.tif"));
         example.insert("output_units".to_string(), json!("celsius"));
         example.insert("output".to_string(), json!("lst_single_channel.tif"));
@@ -2563,7 +2736,9 @@ impl Tool for LandSurfaceTemperatureSingleChannelTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_lst_single_channel".to_string(),
-                description: "Compute single-channel LST from Landsat thermal DN and emissivity raster.".to_string(),
+                description:
+                    "Compute single-channel LST from Landsat thermal DN and emissivity raster."
+                        .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -2580,7 +2755,9 @@ impl Tool for LandSurfaceTemperatureSingleChannelTool {
         let _ = args
             .get("thermal_input")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'thermal_input' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'thermal_input' is required".to_string())
+            })?;
         if let Some(units) = args.get("output_units").and_then(|v| v.as_str()) {
             let u = units.to_ascii_lowercase();
             if u != "kelvin" && u != "celsius" {
@@ -2597,7 +2774,9 @@ impl Tool for LandSurfaceTemperatureSingleChannelTool {
         let thermal_input = args
             .get("thermal_input")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'thermal_input' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'thermal_input' is required".to_string())
+            })?;
         let emissivity_input = args.get("emissivity_input").and_then(|v| v.as_str());
         let input_is_bt = args
             .get("input_is_brightness_temp")
@@ -2629,10 +2808,12 @@ impl Tool for LandSurfaceTemperatureSingleChannelTool {
             if let Some(bundle_root) = args.get("sensor_bundle_root").and_then(|v| v.as_str()) {
                 let bundle = LandsatBundle::open(bundle_root).map_err(|_| {
                     ToolError::Validation(
-                        "parameter 'sensor_bundle_root' is not a recognized Landsat bundle".to_string(),
+                        "parameter 'sensor_bundle_root' is not a recognized Landsat bundle"
+                            .to_string(),
                     )
                 })?;
-                let (m, a, c1, c2) = parse_landsat_thermal_constants_from_bundle(&bundle, thermal_band_number)?;
+                let (m, a, c1, c2) =
+                    parse_landsat_thermal_constants_from_bundle(&bundle, thermal_band_number)?;
                 if radiance_mult.is_none() {
                     radiance_mult = Some(m);
                 }
@@ -2690,7 +2871,8 @@ impl Tool for LandSurfaceTemperatureSingleChannelTool {
             .and_then(|v| v.as_f64())
             .unwrap_or_else(|| landsat_default_thermal_wavelength_um(thermal_band_number));
 
-        ctx.progress.info("land_surface_temperature_single_channel: reading and aligning inputs");
+        ctx.progress
+            .info("land_surface_temperature_single_channel: reading and aligning inputs");
         let mut rasters = vec![load_raster(thermal_input)?];
         if let Some(e_path) = emissivity_input {
             rasters.push(load_raster(e_path)?);
@@ -2707,11 +2889,17 @@ impl Tool for LandSurfaceTemperatureSingleChannelTool {
         let warnings = align_and_validate_raster_stack(&mut rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in warnings {
-            ctx.progress.info(&format!("land_surface_temperature_single_channel: {warning}"));
+            ctx.progress.info(&format!(
+                "land_surface_temperature_single_channel: {warning}"
+            ));
         }
 
         let thermal = &rasters[0];
-        let emissivity_raster = if rasters.len() > 1 { Some(&rasters[1]) } else { None };
+        let emissivity_raster = if rasters.len() > 1 {
+            Some(&rasters[1])
+        } else {
+            None
+        };
 
         let rows = thermal.rows;
         let cols = thermal.cols;
@@ -2770,8 +2958,9 @@ impl Tool for LandSurfaceTemperatureSingleChannelTool {
         let mut done_rows = 0usize;
         let total_rows = rows.max(1);
         for (r, row) in out_rows.iter().enumerate() {
-            out.set_row_slice(0, r as isize, row)
-                .map_err(|e| ToolError::Execution(format!("failed writing output row {}: {e}", r)))?;
+            out.set_row_slice(0, r as isize, row).map_err(|e| {
+                ToolError::Execution(format!("failed writing output row {}: {e}", r))
+            })?;
             done_rows += 1;
             coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
         }
@@ -2785,7 +2974,10 @@ impl Tool for LandSurfaceTemperatureSingleChannelTool {
         outputs.insert("input_is_brightness_temp".to_string(), json!(input_is_bt));
         outputs.insert("wavelength_um".to_string(), json!(wavelength_um));
         outputs.insert("output_units".to_string(), json!(output_units));
-        outputs.insert("emissivity_constant".to_string(), json!(emissivity_constant));
+        outputs.insert(
+            "emissivity_constant".to_string(),
+            json!(emissivity_constant),
+        );
         if !input_is_bt {
             outputs.insert("radiance_mult".to_string(), json!(radiance_mult));
             outputs.insert("radiance_add".to_string(), json!(radiance_add));
@@ -2972,7 +3164,10 @@ impl Tool for LandSurfaceTemperatureSplitWindowTool {
         let mut example = ToolArgs::new();
         example.insert("thermal1_input".to_string(), json!("LC09_B10.TIF"));
         example.insert("thermal2_input".to_string(), json!("LC09_B11.TIF"));
-        example.insert("sensor_bundle_root".to_string(), json!("LC09_L1TP_017030_20240420_20240426_02_T1"));
+        example.insert(
+            "sensor_bundle_root".to_string(),
+            json!("LC09_L1TP_017030_20240420_20240426_02_T1"),
+        );
         example.insert("emissivity_mean_input".to_string(), json!("emissivity.tif"));
         example.insert("output".to_string(), json!("lst_split_window.tif"));
 
@@ -2994,7 +3189,9 @@ impl Tool for LandSurfaceTemperatureSplitWindowTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_lst_split_window".to_string(),
-                description: "Compute split-window LST from two thermal bands with emissivity correction.".to_string(),
+                description:
+                    "Compute split-window LST from two thermal bands with emissivity correction."
+                        .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -3011,11 +3208,15 @@ impl Tool for LandSurfaceTemperatureSplitWindowTool {
         let _ = args
             .get("thermal1_input")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'thermal1_input' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'thermal1_input' is required".to_string())
+            })?;
         let _ = args
             .get("thermal2_input")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'thermal2_input' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'thermal2_input' is required".to_string())
+            })?;
         if let Some(units) = args.get("output_units").and_then(|v| v.as_str()) {
             let u = units.to_ascii_lowercase();
             if u != "kelvin" && u != "celsius" {
@@ -3032,11 +3233,15 @@ impl Tool for LandSurfaceTemperatureSplitWindowTool {
         let thermal1_input = args
             .get("thermal1_input")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'thermal1_input' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'thermal1_input' is required".to_string())
+            })?;
         let thermal2_input = args
             .get("thermal2_input")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'thermal2_input' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'thermal2_input' is required".to_string())
+            })?;
         let emissivity_mean_input = args.get("emissivity_mean_input").and_then(|v| v.as_str());
         let emissivity_delta_input = args.get("emissivity_delta_input").and_then(|v| v.as_str());
         let emissivity_mean_constant = args
@@ -3084,7 +3289,8 @@ impl Tool for LandSurfaceTemperatureSplitWindowTool {
             if let Some(bundle_root) = args.get("sensor_bundle_root").and_then(|v| v.as_str()) {
                 let bundle = LandsatBundle::open(bundle_root).map_err(|_| {
                     ToolError::Validation(
-                        "parameter 'sensor_bundle_root' is not a recognized Landsat bundle".to_string(),
+                        "parameter 'sensor_bundle_root' is not a recognized Landsat bundle"
+                            .to_string(),
                     )
                 })?;
 
@@ -3258,11 +3464,14 @@ impl Tool for LandSurfaceTemperatureSplitWindowTool {
             ));
         }
         for warning in &coefficient_warnings {
-            ctx.progress
-                .info(&format!("land_surface_temperature_split_window: warning: {}", warning));
+            ctx.progress.info(&format!(
+                "land_surface_temperature_split_window: warning: {}",
+                warning
+            ));
         }
 
-        ctx.progress.info("land_surface_temperature_split_window: reading and aligning inputs");
+        ctx.progress
+            .info("land_surface_temperature_split_window: reading and aligning inputs");
         let mut rasters = vec![load_raster(thermal1_input)?, load_raster(thermal2_input)?];
         if let Some(p) = emissivity_mean_input {
             rasters.push(load_raster(p)?);
@@ -3282,7 +3491,8 @@ impl Tool for LandSurfaceTemperatureSplitWindowTool {
         let stack_warnings = align_and_validate_raster_stack(&mut rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in stack_warnings {
-            ctx.progress.info(&format!("land_surface_temperature_split_window: {warning}"));
+            ctx.progress
+                .info(&format!("land_surface_temperature_split_window: {warning}"));
         }
 
         let t1 = &rasters[0];
@@ -3293,7 +3503,11 @@ impl Tool for LandSurfaceTemperatureSplitWindowTool {
             None
         };
         let eps_delta_raster = if emissivity_delta_input.is_some() {
-            let idx = if emissivity_mean_input.is_some() { 3 } else { 2 };
+            let idx = if emissivity_mean_input.is_some() {
+                3
+            } else {
+                2
+            };
             Some(&rasters[idx])
         } else {
             None
@@ -3378,8 +3592,9 @@ impl Tool for LandSurfaceTemperatureSplitWindowTool {
         let mut done_rows = 0usize;
         let total_rows = rows.max(1);
         for (r, row) in out_rows.iter().enumerate() {
-            out.set_row_slice(0, r as isize, row)
-                .map_err(|e| ToolError::Execution(format!("failed writing output row {}: {e}", r)))?;
+            out.set_row_slice(0, r as isize, row).map_err(|e| {
+                ToolError::Execution(format!("failed writing output row {}: {e}", r))
+            })?;
             done_rows += 1;
             coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
         }
@@ -3393,16 +3608,25 @@ impl Tool for LandSurfaceTemperatureSplitWindowTool {
         outputs.insert("active_band".to_string(), json!(0));
         outputs.insert("input_is_brightness_temp".to_string(), json!(input_is_bt));
         outputs.insert("output_units".to_string(), json!(output_units));
-        outputs.insert("coefficients".to_string(), json!({
-            "a0": a0,
-            "a1": a1,
-            "a2": a2,
-            "a3": a3,
-            "a4": a4,
-            "a5": a5,
-        }));
-        outputs.insert("emissivity_mean_constant".to_string(), json!(emissivity_mean_constant));
-        outputs.insert("emissivity_delta_constant".to_string(), json!(emissivity_delta_constant));
+        outputs.insert(
+            "coefficients".to_string(),
+            json!({
+                "a0": a0,
+                "a1": a1,
+                "a2": a2,
+                "a3": a3,
+                "a4": a4,
+                "a5": a5,
+            }),
+        );
+        outputs.insert(
+            "emissivity_mean_constant".to_string(),
+            json!(emissivity_mean_constant),
+        );
+        outputs.insert(
+            "emissivity_delta_constant".to_string(),
+            json!(emissivity_delta_constant),
+        );
         if !coefficient_warnings.is_empty() {
             outputs.insert("warnings".to_string(), json!(coefficient_warnings));
         }
@@ -3461,7 +3685,10 @@ impl Tool for SpectralAngleMapperTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["B2.tif", "B3.tif", "B4.tif", "B8.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["B2.tif", "B3.tif", "B4.tif", "B8.tif"]),
+        );
         defaults.insert(
             "endmembers".to_string(),
             json!([
@@ -3474,7 +3701,10 @@ impl Tool for SpectralAngleMapperTool {
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["pre_b2.tif", "pre_b3.tif", "pre_b4.tif", "pre_b8.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["pre_b2.tif", "pre_b3.tif", "pre_b4.tif", "pre_b8.tif"]),
+        );
         example.insert(
             "endmembers".to_string(),
             json!([
@@ -3505,7 +3735,8 @@ impl Tool for SpectralAngleMapperTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_sam".to_string(),
-                description: "Classify multiband raster stack by minimum spectral angle.".to_string(),
+                description: "Classify multiband raster stack by minimum spectral angle."
+                    .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -3549,7 +3780,8 @@ impl Tool for SpectralAngleMapperTool {
             ));
         }
 
-        ctx.progress.info("spectral_angle_mapper: reading and aligning input stack");
+        ctx.progress
+            .info("spectral_angle_mapper: reading and aligning input stack");
         let rasters = input_paths
             .iter()
             .map(|p| load_raster(p))
@@ -3559,7 +3791,8 @@ impl Tool for SpectralAngleMapperTool {
         // (no auto-reprojection for spectral analysis tools)
         validate_raster_stack_strict(&rasters)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
-        ctx.progress.info("spectral_angle_mapper: validated strict CRS and spatial alignment");
+        ctx.progress
+            .info("spectral_angle_mapper: validated strict CRS and spatial alignment");
 
         let rows = rasters[0].rows;
         let cols = rasters[0].cols;
@@ -3568,10 +3801,8 @@ impl Tool for SpectralAngleMapperTool {
         let row_results: Vec<(Vec<f64>, Vec<f64>)> = (0..rows)
             .into_par_iter()
             .map(|r| {
-                let band_rows: Vec<Vec<f64>> = rasters
-                    .iter()
-                    .map(|b| b.row_slice(0, r as isize))
-                    .collect();
+                let band_rows: Vec<Vec<f64>> =
+                    rasters.iter().map(|b| b.row_slice(0, r as isize)).collect();
                 let mut class_row = vec![nodata; cols];
                 let mut angle_row = vec![nodata; cols];
 
@@ -3636,7 +3867,9 @@ impl Tool for SpectralAngleMapperTool {
         for (r, (class_row, _)) in row_results.iter().enumerate() {
             out_class
                 .set_row_slice(0, r as isize, class_row)
-                .map_err(|e| ToolError::Execution(format!("failed writing class row {}: {e}", r)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed writing class row {}: {e}", r))
+                })?;
             done_rows += 1;
             coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
         }
@@ -3658,7 +3891,9 @@ impl Tool for SpectralAngleMapperTool {
             for (r, (_, angle_row)) in row_results.iter().enumerate() {
                 out_angle
                     .set_row_slice(0, r as isize, angle_row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing angle row {}: {e}", r)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing angle row {}: {e}", r))
+                    })?;
             }
             let angle_locator = write_or_store_output(out_angle, Some(angle_path))?;
             outputs.insert(
@@ -3712,16 +3947,28 @@ impl Tool for ContinuumRemovalTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["b1.tif", "b2.tif", "b3.tif", "b4.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["b1.tif", "b2.tif", "b3.tif", "b4.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
         example.insert(
             "inputs".to_string(),
-            json!(["hyp_b1.tif", "hyp_b2.tif", "hyp_b3.tif", "hyp_b4.tif", "hyp_b5.tif"]),
+            json!([
+                "hyp_b1.tif",
+                "hyp_b2.tif",
+                "hyp_b3.tif",
+                "hyp_b4.tif",
+                "hyp_b5.tif"
+            ]),
         );
-        example.insert("wavelengths".to_string(), json!([450.0, 550.0, 650.0, 850.0, 950.0]));
+        example.insert(
+            "wavelengths".to_string(),
+            json!([450.0, 550.0, 650.0, 850.0, 950.0]),
+        );
         example.insert("output".to_string(), json!("continuum_removed.tif"));
 
         ToolManifest {
@@ -3742,7 +3989,9 @@ impl Tool for ContinuumRemovalTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_continuum_removal".to_string(),
-                description: "Apply upper-hull continuum normalization to a multiband spectrum stack.".to_string(),
+                description:
+                    "Apply upper-hull continuum normalization to a multiband spectrum stack."
+                        .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -3758,7 +4007,8 @@ impl Tool for ContinuumRemovalTool {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         if inputs.len() < 3 {
             return Err(ToolError::Validation(
-                "parameter 'inputs' must contain at least 3 rasters for continuum removal".to_string(),
+                "parameter 'inputs' must contain at least 3 rasters for continuum removal"
+                    .to_string(),
             ));
         }
         let _ = parse_wavelengths_arg(args, inputs.len())?;
@@ -3772,7 +4022,8 @@ impl Tool for ContinuumRemovalTool {
         let wavelengths = parse_wavelengths_arg(args, num_bands)?;
         let output_path = parse_optional_output_path(args, "output")?;
 
-        ctx.progress.info("continuum_removal: reading and aligning input stack");
+        ctx.progress
+            .info("continuum_removal: reading and aligning input stack");
         let rasters = input_paths
             .iter()
             .map(|p| load_raster(p))
@@ -3782,7 +4033,8 @@ impl Tool for ContinuumRemovalTool {
         // (no auto-reprojection for spectral analysis tools)
         validate_raster_stack_strict(&rasters)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
-        ctx.progress.info("continuum_removal: validated strict CRS and spatial alignment");
+        ctx.progress
+            .info("continuum_removal: validated strict CRS and spatial alignment");
 
         let rows = rasters[0].rows;
         let cols = rasters[0].cols;
@@ -3791,10 +4043,8 @@ impl Tool for ContinuumRemovalTool {
         let row_results: Vec<Vec<Vec<f64>>> = (0..rows)
             .into_par_iter()
             .map(|r| {
-                let band_rows: Vec<Vec<f64>> = rasters
-                    .iter()
-                    .map(|b| b.row_slice(0, r as isize))
-                    .collect();
+                let band_rows: Vec<Vec<f64>> =
+                    rasters.iter().map(|b| b.row_slice(0, r as isize)).collect();
                 let mut out_by_band = vec![vec![nodata; cols]; num_bands];
                 let mut spectrum = vec![0.0_f64; num_bands];
                 let mut continuum = vec![0.0_f64; num_bands];
@@ -3854,14 +4104,15 @@ impl Tool for ContinuumRemovalTool {
         let total_rows = rows.max(1) * num_bands;
         for (r, out_by_band) in row_results.iter().enumerate() {
             for b in 0..num_bands {
-                out.set_row_slice(b as isize, r as isize, &out_by_band[b]).map_err(|e| {
-                    ToolError::Execution(format!(
-                        "failed writing output row {} band {}: {}",
-                        r,
-                        b + 1,
-                        e
-                    ))
-                })?;
+                out.set_row_slice(b as isize, r as isize, &out_by_band[b])
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed writing output row {} band {}: {}",
+                            r,
+                            b + 1,
+                            e
+                        ))
+                    })?;
                 done_rows += 1;
                 coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
             }
@@ -3939,7 +4190,10 @@ impl Tool for LinearSpectralUnmixingTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["b1.tif", "b2.tif", "b3.tif", "b4.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["b1.tif", "b2.tif", "b3.tif", "b4.tif"]),
+        );
         defaults.insert(
             "endmembers".to_string(),
             json!([
@@ -3955,7 +4209,10 @@ impl Tool for LinearSpectralUnmixingTool {
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["hyp_b1.tif", "hyp_b2.tif", "hyp_b3.tif", "hyp_b4.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["hyp_b1.tif", "hyp_b2.tif", "hyp_b3.tif", "hyp_b4.tif"]),
+        );
         example.insert(
             "endmembers".to_string(),
             json!([
@@ -4034,7 +4291,8 @@ impl Tool for LinearSpectralUnmixingTool {
         let output_path = parse_optional_output_path(args, "output")?;
         let output_residual_path = parse_optional_output_path(args, "output_residual")?;
 
-        ctx.progress.info("linear_spectral_unmixing: reading and aligning input stack");
+        ctx.progress
+            .info("linear_spectral_unmixing: reading and aligning input stack");
         let rasters = input_paths
             .iter()
             .map(|p| load_raster(p))
@@ -4052,10 +4310,8 @@ impl Tool for LinearSpectralUnmixingTool {
         let row_results: Vec<(Vec<Vec<f64>>, Vec<f64>)> = (0..rows)
             .into_par_iter()
             .map(|r| {
-                let band_rows: Vec<Vec<f64>> = rasters
-                    .iter()
-                    .map(|b| b.row_slice(0, r as isize))
-                    .collect();
+                let band_rows: Vec<Vec<f64>> =
+                    rasters.iter().map(|b| b.row_slice(0, r as isize)).collect();
                 let mut out_by_endmember = vec![vec![nodata; cols]; num_endmembers];
                 let mut residual_row = vec![nodata; cols];
                 let mut pixel = vec![0.0_f64; num_bands];
@@ -4074,7 +4330,13 @@ impl Tool for LinearSpectralUnmixingTool {
                         continue;
                     }
 
-                    let x = solve_nnls_projected(&endmembers, &pixel, iterations, step_size, sum_to_one);
+                    let x = solve_nnls_projected(
+                        &endmembers,
+                        &pixel,
+                        iterations,
+                        step_size,
+                        sum_to_one,
+                    );
 
                     let mut rss = 0.0_f64;
                     for b in 0..num_bands {
@@ -4135,7 +4397,9 @@ impl Tool for LinearSpectralUnmixingTool {
             for (r, (_, residual_row)) in row_results.iter().enumerate() {
                 out_res
                     .set_row_slice(0, r as isize, residual_row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing residual row {}: {e}", r)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing residual row {}: {e}", r))
+                    })?;
             }
             let res_locator = write_or_store_output(out_res, Some(res_path))?;
             outputs.insert(
@@ -4199,14 +4463,20 @@ impl Tool for MinimumNoiseFractionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["b1.tif", "b2.tif", "b3.tif", "b4.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["b1.tif", "b2.tif", "b3.tif", "b4.tif"]),
+        );
         defaults.insert("num_components".to_string(), json!(3));
         defaults.insert("noise_mode".to_string(), json!("difference_x"));
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["hyp_b1.tif", "hyp_b2.tif", "hyp_b3.tif", "hyp_b4.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["hyp_b1.tif", "hyp_b2.tif", "hyp_b3.tif", "hyp_b4.tif"]),
+        );
         example.insert("num_components".to_string(), json!(3));
         example.insert("output".to_string(), json!("mnf_components.tif"));
         example.insert("output_inverse".to_string(), json!("mnf_reconstructed.tif"));
@@ -4229,7 +4499,8 @@ impl Tool for MinimumNoiseFractionTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_mnf".to_string(),
-                description: "Compute first MNF components from a co-registered raster stack.".to_string(),
+                description: "Compute first MNF components from a co-registered raster stack."
+                    .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -4265,7 +4536,8 @@ impl Tool for MinimumNoiseFractionTool {
         let output_path = parse_optional_output_path(args, "output")?;
         let output_inverse_path = parse_optional_output_path(args, "output_inverse")?;
 
-        ctx.progress.info("minimum_noise_fraction: reading and aligning input stack");
+        ctx.progress
+            .info("minimum_noise_fraction: reading and aligning input stack");
         let rasters = input_paths
             .iter()
             .map(|p| load_raster(p))
@@ -4495,7 +4767,8 @@ impl Tool for MinimumNoiseFractionTool {
                 nb,
                 noise_vals.iter().map(|v| v.sqrt()),
             ));
-            let unwhitening = &noise_eig.eigenvectors * sqrt_noise * noise_eig.eigenvectors.transpose();
+            let unwhitening =
+                &noise_eig.eigenvectors * sqrt_noise * noise_eig.eigenvectors.transpose();
             let p_cols = DMatrix::from_columns(
                 &eig_pairs
                     .iter()
@@ -4520,10 +4793,8 @@ impl Tool for MinimumNoiseFractionTool {
         let row_results: Vec<Vec<Vec<f64>>> = (0..rows)
             .into_par_iter()
             .map(|r| {
-                let band_rows: Vec<Vec<f64>> = rasters
-                    .iter()
-                    .map(|b| b.row_slice(0, r as isize))
-                    .collect();
+                let band_rows: Vec<Vec<f64>> =
+                    rasters.iter().map(|b| b.row_slice(0, r as isize)).collect();
                 let mut out_rows = vec![vec![nodata; cols]; requested_components];
 
                 for c in 0..cols {
@@ -4696,7 +4967,10 @@ impl Tool for SpectralLibraryMatchingTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["b1.tif", "b2.tif", "b3.tif", "b4.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["b1.tif", "b2.tif", "b3.tif", "b4.tif"]),
+        );
         defaults.insert(
             "library".to_string(),
             json!([
@@ -4711,7 +4985,10 @@ impl Tool for SpectralLibraryMatchingTool {
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["hyp_b1.tif", "hyp_b2.tif", "hyp_b3.tif", "hyp_b4.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!(["hyp_b1.tif", "hyp_b2.tif", "hyp_b3.tif", "hyp_b4.tif"]),
+        );
         example.insert(
             "library".to_string(),
             json!([
@@ -4818,7 +5095,8 @@ impl Tool for SpectralLibraryMatchingTool {
         };
         let num_classes = library.len();
 
-        ctx.progress.info("spectral_library_matching: reading and aligning input stack");
+        ctx.progress
+            .info("spectral_library_matching: reading and aligning input stack");
         let rasters = input_paths
             .iter()
             .map(|p| load_raster(p))
@@ -4828,7 +5106,8 @@ impl Tool for SpectralLibraryMatchingTool {
         // (no auto-reprojection for spectral analysis tools)
         validate_raster_stack_strict(&rasters)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
-        ctx.progress.info("spectral_library_matching: validated strict CRS and spatial alignment");
+        ctx.progress
+            .info("spectral_library_matching: validated strict CRS and spatial alignment");
 
         let rows = rasters[0].rows;
         let cols = rasters[0].cols;
@@ -4852,10 +5131,8 @@ impl Tool for SpectralLibraryMatchingTool {
         let row_results: Vec<(Vec<f64>, Vec<f64>)> = (0..rows)
             .into_par_iter()
             .map(|r| {
-                let band_rows: Vec<Vec<f64>> = rasters
-                    .iter()
-                    .map(|b| b.row_slice(0, r as isize))
-                    .collect();
+                let band_rows: Vec<Vec<f64>> =
+                    rasters.iter().map(|b| b.row_slice(0, r as isize)).collect();
 
                 let mut class_row = vec![nodata; cols];
                 let mut score_row = vec![nodata; cols];
@@ -4945,7 +5222,9 @@ impl Tool for SpectralLibraryMatchingTool {
         for (r, (class_row, _)) in row_results.iter().enumerate() {
             out_class
                 .set_row_slice(0, r as isize, class_row)
-                .map_err(|e| ToolError::Execution(format!("failed writing class row {}: {e}", r)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed writing class row {}: {e}", r))
+                })?;
         }
 
         let class_locator = write_or_store_output(out_class, output_path)?;
@@ -4963,7 +5242,9 @@ impl Tool for SpectralLibraryMatchingTool {
             for (r, (_, score_row)) in row_results.iter().enumerate() {
                 out_score
                     .set_row_slice(0, r as isize, score_row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing score row {}: {e}", r)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing score row {}: {e}", r))
+                    })?;
             }
             let score_locator = write_or_store_output(out_score, Some(score_path))?;
             outputs.insert(
@@ -5017,13 +5298,26 @@ impl Tool for CloudePottierDecompositionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["m11.tif", "m22.tif", "m33.tif", "m12.tif", "m13.tif", "m23.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["m11.tif", "m22.tif", "m33.tif", "m12.tif", "m13.tif", "m23.tif"]),
+        );
         defaults.insert("matrix_format".to_string(), json!("full3x3"));
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["t11.tif", "t22.tif", "t33.tif", "t12_re.tif", "t13_re.tif", "t23_re.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!([
+                "t11.tif",
+                "t22.tif",
+                "t33.tif",
+                "t12_re.tif",
+                "t13_re.tif",
+                "t23_re.tif"
+            ]),
+        );
         example.insert("matrix_format".to_string(), json!("full3x3"));
         example.insert("output".to_string(), json!("cloude_pottier_haa.tif"));
 
@@ -5067,7 +5361,8 @@ impl Tool for CloudePottierDecompositionTool {
         let (input_paths, _, matrix_format) = parse_polsar_real_symmetric_inputs(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
 
-        ctx.progress.info("cloude_pottier_decomposition: reading and aligning matrix stack");
+        ctx.progress
+            .info("cloude_pottier_decomposition: reading and aligning matrix stack");
         let mut rasters = input_paths
             .iter()
             .map(|p| load_raster(p))
@@ -5084,7 +5379,8 @@ impl Tool for CloudePottierDecompositionTool {
         let warnings = align_and_validate_raster_stack(&mut rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in warnings {
-            ctx.progress.info(&format!("cloude_pottier_decomposition: {warning}"));
+            ctx.progress
+                .info(&format!("cloude_pottier_decomposition: {warning}"));
         }
 
         let rows = rasters[0].rows;
@@ -5094,10 +5390,8 @@ impl Tool for CloudePottierDecompositionTool {
         let row_results: Vec<[Vec<f64>; 3]> = (0..rows)
             .into_par_iter()
             .map(|r| {
-                let band_rows: Vec<Vec<f64>> = rasters
-                    .iter()
-                    .map(|b| b.row_slice(0, r as isize))
-                    .collect();
+                let band_rows: Vec<Vec<f64>> =
+                    rasters.iter().map(|b| b.row_slice(0, r as isize)).collect();
 
                 let mut h_row = vec![nodata; cols];
                 let mut a_row = vec![nodata; cols];
@@ -5175,9 +5469,21 @@ impl Tool for CloudePottierDecompositionTool {
                         eig.eigenvalues[2].max(0.0),
                     ];
                     let mut evecs = [
-                        [eig.eigenvectors[(0, 0)], eig.eigenvectors[(1, 0)], eig.eigenvectors[(2, 0)]],
-                        [eig.eigenvectors[(0, 1)], eig.eigenvectors[(1, 1)], eig.eigenvectors[(2, 1)]],
-                        [eig.eigenvectors[(0, 2)], eig.eigenvectors[(1, 2)], eig.eigenvectors[(2, 2)]],
+                        [
+                            eig.eigenvectors[(0, 0)],
+                            eig.eigenvectors[(1, 0)],
+                            eig.eigenvectors[(2, 0)],
+                        ],
+                        [
+                            eig.eigenvectors[(0, 1)],
+                            eig.eigenvectors[(1, 1)],
+                            eig.eigenvectors[(2, 1)],
+                        ],
+                        [
+                            eig.eigenvectors[(0, 2)],
+                            eig.eigenvectors[(1, 2)],
+                            eig.eigenvectors[(2, 2)],
+                        ],
                     ];
                     if lambdas[1] > lambdas[0] {
                         lambdas.swap(0, 1);
@@ -5238,7 +5544,14 @@ impl Tool for CloudePottierDecompositionTool {
             for (b, row_vals) in bands.iter().enumerate() {
                 output
                     .set_row_slice(b as isize, r as isize, row_vals)
-                    .map_err(|e| ToolError::Execution(format!("failed writing Cloude-Pottier row {} band {}: {}", r, b + 1, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed writing Cloude-Pottier row {} band {}: {}",
+                            r,
+                            b + 1,
+                            e
+                        ))
+                    })?;
                 done_rows += 1;
                 coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
             }
@@ -5250,7 +5563,10 @@ impl Tool for CloudePottierDecompositionTool {
         outputs.insert("__wbw_type__".to_string(), json!("raster"));
         outputs.insert("path".to_string(), json!(locator));
         outputs.insert("active_band".to_string(), json!(0));
-        outputs.insert("bands".to_string(), json!(["entropy", "anisotropy", "alpha_degrees"]));
+        outputs.insert(
+            "bands".to_string(),
+            json!(["entropy", "anisotropy", "alpha_degrees"]),
+        );
         outputs.insert("matrix_format".to_string(), json!(matrix_format));
 
         Ok(ToolRunResult { outputs })
@@ -5303,16 +5619,32 @@ impl Tool for FreemanDurdenDecompositionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["c11.tif", "c22.tif", "c33.tif", "c12.tif", "c13.tif", "c23.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!(["c11.tif", "c22.tif", "c33.tif", "c12.tif", "c13.tif", "c23.tif"]),
+        );
         defaults.insert("matrix_format".to_string(), json!("full3x3"));
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["c11.tif", "c22.tif", "c33.tif", "c12_re.tif", "c13_re.tif", "c23_re.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!([
+                "c11.tif",
+                "c22.tif",
+                "c33.tif",
+                "c12_re.tif",
+                "c13_re.tif",
+                "c23_re.tif"
+            ]),
+        );
         example.insert("matrix_format".to_string(), json!("full3x3"));
         example.insert("output".to_string(), json!("freeman_durden_ps_pd_pv.tif"));
-        example.insert("output_clip_mask".to_string(), json!("freeman_durden_clip_mask.tif"));
+        example.insert(
+            "output_clip_mask".to_string(),
+            json!("freeman_durden_clip_mask.tif"),
+        );
 
         ToolManifest {
             id: meta.id.to_string(),
@@ -5332,7 +5664,8 @@ impl Tool for FreemanDurdenDecompositionTool {
             defaults,
             examples: vec![ToolExample {
                 name: "freeman_durden_3comp".to_string(),
-                description: "Compute 3-component scattering powers with clipping diagnostics.".to_string(),
+                description: "Compute 3-component scattering powers with clipping diagnostics."
+                    .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -5356,7 +5689,8 @@ impl Tool for FreemanDurdenDecompositionTool {
         let output_path = parse_optional_output_path(args, "output")?;
         let output_clip_mask_path = parse_optional_output_path(args, "output_clip_mask")?;
 
-        ctx.progress.info("freeman_durden_decomposition: reading and aligning matrix stack");
+        ctx.progress
+            .info("freeman_durden_decomposition: reading and aligning matrix stack");
         let mut rasters = input_paths
             .iter()
             .map(|p| load_raster(p))
@@ -5373,7 +5707,8 @@ impl Tool for FreemanDurdenDecompositionTool {
         let warnings = align_and_validate_raster_stack(&mut rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in warnings {
-            ctx.progress.info(&format!("freeman_durden_decomposition: {warning}"));
+            ctx.progress
+                .info(&format!("freeman_durden_decomposition: {warning}"));
         }
 
         let rows = rasters[0].rows;
@@ -5383,10 +5718,8 @@ impl Tool for FreemanDurdenDecompositionTool {
         let row_results: Vec<[Vec<f64>; 4]> = (0..rows)
             .into_par_iter()
             .map(|r| {
-                let band_rows: Vec<Vec<f64>> = rasters
-                    .iter()
-                    .map(|b| b.row_slice(0, r as isize))
-                    .collect();
+                let band_rows: Vec<Vec<f64>> =
+                    rasters.iter().map(|b| b.row_slice(0, r as isize)).collect();
 
                 let mut ps_row = vec![nodata; cols];
                 let mut pd_row = vec![nodata; cols];
@@ -5427,7 +5760,13 @@ impl Tool for FreemanDurdenDecompositionTool {
                         {
                             continue;
                         }
-                        (v11.max(0.0), v22.max(0.0), v33.max(0.0), 0.5 * (v13 + v31), true)
+                        (
+                            v11.max(0.0),
+                            v22.max(0.0),
+                            v33.max(0.0),
+                            0.5 * (v13 + v31),
+                            true,
+                        )
                     };
                     let span = (c11 + c22 + c33).max(0.0);
                     if span <= 0.0 {
@@ -5484,7 +5823,14 @@ impl Tool for FreemanDurdenDecompositionTool {
             for b in 0..3 {
                 output
                     .set_row_slice(b as isize, r as isize, &bands[b])
-                    .map_err(|e| ToolError::Execution(format!("failed writing Freeman-Durden row {} band {}: {}", r, b + 1, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed writing Freeman-Durden row {} band {}: {}",
+                            r,
+                            b + 1,
+                            e
+                        ))
+                    })?;
                 done_rows += 1;
                 coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
             }
@@ -5502,7 +5848,10 @@ impl Tool for FreemanDurdenDecompositionTool {
         outputs.insert("__wbw_type__".to_string(), json!("raster"));
         outputs.insert("path".to_string(), json!(locator));
         outputs.insert("active_band".to_string(), json!(0));
-        outputs.insert("bands".to_string(), json!(["surface", "double_bounce", "volume"]));
+        outputs.insert(
+            "bands".to_string(),
+            json!(["surface", "double_bounce", "volume"]),
+        );
         outputs.insert("matrix_format".to_string(), json!(matrix_format));
         outputs.insert("clipped_pixels".to_string(), json!(clipped_pixels));
 
@@ -5512,7 +5861,9 @@ impl Tool for FreemanDurdenDecompositionTool {
             for (r, bands) in row_results.iter().enumerate() {
                 clip_mask
                     .set_row_slice(0, r as isize, &bands[3])
-                    .map_err(|e| ToolError::Execution(format!("failed writing clip-mask row {}: {e}", r)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing clip-mask row {}: {e}", r))
+                    })?;
             }
             let mask_locator = write_or_store_output(clip_mask, Some(mask_path))?;
             outputs.insert(
@@ -5566,13 +5917,33 @@ impl Tool for YamaguchiDecompositionTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), json!(["c11.tif", "c22.tif", "c33.tif", "c12_re.tif", "c13_re.tif", "c23_re.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            json!([
+                "c11.tif",
+                "c22.tif",
+                "c33.tif",
+                "c12_re.tif",
+                "c13_re.tif",
+                "c23_re.tif"
+            ]),
+        );
         defaults.insert("matrix_format".to_string(), json!("full3x3"));
         defaults.insert("auto_reproject".to_string(), json!(true));
         defaults.insert("auto_reproject_method".to_string(), json!(""));
 
         let mut example = ToolArgs::new();
-        example.insert("inputs".to_string(), json!(["c11.tif", "c22.tif", "c33.tif", "c12_re.tif", "c13_re.tif", "c23_re.tif"]));
+        example.insert(
+            "inputs".to_string(),
+            json!([
+                "c11.tif",
+                "c22.tif",
+                "c33.tif",
+                "c12_re.tif",
+                "c13_re.tif",
+                "c23_re.tif"
+            ]),
+        );
         example.insert("matrix_format".to_string(), json!("full3x3"));
         example.insert("output".to_string(), json!("yamaguchi_4comp.tif"));
 
@@ -5594,7 +5965,8 @@ impl Tool for YamaguchiDecompositionTool {
             defaults,
             examples: vec![ToolExample {
                 name: "yamaguchi_4comp".to_string(),
-                description: "Compute 4-component scattering powers with helix component.".to_string(),
+                description: "Compute 4-component scattering powers with helix component."
+                    .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -5616,7 +5988,8 @@ impl Tool for YamaguchiDecompositionTool {
         let (input_paths, _, matrix_format) = parse_polsar_real_symmetric_inputs(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
 
-        ctx.progress.info("yamaguchi_4component_decomposition: reading and aligning matrix stack");
+        ctx.progress
+            .info("yamaguchi_4component_decomposition: reading and aligning matrix stack");
         let mut rasters = input_paths
             .iter()
             .map(|p| load_raster(p))
@@ -5633,7 +6006,8 @@ impl Tool for YamaguchiDecompositionTool {
         let warnings = align_and_validate_raster_stack(&mut rasters, &stack_cfg)
             .map_err(|e| ToolError::Validation(format!("raster stack validation failed: {e}")))?;
         for warning in warnings {
-            ctx.progress.info(&format!("yamaguchi_4component_decomposition: {warning}"));
+            ctx.progress
+                .info(&format!("yamaguchi_4component_decomposition: {warning}"));
         }
 
         let rows = rasters[0].rows;
@@ -5643,10 +6017,8 @@ impl Tool for YamaguchiDecompositionTool {
         let row_results: Vec<[Vec<f64>; 4]> = (0..rows)
             .into_par_iter()
             .map(|r| {
-                let band_rows: Vec<Vec<f64>> = rasters
-                    .iter()
-                    .map(|b| b.row_slice(0, r as isize))
-                    .collect();
+                let band_rows: Vec<Vec<f64>> =
+                    rasters.iter().map(|b| b.row_slice(0, r as isize)).collect();
 
                 let mut ps_row = vec![nodata; cols];
                 let mut pd_row = vec![nodata; cols];
@@ -5719,7 +6091,8 @@ impl Tool for YamaguchiDecompositionTool {
                     };
 
                     // Helix component from residual cross-pol (simplified)
-                    let ph = (remaining - ps - pd).max(0.0) * (c13_re / (remaining.max(1e-12))).abs().max(0.0);
+                    let ph = (remaining - ps - pd).max(0.0)
+                        * (c13_re / (remaining.max(1e-12))).abs().max(0.0);
 
                     ps_row[c] = ps;
                     pd_row[c] = pd;
@@ -5739,7 +6112,14 @@ impl Tool for YamaguchiDecompositionTool {
             for b in 0..4 {
                 output
                     .set_row_slice(b as isize, r as isize, &bands[b])
-                    .map_err(|e| ToolError::Execution(format!("failed writing Yamaguchi row {} band {}: {}", r, b + 1, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed writing Yamaguchi row {} band {}: {}",
+                            r,
+                            b + 1,
+                            e
+                        ))
+                    })?;
                 done_rows += 1;
                 coalescer.emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
             }
@@ -5752,7 +6132,10 @@ impl Tool for YamaguchiDecompositionTool {
         outputs.insert("__wbw_type__".to_string(), json!("raster"));
         outputs.insert("path".to_string(), json!(locator));
         outputs.insert("active_band".to_string(), json!(0));
-        outputs.insert("bands".to_string(), json!(["surface", "double_bounce", "volume", "helix"]));
+        outputs.insert(
+            "bands".to_string(),
+            json!(["surface", "double_bounce", "volume", "helix"]),
+        );
         outputs.insert("matrix_format".to_string(), json!(matrix_format));
 
         Ok(ToolRunResult { outputs })
@@ -5844,11 +6227,15 @@ impl Tool for HAlphaWisartClassificationTool {
         let h_path = args
             .get("h_raster")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'h_raster'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("missing required parameter 'h_raster'".to_string())
+            })?;
         let alpha_path = args
             .get("alpha_raster")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'alpha_raster'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("missing required parameter 'alpha_raster'".to_string())
+            })?;
         let _ = load_raster(h_path)?;
         let _ = load_raster(alpha_path)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -5859,14 +6246,19 @@ impl Tool for HAlphaWisartClassificationTool {
         let h_path = args
             .get("h_raster")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'h_raster'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("missing required parameter 'h_raster'".to_string())
+            })?;
         let alpha_path = args
             .get("alpha_raster")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'alpha_raster'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("missing required parameter 'alpha_raster'".to_string())
+            })?;
         let output_path = parse_optional_output_path(args, "output")?;
 
-        ctx.progress.info("h_alpha_wisart_classification: reading rasters");
+        ctx.progress
+            .info("h_alpha_wisart_classification: reading rasters");
         let mut h_raster = load_raster(h_path)?;
         let mut alpha_raster = load_raster(alpha_path)?;
 
@@ -5884,7 +6276,8 @@ impl Tool for HAlphaWisartClassificationTool {
         h_raster = rasters[0].clone();
         alpha_raster = rasters[1].clone();
         for warning in warnings {
-            ctx.progress.info(&format!("h_alpha_wisart_classification: {warning}"));
+            ctx.progress
+                .info(&format!("h_alpha_wisart_classification: {warning}"));
         }
 
         let rows = h_raster.rows;
@@ -5950,7 +6343,9 @@ impl Tool for HAlphaWisartClassificationTool {
             let end = start + cols;
             output
                 .set_row_slice(0, r as isize, &zone_values[start..end])
-                .map_err(|e| ToolError::Execution(format!("failed writing classification row {}: {e}", r)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed writing classification row {}: {e}", r))
+                })?;
             coalescer.emit_unit_fraction(ctx.progress, (r + 1) as f64 / rows as f64);
         }
         coalescer.finish(ctx.progress);
@@ -6063,7 +6458,9 @@ impl Tool for WishartIterativeClusteringTool {
             defaults,
             examples: vec![ToolExample {
                 name: "wisart_clustering".to_string(),
-                description: "Unsupervised clustering of SAR polarimetry using iterative Wisart distance.".to_string(),
+                description:
+                    "Unsupervised clustering of SAR polarimetry using iterative Wisart distance."
+                        .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -6080,11 +6477,15 @@ impl Tool for WishartIterativeClusteringTool {
         let h_path = args
             .get("h_raster")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'h_raster'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("missing required parameter 'h_raster'".to_string())
+            })?;
         let alpha_path = args
             .get("alpha_raster")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'alpha_raster'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("missing required parameter 'alpha_raster'".to_string())
+            })?;
         let _ = load_raster(h_path)?;
         let _ = load_raster(alpha_path)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -6095,11 +6496,15 @@ impl Tool for WishartIterativeClusteringTool {
         let h_path = args
             .get("h_raster")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'h_raster'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("missing required parameter 'h_raster'".to_string())
+            })?;
         let alpha_path = args
             .get("alpha_raster")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'alpha_raster'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("missing required parameter 'alpha_raster'".to_string())
+            })?;
         let output_path = parse_optional_output_path(args, "output")?;
 
         let max_iterations = args
@@ -6113,7 +6518,8 @@ impl Tool for WishartIterativeClusteringTool {
             .unwrap_or(0.99)
             .clamp(0.5, 0.9999);
 
-        ctx.progress.info("wisart_iterative_clustering: reading and initializing");
+        ctx.progress
+            .info("wisart_iterative_clustering: reading and initializing");
         let mut h_raster = load_raster(h_path)?;
         let mut alpha_raster = load_raster(alpha_path)?;
 
@@ -6131,7 +6537,8 @@ impl Tool for WishartIterativeClusteringTool {
         h_raster = rasters[0].clone();
         alpha_raster = rasters[1].clone();
         for warning in warnings {
-            ctx.progress.info(&format!("wisart_iterative_clustering: {warning}"));
+            ctx.progress
+                .info(&format!("wisart_iterative_clustering: {warning}"));
         }
 
         let rows = h_raster.rows;
@@ -6198,7 +6605,11 @@ impl Tool for WishartIterativeClusteringTool {
 
         // Iterative clustering
         for iteration in 0..max_iterations {
-            ctx.progress.info(&format!("wisart_iterative_clustering: iteration {}/{}", iteration + 1, max_iterations));
+            ctx.progress.info(&format!(
+                "wisart_iterative_clustering: iteration {}/{}",
+                iteration + 1,
+                max_iterations
+            ));
 
             // Recompute cluster centers (simplified: mean H and alpha per cluster)
             let (mut cluster_h, mut cluster_alpha, cluster_count) = (0..total_pixels)
@@ -6275,7 +6686,10 @@ impl Tool for WishartIterativeClusteringTool {
                 .filter(|(c, n)| c == n)
                 .count();
             let convergence_ratio = unchanged as f64 / total_pixels as f64;
-            ctx.progress.info(&format!("wisart_iterative_clustering: convergence ratio {:.2}%", convergence_ratio * 100.0));
+            ctx.progress.info(&format!(
+                "wisart_iterative_clustering: convergence ratio {:.2}%",
+                convergence_ratio * 100.0
+            ));
 
             clusters = new_clusters;
 
@@ -6296,7 +6710,9 @@ impl Tool for WishartIterativeClusteringTool {
             let end = start + cols;
             output
                 .set_row_slice(0, r as isize, &cluster_values[start..end])
-                .map_err(|e| ToolError::Execution(format!("failed writing clustering row {}: {e}", r)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed writing clustering row {}: {e}", r))
+                })?;
             coalescer.emit_unit_fraction(ctx.progress, (r + 1) as f64 / rows as f64);
         }
         coalescer.finish(ctx.progress);
@@ -6371,7 +6787,7 @@ mod tests {
         assert!(result.is_err(), "expected missing-band metadata error");
         let msg = format!("{}", result.expect_err("should fail"));
         assert!(
-            msg.contains("missing REFLECTANCE_MULT_BAND_1") || msg.contains("missing REFLECTANCE_ADD_BAND_1"),
+            msg.contains("REFLECTANCE_MULT_BAND_1") || msg.contains("REFLECTANCE_ADD_BAND_1"),
             "unexpected error message: {msg}"
         );
 
@@ -6394,7 +6810,7 @@ mod tests {
         assert!(result.is_err(), "expected missing K2 constant error");
         let msg = format!("{}", result.expect_err("should fail"));
         assert!(
-            msg.contains("missing K2_CONSTANT_BAND_10"),
+            msg.contains("K2_CONSTANT_BAND_10"),
             "unexpected error message: {msg}"
         );
 

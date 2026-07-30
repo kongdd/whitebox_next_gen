@@ -87,7 +87,11 @@ struct BenchVariant {
     threads: usize,
 }
 
-fn make_tree_segmentation_args(input_path: &str, output_path: &str, variant: BenchVariant) -> ToolArgs {
+fn make_tree_segmentation_args(
+    input_path: &str,
+    output_path: &str,
+    variant: BenchVariant,
+) -> ToolArgs {
     let mut args = ToolArgs::new();
     args.insert("input".to_string(), json!(input_path));
     args.insert("output".to_string(), json!(output_path));
@@ -99,10 +103,19 @@ fn make_tree_segmentation_args(input_path: &str, output_path: &str, variant: Ben
     args.insert("adaptive_bandwidth".to_string(), json!(true));
     args.insert("adaptive_neighbors".to_string(), json!(24));
     args.insert("adaptive_sector_count".to_string(), json!(8));
-    args.insert("grid_acceleration".to_string(), json!(variant.grid_acceleration));
+    args.insert(
+        "grid_acceleration".to_string(),
+        json!(variant.grid_acceleration),
+    );
     args.insert("grid_cell_size".to_string(), json!(0.75));
-    args.insert("grid_refine_exact".to_string(), json!(variant.grid_refine_exact));
-    args.insert("grid_refine_iterations".to_string(), json!(variant.grid_refine_iterations));
+    args.insert(
+        "grid_refine_exact".to_string(),
+        json!(variant.grid_refine_exact),
+    );
+    args.insert(
+        "grid_refine_iterations".to_string(),
+        json!(variant.grid_refine_iterations),
+    );
     args.insert("tile_size".to_string(), json!(variant.tile_size));
     args.insert("tile_overlap".to_string(), json!(variant.tile_overlap));
     args.insert("vertical_bandwidth".to_string(), json!(4.5));
@@ -255,7 +268,10 @@ fn bench_individual_tree_segmentation(c: &mut Criterion) {
         // One-time quality sanity check so performance runs compare plausible outputs.
         let exact_cloud = run_and_read_output(&registry, &ctx, &exact_args);
         let (exact_assigned, exact_clusters) = assigned_stats(&exact_cloud);
-        assert!(exact_assigned > 0, "exact path assigned no vegetation points");
+        assert!(
+            exact_assigned > 0,
+            "exact path assigned no vegetation points"
+        );
 
         for variant in &variants {
             let out_path = unique_temp_las_path(&format!("its_{}_{}", label, variant.name));
@@ -266,7 +282,11 @@ fn bench_individual_tree_segmentation(c: &mut Criterion) {
             );
             let variant_cloud = run_and_read_output(&registry, &ctx, &args);
             let (variant_assigned, variant_clusters) = assigned_stats(&variant_cloud);
-            assert!(variant_assigned > 0, "{} path assigned no vegetation points", variant.name);
+            assert!(
+                variant_assigned > 0,
+                "{} path assigned no vegetation points",
+                variant.name
+            );
             assert!(
                 variant_assigned as f64 >= exact_assigned as f64 * 0.80,
                 "{} assigned too few points: variant={}, exact={}",
@@ -300,12 +320,19 @@ fn bench_individual_tree_segmentation(c: &mut Criterion) {
         }
 
         group.bench_with_input(
-            BenchmarkId::new("exact", format!("{}_t{}_p{}", label, tree_count, points_per_tree)),
+            BenchmarkId::new(
+                "exact",
+                format!("{}_t{}_p{}", label, tree_count, points_per_tree),
+            ),
             &(tree_count, points_per_tree),
             |b, _| {
                 b.iter(|| {
                     let out = registry
-                        .run_tool("individual_tree_segmentation", black_box(&exact_args), black_box(&ctx))
+                        .run_tool(
+                            "individual_tree_segmentation",
+                            black_box(&exact_args),
+                            black_box(&ctx),
+                        )
                         .expect("exact benchmark run failed");
                     black_box(out);
                 })
@@ -313,7 +340,8 @@ fn bench_individual_tree_segmentation(c: &mut Criterion) {
         );
 
         for variant in variants {
-            let variant_out = unique_temp_las_path(&format!("its_{}_{}_bench", label, variant.name));
+            let variant_out =
+                unique_temp_las_path(&format!("its_{}_{}_bench", label, variant.name));
             let variant_args = make_tree_segmentation_args(
                 &input_path.to_string_lossy(),
                 &variant_out.to_string_lossy(),

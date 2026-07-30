@@ -64,24 +64,35 @@ impl Phase1NetworkFixture {
         let mut network = Layer::new("network")
             .with_geom_type(wbvector::GeometryType::LineString)
             .with_epsg(4326);
-        network.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+        network
+            .schema
+            .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
 
         // Main corridor edges.
         network
             .add_feature(
-                Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+                Some(Geometry::line_string(vec![
+                    Coord::xy(0.0, 0.0),
+                    Coord::xy(1.0, 0.0),
+                ])),
                 &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
             )
             .expect("add edge A_B");
         network
             .add_feature(
-                Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+                Some(Geometry::line_string(vec![
+                    Coord::xy(1.0, 0.0),
+                    Coord::xy(2.0, 0.0),
+                ])),
                 &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
             )
             .expect("add edge B_C");
         network
             .add_feature(
-                Some(Geometry::line_string(vec![Coord::xy(2.0, 0.0), Coord::xy(3.0, 0.0)])),
+                Some(Geometry::line_string(vec![
+                    Coord::xy(2.0, 0.0),
+                    Coord::xy(3.0, 0.0),
+                ])),
                 &[("EDGE_ID", FieldValue::Text("C_D".to_string()))],
             )
             .expect("add edge C_D");
@@ -89,19 +100,28 @@ impl Phase1NetworkFixture {
         // Detour branch edges.
         network
             .add_feature(
-                Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+                Some(Geometry::line_string(vec![
+                    Coord::xy(1.0, 0.0),
+                    Coord::xy(1.0, 1.0),
+                ])),
                 &[("EDGE_ID", FieldValue::Text("B_E".to_string()))],
             )
             .expect("add edge B_E");
         network
             .add_feature(
-                Some(Geometry::line_string(vec![Coord::xy(1.0, 1.0), Coord::xy(2.0, 1.0)])),
+                Some(Geometry::line_string(vec![
+                    Coord::xy(1.0, 1.0),
+                    Coord::xy(2.0, 1.0),
+                ])),
                 &[("EDGE_ID", FieldValue::Text("E_F".to_string()))],
             )
             .expect("add edge E_F");
         network
             .add_feature(
-                Some(Geometry::line_string(vec![Coord::xy(2.0, 1.0), Coord::xy(2.0, 0.0)])),
+                Some(Geometry::line_string(vec![
+                    Coord::xy(2.0, 1.0),
+                    Coord::xy(2.0, 0.0),
+                ])),
                 &[("EDGE_ID", FieldValue::Text("F_C".to_string()))],
             )
             .expect("add edge F_C");
@@ -121,7 +141,9 @@ impl Phase1NetworkFixture {
         let mut trajectory = Layer::new("trajectory")
             .with_geom_type(wbvector::GeometryType::Point)
             .with_epsg(4326);
-        trajectory.schema.add_field(FieldDef::new("TS", FieldType::Text));
+        trajectory
+            .schema
+            .add_field(FieldDef::new("TS", FieldType::Text));
         trajectory
             .add_feature(
                 Some(Geometry::Point(Coord::xy(0.05, 0.03))),
@@ -161,7 +183,8 @@ impl Phase1NetworkFixture {
         ]
         .join("\n");
 
-        std::fs::write(&self.temporal_csv_path, temporal_csv).expect("write temporal profile csv fixture");
+        std::fs::write(&self.temporal_csv_path, temporal_csv)
+            .expect("write temporal profile csv fixture");
     }
 
     fn service_area_args(&self) -> ToolArgs {
@@ -265,7 +288,11 @@ fn bench_phase1_network_tools(c: &mut Criterion) {
             let _ = std::fs::remove_file(&fixture.points_output_path);
             let _ = std::fs::remove_file(&fixture.report_output_path);
             let out = registry
-                .run_tool("map_matching_v1", black_box(&map_matching_args), black_box(&ctx))
+                .run_tool(
+                    "map_matching_v1",
+                    black_box(&map_matching_args),
+                    black_box(&ctx),
+                )
                 .expect("map_matching_v1 benchmark run failed");
             black_box(out);
         })

@@ -5,21 +5,23 @@ use std::sync::Arc;
 
 use rayon::prelude::*;
 use serde_json::json;
-use wbprojection::{Crs, EpsgIdentifyPolicy, identify_epsg_from_wkt_with_policy};
 use wbcore::{
-    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier, PercentCoalescer, Tool,
-    ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
-    ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
+    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier,
+    PercentCoalescer, Tool, ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample,
+    ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
 };
+use wbprojection::{identify_epsg_from_wkt_with_policy, Crs, EpsgIdentifyPolicy};
 use wbraster::{DataType, Raster, RasterConfig, RasterFormat};
 
 use crate::memory_store;
 use crate::rendering::{LineGraph, RadialLineGraph};
+use crate::tools::{slope_aspect_from_dem, D8FlowAccumTool};
 
 pub struct RuggednessIndexTool;
 pub struct SurfaceAreaRatioTool;
 pub struct ElevRelativeToMinMaxTool;
 pub struct WetnessIndexTool;
+pub struct SagaWetnessIndexTool;
 pub struct PercentElevRangeTool;
 pub struct RelativeTopographicPositionTool;
 pub struct NumDownslopeNeighboursTool;
@@ -138,13 +140,12 @@ impl TerrainAnalysisCore {
     }
 
     fn raster_is_geographic(input: &Raster) -> bool {
-        let epsg = input.crs.epsg.or_else(|| {
-            input
-                .crs
-                .wkt
-                .as_deref()
-                .and_then(|w| identify_epsg_from_wkt_with_policy(w, EpsgIdentifyPolicy::Lenient))
-        });
+        let epsg =
+            input.crs.epsg.or_else(|| {
+                input.crs.wkt.as_deref().and_then(|w| {
+                    identify_epsg_from_wkt_with_policy(w, EpsgIdentifyPolicy::Lenient)
+                })
+            });
         if let Some(code) = epsg {
             if let Ok(crs) = Crs::from_epsg(code) {
                 return crs.is_geographic();
@@ -170,9 +171,7 @@ impl TerrainAnalysisCore {
                 .map_err(|e| ToolError::Validation(format!("unsupported output path: {e}")))?;
             output
                 .write(&output_path_str, output_format)
-                .map_err(|e| {
-                    ToolError::Execution(format!("failed writing output raster: {e}"))
-                })?;
+                .map_err(|e| ToolError::Execution(format!("failed writing output raster: {e}")))?;
             Ok(output_path_str)
         } else {
             let id = memory_store::put_raster(output);
@@ -214,8 +213,7 @@ impl TerrainAnalysisCore {
             a32: f64,
             a33: f64,
         ) -> f64 {
-            a11 * (a22 * a33 - a23 * a32)
-                - a12 * (a21 * a33 - a23 * a31)
+            a11 * (a22 * a33 - a23 * a32) - a12 * (a21 * a33 - a23 * a31)
                 + a13 * (a21 * a32 - a22 * a31)
         }
 
@@ -267,15 +265,7 @@ impl TerrainAnalysisCore {
                 }
 
                 (
-                    sum_y,
-                    sum_xr_y,
-                    sum_xc_y,
-                    sum_xr,
-                    sum_xc,
-                    sum_xr_xr,
-                    sum_xc_xc,
-                    sum_xr_xc,
-                    n,
+                    sum_y, sum_xr_y, sum_xc_y, sum_xr, sum_xc, sum_xr_xr, sum_xc_xc, sum_xr_xc, n,
                 )
             })
             .reduce(
@@ -296,9 +286,7 @@ impl TerrainAnalysisCore {
             );
 
         let Some((b0, b1r, b1c)) = Self::solve_3x3(
-            stats.8, stats.3, stats.4,
-            stats.3, stats.5, stats.7,
-            stats.4, stats.7, stats.6,
+            stats.8, stats.3, stats.4, stats.3, stats.5, stats.7, stats.4, stats.7, stats.6,
             stats.0, stats.1, stats.2,
         ) else {
             return input.clone();
@@ -379,25 +367,48 @@ impl TerrainAnalysisCore {
         let lat2 = lat2_deg.to_radians();
         let dlat = (lat2_deg - lat1_deg).to_radians();
         let dlon = (lon2_deg - lon1_deg).to_radians();
-        let a = (dlat * 0.5).sin().powi(2)
-            + lat1.cos() * lat2.cos() * (dlon * 0.5).sin().powi(2);
+        let a = (dlat * 0.5).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon * 0.5).sin().powi(2);
         let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
         r * c
     }
 
     fn rect_sum(sum: &[f64], cols: usize, y1: usize, x1: usize, y2: usize, x2: usize) -> f64 {
         let a = sum[Self::idx(y2, x2, cols)];
-        let b = if y1 > 0 { sum[Self::idx(y1 - 1, x2, cols)] } else { 0.0 };
-        let c = if x1 > 0 { sum[Self::idx(y2, x1 - 1, cols)] } else { 0.0 };
-        let d = if y1 > 0 && x1 > 0 { sum[Self::idx(y1 - 1, x1 - 1, cols)] } else { 0.0 };
+        let b = if y1 > 0 {
+            sum[Self::idx(y1 - 1, x2, cols)]
+        } else {
+            0.0
+        };
+        let c = if x1 > 0 {
+            sum[Self::idx(y2, x1 - 1, cols)]
+        } else {
+            0.0
+        };
+        let d = if y1 > 0 && x1 > 0 {
+            sum[Self::idx(y1 - 1, x1 - 1, cols)]
+        } else {
+            0.0
+        };
         a - b - c + d
     }
 
     fn rect_count(count: &[i64], cols: usize, y1: usize, x1: usize, y2: usize, x2: usize) -> i64 {
         let a = count[Self::idx(y2, x2, cols)];
-        let b = if y1 > 0 { count[Self::idx(y1 - 1, x2, cols)] } else { 0 };
-        let c = if x1 > 0 { count[Self::idx(y2, x1 - 1, cols)] } else { 0 };
-        let d = if y1 > 0 && x1 > 0 { count[Self::idx(y1 - 1, x1 - 1, cols)] } else { 0 };
+        let b = if y1 > 0 {
+            count[Self::idx(y1 - 1, x2, cols)]
+        } else {
+            0
+        };
+        let c = if x1 > 0 {
+            count[Self::idx(y2, x1 - 1, cols)]
+        } else {
+            0
+        };
+        let d = if y1 > 0 && x1 > 0 {
+            count[Self::idx(y1 - 1, x1 - 1, cols)]
+        } else {
+            0
+        };
         a - b - c + d
     }
 
@@ -435,7 +446,11 @@ impl TerrainAnalysisCore {
         (sum, sum_sq, count)
     }
 
-    fn build_integral_from_values(values: &[f64], rows: usize, cols: usize) -> (Vec<f64>, Vec<i64>) {
+    fn build_integral_from_values(
+        values: &[f64],
+        rows: usize,
+        cols: usize,
+    ) -> (Vec<f64>, Vec<i64>) {
         let mut sum = vec![0.0; rows * cols];
         let mut count = vec![0i64; rows * cols];
         for row in 0..rows {
@@ -568,7 +583,11 @@ impl TerrainAnalysisCore {
                         return zc;
                     }
                     let v = values[rr as usize * cols + cc as usize];
-                    if v.is_finite() { v } else { zc }
+                    if v.is_finite() {
+                        v
+                    } else {
+                        zc
+                    }
                 };
 
                 let z1 = z(-1, -1) * z_factor;
@@ -600,9 +619,9 @@ impl TerrainAnalysisCore {
     }
 
     fn parse_raster_input_list(args: &ToolArgs, key: &str) -> Result<Vec<String>, ToolError> {
-        let v = args
-            .get(key)
-            .ok_or_else(|| ToolError::Validation(format!("missing required parameter '{}'", key)))?;
+        let v = args.get(key).ok_or_else(|| {
+            ToolError::Validation(format!("missing required parameter '{}'", key))
+        })?;
         if let Some(s) = v.as_str() {
             let items = s
                 .split([';', ','])
@@ -611,7 +630,10 @@ impl TerrainAnalysisCore {
                 .map(|p| p.to_string())
                 .collect::<Vec<_>>();
             if items.is_empty() {
-                return Err(ToolError::Validation(format!("parameter '{}' contains no input paths", key)));
+                return Err(ToolError::Validation(format!(
+                    "parameter '{}' contains no input paths",
+                    key
+                )));
             }
             return Ok(items);
         }
@@ -623,11 +645,17 @@ impl TerrainAnalysisCore {
                 .filter(|s| !s.is_empty())
                 .collect::<Vec<_>>();
             if items.is_empty() {
-                return Err(ToolError::Validation(format!("parameter '{}' contains no input paths", key)));
+                return Err(ToolError::Validation(format!(
+                    "parameter '{}' contains no input paths",
+                    key
+                )));
             }
             return Ok(items);
         }
-        Err(ToolError::Validation(format!("parameter '{}' must be a string list or array", key)))
+        Err(ToolError::Validation(format!(
+            "parameter '{}' must be a string list or array",
+            key
+        )))
     }
 
     fn parse_vector_points(layer: &wbvector::Layer) -> Result<Vec<(f64, f64)>, ToolError> {
@@ -701,9 +729,8 @@ impl TerrainAnalysisCore {
                 }
             }
         };
-        wbvector::write(layer, &out_str, fmt).map_err(|e| {
-            ToolError::Execution(format!("failed writing output vector: {}", e))
-        })?;
+        wbvector::write(layer, &out_str, fmt)
+            .map_err(|e| ToolError::Execution(format!("failed writing output vector: {}", e)))?;
         Ok(out_str)
     }
 
@@ -737,20 +764,31 @@ impl TerrainAnalysisCore {
         let sy = |y: f64| height - pad_b - (y - min_y) / y_rng * (height - pad_t - pad_b);
 
         let palette = [
-            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#17becf",
-            "#bcbd22",
+            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#17becf", "#bcbd22",
         ];
 
         let mut grid = String::new();
         for i in 0..=10 {
             let x = i as f64 * 10.0;
             let px = sx(x);
-            grid.push_str(&format!("<line x1='{:.2}' y1='{:.2}' x2='{:.2}' y2='{:.2}' stroke='#d0d0d0'/>", px, pad_t, px, height - pad_b));
+            grid.push_str(&format!(
+                "<line x1='{:.2}' y1='{:.2}' x2='{:.2}' y2='{:.2}' stroke='#d0d0d0'/>",
+                px,
+                pad_t,
+                px,
+                height - pad_b
+            ));
         }
         for i in 0..=8 {
             let yv = min_y + i as f64 / 8.0 * y_rng;
             let py = sy(yv);
-            grid.push_str(&format!("<line x1='{:.2}' y1='{:.2}' x2='{:.2}' y2='{:.2}' stroke='#d0d0d0'/>", pad_l, py, width - pad_r, py));
+            grid.push_str(&format!(
+                "<line x1='{:.2}' y1='{:.2}' x2='{:.2}' y2='{:.2}' stroke='#d0d0d0'/>",
+                pad_l,
+                py,
+                width - pad_r,
+                py
+            ));
         }
 
         let mut lines = String::new();
@@ -765,7 +803,10 @@ impl TerrainAnalysisCore {
                 .map(|(x, y)| format!("{:.2},{:.2}", sx(*x), sy(*y)))
                 .collect::<Vec<_>>()
                 .join(" ");
-            lines.push_str(&format!("<polyline fill='none' stroke='{}' stroke-width='2.6' points='{}'/>", color, poly));
+            lines.push_str(&format!(
+                "<polyline fill='none' stroke='{}' stroke-width='2.6' points='{}'/>",
+                color, poly
+            ));
             legend.push_str(&format!("<div style='margin:6px 0'><span style='display:inline-block;width:22px;height:3px;background:{};vertical-align:middle;margin-right:8px'></span>{} (HI={:.3})</div>", color, name, hi));
         }
 
@@ -882,20 +923,31 @@ impl TerrainAnalysisCore {
         let sy = |y: f64| height - pad_b - (y - min_y) / y_rng * (height - pad_t - pad_b);
 
         let palette = [
-            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#17becf",
-            "#bcbd22",
+            "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#17becf", "#bcbd22",
         ];
 
         let mut grid = String::new();
         for i in 0..=10 {
             let x = min_x + i as f64 / 10.0 * x_rng;
             let px = sx(x);
-            grid.push_str(&format!("<line x1='{:.2}' y1='{:.2}' x2='{:.2}' y2='{:.2}' stroke='#d0d0d0'/>", px, pad_t, px, height - pad_b));
+            grid.push_str(&format!(
+                "<line x1='{:.2}' y1='{:.2}' x2='{:.2}' y2='{:.2}' stroke='#d0d0d0'/>",
+                px,
+                pad_t,
+                px,
+                height - pad_b
+            ));
         }
         for i in 0..=8 {
             let y = min_y + i as f64 / 8.0 * y_rng;
             let py = sy(y);
-            grid.push_str(&format!("<line x1='{:.2}' y1='{:.2}' x2='{:.2}' y2='{:.2}' stroke='#d0d0d0'/>", pad_l, py, width - pad_r, py));
+            grid.push_str(&format!(
+                "<line x1='{:.2}' y1='{:.2}' x2='{:.2}' y2='{:.2}' stroke='#d0d0d0'/>",
+                pad_l,
+                py,
+                width - pad_r,
+                py
+            ));
         }
 
         let mut lines = String::new();
@@ -910,7 +962,10 @@ impl TerrainAnalysisCore {
                 .map(|(x, y)| format!("{:.2},{:.2}", sx(*x), sy(*y)))
                 .collect::<Vec<_>>()
                 .join(" ");
-            lines.push_str(&format!("<polyline fill='none' stroke='{}' stroke-width='2.4' points='{}'/>", color, poly));
+            lines.push_str(&format!(
+                "<polyline fill='none' stroke='{}' stroke-width='2.4' points='{}'/>",
+                color, poly
+            ));
             legend.push_str(&format!("<div style='margin:6px 0'><span style='display:inline-block;width:22px;height:3px;background:{};vertical-align:middle;margin-right:8px'></span>{}</div>", color, name));
         }
 
@@ -958,18 +1013,28 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "hypsometric_analysis".to_string(),
             display_name: "Hypsometric Analysis".to_string(),
-            summary: "Creates a hypsometric (area-elevation) curve HTML report for one or more DEMs.".to_string(),
+            summary:
+                "Creates a hypsometric (area-elevation) curve HTML report for one or more DEMs."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "signature".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "signature".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_hypsometric_analysis(args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_hypsometric_analysis(
+        args: &ToolArgs,
+        _ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_paths = Self::parse_raster_input_list(args, "inputs")?;
         let watershed_paths = if args.get("watershed").is_some() {
             Some(Self::parse_raster_input_list(args, "watershed")?)
@@ -1008,7 +1073,8 @@ impl TerrainAnalysisCore {
                 None
             };
 
-            let mut groups: std::collections::BTreeMap<i64, Vec<f64>> = std::collections::BTreeMap::new();
+            let mut groups: std::collections::BTreeMap<i64, Vec<f64>> =
+                std::collections::BTreeMap::new();
             for r in 0..dem.rows {
                 for c in 0..dem.cols {
                     let z = dem.get(0, r as isize, c as isize);
@@ -1048,7 +1114,14 @@ impl TerrainAnalysisCore {
                     pts.push((p as f64, vals[idx]));
                 }
                 let name = if ws.is_some() {
-                    format!("{}_ws{}", std::path::Path::new(in_path).file_stem().and_then(|s| s.to_str()).unwrap_or("dem"), gid)
+                    format!(
+                        "{}_ws{}",
+                        std::path::Path::new(in_path)
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("dem"),
+                        gid
+                    )
                 } else {
                     std::path::Path::new(in_path)
                         .file_stem()
@@ -1069,7 +1142,10 @@ impl TerrainAnalysisCore {
         Self::write_hypsometric_html(&output_path, "Hypsometric Analysis", &series)?;
 
         let mut outputs = std::collections::BTreeMap::new();
-        outputs.insert("path".to_string(), json!(output_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(output_path.to_string_lossy().to_string()),
+        );
         Ok(ToolRunResult {
             outputs,
             ..Default::default()
@@ -1212,15 +1288,12 @@ impl TerrainAnalysisCore {
                     let p1 = &part[i + 1];
                     let start = surface.world_to_pixel(p0.x, p0.y);
                     let end = surface.world_to_pixel(p1.x, p1.y);
-                    let (st_col, st_row, end_col, end_row) = if let (
-                        Some((sc, sr)),
-                        Some((ec, er)),
-                    ) = (start, end)
-                    {
-                        (sc, sr, ec, er)
-                    } else {
-                        continue;
-                    };
+                    let (st_col, st_row, end_col, end_row) =
+                        if let (Some((sc, sr)), Some((ec, er))) = (start, end) {
+                            (sc, sr, ec, er)
+                        } else {
+                            continue;
+                        };
 
                     let mut dx = (end_col - st_col) as f64;
                     let mut dy = (end_row - st_row) as f64;
@@ -1301,7 +1374,10 @@ impl TerrainAnalysisCore {
         })?;
 
         let mut outputs = std::collections::BTreeMap::new();
-        outputs.insert("path".to_string(), json!(output_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(output_path.to_string_lossy().to_string()),
+        );
         Ok(ToolRunResult {
             outputs,
             ..Default::default()
@@ -1318,18 +1394,28 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "slope_vs_aspect_plot".to_string(),
             display_name: "Slope Vs Aspect Plot".to_string(),
-            summary: "Creates an HTML radial slope-vs-aspect analysis plot for an input DEM.".to_string(),
+            summary: "Creates an HTML radial slope-vs-aspect analysis plot for an input DEM."
+                .to_string(),
             category: ToolCategory::Terrain,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "plot".to_string(), "html".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "plot".to_string(),
+                "html".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_slope_vs_aspect_plot(args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_slope_vs_aspect_plot(
+        args: &ToolArgs,
+        _ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let aspect_bin_size = args
             .get("aspect_bin_size")
@@ -1396,9 +1482,8 @@ impl TerrainAnalysisCore {
                 })?;
                 let center_x = (dem.x_min + dem.x_max()) * 0.5;
                 let center_y = (dem.y_min + dem.y_max()) * 0.5;
-                let (center_lon, center_lat) = src
-                    .transform_to(center_x, center_y, &wgs84)
-                    .map_err(|e| {
+                let (center_lon, center_lat) =
+                    src.transform_to(center_x, center_y, &wgs84).map_err(|e| {
                         ToolError::Execution(format!(
                             "failed transforming DEM center to geographic coordinates: {}",
                             e
@@ -1557,8 +1642,9 @@ impl TerrainAnalysisCore {
                         metrics[r]
                     } else {
                         let mid_lat = dem.row_center_y(row).to_radians();
-                        let dx = (dem.cell_size_x.abs() * 111_320.0 * mid_lat.cos().abs().max(1.0e-8))
-                            .max(f64::EPSILON);
+                        let dx =
+                            (dem.cell_size_x.abs() * 111_320.0 * mid_lat.cos().abs().max(1.0e-8))
+                                .max(f64::EPSILON);
                         let dy = (dem.cell_size_y.abs() * 111_320.0).max(f64::EPSILON);
                         (dx, dx, dx, dy, dy)
                     };
@@ -1592,8 +1678,9 @@ impl TerrainAnalysisCore {
                             * (a.powi(4) * (zc * z_factor - 3.0 * z7)
                                 + b.powi(4) * (3.0 * zc * z_factor - z7)
                                 + (c.powi(4) - 2.0 * a * a * b * b) * (zc * z_factor - z7))
-                        - 2.0 * (a * a * d * d * (b * b - c * c) * z7
-                            + c * c * e * e * (a * a - b * b) * z1);
+                        - 2.0
+                            * (a * a * d * d * (b * b - c * c) * z7
+                                + c * c * e * e * (a * a - b * b) * z1);
                     let q_den = 3.0 * d * e * (d + e) * (a.powi(4) + b.powi(4) + c.powi(4));
                     let q = if q_den.abs() > f64::EPSILON {
                         q_num / q_den
@@ -1718,7 +1805,10 @@ impl TerrainAnalysisCore {
         })?;
 
         let mut outputs = std::collections::BTreeMap::new();
-        outputs.insert("path".to_string(), json!(output_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(output_path.to_string_lossy().to_string()),
+        );
         Ok(ToolRunResult {
             outputs,
             ..Default::default()
@@ -1733,9 +1823,21 @@ impl TerrainAnalysisCore {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "inputs", description: "Input DEM paths as ';' or ',' separated string, or list.", required: true },
-                ToolParamSpec { name: "watershed", description: "Optional watershed rasters matching each input DEM.", required: false },
-                ToolParamSpec { name: "output", description: "Output HTML report path.", required: false },
+                ToolParamSpec {
+                    name: "inputs",
+                    description: "Input DEM paths as ';' or ',' separated string, or list.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "watershed",
+                    description: "Optional watershed rasters matching each input DEM.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output HTML report path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -1747,18 +1849,28 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "slope_vs_elev_plot".to_string(),
             display_name: "Slope Vs Elev Plot".to_string(),
-            summary: "Creates an HTML slope-vs-elevation analysis chart for one or more DEMs.".to_string(),
+            summary: "Creates an HTML slope-vs-elevation analysis chart for one or more DEMs."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "plot".to_string(), "html".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "plot".to_string(),
+                "html".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_slope_vs_elev_plot(args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_slope_vs_elev_plot(
+        args: &ToolArgs,
+        _ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_paths = Self::parse_raster_input_list(args, "inputs")?;
         let watershed_paths = if args.get("watershed").is_some() {
             Some(Self::parse_raster_input_list(args, "watershed")?)
@@ -1929,7 +2041,10 @@ impl TerrainAnalysisCore {
         Self::write_slope_vs_elev_html(&output_path, &series)?;
 
         let mut outputs = std::collections::BTreeMap::new();
-        outputs.insert("path".to_string(), json!(output_path.to_string_lossy().to_string()));
+        outputs.insert(
+            "path".to_string(),
+            json!(output_path.to_string_lossy().to_string()),
+        );
         Ok(ToolRunResult {
             outputs,
             ..Default::default()
@@ -1962,12 +2077,19 @@ impl TerrainAnalysisCore {
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_elev_above_pit_dist(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_elev_above_pit_dist(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         Self::run_elev_above_pit(args, ctx)
     }
 
@@ -1993,21 +2115,35 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "circular_variance_of_aspect".to_string(),
             display_name: "Circular Variance Of Aspect".to_string(),
-            summary: "Calculates local circular variance of aspect within a moving neighbourhood.".to_string(),
+            summary: "Calculates local circular variance of aspect within a moving neighbourhood."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "texture".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "texture".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_circular_variance_of_aspect(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_circular_variance_of_aspect(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
-        let mut filter_size = args.get("filter").and_then(|v| v.as_u64()).map(|v| v as usize).unwrap_or(11).max(3);
+        let mut filter_size = args
+            .get("filter")
+            .and_then(|v| v.as_u64())
+            .map(|v| v as usize)
+            .unwrap_or(11)
+            .max(3);
         if filter_size % 2 == 0 {
             filter_size += 1;
         }
@@ -2075,7 +2211,11 @@ impl TerrainAnalysisCore {
                                 return zc;
                             }
                             let v = smoothed[rr as usize * cols + cc as usize];
-                            if v.is_finite() { v } else { zc }
+                            if v.is_finite() {
+                                v
+                            } else {
+                                zc
+                            }
                         };
                         let z1 = z(-1, -1);
                         let z2 = z(-1, 0);
@@ -2086,16 +2226,50 @@ impl TerrainAnalysisCore {
                         let z8 = z(1, 0);
                         let z9 = z(1, 1);
                         let zc_scaled = zc * z_factor;
-                        let z1s = if z1.is_finite() { z1 * z_factor } else { zc_scaled };
-                        let z2s = if z2.is_finite() { z2 * z_factor } else { zc_scaled };
-                        let z3s = if z3.is_finite() { z3 * z_factor } else { zc_scaled };
-                        let z4s = if z4.is_finite() { z4 * z_factor } else { zc_scaled };
-                        let z6s = if z6.is_finite() { z6 * z_factor } else { zc_scaled };
-                        let z7s = if z7.is_finite() { z7 * z_factor } else { zc_scaled };
-                        let z8s = if z8.is_finite() { z8 * z_factor } else { zc_scaled };
-                        let z9s = if z9.is_finite() { z9 * z_factor } else { zc_scaled };
-                        let dzdx = ((z3s + 2.0 * z6s + z9s) - (z1s + 2.0 * z4s + z7s)) / eight_grid_res;
-                        let dzdy = ((z7s + 2.0 * z8s + z9s) - (z1s + 2.0 * z2s + z3s)) / eight_grid_res;
+                        let z1s = if z1.is_finite() {
+                            z1 * z_factor
+                        } else {
+                            zc_scaled
+                        };
+                        let z2s = if z2.is_finite() {
+                            z2 * z_factor
+                        } else {
+                            zc_scaled
+                        };
+                        let z3s = if z3.is_finite() {
+                            z3 * z_factor
+                        } else {
+                            zc_scaled
+                        };
+                        let z4s = if z4.is_finite() {
+                            z4 * z_factor
+                        } else {
+                            zc_scaled
+                        };
+                        let z6s = if z6.is_finite() {
+                            z6 * z_factor
+                        } else {
+                            zc_scaled
+                        };
+                        let z7s = if z7.is_finite() {
+                            z7 * z_factor
+                        } else {
+                            zc_scaled
+                        };
+                        let z8s = if z8.is_finite() {
+                            z8 * z_factor
+                        } else {
+                            zc_scaled
+                        };
+                        let z9s = if z9.is_finite() {
+                            z9 * z_factor
+                        } else {
+                            zc_scaled
+                        };
+                        let dzdx =
+                            ((z3s + 2.0 * z6s + z9s) - (z1s + 2.0 * z4s + z7s)) / eight_grid_res;
+                        let dzdy =
+                            ((z7s + 2.0 * z8s + z9s) - (z1s + 2.0 * z2s + z3s)) / eight_grid_res;
                         let slope_mag = (dzdx * dzdx + dzdy * dzdy).sqrt();
                         if slope_mag <= f64::EPSILON {
                             row_flat[c] = true;
@@ -2162,7 +2336,10 @@ impl TerrainAnalysisCore {
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn fetch_analysis_metadata() -> ToolMetadata {
@@ -2248,7 +2425,11 @@ impl TerrainAnalysisCore {
                             let t = step as f64;
                             let x = c as f64 + dx * t;
                             let y = r as f64 + dy * t;
-                            if x < 0.0 || y < 0.0 || x >= (cols - 1) as f64 || y >= (rows - 1) as f64 {
+                            if x < 0.0
+                                || y < 0.0
+                                || x >= (cols - 1) as f64
+                                || y >= (rows - 1) as f64
+                            {
                                 break;
                             }
                             let dist = t * cell_size;
@@ -2274,7 +2455,10 @@ impl TerrainAnalysisCore {
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn find_ridges_metadata() -> ToolMetadata {
@@ -2299,13 +2483,20 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "find_ridges".to_string(),
             display_name: "Find Ridges".to_string(),
-            summary: "Identifies potential ridge and peak cells in a DEM, with optional line thinning.".to_string(),
+            summary:
+                "Identifies potential ridge and peak cells in a DEM, with optional line thinning."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "ridges".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "ridges".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2313,7 +2504,10 @@ impl TerrainAnalysisCore {
     fn run_find_ridges(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
-        let line_thin = args.get("line_thin").and_then(|v| v.as_bool()).unwrap_or(true);
+        let line_thin = args
+            .get("line_thin")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true);
 
         let input = Self::load_raster(&input_path)?;
         let mut output = input.as_ref().clone();
@@ -2395,7 +2589,11 @@ impl TerrainAnalysisCore {
                                 for i in 0..8 {
                                     let rr = r as isize + dy[i];
                                     let cc = c as isize + dx[i];
-                                    if rr < 0 || cc < 0 || rr >= rows as isize || cc >= cols as isize {
+                                    if rr < 0
+                                        || cc < 0
+                                        || rr >= rows as isize
+                                        || cc >= cols as isize
+                                    {
                                         nbs[i] = 0.0;
                                     } else {
                                         let v = grid[rr as usize][cc as usize];
@@ -2432,7 +2630,10 @@ impl TerrainAnalysisCore {
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn assess_route_metadata() -> ToolMetadata {
@@ -2817,21 +3018,45 @@ impl TerrainAnalysisCore {
             ));
         }
 
-        let mut output = wbvector::Layer::new("assess_route")
-            .with_geom_type(wbvector::GeometryType::LineString);
+        let mut output =
+            wbvector::Layer::new("assess_route").with_geom_type(wbvector::GeometryType::LineString);
         if let Some(crs) = routes.crs.clone() {
             output = output.with_crs(crs);
         }
 
         output.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
-        output.add_field(wbvector::FieldDef::new("PARENT_ID", wbvector::FieldType::Integer));
-        output.add_field(wbvector::FieldDef::new("AVG_SLOPE", wbvector::FieldType::Float));
-        output.add_field(wbvector::FieldDef::new("MIN_ELEV", wbvector::FieldType::Float));
-        output.add_field(wbvector::FieldDef::new("MAX_ELEV", wbvector::FieldType::Float));
-        output.add_field(wbvector::FieldDef::new("RELIEF", wbvector::FieldType::Float));
-        output.add_field(wbvector::FieldDef::new("SINUOSITY", wbvector::FieldType::Float));
-        output.add_field(wbvector::FieldDef::new("CHG_IN_SLP", wbvector::FieldType::Float));
-        output.add_field(wbvector::FieldDef::new("VISIBILITY", wbvector::FieldType::Float));
+        output.add_field(wbvector::FieldDef::new(
+            "PARENT_ID",
+            wbvector::FieldType::Integer,
+        ));
+        output.add_field(wbvector::FieldDef::new(
+            "AVG_SLOPE",
+            wbvector::FieldType::Float,
+        ));
+        output.add_field(wbvector::FieldDef::new(
+            "MIN_ELEV",
+            wbvector::FieldType::Float,
+        ));
+        output.add_field(wbvector::FieldDef::new(
+            "MAX_ELEV",
+            wbvector::FieldType::Float,
+        ));
+        output.add_field(wbvector::FieldDef::new(
+            "RELIEF",
+            wbvector::FieldType::Float,
+        ));
+        output.add_field(wbvector::FieldDef::new(
+            "SINUOSITY",
+            wbvector::FieldType::Float,
+        ));
+        output.add_field(wbvector::FieldDef::new(
+            "CHG_IN_SLP",
+            wbvector::FieldType::Float,
+        ));
+        output.add_field(wbvector::FieldDef::new(
+            "VISIBILITY",
+            wbvector::FieldType::Float,
+        ));
 
         let mut copied_parent_fields: Vec<(usize, String)> = Vec::new();
         for (i, def) in routes.schema.fields().iter().enumerate() {
@@ -2850,7 +3075,8 @@ impl TerrainAnalysisCore {
                 for part in parts {
                     let segments = Self::split_route_part_by_length(&part, segment_length);
                     for segment in segments {
-                        let metrics = Self::compute_assess_route_metrics(&dem, &segment, search_radius);
+                        let metrics =
+                            Self::compute_assess_route_metrics(&dem, &segment, search_radius);
 
                         let mut out_feature = wbvector::Feature::with_geometry(
                             output.features.len() as u64,
@@ -2858,7 +3084,11 @@ impl TerrainAnalysisCore {
                             output.schema.len(),
                         );
                         out_feature
-                            .set(&output.schema, "FID", wbvector::FieldValue::Integer(out_fid))
+                            .set(
+                                &output.schema,
+                                "FID",
+                                wbvector::FieldValue::Integer(out_fid),
+                            )
                             .map_err(|e| {
                                 ToolError::Execution(format!(
                                     "failed assigning output attribute FID: {}",
@@ -3089,7 +3319,10 @@ impl TerrainAnalysisCore {
         }
     }
 
-    fn run_breakline_mapping(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_breakline_mapping(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let threshold = args
@@ -3158,7 +3391,11 @@ impl TerrainAnalysisCore {
                             return z12;
                         }
                         let v = input.get(band, rr, cc);
-                        if input.is_nodata(v) { z12 } else { v }
+                        if input.is_nodata(v) {
+                            z12
+                        } else {
+                            v
+                        }
                     };
 
                     let (p, q, r2, s2, t2) = if !is_geographic {
@@ -3173,20 +3410,61 @@ impl TerrainAnalysisCore {
                         }
 
                         let r2 = (2.0
-                            * (zz[0] + zz[4] + zz[5] + zz[9] + zz[10] + zz[14] + zz[15] + zz[19] + zz[20] + zz[24])
+                            * (zz[0]
+                                + zz[4]
+                                + zz[5]
+                                + zz[9]
+                                + zz[10]
+                                + zz[14]
+                                + zz[15]
+                                + zz[19]
+                                + zz[20]
+                                + zz[24])
                             - 2.0 * (zz[2] + zz[7] + zz[12] + zz[17] + zz[22])
-                            - zz[1] - zz[3] - zz[6] - zz[8] - zz[11] - zz[13] - zz[16] - zz[18] - zz[21] - zz[23])
+                            - zz[1]
+                            - zz[3]
+                            - zz[6]
+                            - zz[8]
+                            - zz[11]
+                            - zz[13]
+                            - zz[16]
+                            - zz[18]
+                            - zz[21]
+                            - zz[23])
                             / (35.0 * res * res);
 
                         let t2 = (2.0
-                            * (zz[0] + zz[1] + zz[2] + zz[3] + zz[4] + zz[20] + zz[21] + zz[22] + zz[23] + zz[24])
+                            * (zz[0]
+                                + zz[1]
+                                + zz[2]
+                                + zz[3]
+                                + zz[4]
+                                + zz[20]
+                                + zz[21]
+                                + zz[22]
+                                + zz[23]
+                                + zz[24])
                             - 2.0 * (zz[10] + zz[11] + zz[12] + zz[13] + zz[14])
-                            - zz[5] - zz[6] - zz[7] - zz[8] - zz[9] - zz[15] - zz[16] - zz[17] - zz[18] - zz[19])
+                            - zz[5]
+                            - zz[6]
+                            - zz[7]
+                            - zz[8]
+                            - zz[9]
+                            - zz[15]
+                            - zz[16]
+                            - zz[17]
+                            - zz[18]
+                            - zz[19])
                             / (35.0 * res * res);
 
                         let s2 = (zz[8] + zz[16] - zz[6] - zz[18]
                             + 4.0 * (zz[4] + zz[20] - zz[0] - zz[24])
-                            + 2.0 * (zz[3] + zz[9] + zz[15] + zz[21] - zz[1] - zz[5] - zz[19] - zz[23]))
+                            + 2.0
+                                * (zz[3] + zz[9] + zz[15] + zz[21]
+                                    - zz[1]
+                                    - zz[5]
+                                    - zz[19]
+                                    - zz[23]))
                             / (100.0 * res * res);
 
                         let q = (44.0 * (zz[3] + zz[23] - zz[1] - zz[21])
@@ -3223,11 +3501,16 @@ impl TerrainAnalysisCore {
                         let phi_n = input.row_center_y((row - 1).max(0));
                         let lambda_w = input.col_center_x((col - 1).max(0));
 
-                        let b = Self::haversine_distance_m(phi, lambda, phi, lambda_w).max(f64::EPSILON);
-                        let d = Self::haversine_distance_m(phi, lambda, phi_s, lambda).max(f64::EPSILON);
-                        let e = Self::haversine_distance_m(phi, lambda, phi_n, lambda).max(f64::EPSILON);
-                        let a = Self::haversine_distance_m(phi_s, lambda, phi_s, lambda_w).max(f64::EPSILON);
-                        let c = Self::haversine_distance_m(phi_n, lambda, phi_n, lambda_w).max(f64::EPSILON);
+                        let b = Self::haversine_distance_m(phi, lambda, phi, lambda_w)
+                            .max(f64::EPSILON);
+                        let d = Self::haversine_distance_m(phi, lambda, phi_s, lambda)
+                            .max(f64::EPSILON);
+                        let e = Self::haversine_distance_m(phi, lambda, phi_n, lambda)
+                            .max(f64::EPSILON);
+                        let a = Self::haversine_distance_m(phi_s, lambda, phi_s, lambda_w)
+                            .max(f64::EPSILON);
+                        let c = Self::haversine_distance_m(phi_n, lambda, phi_n, lambda_w)
+                            .max(f64::EPSILON);
 
                         let r2 = (c * c * (z0 + z2 - 2.0 * z1)
                             + b * b * (z3 + z5 - 2.0 * z12)
@@ -3235,7 +3518,8 @@ impl TerrainAnalysisCore {
                             / (a.powi(4) + b.powi(4) + c.powi(4)).max(f64::EPSILON);
 
                         let t_num = 2.0
-                            * ((d * (a.powi(4) + b.powi(4) + b * b * c * c) - c * c * e * (a * a - b * b))
+                            * ((d * (a.powi(4) + b.powi(4) + b * b * c * c)
+                                - c * c * e * (a * a - b * b))
                                 * (z0 + z2)
                                 - (d * (a.powi(4) + c.powi(4) + b * b * c * c)
                                     + e * (a.powi(4) + c.powi(4) + a * a * b * b))
@@ -3333,11 +3617,31 @@ impl TerrainAnalysisCore {
 
         // Stage 2: threshold and directional local-min suppression.
         let offsets5 = [
-            (-2isize, -2isize), (-1, -2), (0, -2), (1, -2), (2, -2),
-            (-2, -1), (-1, -1), (0, -1), (1, -1), (2, -1),
-            (-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0),
-            (-2, 1), (-1, 1), (0, 1), (1, 1), (2, 1),
-            (-2, 2), (-1, 2), (0, 2), (1, 2), (2, 2),
+            (-2isize, -2isize),
+            (-1, -2),
+            (0, -2),
+            (1, -2),
+            (2, -2),
+            (-2, -1),
+            (-1, -1),
+            (0, -1),
+            (1, -1),
+            (2, -1),
+            (-2, 0),
+            (-1, 0),
+            (0, 0),
+            (1, 0),
+            (2, 0),
+            (-2, 1),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
+            (2, 1),
+            (-2, 2),
+            (-1, 2),
+            (0, 2),
+            (1, 2),
+            (2, 2),
         ];
         let mut thinned = vec![vec![0.0; cols]; rows];
         for r in 0..rows {
@@ -3372,7 +3676,14 @@ impl TerrainAnalysisCore {
                     || (z < n5 && z < n7)
                     || (z < n6 && z < n7 && z < n0)
                     || (z < n7 && z < n1)
-                    || (z < n0 && z < n1 && z < n2 && z < n3 && z < n4 && z < n5 && z < n6 && z < n7);
+                    || (z < n0
+                        && z < n1
+                        && z < n2
+                        && z < n3
+                        && z < n4
+                        && z < n5
+                        && z < n6
+                        && z < n7);
                 if !suppress {
                     let mut is_edge_or_nodata = false;
                     for (dc, dr) in offsets5 {
@@ -3496,7 +3807,8 @@ impl TerrainAnalysisCore {
                                 continue;
                             }
                             let v = thinned[rr as usize][cc as usize];
-                            if v > maxval && line_id[Self::idx(rr as usize, cc as usize, cols)] == 0 {
+                            if v > maxval && line_id[Self::idx(rr as usize, cc as usize, cols)] == 0
+                            {
                                 maxval = v;
                                 max_idx = i as isize;
                             }
@@ -3561,7 +3873,10 @@ impl TerrainAnalysisCore {
         for r in 0..rows {
             for c in 0..cols {
                 let fid = line_id[Self::idx(r, c, cols)];
-                if fid <= 0 || fid as usize >= feature_size.len() || feature_size[fid as usize] < min_length {
+                if fid <= 0
+                    || fid as usize >= feature_size.len()
+                    || feature_size[fid as usize] < min_length
+                {
                     continue;
                 }
 
@@ -3593,22 +3908,32 @@ impl TerrainAnalysisCore {
             }
         }
 
-        let mut layer = wbvector::Layer::new("breaklines").with_geom_type(wbvector::GeometryType::LineString);
+        let mut layer =
+            wbvector::Layer::new("breaklines").with_geom_type(wbvector::GeometryType::LineString);
         layer.crs = match (input.crs.epsg, input.crs.wkt.as_deref()) {
             (_, Some(wkt)) => Some(wbvector::Crs::new().with_wkt(wkt)),
             (Some(epsg), None) => Some(wbvector::Crs::new().with_epsg(epsg)),
             _ => None,
         };
         layer.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
-        layer.add_field(wbvector::FieldDef::new("AVG_CURV", wbvector::FieldType::Float));
-        layer.add_field(wbvector::FieldDef::new("LENGTH", wbvector::FieldType::Float));
+        layer.add_field(wbvector::FieldDef::new(
+            "AVG_CURV",
+            wbvector::FieldType::Float,
+        ));
+        layer.add_field(wbvector::FieldDef::new(
+            "LENGTH",
+            wbvector::FieldType::Float,
+        ));
 
         let mut out_fid = 1i64;
         let mut visited = vec![false; rows * cols];
         for r in 0..rows {
             for c in 0..cols {
                 let fid = line_id[Self::idx(r, c, cols)];
-                if fid <= 0 || fid as usize >= feature_size.len() || feature_size[fid as usize] < min_length {
+                if fid <= 0
+                    || fid as usize >= feature_size.len()
+                    || feature_size[fid as usize] < min_length
+                {
                     continue;
                 }
 
@@ -3756,11 +4081,16 @@ impl TerrainAnalysisCore {
                         Some(wbvector::Geometry::line_string(coords)),
                         &[
                             ("FID", wbvector::FieldValue::Integer(out_fid)),
-                            ("AVG_CURV", wbvector::FieldValue::Float(avg_sum / num_cells as f64)),
+                            (
+                                "AVG_CURV",
+                                wbvector::FieldValue::Float(avg_sum / num_cells as f64),
+                            ),
                             ("LENGTH", wbvector::FieldValue::Float(length)),
                         ],
                     )
-                    .map_err(|e| ToolError::Execution(format!("failed building output feature: {}", e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed building output feature: {}", e))
+                    })?;
                 out_fid += 1;
             }
         }
@@ -3798,13 +4128,20 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "pennock_landform_classification".to_string(),
             display_name: "Pennock Landform Classification".to_string(),
-            summary: "Classifies landform elements into seven Pennock et al. (1987) terrain classes.".to_string(),
+            summary:
+                "Classifies landform elements into seven Pennock et al. (1987) terrain classes."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "classification".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "classification".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3882,7 +4219,11 @@ impl TerrainAnalysisCore {
                 scope.spawn(move || {
                     // Inline nodata check — avoids epsilon arithmetic in is_nodata() per pixel.
                     let is_nd = |v: f64| -> bool {
-                        if nodata_is_nan { v.is_nan() } else { v == nodata }
+                        if nodata_is_nan {
+                            v.is_nan()
+                        } else {
+                            v == nodata
+                        }
                     };
                     for r in (0..rows).filter(|r| r % num_workers == tid) {
                         // Preload 3 row slices for sequential memory access instead of
@@ -3899,7 +4240,11 @@ impl TerrainAnalysisCore {
                                 return z_fallback;
                             }
                             let v = row[c as usize];
-                            if is_nd(v) { z_fallback } else { v * z_factor }
+                            if is_nd(v) {
+                                z_fallback
+                            } else {
+                                v * z_factor
+                            }
                         };
 
                         let mut row_out = vec![out_nodata; cols];
@@ -3916,11 +4261,11 @@ impl TerrainAnalysisCore {
                                 get_n(&row_prev, ci + 1, z), // n[0]: row-1, col+1
                                 get_n(&row_curr, ci + 1, z), // n[1]: row+0, col+1
                                 get_n(&row_next, ci + 1, z), // n[2]: row+1, col+1
-                                get_n(&row_next, ci,     z), // n[3]: row+1, col+0
+                                get_n(&row_next, ci, z),     // n[3]: row+1, col+0
                                 get_n(&row_next, ci - 1, z), // n[4]: row+1, col-1
                                 get_n(&row_curr, ci - 1, z), // n[5]: row+0, col-1
                                 get_n(&row_prev, ci - 1, z), // n[6]: row-1, col-1
-                                get_n(&row_prev, ci,     z), // n[7]: row-1, col+0
+                                get_n(&row_prev, ci, z),     // n[7]: row-1, col+0
                             ];
 
                             let zx = (n[1] - n[5]) / cell_size_times2;
@@ -3937,20 +4282,36 @@ impl TerrainAnalysisCore {
                             }
                             let q = p + 1.0;
 
-                            let fy = (n[6] - n[4] + 2.0 * (n[7] - n[3]) + n[0] - n[2]) / eight_grid_res;
-                            let fx = (n[2] - n[4] + 2.0 * (n[1] - n[5]) + n[0] - n[6]) / eight_grid_res;
+                            let fy =
+                                (n[6] - n[4] + 2.0 * (n[7] - n[3]) + n[0] - n[2]) / eight_grid_res;
+                            let fx =
+                                (n[2] - n[4] + 2.0 * (n[1] - n[5]) + n[0] - n[6]) / eight_grid_res;
                             let slope = (fx * fx + fy * fy).sqrt().atan().to_degrees();
                             let denom = p * q.powf(1.5);
-                            let plan = -((zxx * zy2 - 2.0 * zxy * zx * zy + zyy * zx2) / denom).to_degrees();
-                            let prof = -((zxx * zx2 - 2.0 * zxy * zx * zy + zyy * zy2) / denom).to_degrees();
+                            let plan = -((zxx * zy2 - 2.0 * zxy * zx * zy + zyy * zx2) / denom)
+                                .to_degrees();
+                            let prof = -((zxx * zx2 - 2.0 * zxy * zx * zy + zyy * zy2) / denom)
+                                .to_degrees();
 
-                            row_out[c] = if prof < -prof_threshold && plan <= -plan_threshold && slope > slope_threshold {
+                            row_out[c] = if prof < -prof_threshold
+                                && plan <= -plan_threshold
+                                && slope > slope_threshold
+                            {
                                 1.0
-                            } else if prof < -prof_threshold && plan > plan_threshold && slope > slope_threshold {
+                            } else if prof < -prof_threshold
+                                && plan > plan_threshold
+                                && slope > slope_threshold
+                            {
                                 2.0
-                            } else if prof > prof_threshold && plan <= plan_threshold && slope > slope_threshold {
+                            } else if prof > prof_threshold
+                                && plan <= plan_threshold
+                                && slope > slope_threshold
+                            {
                                 3.0
-                            } else if prof > prof_threshold && plan > plan_threshold && slope > slope_threshold {
+                            } else if prof > prof_threshold
+                                && plan > plan_threshold
+                                && slope > slope_threshold
+                            {
                                 4.0
                             } else if prof >= -prof_threshold
                                 && prof < prof_threshold
@@ -4141,9 +4502,10 @@ impl TerrainAnalysisCore {
         for dir in 0..8usize {
             let step_length = ((DX[dir] as f64 * cell_size_x).powi(2)
                 + (DY[dir] as f64 * cell_size_y).powi(2))
-                .sqrt();
+            .sqrt();
             step_lengths[dir] = step_length;
-            flat_threshold_heights[dir] = flatness_threshold_tan * flatness_distance_f64 * step_length;
+            flat_threshold_heights[dir] =
+                flatness_threshold_tan * flatness_distance_f64 * step_length;
         }
 
         let mut inv_distances = vec![[0.0_f64; 8]; search_distance + 1];
@@ -4222,20 +4584,18 @@ impl TerrainAnalysisCore {
 
                         let zenith_distance = zenith_step as f64 * step_lengths[dir];
                         let nadir_distance = nadir_step as f64 * step_lengths[dir];
-                        let zenith_threshold = if flatness_distance > 0
-                            && zenith_step > flatness_distance
-                        {
-                            flat_threshold_heights[dir].atan2(zenith_distance)
-                        } else {
-                            flatness_threshold
-                        };
-                        let nadir_threshold = if flatness_distance > 0
-                            && nadir_step > flatness_distance
-                        {
-                            flat_threshold_heights[dir].atan2(nadir_distance)
-                        } else {
-                            flatness_threshold
-                        };
+                        let zenith_threshold =
+                            if flatness_distance > 0 && zenith_step > flatness_distance {
+                                flat_threshold_heights[dir].atan2(zenith_distance)
+                            } else {
+                                flatness_threshold
+                            };
+                        let nadir_threshold =
+                            if flatness_distance > 0 && nadir_step > flatness_distance {
+                                flat_threshold_heights[dir].atan2(nadir_distance)
+                            } else {
+                                flatness_threshold
+                            };
                         let zenith_angle = if zenith_step > 0 {
                             zenith_slope.atan()
                         } else {
@@ -4281,7 +4641,10 @@ impl TerrainAnalysisCore {
         }
 
         ctx.progress.progress(1.0);
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn viewshed_metadata() -> ToolMetadata {
@@ -4308,13 +4671,19 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "viewshed".to_string(),
             display_name: "Viewshed".to_string(),
-            summary: "Computes station visibility counts from point stations over a DEM.".to_string(),
+            summary: "Computes station visibility counts from point stations over a DEM."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "visibility".to_string(), "terrain".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "visibility".to_string(),
+                "terrain".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -4323,7 +4692,11 @@ impl TerrainAnalysisCore {
         let input_path = Self::parse_input(args)?;
         let stations_path = parse_vector_path_arg(args, "stations")?;
         let output_path = parse_optional_output_path(args, "output")?;
-        let height = args.get("height").and_then(|v| v.as_f64()).unwrap_or(2.0).max(0.0);
+        let height = args
+            .get("height")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(2.0)
+            .max(0.0);
 
         let input = Self::load_raster(&input_path)?;
         let mut output = input.as_ref().clone();
@@ -4354,7 +4727,11 @@ impl TerrainAnalysisCore {
         let mut counts = vec![0.0; rows * cols];
         let visibility_progress = PercentCoalescer::new(1, 99);
         for (stn_idx, (sr, sc, sz)) in station_pixels.iter().enumerate() {
-            ctx.progress.info(&format!("running viewshed station {} of {}", stn_idx + 1, station_pixels.len()));
+            ctx.progress.info(&format!(
+                "running viewshed station {} of {}",
+                stn_idx + 1,
+                station_pixels.len()
+            ));
             let station_vis: Vec<Vec<f64>> = (0..rows)
                 .into_par_iter()
                 .map(|r| {
@@ -4416,12 +4793,15 @@ impl TerrainAnalysisCore {
                     row_out[c] = counts[r * cols + c];
                 }
             }
-            output.set_row_slice(0, r as isize, &row_out).map_err(|e| {
-                ToolError::Execution(format!("failed writing row {}: {}", r, e))
-            })?;
+            output
+                .set_row_slice(0, r as isize, &row_out)
+                .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn low_points_on_headwater_divides_metadata() -> ToolMetadata {
@@ -4471,30 +4851,37 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "low_points_on_headwater_divides".to_string(),
             display_name: "Low Points on Headwater Divides".to_string(),
-            summary: "Locates low pass points along divides between neighboring headwater subbasins.".to_string(),
+            summary:
+                "Locates low pass points along divides between neighboring headwater subbasins."
+                    .to_string(),
             category: ToolCategory::Terrain,
             license_tier: LicenseTier::Open,
             params: vec![
                 ToolParamDescriptor {
                     name: "dem".to_string(),
-                    description: "Input depressionless DEM raster path or typed raster object.".to_string(),
+                    description: "Input depressionless DEM raster path or typed raster object."
+                        .to_string(),
                     required: true,
                 },
                 ToolParamDescriptor {
                     name: "streams".to_string(),
-                    description: "Input stream raster path (positive values indicate channel cells).".to_string(),
+                    description:
+                        "Input stream raster path (positive values indicate channel cells)."
+                            .to_string(),
                     required: true,
                 },
                 ToolParamDescriptor {
                     name: "output".to_string(),
-                    description: "Optional output vector path (default temporary .shp).".to_string(),
+                    description: "Optional output vector path (default temporary .shp)."
+                        .to_string(),
                     required: false,
                 },
             ],
             defaults,
             examples: vec![ToolExample {
                 name: "basic_low_points_on_headwater_divides".to_string(),
-                description: "Find low pass points between neighboring headwater basins.".to_string(),
+                description: "Find low pass points between neighboring headwater basins."
+                    .to_string(),
                 args: example_args,
             }],
             tags: vec![
@@ -4512,8 +4899,8 @@ impl TerrainAnalysisCore {
         args: &ToolArgs,
         ctx: &ToolContext,
     ) -> Result<ToolRunResult, ToolError> {
-        let dem_path = parse_raster_path_arg(args, "dem")
-            .or_else(|_| parse_raster_path_arg(args, "input"))?;
+        let dem_path =
+            parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
         let streams_path = parse_raster_path_arg(args, "streams")
             .or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
         let output_path = parse_optional_output_path(args, "output")?;
@@ -4619,7 +5006,8 @@ impl TerrainAnalysisCore {
                     valleys[idx] = 1;
                 }
             }
-            compute_progress.emit_unit_fraction(ctx.progress, (rows + r + 1) as f64 / (rows as f64 * 5.0));
+            compute_progress
+                .emit_unit_fraction(ctx.progress, (rows + r + 1) as f64 / (rows as f64 * 5.0));
         }
 
         let mut stack = channel_heads.clone();
@@ -4742,7 +5130,10 @@ impl TerrainAnalysisCore {
                     }
                 }
             }
-            compute_progress.emit_unit_fraction(ctx.progress, (rows * 4 + r + 1) as f64 / (rows as f64 * 5.0));
+            compute_progress.emit_unit_fraction(
+                ctx.progress,
+                (rows * 4 + r + 1) as f64 / (rows as f64 * 5.0),
+            );
         }
 
         let mut layer = wbvector::Layer::new("low_points_on_headwater_divides")
@@ -4753,7 +5144,10 @@ impl TerrainAnalysisCore {
             _ => None,
         };
         layer.add_field(wbvector::FieldDef::new("FID", wbvector::FieldType::Integer));
-        layer.add_field(wbvector::FieldDef::new("HEIGHT", wbvector::FieldType::Float));
+        layer.add_field(wbvector::FieldDef::new(
+            "HEIGHT",
+            wbvector::FieldType::Float,
+        ));
         layer.add_field(wbvector::FieldDef::new(
             "HEADWTR_ID",
             wbvector::FieldType::Integer,
@@ -4769,10 +5163,7 @@ impl TerrainAnalysisCore {
                     &[
                         ("FID", wbvector::FieldValue::Integer(fid)),
                         ("HEIGHT", wbvector::FieldValue::Float(z)),
-                        (
-                            "HEADWTR_ID",
-                            wbvector::FieldValue::Integer(hid as i64),
-                        ),
+                        ("HEADWTR_ID", wbvector::FieldValue::Integer(hid as i64)),
                     ],
                 )
                 .map_err(|e| {
@@ -4781,11 +5172,8 @@ impl TerrainAnalysisCore {
             fid += 1;
         }
 
-        let out = Self::write_vector_output(
-            &layer,
-            output_path,
-            "low_points_on_headwater_divides.shp",
-        )?;
+        let out =
+            Self::write_vector_output(&layer, output_path, "low_points_on_headwater_divides.shp")?;
         Ok(Self::build_result(out))
     }
 
@@ -4813,18 +5201,28 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "percent_elev_range".to_string(),
             display_name: "Percent Elevation Range".to_string(),
-            summary: "Calculates local topographic position as percent of neighbourhood elevation range.".to_string(),
+            summary:
+                "Calculates local topographic position as percent of neighbourhood elevation range."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "local-relief".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "local-relief".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_percent_elev_range(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_percent_elev_range(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let (filter_size_x, filter_size_y) = Self::parse_filter_sizes(args);
@@ -4868,7 +5266,11 @@ impl TerrainAnalysisCore {
                         }
                         if min_v.is_finite() && max_v.is_finite() {
                             let range = max_v - min_v;
-                            row_out[c] = if range > 0.0 { (z - min_v) / range * 100.0 } else { 0.0 };
+                            row_out[c] = if range > 0.0 {
+                                (z - min_v) / range * 100.0
+                            } else {
+                                0.0
+                            };
                         }
                     }
                     row_out
@@ -4876,11 +5278,16 @@ impl TerrainAnalysisCore {
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output.set_row_slice(band, r as isize, row).map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn relative_topographic_position_metadata() -> ToolMetadata {
@@ -4907,18 +5314,27 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "relative_topographic_position".to_string(),
             display_name: "Relative Topographic Position".to_string(),
-            summary: "Calculates RTP using neighbourhood min, mean, and max elevation values.".to_string(),
+            summary: "Calculates RTP using neighbourhood min, mean, and max elevation values."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "local-relief".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "local-relief".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_relative_topographic_position(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_relative_topographic_position(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let (filter_size_x, filter_size_y) = Self::parse_filter_sizes(args);
@@ -4975,21 +5391,34 @@ impl TerrainAnalysisCore {
                         }
                         row_out[c] = if z < mean {
                             let den = mean - min_v;
-                            if den > 0.0 { (z - mean) / den } else { 0.0 }
+                            if den > 0.0 {
+                                (z - mean) / den
+                            } else {
+                                0.0
+                            }
                         } else {
                             let den = max_v - mean;
-                            if den > 0.0 { (z - mean) / den } else { 0.0 }
+                            if den > 0.0 {
+                                (z - mean) / den
+                            } else {
+                                0.0
+                            }
                         };
                     }
                     row_out
                 })
                 .collect();
             for (r, row) in row_data.iter().enumerate() {
-                output.set_row_slice(band, r as isize, row).map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn num_downslope_neighbours_metadata() -> ToolMetadata {
@@ -5018,12 +5447,20 @@ impl TerrainAnalysisCore {
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "flow".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "flow".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_num_downslope_neighbours(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_num_downslope_neighbours(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let input = Self::load_raster(&input_path)?;
@@ -5032,7 +5469,16 @@ impl TerrainAnalysisCore {
         let cols = input.cols;
         let bands = input.bands;
         let nodata = input.nodata;
-        let offsets = [(-1isize, -1isize), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0)];
+        let offsets = [
+            (-1isize, -1isize),
+            (0, -1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+            (0, 1),
+            (-1, 1),
+            (-1, 0),
+        ];
 
         for band_idx in 0..bands {
             let band = band_idx as isize;
@@ -5060,11 +5506,16 @@ impl TerrainAnalysisCore {
                 })
                 .collect();
             for (r, row) in row_data.iter().enumerate() {
-                output.set_row_slice(band, r as isize, row).map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn num_upslope_neighbours_metadata() -> ToolMetadata {
@@ -5087,18 +5538,27 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "num_upslope_neighbours".to_string(),
             display_name: "Num Upslope Neighbours".to_string(),
-            summary: "Counts the number of 8-neighbour cells higher than each DEM cell.".to_string(),
+            summary: "Counts the number of 8-neighbour cells higher than each DEM cell."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "flow".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "flow".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_num_upslope_neighbours(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_num_upslope_neighbours(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let input = Self::load_raster(&input_path)?;
@@ -5107,7 +5567,16 @@ impl TerrainAnalysisCore {
         let cols = input.cols;
         let bands = input.bands;
         let nodata = input.nodata;
-        let offsets = [(-1isize, -1isize), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0)];
+        let offsets = [
+            (-1isize, -1isize),
+            (0, -1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+            (0, 1),
+            (-1, 1),
+            (-1, 0),
+        ];
 
         for band_idx in 0..bands {
             let band = band_idx as isize;
@@ -5135,11 +5604,16 @@ impl TerrainAnalysisCore {
                 })
                 .collect();
             for (r, row) in row_data.iter().enumerate() {
-                output.set_row_slice(band, r as isize, row).map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn max_downslope_elev_change_metadata() -> ToolMetadata {
@@ -5162,18 +5636,27 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "max_downslope_elev_change".to_string(),
             display_name: "Max Downslope Elev Change".to_string(),
-            summary: "Calculates the maximum elevation drop to lower neighbouring cells.".to_string(),
+            summary: "Calculates the maximum elevation drop to lower neighbouring cells."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "flow".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "flow".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_max_downslope_elev_change(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_max_downslope_elev_change(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let input = Self::load_raster(&input_path)?;
@@ -5185,7 +5668,16 @@ impl TerrainAnalysisCore {
         let cell_size_x = input.cell_size_x.abs().max(f64::EPSILON);
         let cell_size_y = input.cell_size_y.abs().max(f64::EPSILON);
         let diag = (cell_size_x * cell_size_x + cell_size_y * cell_size_y).sqrt();
-        let offsets = [(-1isize, -1isize, diag), (0, -1, cell_size_y), (1, -1, diag), (1, 0, cell_size_x), (1, 1, diag), (0, 1, cell_size_y), (-1, 1, diag), (-1, 0, cell_size_x)];
+        let offsets = [
+            (-1isize, -1isize, diag),
+            (0, -1, cell_size_y),
+            (1, -1, diag),
+            (1, 0, cell_size_x),
+            (1, 1, diag),
+            (0, 1, cell_size_y),
+            (-1, 1, diag),
+            (-1, 0, cell_size_x),
+        ];
 
         for band_idx in 0..bands {
             let band = band_idx as isize;
@@ -5218,11 +5710,16 @@ impl TerrainAnalysisCore {
                 })
                 .collect();
             for (r, row) in row_data.iter().enumerate() {
-                output.set_row_slice(band, r as isize, row).map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn max_upslope_elev_change_metadata() -> ToolMetadata {
@@ -5245,18 +5742,27 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "max_upslope_elev_change".to_string(),
             display_name: "Max Upslope Elev Change".to_string(),
-            summary: "Calculates the maximum elevation gain to higher neighbouring cells.".to_string(),
+            summary: "Calculates the maximum elevation gain to higher neighbouring cells."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "flow".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "flow".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_max_upslope_elev_change(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_max_upslope_elev_change(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let input = Self::load_raster(&input_path)?;
@@ -5268,7 +5774,16 @@ impl TerrainAnalysisCore {
         let cell_size_x = input.cell_size_x.abs().max(f64::EPSILON);
         let cell_size_y = input.cell_size_y.abs().max(f64::EPSILON);
         let diag = (cell_size_x * cell_size_x + cell_size_y * cell_size_y).sqrt();
-        let offsets = [(-1isize, -1isize, diag), (0, -1, cell_size_y), (1, -1, diag), (1, 0, cell_size_x), (1, 1, diag), (0, 1, cell_size_y), (-1, 1, diag), (-1, 0, cell_size_x)];
+        let offsets = [
+            (-1isize, -1isize, diag),
+            (0, -1, cell_size_y),
+            (1, -1, diag),
+            (1, 0, cell_size_x),
+            (1, 1, diag),
+            (0, 1, cell_size_y),
+            (-1, 1, diag),
+            (-1, 0, cell_size_x),
+        ];
 
         for band_idx in 0..bands {
             let band = band_idx as isize;
@@ -5301,11 +5816,16 @@ impl TerrainAnalysisCore {
                 })
                 .collect();
             for (r, row) in row_data.iter().enumerate() {
-                output.set_row_slice(band, r as isize, row).map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn min_downslope_elev_change_metadata() -> ToolMetadata {
@@ -5328,18 +5848,27 @@ impl TerrainAnalysisCore {
         ToolManifest {
             id: "min_downslope_elev_change".to_string(),
             display_name: "Min Downslope Elev Change".to_string(),
-            summary: "Calculates the minimum non-negative elevation drop to neighbouring cells.".to_string(),
+            summary: "Calculates the minimum non-negative elevation drop to neighbouring cells."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "flow".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "flow".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_min_downslope_elev_change(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_min_downslope_elev_change(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let input = Self::load_raster(&input_path)?;
@@ -5351,7 +5880,16 @@ impl TerrainAnalysisCore {
         let cell_size_x = input.cell_size_x.abs().max(f64::EPSILON);
         let cell_size_y = input.cell_size_y.abs().max(f64::EPSILON);
         let diag = (cell_size_x * cell_size_x + cell_size_y * cell_size_y).sqrt();
-        let offsets = [(-1isize, -1isize, diag), (0, -1, cell_size_y), (1, -1, diag), (1, 0, cell_size_x), (1, 1, diag), (0, 1, cell_size_y), (-1, 1, diag), (-1, 0, cell_size_x)];
+        let offsets = [
+            (-1isize, -1isize, diag),
+            (0, -1, cell_size_y),
+            (1, -1, diag),
+            (1, 0, cell_size_x),
+            (1, 1, diag),
+            (0, 1, cell_size_y),
+            (-1, 1, diag),
+            (-1, 0, cell_size_x),
+        ];
 
         for band_idx in 0..bands {
             let band = band_idx as isize;
@@ -5378,17 +5916,26 @@ impl TerrainAnalysisCore {
                                 }
                             }
                         }
-                        row_out[c] = if min_slope < f64::INFINITY { min_drop } else { 0.0 };
+                        row_out[c] = if min_slope < f64::INFINITY {
+                            min_drop
+                        } else {
+                            0.0
+                        };
                     }
                     row_out
                 })
                 .collect();
             for (r, row) in row_data.iter().enumerate() {
-                output.set_row_slice(band, r as isize, row).map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn elevation_percentile_metadata() -> ToolMetadata {
@@ -5432,7 +5979,10 @@ Applications: (1) Landform classification combining elevation percentile + slope
         }
     }
 
-    fn run_elevation_percentile(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_elevation_percentile(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let (filter_size_x, filter_size_y) = Self::parse_filter_sizes(args);
@@ -5602,11 +6152,16 @@ Applications: (1) Landform classification combining elevation percentile + slope
                 })
                 .collect();
             for (r, row) in row_data.iter().enumerate() {
-                output.set_row_slice(band, r as isize, row).map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn downslope_index_metadata() -> ToolMetadata {
@@ -5658,7 +6213,10 @@ Applications: (1) Landform classification combining elevation percentile + slope
         }
     }
 
-    fn run_max_branch_length(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_max_branch_length(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let log_transform = args
@@ -5679,7 +6237,16 @@ Applications: (1) Landform classification combining elevation percentile + slope
         let diag = (cell_size_x * cell_size_x + cell_size_y * cell_size_y).sqrt();
         let dx = [1isize, 1, 1, 0, -1, -1, -1, 0];
         let dy = [-1isize, 0, 1, 1, 1, 0, -1, -1];
-        let lengths = [diag, cell_size_x, diag, cell_size_y, diag, cell_size_x, diag, cell_size_y];
+        let lengths = [
+            diag,
+            cell_size_x,
+            diag,
+            cell_size_y,
+            diag,
+            cell_size_x,
+            diag,
+            cell_size_y,
+        ];
         let coalescer = PercentCoalescer::new(1, 99);
 
         for band_idx in 0..bands {
@@ -5745,7 +6312,12 @@ Applications: (1) Landform classification combining elevation percentile + slope
                         continue;
                     }
 
-                    let mut trace_pair = |mut r1: isize, mut c1: isize, mut r2: isize, mut c2: isize, marker: isize| -> (f64, f64) {
+                    let mut trace_pair = |mut r1: isize,
+                                          mut c1: isize,
+                                          mut r2: isize,
+                                          mut c2: isize,
+                                          marker: isize|
+                     -> (f64, f64) {
                         let mut dist1 = 0.0;
                         let mut dist2 = 0.0;
                         let mut flag1 = true;
@@ -5810,7 +6382,13 @@ Applications: (1) Landform classification combining elevation percentile + slope
                         let ir = r * cols + (c + 1);
                         if flow_dir[ir] >= 0 {
                             let marker = (r * cols + c + 1) as isize;
-                            let (dist1, dist2) = trace_pair(r as isize, c as isize, r as isize, (c + 1) as isize, marker);
+                            let (dist1, dist2) = trace_pair(
+                                r as isize,
+                                c as isize,
+                                r as isize,
+                                (c + 1) as isize,
+                                marker,
+                            );
                             if dist1 > out_vals[i0] {
                                 out_vals[i0] = dist1;
                             }
@@ -5824,7 +6402,13 @@ Applications: (1) Landform classification combining elevation percentile + slope
                         let ib = (r + 1) * cols + c;
                         if flow_dir[ib] >= 0 {
                             let marker = -((r * cols + c + 1) as isize);
-                            let (dist1, dist2) = trace_pair(r as isize, c as isize, (r + 1) as isize, c as isize, marker);
+                            let (dist1, dist2) = trace_pair(
+                                r as isize,
+                                c as isize,
+                                (r + 1) as isize,
+                                c as isize,
+                                marker,
+                            );
                             if dist1 > out_vals[i0] {
                                 out_vals[i0] = dist1;
                             }
@@ -5867,13 +6451,18 @@ Applications: (1) Landform classification combining elevation percentile + slope
                 let end = start + cols;
                 output
                     .set_row_slice(band, r as isize, &out_vals[start..end])
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                    })?;
             }
 
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn downslope_index_manifest() -> ToolManifest {
@@ -5884,13 +6473,19 @@ Applications: (1) Landform classification combining elevation percentile + slope
         ToolManifest {
             id: "downslope_index".to_string(),
             display_name: "Downslope Index".to_string(),
-            summary: "Calculates Hjerdt et al. (2004) downslope index using D8 flow directions.".to_string(),
+            summary: "Calculates Hjerdt et al. (2004) downslope index using D8 flow directions."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "hydrology".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "hydrology".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -5902,9 +6497,15 @@ Applications: (1) Landform classification combining elevation percentile + slope
             .get("vertical_drop")
             .or_else(|| args.get("drop"))
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| ToolError::Validation("missing required numeric parameter 'vertical_drop'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation(
+                    "missing required numeric parameter 'vertical_drop'".to_string(),
+                )
+            })?;
         if vertical_drop <= 0.0 {
-            return Err(ToolError::Validation("parameter 'vertical_drop' must be > 0".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'vertical_drop' must be > 0".to_string(),
+            ));
         }
         let output_type = args
             .get("output_type")
@@ -5921,8 +6522,26 @@ Applications: (1) Landform classification combining elevation percentile + slope
         let cell_size_x = input.cell_size_x.abs().max(f64::EPSILON);
         let cell_size_y = input.cell_size_y.abs().max(f64::EPSILON);
         let diag = (cell_size_x * cell_size_x + cell_size_y * cell_size_y).sqrt();
-        let offsets = [(-1isize, -1isize), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0)];
-        let lengths = [diag, cell_size_y, diag, cell_size_x, diag, cell_size_y, diag, cell_size_x];
+        let offsets = [
+            (-1isize, -1isize),
+            (0, -1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+            (0, 1),
+            (-1, 1),
+            (-1, 0),
+        ];
+        let lengths = [
+            diag,
+            cell_size_y,
+            diag,
+            cell_size_x,
+            diag,
+            cell_size_y,
+            diag,
+            cell_size_x,
+        ];
 
         for band_idx in 0..bands {
             let band = band_idx as isize;
@@ -6013,11 +6632,16 @@ Applications: (1) Landform classification combining elevation percentile + slope
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output.set_row_slice(band, r as isize, row).map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn elev_above_pit_metadata() -> ToolMetadata {
@@ -6040,13 +6664,19 @@ Applications: (1) Landform classification combining elevation percentile + slope
         ToolManifest {
             id: "elev_above_pit".to_string(),
             display_name: "Elev Above Pit".to_string(),
-            summary: "Calculates elevation above the nearest downslope pit cell (or edge sink).".to_string(),
+            summary: "Calculates elevation above the nearest downslope pit cell (or edge sink)."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "relative-elevation".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "relative-elevation".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6063,8 +6693,26 @@ Applications: (1) Landform classification combining elevation percentile + slope
         let cell_size_x = input.cell_size_x.abs().max(f64::EPSILON);
         let cell_size_y = input.cell_size_y.abs().max(f64::EPSILON);
         let diag = (cell_size_x * cell_size_x + cell_size_y * cell_size_y).sqrt();
-        let offsets = [(-1isize, -1isize), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0)];
-        let lengths = [diag, cell_size_y, diag, cell_size_x, diag, cell_size_y, diag, cell_size_x];
+        let offsets = [
+            (-1isize, -1isize),
+            (0, -1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+            (0, 1),
+            (-1, 1),
+            (-1, 0),
+        ];
+        let lengths = [
+            diag,
+            cell_size_y,
+            diag,
+            cell_size_x,
+            diag,
+            cell_size_y,
+            diag,
+            cell_size_x,
+        ];
         let inflowing_vals = [4i8, 5i8, 6i8, 7i8, 0i8, 1i8, 2i8, 3i8];
 
         for band_idx in 0..bands {
@@ -6132,14 +6780,17 @@ Applications: (1) Landform classification combining elevation percentile + slope
             }
 
             for (r, row) in row_data.iter().enumerate() {
-                output
-                    .set_row_slice(band, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn directional_relief_metadata() -> ToolMetadata {
@@ -6165,13 +6816,20 @@ Applications: (1) Landform classification combining elevation percentile + slope
         ToolManifest {
             id: "directional_relief".to_string(),
             display_name: "Directional Relief".to_string(),
-            summary: "Calculates directional relief by ray-tracing elevation in a specified azimuth.".to_string(),
+            summary:
+                "Calculates directional relief by ray-tracing elevation in a specified azimuth."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "relief".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "relief".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6191,7 +6849,11 @@ Applications: (1) Landform classification combining elevation percentile + slope
         let z10 = input.get(band, y1, x0);
         let z01 = input.get(band, y0, x1);
         let z11 = input.get(band, y1, x1);
-        if input.is_nodata(z00) || input.is_nodata(z10) || input.is_nodata(z01) || input.is_nodata(z11) {
+        if input.is_nodata(z00)
+            || input.is_nodata(z10)
+            || input.is_nodata(z01)
+            || input.is_nodata(z11)
+        {
             return None;
         }
         let tx = x - x0 as f64;
@@ -6201,13 +6863,13 @@ Applications: (1) Landform classification combining elevation percentile + slope
         Some(a * (1.0 - ty) + b * ty)
     }
 
-    fn run_directional_relief(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_directional_relief(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
-        let mut azimuth = args
-            .get("azimuth")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
+        let mut azimuth = args.get("azimuth").and_then(|v| v.as_f64()).unwrap_or(0.0);
         while azimuth < 0.0 {
             azimuth += 360.0;
         }
@@ -6243,7 +6905,9 @@ Applications: (1) Landform classification combining elevation percentile + slope
 
                     let row_cell_size = if Self::raster_is_geographic(&input) {
                         let lat_rad = input.row_center_y(r as isize).to_radians();
-                        ((input.cell_size_x.abs() + input.cell_size_y.abs()) / 2.0) * 111_111.0 * lat_rad.cos().abs().max(1e-6)
+                        ((input.cell_size_x.abs() + input.cell_size_y.abs()) / 2.0)
+                            * 111_111.0
+                            * lat_rad.cos().abs().max(1e-6)
                     } else {
                         (input.cell_size_x.abs() + input.cell_size_y.abs()) / 2.0
                     }
@@ -6261,7 +6925,11 @@ Applications: (1) Landform classification combining elevation percentile + slope
                         loop {
                             let yy = r as f64 + dy * step;
                             let xx = c as f64 + dx * step;
-                            if yy <= 0.0 || xx <= 0.0 || yy >= (rows - 1) as f64 || xx >= (cols - 1) as f64 {
+                            if yy <= 0.0
+                                || xx <= 0.0
+                                || yy >= (rows - 1) as f64
+                                || xx >= (cols - 1) as f64
+                            {
                                 break;
                             }
                             let dist = step * row_cell_size;
@@ -6284,14 +6952,17 @@ Applications: (1) Landform classification combining elevation percentile + slope
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output
-                    .set_row_slice(band, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn exposure_towards_wind_flux_metadata() -> ToolMetadata {
@@ -6351,11 +7022,7 @@ Applications: (1) Landform classification combining elevation percentile + slope
             .get("max_dist")
             .and_then(|v| v.as_f64())
             .unwrap_or(f64::INFINITY);
-        let mut azimuth = args
-            .get("azimuth")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0)
-            % 360.0;
+        let mut azimuth = args.get("azimuth").and_then(|v| v.as_f64()).unwrap_or(0.0) % 360.0;
         if azimuth < 0.0 {
             azimuth += 360.0;
         }
@@ -6381,7 +7048,8 @@ Applications: (1) Landform classification combining elevation percentile + slope
             ));
         }
 
-        let diag_length = ((rows as f64 * cell_size_y).powi(2) + (cols as f64 * cell_size_x).powi(2)).sqrt();
+        let diag_length =
+            ((rows as f64 * cell_size_y).powi(2) + (cols as f64 * cell_size_x).powi(2)).sqrt();
         if max_dist > diag_length {
             max_dist = diag_length;
         }
@@ -6469,7 +7137,11 @@ Applications: (1) Landform classification combining elevation percentile + slope
 
                         let z = |dr: isize, dc: isize| {
                             let v = input.get(band, row + dr, col + dc);
-                            if input.is_nodata(v) { zc * zf } else { v * zf }
+                            if input.is_nodata(v) {
+                                zc * zf
+                            } else {
+                                v * zf
+                            }
                         };
 
                         let n0 = z(-1, -1);
@@ -6486,7 +7158,8 @@ Applications: (1) Landform classification combining elevation percentile + slope
                             fx = 0.00001;
                         }
                         let fy = (n6 - n4 + 2.0 * (n7 - n3) + n0 - n2) / eight_grid_res;
-                        aspect_row[c] = 180.0 - (fy / fx).atan().to_degrees() + 90.0 * (fx / fx.abs());
+                        aspect_row[c] =
+                            180.0 - (fy / fx).atan().to_degrees() + 90.0 * (fx / fx.abs());
                         slope_row[c] = (fx * fx + fy * fy).sqrt().atan();
                     }
 
@@ -6494,7 +7167,8 @@ Applications: (1) Landform classification combining elevation percentile + slope
                 })
                 .collect();
 
-            let aspect_rows: Vec<Vec<f64>> = slope_aspect_rows.iter().map(|(a, _)| a.clone()).collect();
+            let aspect_rows: Vec<Vec<f64>> =
+                slope_aspect_rows.iter().map(|(a, _)| a.clone()).collect();
             let slope_rows: Vec<Vec<f64>> = slope_aspect_rows.into_iter().map(|(_, s)| s).collect();
 
             let horizon_rows: Vec<Vec<f64>> = (0..rows)
@@ -6585,7 +7259,10 @@ Applications: (1) Landform classification combining elevation percentile + slope
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn relative_aspect_metadata() -> ToolMetadata {
@@ -6612,13 +7289,20 @@ Applications: (1) Landform classification combining elevation percentile + slope
         ToolManifest {
             id: "relative_aspect".to_string(),
             display_name: "Relative Aspect".to_string(),
-            summary: "Calculates terrain aspect relative to a user-specified azimuth (0 to 180 degrees).".to_string(),
+            summary:
+                "Calculates terrain aspect relative to a user-specified azimuth (0 to 180 degrees)."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "aspect".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "aspect".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -6626,10 +7310,7 @@ Applications: (1) Landform classification combining elevation percentile + slope
     fn run_relative_aspect(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
-        let mut azimuth = args
-            .get("azimuth")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0);
+        let mut azimuth = args.get("azimuth").and_then(|v| v.as_f64()).unwrap_or(0.0);
         while azimuth < 0.0 {
             azimuth += 360.0;
         }
@@ -6668,7 +7349,11 @@ Applications: (1) Landform classification combining elevation percentile + slope
 
                         let z = |dr: isize, dc: isize| {
                             let v = input.get(band, r as isize + dr, c as isize + dc);
-                            if input.is_nodata(v) { zc } else { v }
+                            if input.is_nodata(v) {
+                                zc
+                            } else {
+                                v
+                            }
                         };
 
                         let z1 = z(-1, -1) * z_factor;
@@ -6706,14 +7391,17 @@ Applications: (1) Landform classification combining elevation percentile + slope
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output
-                    .set_row_slice(band, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn edge_density_metadata() -> ToolMetadata {
@@ -6788,7 +7476,16 @@ Applications: (1) Landform classification combining elevation percentile + slope
         let resx = input.cell_size_x.abs().max(f64::EPSILON);
         let resy = input.cell_size_y.abs().max(f64::EPSILON);
 
-        let offsets = [(-1isize, -1isize), (0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0)];
+        let offsets = [
+            (-1isize, -1isize),
+            (0, -1),
+            (1, -1),
+            (1, 0),
+            (1, 1),
+            (0, 1),
+            (-1, 1),
+            (-1, 0),
+        ];
 
         for band_idx in 0..bands {
             let band = band_idx as isize;
@@ -6806,7 +7503,11 @@ Applications: (1) Landform classification combining elevation percentile + slope
                     }
                     let z = |dr: isize, dc: isize| {
                         let v = input.get(band, r as isize + dr, c as isize + dc);
-                        if input.is_nodata(v) { zc } else { v }
+                        if input.is_nodata(v) {
+                            zc
+                        } else {
+                            v
+                        }
                     };
                     let z1 = z(-1, -1) * z_factor;
                     let z2 = z(-1, 0) * z_factor;
@@ -6852,14 +7553,19 @@ Applications: (1) Landform classification combining elevation percentile + slope
                         }
                         let nidx = rr as usize * cols + cc as usize;
                         if let Some(nn) = normals[nidx] {
-                            let dot = (n0[0] * nn[0] + n0[1] * nn[1] + n0[2] * nn[2]).clamp(-1.0, 1.0);
+                            let dot =
+                                (n0[0] * nn[0] + n0[1] * nn[1] + n0[2] * nn[2]).clamp(-1.0, 1.0);
                             if dot < threshold {
                                 is_edge = true;
                                 break;
                             }
                         }
                     }
-                    if is_edge { 1.0 } else { 0.0 }
+                    if is_edge {
+                        1.0
+                    } else {
+                        0.0
+                    }
                 })
                 .collect();
 
@@ -6910,14 +7616,17 @@ Applications: (1) Landform classification combining elevation percentile + slope
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output
-                    .set_row_slice(band, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn spherical_std_dev_of_normals_metadata() -> ToolMetadata {
@@ -6944,18 +7653,27 @@ Applications: (1) Landform classification combining elevation percentile + slope
         ToolManifest {
             id: "spherical_std_dev_of_normals".to_string(),
             display_name: "Spherical Std Dev Of Normals".to_string(),
-            summary: "Calculates spherical standard deviation of local surface normals.".to_string(),
+            summary: "Calculates spherical standard deviation of local surface normals."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["geomorphometry".to_string(), "terrain".to_string(), "roughness".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "roughness".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
-    fn run_spherical_std_dev_of_normals(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_spherical_std_dev_of_normals(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let mut filter_size = args
@@ -6988,14 +7706,16 @@ Applications: (1) Landform classification combining elevation percentile + slope
             let coalescer = PercentCoalescer::new(1, 99);
 
             let mut base = vec![f64::NAN; rows * cols];
-            base.par_chunks_mut(cols).enumerate().for_each(|(r, row_vals)| {
-                for (c, out) in row_vals.iter_mut().enumerate() {
-                    let v = input.get(band, r as isize, c as isize);
-                    if !input.is_nodata(v) {
-                        *out = v;
+            base.par_chunks_mut(cols)
+                .enumerate()
+                .for_each(|(r, row_vals)| {
+                    for (c, out) in row_vals.iter_mut().enumerate() {
+                        let v = input.get(band, r as isize, c as isize);
+                        if !input.is_nodata(v) {
+                            *out = v;
+                        }
                     }
-                }
-            });
+                });
 
             let sigma = (mid as f64 + 0.5) / 3.0;
             let smoothed = Self::gaussian_blur_values(&base, rows, cols, sigma.max(1.0));
@@ -7041,14 +7761,17 @@ Applications: (1) Landform classification combining elevation percentile + slope
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output
-                    .set_row_slice(band, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     fn average_normal_vector_angular_deviation_metadata() -> ToolMetadata {
@@ -7118,7 +7841,8 @@ Applications: (1) Landform classification combining elevation percentile + slope
 
         for band_idx in 0..bands {
             let band = band_idx as isize;
-            ctx.progress.info("running average_normal_vector_angular_deviation");
+            ctx.progress
+                .info("running average_normal_vector_angular_deviation");
             let coalescer = PercentCoalescer::new(1, 99);
 
             let mut base = vec![f64::NAN; rows * cols];
@@ -7153,7 +7877,8 @@ Applications: (1) Landform classification combining elevation percentile + slope
             let mut diff = vec![f64::NAN; rows * cols];
             diff.par_iter_mut().enumerate().for_each(|(i, out)| {
                 if onx[i].is_finite() && snx[i].is_finite() {
-                    let dot = (onx[i] * snx[i] + ony[i] * sny[i] + onz[i] * snz[i]).clamp(-1.0, 1.0);
+                    let dot =
+                        (onx[i] * snx[i] + ony[i] * sny[i] + onz[i] * snz[i]).clamp(-1.0, 1.0);
                     *out = dot.acos().to_degrees();
                 }
             });
@@ -7183,14 +7908,17 @@ Applications: (1) Landform classification combining elevation percentile + slope
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output
-                    .set_row_slice(band, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
 
-        Ok(Self::build_result(Self::write_or_store_output(output, output_path)?))
+        Ok(Self::build_result(Self::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 
     // -----------------------------------------------------------------------
@@ -7298,9 +8026,14 @@ Compare to Elevation Percentile (relative position in relief) and Surface Area R
                             continue;
                         }
                         let offsets: [(isize, isize); 8] = [
-                            (-1, -1), (0, -1), (1, -1),
-                            (-1,  0),           (1,  0),
-                            (-1,  1), (0,  1), (1,  1),
+                            (-1, -1),
+                            (0, -1),
+                            (1, -1),
+                            (-1, 0),
+                            (1, 0),
+                            (-1, 1),
+                            (0, 1),
+                            (1, 1),
                         ];
                         let mut sum_sq = 0.0_f64;
                         let mut n = 0_usize;
@@ -7321,9 +8054,9 @@ Compare to Elevation Percentile (relative position in relief) and Surface Area R
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output
-                    .set_row_slice(band, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
@@ -7423,21 +8156,34 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
 
         // Horizontal/vertical/diagonal neighbour pairs (Jenness 2004, Table 1)
         const DIST_PAIRS: [[usize; 2]; 16] = [
-            [0, 1], [1, 2], [3, 4], [4, 5], [6, 7], [7, 8], // h/v pairs
-            [0, 3], [1, 4], [2, 5], [3, 6], [4, 7], [5, 8], // h/v pairs (N-S axis)
-            [0, 4], [1, 5], [3, 7], [4, 8], // diagonal pairs
+            [0, 1],
+            [1, 2],
+            [3, 4],
+            [4, 5],
+            [6, 7],
+            [7, 8], // h/v pairs
+            [0, 3],
+            [1, 4],
+            [2, 5],
+            [3, 6],
+            [4, 7],
+            [5, 8], // h/v pairs (N-S axis)
+            [0, 4],
+            [1, 5],
+            [3, 7],
+            [4, 8], // diagonal pairs
         ];
 
         // 8 triangles; each entry is three indices into DIST_PAIRS distances.
         const TRIANGLE_SIDES: [[usize; 3]; 8] = [
-            [6, 7, 12],  // NW triangle
-            [7, 8, 13],  // N  triangle
-            [8, 9, 15],  // NE triangle (corrected)
-            [0, 7, 12],  // W  triangle
-            [1, 8, 13],  // E  triangle
-            [3, 7, 14],  // SW triangle (corrected)
-            [4, 8, 15],  // S  triangle (corrected)
-            [5, 9, 15],  // SE triangle
+            [6, 7, 12], // NW triangle
+            [7, 8, 13], // N  triangle
+            [8, 9, 15], // NE triangle (corrected)
+            [0, 7, 12], // W  triangle
+            [1, 8, 13], // E  triangle
+            [3, 7, 14], // SW triangle (corrected)
+            [4, 8, 15], // S  triangle (corrected)
+            [5, 9, 15], // SE triangle
         ];
 
         let input_path = Self::parse_input(args)?;
@@ -7467,7 +8213,10 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
                     // Per-row geographic scaling
                     let (resx, resy) = if is_geographic {
                         let mid_lat = input.row_center_y(row).to_radians();
-                        (base_res_x * 111_111.0 * mid_lat.cos(), base_res_y * 111_111.0)
+                        (
+                            base_res_x * 111_111.0 * mid_lat.cos(),
+                            base_res_y * 111_111.0,
+                        )
                     } else {
                         (base_res_x, base_res_y)
                     };
@@ -7478,7 +8227,7 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
                     let planar: [f64; 16] = [
                         resx, resx, resx, resx, resx, resx, // horizontal
                         resy, resy, resy, resy, resy, resy, // vertical
-                        diag, diag, diag, diag,              // diagonal
+                        diag, diag, diag, diag, // diagonal
                     ];
 
                     for c in 0..cols {
@@ -7489,9 +8238,15 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
                             continue;
                         }
                         let offsets: [(isize, isize); 9] = [
-                            (-1, -1), (0, -1), (1, -1),
-                            (-1,  0), (0,  0), (1,  0),
-                            (-1,  1), (0,  1), (1,  1),
+                            (-1, -1),
+                            (0, -1),
+                            (1, -1),
+                            (-1, 0),
+                            (0, 0),
+                            (1, 0),
+                            (-1, 1),
+                            (0, 1),
+                            (1, 1),
                         ];
                         let mut z = [0.0f64; 9];
                         let mut nodata_flags = [false; 9];
@@ -7544,9 +8299,9 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output
-                    .set_row_slice(band, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
@@ -7592,8 +8347,9 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
         ToolManifest {
             id: "elev_relative_to_min_max".to_string(),
             display_name: "Elevation Relative to Min/Max".to_string(),
-            summary: "Expresses each elevation as a percentage (0–100) of the raster's elevation range."
-                .to_string(),
+            summary:
+                "Expresses each elevation as a percentage (0–100) of the raster's elevation range."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
@@ -7604,7 +8360,8 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
                 },
                 ToolParamDescriptor {
                     name: "output".to_string(),
-                    description: "Optional output path. If omitted, result is stored in memory.".to_string(),
+                    description: "Optional output path. If omitted, result is stored in memory."
+                        .to_string(),
                     required: false,
                 },
             ],
@@ -7653,8 +8410,12 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
                     for c in 0..cols {
                         let v = input.get(band, r as isize, c as isize);
                         if !input.is_nodata(v) {
-                            if v < mn { mn = v; }
-                            if v > mx { mx = v; }
+                            if v < mn {
+                                mn = v;
+                            }
+                            if v > mx {
+                                mx = v;
+                            }
                         }
                     }
                     (mn, mx)
@@ -7686,9 +8447,9 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output
-                    .set_row_slice(band, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
@@ -7741,8 +8502,7 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
         ToolManifest {
             id: "wetness_index".to_string(),
             display_name: "Wetness Index".to_string(),
-            summary: "Calculates the topographic wetness index ln(SCA / tan(slope))."
-                .to_string(),
+            summary: "Calculates the topographic wetness index ln(SCA / tan(slope)).".to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
@@ -7781,10 +8541,7 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
         }
     }
 
-    fn run_wetness_index(
-        args: &ToolArgs,
-        ctx: &ToolContext,
-    ) -> Result<ToolRunResult, ToolError> {
+    fn run_wetness_index(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let output_path = parse_optional_output_path(args, "output")?;
 
         ctx.progress.info("running wetness_index");
@@ -7833,9 +8590,214 @@ Applications: (1) Terrain roughness classification (smooth=near 1.0, rough>2.0),
                 .collect();
 
             for (r, row) in row_data.iter().enumerate() {
-                output
-                    .set_row_slice(band, r as isize, row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
+            }
+            coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
+        }
+
+        let output_locator = Self::write_or_store_output(output, output_path)?;
+        Ok(Self::build_result(output_locator))
+    }
+
+    fn saga_wetness_index_metadata() -> ToolMetadata {
+        ToolMetadata {
+            id: "saga_wetness_index",
+            display_name: "SAGA Wetness Index",
+            summary: "Computes a SAGA-style wetness index from a depressionless DEM by internally deriving slope and specific catchment area. This implementation uses a lightweight formulation with an optional suction offset and minimum-slope threshold, and is intended as an approximation of the SAGA wetness-index concept rather than a guarantee of exact algorithmic parity.",
+            category: ToolCategory::Raster,
+            license_tier: LicenseTier::Open,
+            params: vec![
+                ToolParamSpec {
+                    name: "dem",
+                    description: "Input DEM raster path or typed raster object. The DEM should be hydrologically conditioned and depressionless.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "suction",
+                    description: "Optional additive offset applied to the specific catchment area before the wetness-index calculation.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "slope_min",
+                    description: "Minimum slope value in degrees to use when computing tan(slope).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "z_factor",
+                    description: "Optional multiplier applied to the input elevation values when computing slope.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output path. If omitted, output remains in memory.",
+                    required: false,
+                },
+            ],
+        }
+    }
+
+    fn saga_wetness_index_manifest() -> ToolManifest {
+        let mut defaults = ToolArgs::new();
+        defaults.insert("dem".to_string(), json!("dem.tif"));
+        defaults.insert("suction".to_string(), json!(0.0));
+        defaults.insert("slope_min".to_string(), json!(0.1));
+        defaults.insert("z_factor".to_string(), json!(1.0));
+
+        let mut example_args = ToolArgs::new();
+        example_args.insert("dem".to_string(), json!("dem.tif"));
+        example_args.insert("suction".to_string(), json!(1.0));
+        example_args.insert("slope_min".to_string(), json!(0.1));
+        example_args.insert("z_factor".to_string(), json!(1.0));
+        example_args.insert("output".to_string(), json!("saga_twi.tif"));
+
+        ToolManifest {
+            id: "saga_wetness_index".to_string(),
+            display_name: "SAGA Wetness Index".to_string(),
+            summary: "Computes a SAGA-style wetness index from a depressionless DEM by internally deriving slope and specific catchment area.".to_string(),
+            category: ToolCategory::Raster,
+            license_tier: LicenseTier::Open,
+            params: vec![
+                ToolParamDescriptor {
+                    name: "dem".to_string(),
+                    description: "Input DEM raster path or typed raster object. The DEM should be hydrologically conditioned and depressionless.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "suction".to_string(),
+                    description: "Optional additive offset applied to the specific catchment area before the wetness-index calculation.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "slope_min".to_string(),
+                    description: "Minimum slope value in degrees to use when computing tan(slope).".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "z_factor".to_string(),
+                    description: "Optional multiplier applied to the input elevation values when computing slope.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output".to_string(),
+                    description: "Optional output path. If omitted, result is stored in memory."
+                        .to_string(),
+                    required: false,
+                },
+            ],
+            defaults,
+            examples: vec![ToolExample {
+                name: "basic_saga_wetness_index".to_string(),
+                description: "Compute a SAGA-style wetness index from a DEM.".to_string(),
+                args: example_args,
+            }],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "terrain".to_string(),
+                "hydrology".to_string(),
+                "wetness".to_string(),
+                "saga".to_string(),
+            ],
+            stability: ToolStability::Stable,
+        }
+    }
+
+    fn run_saga_wetness_index(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
+        let output_path = parse_optional_output_path(args, "output")?;
+        let suction = args.get("suction").and_then(|v| v.as_f64()).unwrap_or(0.0);
+        let slope_min = args
+            .get("slope_min")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.1);
+        let z_factor = args.get("z_factor").and_then(|v| v.as_f64()).unwrap_or(1.0);
+
+        if suction < 0.0 {
+            return Err(ToolError::Validation(
+                "parameter 'suction' must be greater than or equal to 0".to_string(),
+            ));
+        }
+        if slope_min <= 0.0 {
+            return Err(ToolError::Validation(
+                "parameter 'slope_min' must be greater than 0".to_string(),
+            ));
+        }
+
+        ctx.progress.info("running saga_wetness_index");
+        ctx.progress.info("reading DEM raster");
+        let dem_path =
+            parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
+        let dem = Self::load_raster(&dem_path)?;
+
+        ctx.progress.info("computing slope from DEM");
+        let (slope, _) = slope_aspect_from_dem(dem.as_ref(), z_factor)?;
+
+        ctx.progress.info("computing specific catchment area");
+        let dem_id = memory_store::put_raster(dem.as_ref().clone());
+        let dem_mem_path = memory_store::make_raster_memory_path(&dem_id);
+        let mut flow_args = ToolArgs::new();
+        flow_args.insert("input".to_string(), json!(dem_mem_path));
+        flow_args.insert("out_type".to_string(), json!("sca"));
+        flow_args.insert("log_transform".to_string(), json!(false));
+        let flow_result = D8FlowAccumTool.run(&flow_args, ctx)?;
+        let sca_path = flow_result
+            .outputs
+            .get("path")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Execution(
+                    "flow accumulation tool did not return an output path".to_string(),
+                )
+            })?;
+        let sca = Self::load_raster(sca_path)?;
+
+        if sca.rows != slope.rows || sca.cols != slope.cols {
+            return Err(ToolError::Validation(
+                "computed slope and specific catchment area rasters must have the same dimensions"
+                    .to_string(),
+            ));
+        }
+
+        let mut output = sca.as_ref().clone();
+        let rows = sca.rows;
+        let cols = sca.cols;
+        let bands = sca.bands;
+        let coalescer = PercentCoalescer::new(1, 99);
+        let nodata = sca.nodata;
+
+        for band_idx in 0..bands {
+            let band = band_idx as isize;
+            let row_data: Vec<Vec<f64>> = (0..rows)
+                .into_par_iter()
+                .map(|r| {
+                    let mut row_out = vec![nodata; cols];
+                    let row = r as isize;
+                    for c in 0..cols {
+                        let col = c as isize;
+                        let sca_val = sca.get(band, row, col);
+                        let slope_val = slope.get(band, row, col);
+                        if sca.is_nodata(sca_val) || slope.is_nodata(slope_val) {
+                            continue;
+                        }
+                        let effective_slope = slope_val.max(slope_min);
+                        let slope_rad = effective_slope.to_radians();
+                        let tan_slope = slope_rad.tan();
+                        if tan_slope <= 0.0 || sca_val + suction <= 0.0 {
+                            continue;
+                        }
+                        row_out[c] = ((sca_val + suction) / tan_slope).ln();
+                    }
+                    row_out
+                })
+                .collect();
+
+            for (r, row) in row_data.iter().enumerate() {
+                output.set_row_slice(band, r as isize, row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
         }
@@ -7928,9 +8890,32 @@ impl Tool for WetnessIndexTool {
     }
 }
 
+impl Tool for SagaWetnessIndexTool {
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::saga_wetness_index_metadata()
+    }
+
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::saga_wetness_index_manifest()
+    }
+
+    fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
+        let _ = parse_optional_output_path(args, "output")?;
+        Ok(())
+    }
+
+    fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+        TerrainAnalysisCore::run_saga_wetness_index(args, ctx)
+    }
+}
+
 impl Tool for PercentElevRangeTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::percent_elev_range_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::percent_elev_range_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::percent_elev_range_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::percent_elev_range_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -7942,8 +8927,12 @@ impl Tool for PercentElevRangeTool {
 }
 
 impl Tool for RelativeTopographicPositionTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::relative_topographic_position_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::relative_topographic_position_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::relative_topographic_position_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::relative_topographic_position_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -7955,8 +8944,12 @@ impl Tool for RelativeTopographicPositionTool {
 }
 
 impl Tool for NumDownslopeNeighboursTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::num_downslope_neighbours_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::num_downslope_neighbours_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::num_downslope_neighbours_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::num_downslope_neighbours_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -7968,8 +8961,12 @@ impl Tool for NumDownslopeNeighboursTool {
 }
 
 impl Tool for NumUpslopeNeighboursTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::num_upslope_neighbours_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::num_upslope_neighbours_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::num_upslope_neighbours_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::num_upslope_neighbours_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -7981,8 +8978,12 @@ impl Tool for NumUpslopeNeighboursTool {
 }
 
 impl Tool for MaxDownslopeElevChangeTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::max_downslope_elev_change_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::max_downslope_elev_change_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::max_downslope_elev_change_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::max_downslope_elev_change_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -7994,8 +8995,12 @@ impl Tool for MaxDownslopeElevChangeTool {
 }
 
 impl Tool for MaxUpslopeElevChangeTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::max_upslope_elev_change_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::max_upslope_elev_change_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::max_upslope_elev_change_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::max_upslope_elev_change_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8007,8 +9012,12 @@ impl Tool for MaxUpslopeElevChangeTool {
 }
 
 impl Tool for MinDownslopeElevChangeTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::min_downslope_elev_change_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::min_downslope_elev_change_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::min_downslope_elev_change_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::min_downslope_elev_change_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8020,8 +9029,12 @@ impl Tool for MinDownslopeElevChangeTool {
 }
 
 impl Tool for ElevationPercentileTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::elevation_percentile_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::elevation_percentile_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::elevation_percentile_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::elevation_percentile_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8033,8 +9046,12 @@ impl Tool for ElevationPercentileTool {
 }
 
 impl Tool for DownslopeIndexTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::downslope_index_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::downslope_index_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::downslope_index_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::downslope_index_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8042,9 +9059,15 @@ impl Tool for DownslopeIndexTool {
             .get("vertical_drop")
             .or_else(|| args.get("drop"))
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| ToolError::Validation("missing required numeric parameter 'vertical_drop'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation(
+                    "missing required numeric parameter 'vertical_drop'".to_string(),
+                )
+            })?;
         if vertical_drop <= 0.0 {
-            return Err(ToolError::Validation("parameter 'vertical_drop' must be > 0".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'vertical_drop' must be > 0".to_string(),
+            ));
         }
         Ok(())
     }
@@ -8054,8 +9077,12 @@ impl Tool for DownslopeIndexTool {
 }
 
 impl Tool for MaxBranchLengthTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::max_branch_length_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::max_branch_length_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::max_branch_length_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::max_branch_length_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8067,8 +9094,12 @@ impl Tool for MaxBranchLengthTool {
 }
 
 impl Tool for ElevAbovePitTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::elev_above_pit_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::elev_above_pit_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::elev_above_pit_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::elev_above_pit_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8080,8 +9111,12 @@ impl Tool for ElevAbovePitTool {
 }
 
 impl Tool for DirectionalReliefTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::directional_relief_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::directional_relief_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::directional_relief_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::directional_relief_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8093,8 +9128,12 @@ impl Tool for DirectionalReliefTool {
 }
 
 impl Tool for ExposureTowardsWindFluxTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::exposure_towards_wind_flux_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::exposure_towards_wind_flux_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::exposure_towards_wind_flux_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::exposure_towards_wind_flux_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8113,8 +9152,12 @@ impl Tool for ExposureTowardsWindFluxTool {
 }
 
 impl Tool for RelativeAspectTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::relative_aspect_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::relative_aspect_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::relative_aspect_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::relative_aspect_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8126,8 +9169,12 @@ impl Tool for RelativeAspectTool {
 }
 
 impl Tool for EdgeDensityTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::edge_density_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::edge_density_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::edge_density_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::edge_density_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8139,8 +9186,12 @@ impl Tool for EdgeDensityTool {
 }
 
 impl Tool for SphericalStdDevOfNormalsTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::spherical_std_dev_of_normals_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::spherical_std_dev_of_normals_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::spherical_std_dev_of_normals_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::spherical_std_dev_of_normals_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8152,8 +9203,12 @@ impl Tool for SphericalStdDevOfNormalsTool {
 }
 
 impl Tool for AverageNormalVectorAngularDeviationTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::average_normal_vector_angular_deviation_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::average_normal_vector_angular_deviation_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::average_normal_vector_angular_deviation_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::average_normal_vector_angular_deviation_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8165,8 +9220,12 @@ impl Tool for AverageNormalVectorAngularDeviationTool {
 }
 
 impl Tool for HypsometricAnalysisTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::hypsometric_analysis_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::hypsometric_analysis_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::hypsometric_analysis_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::hypsometric_analysis_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_raster_input_list(args, "inputs")?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8200,8 +9259,12 @@ impl Tool for ProfileTool {
 }
 
 impl Tool for SlopeVsAspectPlotTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::slope_vs_aspect_plot_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::slope_vs_aspect_plot_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::slope_vs_aspect_plot_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::slope_vs_aspect_plot_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8231,8 +9294,12 @@ impl Tool for SlopeVsAspectPlotTool {
 }
 
 impl Tool for SlopeVsElevPlotTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::slope_vs_elev_plot_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::slope_vs_elev_plot_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::slope_vs_elev_plot_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::slope_vs_elev_plot_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_raster_input_list(args, "inputs")?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8254,8 +9321,12 @@ impl Tool for SlopeVsElevPlotTool {
 }
 
 impl Tool for ElevAbovePitDistTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::elev_above_pit_dist_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::elev_above_pit_dist_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::elev_above_pit_dist_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::elev_above_pit_dist_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8267,8 +9338,12 @@ impl Tool for ElevAbovePitDistTool {
 }
 
 impl Tool for CircularVarianceOfAspectTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::circular_variance_of_aspect_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::circular_variance_of_aspect_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::circular_variance_of_aspect_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::circular_variance_of_aspect_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8280,8 +9355,12 @@ impl Tool for CircularVarianceOfAspectTool {
 }
 
 impl Tool for FetchAnalysisTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::fetch_analysis_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::fetch_analysis_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::fetch_analysis_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::fetch_analysis_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8293,8 +9372,12 @@ impl Tool for FetchAnalysisTool {
 }
 
 impl Tool for FindRidgesTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::find_ridges_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::find_ridges_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::find_ridges_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::find_ridges_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8306,8 +9389,12 @@ impl Tool for FindRidgesTool {
 }
 
 impl Tool for GeomorphonsTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::geomorphons_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::geomorphons_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::geomorphons_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::geomorphons_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8317,7 +9404,9 @@ impl Tool for GeomorphonsTool {
             .and_then(|v| v.as_u64())
         {
             if v == 0 {
-                return Err(ToolError::Validation("parameter 'search_distance' must be >= 1".to_string()));
+                return Err(ToolError::Validation(
+                    "parameter 'search_distance' must be >= 1".to_string(),
+                ));
             }
         }
         if let Some(v) = args
@@ -8326,7 +9415,9 @@ impl Tool for GeomorphonsTool {
             .and_then(|v| v.as_f64())
         {
             if v < 0.0 {
-                return Err(ToolError::Validation("parameter 'flatness_threshold' must be >= 0".to_string()));
+                return Err(ToolError::Validation(
+                    "parameter 'flatness_threshold' must be >= 0".to_string(),
+                ));
             }
         }
         Ok(())
@@ -8337,24 +9428,34 @@ impl Tool for GeomorphonsTool {
 }
 
 impl Tool for PennockLandformClassificationTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::pennock_landform_classification_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::pennock_landform_classification_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::pennock_landform_classification_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::pennock_landform_classification_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
         if let Some(v) = args.get("slope_threshold").and_then(|v| v.as_f64()) {
             if v < 0.0 {
-                return Err(ToolError::Validation("parameter 'slope_threshold' must be >= 0".to_string()));
+                return Err(ToolError::Validation(
+                    "parameter 'slope_threshold' must be >= 0".to_string(),
+                ));
             }
         }
         if let Some(v) = args.get("prof_curv_threshold").and_then(|v| v.as_f64()) {
             if v < 0.0 {
-                return Err(ToolError::Validation("parameter 'prof_curv_threshold' must be >= 0".to_string()));
+                return Err(ToolError::Validation(
+                    "parameter 'prof_curv_threshold' must be >= 0".to_string(),
+                ));
             }
         }
         if let Some(v) = args.get("plan_curv_threshold").and_then(|v| v.as_f64()) {
             if v < 0.0 {
-                return Err(ToolError::Validation("parameter 'plan_curv_threshold' must be >= 0".to_string()));
+                return Err(ToolError::Validation(
+                    "parameter 'plan_curv_threshold' must be >= 0".to_string(),
+                ));
             }
         }
         Ok(())
@@ -8365,8 +9466,12 @@ impl Tool for PennockLandformClassificationTool {
 }
 
 impl Tool for ViewshedTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::viewshed_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::viewshed_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::viewshed_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::viewshed_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_vector_path_arg(args, "stations")?;
@@ -8386,10 +9491,16 @@ impl Tool for AssessRouteTool {
         TerrainAnalysisCore::assess_route_manifest()
     }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_vector_path_arg(args, "routes").or_else(|_| parse_vector_path_arg(args, "input"))?;
-        let _ = parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input_dem"))?;
+        let _ = parse_vector_path_arg(args, "routes")
+            .or_else(|_| parse_vector_path_arg(args, "input"))?;
+        let _ = parse_raster_path_arg(args, "dem")
+            .or_else(|_| parse_raster_path_arg(args, "input_dem"))?;
         let _ = parse_optional_output_path(args, "output")?;
-        if let Some(v) = args.get("segment_length").or_else(|| args.get("length")).and_then(|v| v.as_f64()) {
+        if let Some(v) = args
+            .get("segment_length")
+            .or_else(|| args.get("length"))
+            .and_then(|v| v.as_f64())
+        {
             if !v.is_finite() || v <= 0.0 {
                 return Err(ToolError::Validation(
                     "parameter 'segment_length' must be a positive finite number".to_string(),
@@ -8415,8 +9526,12 @@ impl Tool for AssessRouteTool {
 }
 
 impl Tool for BreaklineMappingTool {
-    fn metadata(&self) -> ToolMetadata { TerrainAnalysisCore::breakline_mapping_metadata() }
-    fn manifest(&self) -> ToolManifest { TerrainAnalysisCore::breakline_mapping_manifest() }
+    fn metadata(&self) -> ToolMetadata {
+        TerrainAnalysisCore::breakline_mapping_metadata()
+    }
+    fn manifest(&self) -> ToolManifest {
+        TerrainAnalysisCore::breakline_mapping_manifest()
+    }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         let _ = TerrainAnalysisCore::parse_input(args)?;
         let _ = parse_optional_output_path(args, "output")?;
@@ -8449,8 +9564,10 @@ impl Tool for LowPointsOnHeadwaterDividesTool {
         TerrainAnalysisCore::low_points_on_headwater_divides_manifest()
     }
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        let _ = parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
-        let _ = parse_raster_path_arg(args, "streams").or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
+        let _ =
+            parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
+        let _ = parse_raster_path_arg(args, "streams")
+            .or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
         let _ = parse_optional_output_path(args, "output")?;
         Ok(())
     }
@@ -8536,7 +9653,9 @@ mod tests {
         let mut raster = Raster::new(cfg);
         for row in 0..rows as isize {
             for col in 0..cols as isize {
-                raster.set(0, row, col, row as f64 * cols as f64 + col as f64).unwrap();
+                raster
+                    .set(0, row, col, row as f64 * cols as f64 + col as f64)
+                    .unwrap();
             }
         }
         raster
@@ -8598,7 +9717,10 @@ mod tests {
         let min_v = out.get(0, 0, 0);
         let max_v = out.get(0, 4, 4);
         assert!(min_v.abs() < 1e-10, "expected min 0.0, got {min_v}");
-        assert!((max_v - 100.0).abs() < 1e-10, "expected max 100.0, got {max_v}");
+        assert!(
+            (max_v - 100.0).abs() < 1e-10,
+            "expected max 100.0, got {max_v}"
+        );
     }
 
     #[test]
@@ -8620,6 +9742,30 @@ mod tests {
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         let v = out.get(0, 3, 3);
         assert!((v - 1.0).abs() < 1e-6, "expected 1.0, got {v}");
+    }
+
+    #[test]
+    fn saga_wetness_index_applies_suction_offset() {
+        let sca_id = memory_store::put_raster(make_constant_raster(7, 7, std::f64::consts::E));
+        let slope_id = memory_store::put_raster(make_constant_raster(7, 7, 45.0));
+        let mut args = ToolArgs::new();
+        args.insert(
+            "sca".to_string(),
+            json!(memory_store::make_raster_memory_path(&sca_id)),
+        );
+        args.insert(
+            "slope".to_string(),
+            json!(memory_store::make_raster_memory_path(&slope_id)),
+        );
+        args.insert("suction".to_string(), json!(1.0));
+        args.insert("slope_min".to_string(), json!(0.1));
+        let result = SagaWetnessIndexTool.run(&args, &make_ctx()).unwrap();
+        let out_path = result.outputs.get("path").unwrap().as_str().unwrap();
+        let out_id = memory_store::raster_path_to_id(out_path).unwrap();
+        let out = memory_store::get_raster_by_id(out_id).unwrap();
+        let v = out.get(0, 3, 3);
+        let expected = ((std::f64::consts::E + 1.0) / 1.0_f64).ln();
+        assert!((v - expected).abs() < 1e-6, "expected {expected}, got {v}");
     }
 
     #[test]
@@ -8666,10 +9812,15 @@ mod tests {
         let dem = make_constant_raster(7, 7, 10.0);
         let id = memory_store::put_raster(dem);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("azimuth".to_string(), json!(315.0));
         let result = DirectionalReliefTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         assert!(out.get(0, 3, 3).abs() < 1e-10);
     }
@@ -8679,7 +9830,10 @@ mod tests {
         let dem = make_constant_raster(7, 7, 10.0);
         let id = memory_store::put_raster(dem);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("azimuth".to_string(), json!(315.0));
         args.insert("max_dist".to_string(), json!(100.0));
         let result = ExposureTowardsWindFluxTool.run(&args, &make_ctx()).unwrap();
@@ -8695,10 +9849,15 @@ mod tests {
         let dem = make_constant_raster(7, 7, 10.0);
         let id = memory_store::put_raster(dem);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("azimuth".to_string(), json!(180.0));
         let result = RelativeAspectTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         assert!((out.get(0, 3, 3) + 1.0).abs() < 1e-10);
     }
@@ -8708,11 +9867,16 @@ mod tests {
         let dem = make_constant_raster(7, 7, 10.0);
         let id = memory_store::put_raster(dem);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("filter_size".to_string(), json!(5));
         args.insert("norm_diff".to_string(), json!(5.0));
         let result = EdgeDensityTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         assert!(out.get(0, 3, 3).abs() < 1e-10);
     }
@@ -8722,10 +9886,17 @@ mod tests {
         let dem = make_constant_raster(9, 9, 10.0);
         let id = memory_store::put_raster(dem);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("filter_size".to_string(), json!(5));
-        let result = SphericalStdDevOfNormalsTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let result = SphericalStdDevOfNormalsTool
+            .run(&args, &make_ctx())
+            .unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         assert!(out.get(0, 4, 4).abs() < 1e-8);
     }
@@ -8735,10 +9906,17 @@ mod tests {
         let dem = make_constant_raster(9, 9, 10.0);
         let id = memory_store::put_raster(dem);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("filter_size".to_string(), json!(5));
-        let result = AverageNormalVectorAngularDeviationTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let result = AverageNormalVectorAngularDeviationTool
+            .run(&args, &make_ctx())
+            .unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         assert!(out.get(0, 4, 4).abs() < 1e-8);
     }
@@ -8759,7 +9937,10 @@ mod tests {
 
         let mut args = ToolArgs::new();
         args.insert("inputs".to_string(), json!(in_path));
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
         let result = HypsometricAnalysisTool.run(&args, &make_ctx()).unwrap();
         let p = result.outputs.get("path").unwrap().as_str().unwrap();
         assert!(std::path::Path::new(p).exists());
@@ -8776,12 +9957,15 @@ mod tests {
 
         let mut args = ToolArgs::new();
         args.insert("input".to_string(), json!(in_path));
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
         let result = SlopeVsAspectPlotTool.run(&args, &make_ctx()).unwrap();
         let p = result.outputs.get("path").unwrap().as_str().unwrap();
         assert!(std::path::Path::new(p).exists());
         let html = std::fs::read_to_string(p).unwrap();
-        assert!(html.contains("Slope vs Aspect"));
+        assert!(html.contains("Slope vs. Aspect"));
     }
 
     #[test]
@@ -8793,7 +9977,10 @@ mod tests {
 
         let mut args = ToolArgs::new();
         args.insert("inputs".to_string(), json!(vec![in_path]));
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
         let result = SlopeVsElevPlotTool.run(&args, &make_ctx()).unwrap();
         let p = result.outputs.get("path").unwrap().as_str().unwrap();
         assert!(std::path::Path::new(p).exists());
@@ -8807,17 +9994,26 @@ mod tests {
         dem.set(0, 2, 2, 10.0).unwrap();
         let id = memory_store::put_raster(dem);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("filter_size_x".to_string(), json!(3));
         args.insert("filter_size_y".to_string(), json!(3));
 
         let r1 = PercentElevRangeTool.run(&args, &make_ctx()).unwrap();
-        let id1 = memory_store::raster_path_to_id(r1.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let id1 =
+            memory_store::raster_path_to_id(r1.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out1 = memory_store::get_raster_by_id(id1).unwrap();
         assert!((out1.get(0, 2, 2) - 100.0).abs() < 1e-10);
 
-        let r2 = RelativeTopographicPositionTool.run(&args, &make_ctx()).unwrap();
-        let id2 = memory_store::raster_path_to_id(r2.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let r2 = RelativeTopographicPositionTool
+            .run(&args, &make_ctx())
+            .unwrap();
+        let id2 =
+            memory_store::raster_path_to_id(r2.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out2 = memory_store::get_raster_by_id(id2).unwrap();
         assert!((out2.get(0, 2, 2) - 1.0).abs() < 1e-10);
     }
@@ -8827,11 +10023,16 @@ mod tests {
         let input = make_constant_raster(7, 7, 100.0);
         let id = memory_store::put_raster(input);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("search_distance".to_string(), json!(3));
         args.insert("output_forms".to_string(), json!(true));
         let result = GeomorphonsTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         assert_eq!(out.data_type, DataType::I16);
         assert!((out.get(0, 3, 3) - 1.0).abs() < 1e-10);
@@ -8842,11 +10043,16 @@ mod tests {
         let input = make_constant_raster(7, 7, 100.0);
         let id = memory_store::put_raster(input);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("search_distance".to_string(), json!(3));
         args.insert("output_forms".to_string(), json!(false));
         let result = GeomorphonsTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         assert!((out.get(0, 3, 3) - 3280.0).abs() < 1e-10);
     }
@@ -8858,16 +10064,24 @@ mod tests {
         input.set(0, 4, 5, 10.0).unwrap();
         let id = memory_store::put_raster(input);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("search_distance".to_string(), json!(1));
         args.insert("flatness_threshold".to_string(), json!(0.0));
         args.insert("output_forms".to_string(), json!(false));
 
         let result = GeomorphonsTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         let center_code = out.get(0, 4, 4);
-        assert!((center_code - 3281.0).abs() < 1e-10, "expected east-directed zenith dominance code, got {center_code}");
+        assert!(
+            (center_code - 3281.0).abs() < 1e-10,
+            "expected east-directed zenith dominance code, got {center_code}"
+        );
     }
 
     #[test]
@@ -8877,16 +10091,24 @@ mod tests {
         input.set(0, 5, 7, 10.0).unwrap();
         let id = memory_store::put_raster(input);
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("search_distance".to_string(), json!(2));
         args.insert("flatness_threshold".to_string(), json!(0.0));
         args.insert("output_forms".to_string(), json!(false));
 
         let result = GeomorphonsTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         let center_code = out.get(0, 5, 5);
-        assert!((center_code - 3281.0).abs() < 1e-10, "expected endpoint sample to influence east-directed classification, got {center_code}");
+        assert!(
+            (center_code - 3281.0).abs() < 1e-10,
+            "expected endpoint sample to influence east-directed classification, got {center_code}"
+        );
     }
 
     #[test]
@@ -8903,31 +10125,52 @@ mod tests {
         let west_id = memory_store::put_raster(west_input);
 
         let mut east_args = ToolArgs::new();
-        east_args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&east_id)));
+        east_args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&east_id)),
+        );
         east_args.insert("search_distance".to_string(), json!(1));
         east_args.insert("flatness_threshold".to_string(), json!(0.0));
         east_args.insert("output_forms".to_string(), json!(false));
 
         let mut west_args = ToolArgs::new();
-        west_args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&west_id)));
+        west_args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&west_id)),
+        );
         west_args.insert("search_distance".to_string(), json!(1));
         west_args.insert("flatness_threshold".to_string(), json!(0.0));
         west_args.insert("output_forms".to_string(), json!(false));
 
         let east_result = GeomorphonsTool.run(&east_args, &make_ctx()).unwrap();
-        let east_out_id = memory_store::raster_path_to_id(east_result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let east_out_id = memory_store::raster_path_to_id(
+            east_result.outputs.get("path").unwrap().as_str().unwrap(),
+        )
+        .unwrap();
         let east_out = memory_store::get_raster_by_id(east_out_id).unwrap();
 
         let west_result = GeomorphonsTool.run(&west_args, &make_ctx()).unwrap();
-        let west_out_id = memory_store::raster_path_to_id(west_result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let west_out_id = memory_store::raster_path_to_id(
+            west_result.outputs.get("path").unwrap().as_str().unwrap(),
+        )
+        .unwrap();
         let west_out = memory_store::get_raster_by_id(west_out_id).unwrap();
 
         let east_code = east_out.get(0, 4, 4);
         let west_code = west_out.get(0, 4, 4);
 
-        assert!((east_code - 3281.0).abs() < 1e-10, "unexpected east code: {east_code}");
-        assert!((west_code - 3361.0).abs() < 1e-10, "unexpected west code: {west_code}");
-        assert!((east_code - west_code).abs() > 1e-10, "raw codes should preserve orientation");
+        assert!(
+            (east_code - 3281.0).abs() < 1e-10,
+            "unexpected east code: {east_code}"
+        );
+        assert!(
+            (west_code - 3361.0).abs() < 1e-10,
+            "unexpected west code: {west_code}"
+        );
+        assert!(
+            (east_code - west_code).abs() > 1e-10,
+            "raw codes should preserve orientation"
+        );
     }
 
     #[test]
@@ -8939,17 +10182,25 @@ mod tests {
         let id = memory_store::put_raster(input);
 
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("search_distance".to_string(), json!(2));
         args.insert("flatness_threshold".to_string(), json!(10.0));
         args.insert("output_forms".to_string(), json!(false));
 
         let result = GeomorphonsTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         let center_code = out.get(0, 5, 5);
 
-        assert!((center_code - 3281.0).abs() < 1e-10, "expected positive-only profile to remain zenith-dominant, got {center_code}");
+        assert!(
+            (center_code - 3281.0).abs() < 1e-10,
+            "expected positive-only profile to remain zenith-dominant, got {center_code}"
+        );
     }
 
     #[test]
@@ -8959,7 +10210,8 @@ mod tests {
         isotropic.set(0, 3, 5, 10.0).unwrap();
         isotropic.set(0, 7, 5, 10.0).unwrap();
 
-        let mut anisotropic = make_constant_raster_with_cell_sizes(11, 11, -9999.0, 10.0, Some(20.0));
+        let mut anisotropic =
+            make_constant_raster_with_cell_sizes(11, 11, -9999.0, 10.0, Some(20.0));
         anisotropic.set(0, 5, 5, 0.0).unwrap();
         anisotropic.set(0, 3, 5, 10.0).unwrap();
         anisotropic.set(0, 7, 5, 10.0).unwrap();
@@ -8968,23 +10220,35 @@ mod tests {
         let aniso_id = memory_store::put_raster(anisotropic);
 
         let mut iso_args = ToolArgs::new();
-        iso_args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&iso_id)));
+        iso_args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&iso_id)),
+        );
         iso_args.insert("search_distance".to_string(), json!(2));
         iso_args.insert("flatness_threshold".to_string(), json!(0.0));
         iso_args.insert("output_forms".to_string(), json!(false));
 
         let mut aniso_args = ToolArgs::new();
-        aniso_args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&aniso_id)));
+        aniso_args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&aniso_id)),
+        );
         aniso_args.insert("search_distance".to_string(), json!(2));
         aniso_args.insert("flatness_threshold".to_string(), json!(0.0));
         aniso_args.insert("output_forms".to_string(), json!(false));
 
         let iso_result = GeomorphonsTool.run(&iso_args, &make_ctx()).unwrap();
-        let iso_out_id = memory_store::raster_path_to_id(iso_result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let iso_out_id = memory_store::raster_path_to_id(
+            iso_result.outputs.get("path").unwrap().as_str().unwrap(),
+        )
+        .unwrap();
         let iso_out = memory_store::get_raster_by_id(iso_out_id).unwrap();
 
         let aniso_result = GeomorphonsTool.run(&aniso_args, &make_ctx()).unwrap();
-        let aniso_out_id = memory_store::raster_path_to_id(aniso_result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let aniso_out_id = memory_store::raster_path_to_id(
+            aniso_result.outputs.get("path").unwrap().as_str().unwrap(),
+        )
+        .unwrap();
         let aniso_out = memory_store::get_raster_by_id(aniso_out_id).unwrap();
 
         let iso_code = iso_out.get(0, 5, 5);
@@ -8997,15 +10261,23 @@ mod tests {
         let mut args = ToolArgs::new();
         let dem = make_ramp_raster(3, 3);
         let id = memory_store::put_raster(dem);
-        args.insert("input".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "input".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("filter_size_x".to_string(), json!(3));
         args.insert("filter_size_y".to_string(), json!(3));
         args.insert("sig_digits".to_string(), json!(2));
         let result = ElevationPercentileTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         let center = out.get(0, 1, 1);
-        assert!((center - (4.0 / 9.0 * 100.0)).abs() < 1e-4, "unexpected percentile: {center}");
+        assert!(
+            (center - (4.0 / 9.0 * 100.0)).abs() < 1e-4,
+            "unexpected percentile: {center}"
+        );
     }
 
     #[test]
@@ -9064,8 +10336,12 @@ mod tests {
             json!(memory_store::make_raster_memory_path(&id)),
         );
         args.insert("filter".to_string(), json!(5));
-        let result = CircularVarianceOfAspectTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let result = CircularVarianceOfAspectTool
+            .run(&args, &make_ctx())
+            .unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         assert!(out.get(0, 4, 4).abs() < 1e-8);
     }
@@ -9082,7 +10358,9 @@ mod tests {
         args.insert("azimuth".to_string(), json!(315.0));
         args.insert("hgt_inc".to_string(), json!(0.05));
         let result = FetchAnalysisTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         assert!(out.get(0, 4, 4) < 0.0);
     }
@@ -9099,7 +10377,9 @@ mod tests {
         );
         args.insert("line_thin".to_string(), json!(false));
         let result = FindRidgesTool.run(&args, &make_ctx()).unwrap();
-        let out_id = memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap()).unwrap();
+        let out_id =
+            memory_store::raster_path_to_id(result.outputs.get("path").unwrap().as_str().unwrap())
+                .unwrap();
         let out = memory_store::get_raster_by_id(out_id).unwrap();
         assert!((out.get(0, 3, 3) - 1.0).abs() < 1e-10);
     }
@@ -9131,13 +10411,19 @@ mod tests {
         );
         args.insert("threshold".to_string(), json!(0.5));
         args.insert("min_length".to_string(), json!(3));
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
 
         let result = BreaklineMappingTool.run(&args, &make_ctx()).unwrap();
         let p = result.outputs.get("path").unwrap().as_str().unwrap();
         assert!(std::path::Path::new(p).exists());
         let layer = wbvector::read(p).unwrap();
-        assert!(!layer.features.is_empty(), "expected extracted breakline features");
+        assert!(
+            !layer.features.is_empty(),
+            "expected extracted breakline features"
+        );
     }
 
     #[test]
@@ -9158,7 +10444,8 @@ mod tests {
         }
         let dem_id = memory_store::put_raster(dem);
 
-        let mut routes = wbvector::Layer::new("routes").with_geom_type(wbvector::GeometryType::LineString);
+        let mut routes =
+            wbvector::Layer::new("routes").with_geom_type(wbvector::GeometryType::LineString);
         routes.add_field(wbvector::FieldDef::new("NAME", wbvector::FieldType::Text));
         routes
             .add_feature(
@@ -9171,26 +10458,39 @@ mod tests {
             .unwrap();
 
         let routes_path = std::env::temp_dir().join("assess_route_input_routes.shp");
-        wbvector::write(&routes, routes_path.as_path(), wbvector::VectorFormat::Shapefile)
-            .unwrap();
+        wbvector::write(
+            &routes,
+            routes_path.as_path(),
+            wbvector::VectorFormat::Shapefile,
+        )
+        .unwrap();
 
         let out_path = std::env::temp_dir().join("assess_route_output_segments.shp");
         let mut args = ToolArgs::new();
-        args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
+        args.insert(
+            "routes".to_string(),
+            json!(routes_path.to_string_lossy().to_string()),
+        );
         args.insert(
             "dem".to_string(),
             json!(memory_store::make_raster_memory_path(&dem_id)),
         );
         args.insert("segment_length".to_string(), json!(100.0));
         args.insert("search_radius".to_string(), json!(8));
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
 
         let result = AssessRouteTool.run(&args, &make_ctx()).unwrap();
         let p = result.outputs.get("path").unwrap().as_str().unwrap();
         assert!(std::path::Path::new(p).exists());
 
         let out_layer = wbvector::read(p).unwrap();
-        assert!(out_layer.features.len() >= 2, "expected segmented route features");
+        assert!(
+            out_layer.features.len() >= 2,
+            "expected segmented route features"
+        );
         let avg_slope_idx = out_layer.schema.field_index("AVG_SLOPE").unwrap();
         let vis_idx = out_layer.schema.field_index("VISIBILITY").unwrap();
 
@@ -9210,7 +10510,10 @@ mod tests {
                 "expected VISIBILITY to be numeric or null"
             );
         }
-        assert!(has_avg_slope, "expected at least one segment with computed AVG_SLOPE");
+        assert!(
+            has_avg_slope,
+            "expected at least one segment with computed AVG_SLOPE"
+        );
     }
 
     #[test]
@@ -9231,7 +10534,8 @@ mod tests {
         }
         let dem_id = memory_store::put_raster(dem);
 
-        let mut lines = wbvector::Layer::new("profiles").with_geom_type(wbvector::GeometryType::LineString);
+        let mut lines =
+            wbvector::Layer::new("profiles").with_geom_type(wbvector::GeometryType::LineString);
         lines
             .add_feature(
                 Some(wbvector::Geometry::line_string(vec![
@@ -9242,7 +10546,12 @@ mod tests {
             )
             .unwrap();
         let lines_path = std::env::temp_dir().join("profile_lines_test.shp");
-        wbvector::write(&lines, lines_path.as_path(), wbvector::VectorFormat::Shapefile).unwrap();
+        wbvector::write(
+            &lines,
+            lines_path.as_path(),
+            wbvector::VectorFormat::Shapefile,
+        )
+        .unwrap();
 
         let mut args = ToolArgs::new();
         args.insert(
@@ -9254,13 +10563,51 @@ mod tests {
             json!(memory_store::make_raster_memory_path(&dem_id)),
         );
         let out_path = std::env::temp_dir().join("profile_test_output.html");
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
 
         let result = ProfileTool.run(&args, &make_ctx()).unwrap();
         let p = result.outputs.get("path").unwrap().as_str().unwrap();
         assert!(std::path::Path::new(p).exists());
         let html = std::fs::read_to_string(p).unwrap();
         assert!(html.contains("Profile"));
+    }
+
+    #[test]
+    fn saga_wetness_index_runs_on_dem_and_returns_finite_values() {
+        let cfg = RasterConfig {
+            rows: 5,
+            cols: 5,
+            bands: 1,
+            nodata: -9999.0,
+            cell_size: 10.0,
+            ..Default::default()
+        };
+        let mut dem = Raster::new(cfg);
+        for r in 0..5isize {
+            for c in 0..5isize {
+                dem.set(0, r, c, 100.0 + r as f64 + c as f64).unwrap();
+            }
+        }
+        let dem_id = memory_store::put_raster(dem);
+
+        let mut args = ToolArgs::new();
+        args.insert(
+            "dem".to_string(),
+            json!(memory_store::make_raster_memory_path(&dem_id)),
+        );
+        args.insert("suction".to_string(), json!(1.0));
+        args.insert("slope_min".to_string(), json!(0.1));
+
+        let result = SagaWetnessIndexTool.run(&args, &make_ctx()).unwrap();
+        let output_path = result.outputs.get("path").unwrap().as_str().unwrap();
+        let out_id = memory_store::raster_path_to_id(output_path).unwrap();
+        let out = memory_store::get_raster_arc_by_id(out_id).unwrap();
+        let value = out.get(0, 0, 0);
+        assert!(value.is_finite(), "expected finite output value");
+        assert!(value > 0.0, "expected positive wetness-index value");
     }
 
     #[test]
@@ -9303,7 +10650,10 @@ mod tests {
             json!(memory_store::make_raster_memory_path(&streams_id)),
         );
         let out_path = std::env::temp_dir().join("low_points_on_headwater_divides_test.shp");
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
 
         let result = LowPointsOnHeadwaterDividesTool
             .run(&args, &make_ctx())
@@ -9312,7 +10662,9 @@ mod tests {
         assert!(std::path::Path::new(p).exists());
 
         let layer = wbvector::read(p).unwrap();
-        assert!(!layer.features.is_empty(), "expected at least one low-point feature");
+        assert!(
+            !layer.features.is_empty(),
+            "expected at least one low-point feature"
+        );
     }
 }
-

@@ -40,7 +40,6 @@ impl GlcmFeature {
             Self::Correlation => "correlation",
         }
     }
-
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -325,7 +324,10 @@ fn feature_value(metrics: &[f64; 9], feature: GlcmFeature) -> f64 {
     }
 }
 
-fn write_or_store_output(output: Raster, output_path: Option<std::path::PathBuf>) -> Result<String, ToolError> {
+fn write_or_store_output(
+    output: Raster,
+    output_path: Option<std::path::PathBuf>,
+) -> Result<String, ToolError> {
     if let Some(output_path) = output_path {
         if let Some(parent) = output_path.parent() {
             if !parent.as_os_str().is_empty() {
@@ -385,7 +387,10 @@ impl Tool for GlcmTextureTool {
         defaults.insert("window_size".to_string(), json!(7));
         defaults.insert("distance".to_string(), json!(1));
         defaults.insert("angles".to_string(), json!("0,45,90,135"));
-        defaults.insert("features".to_string(), json!("contrast,homogeneity,energy,entropy"));
+        defaults.insert(
+            "features".to_string(),
+            json!("contrast,homogeneity,energy,entropy"),
+        );
         defaults.insert("direction_aggregation".to_string(), json!("mean"));
         defaults.insert("levels".to_string(), json!(32));
         defaults.insert("symmetric".to_string(), json!(true));
@@ -395,7 +400,10 @@ impl Tool for GlcmTextureTool {
         example.insert("window_size".to_string(), json!(9));
         example.insert("distance".to_string(), json!(1));
         example.insert("angles".to_string(), json!("0,45,90,135"));
-        example.insert("features".to_string(), json!("contrast,homogeneity,entropy"));
+        example.insert(
+            "features".to_string(),
+            json!("contrast,homogeneity,entropy"),
+        );
         example.insert("direction_aggregation".to_string(), json!("mean"));
         example.insert("levels".to_string(), json!(32));
         example.insert("output".to_string(), json!("glcm_texture.tif"));
@@ -418,7 +426,8 @@ impl Tool for GlcmTextureTool {
             defaults,
             examples: vec![ToolExample {
                 name: "basic_glcm_texture".to_string(),
-                description: "Compute a multiband GLCM texture raster with directional averaging.".to_string(),
+                description: "Compute a multiband GLCM texture raster with directional averaging."
+                    .to_string(),
                 args: example,
             }],
             tags: vec![
@@ -527,7 +536,10 @@ impl Tool for GlcmTextureTool {
         let output_path = parse_optional_output_path(args, "output")?;
 
         let input = Raster::read(&input_path).map_err(|e| {
-            ToolError::Execution(format!("failed reading input raster '{}': {}", input_path, e))
+            ToolError::Execution(format!(
+                "failed reading input raster '{}': {}",
+                input_path, e
+            ))
         })?;
 
         let rows = input.rows as isize;
@@ -547,24 +559,43 @@ impl Tool for GlcmTextureTool {
             }
         } else {
             for feature in &features {
-                band_names.push(format!("{}_{}", feature.id(), args
-                    .get("direction_aggregation")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("mean")
-                    .to_ascii_lowercase()));
+                band_names.push(format!(
+                    "{}_{}",
+                    feature.id(),
+                    args.get("direction_aggregation")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("mean")
+                        .to_ascii_lowercase()
+                ));
             }
         }
 
         let mut metadata = input.metadata.clone();
         metadata.push(("texture_tool".to_string(), "glcm_texture".to_string()));
-        metadata.push(("glcm_features".to_string(), features.iter().map(|f| f.id()).collect::<Vec<_>>().join(",")));
-        metadata.push(("glcm_angles".to_string(), angles.iter().map(|a| a.to_string()).collect::<Vec<_>>().join(",")));
+        metadata.push((
+            "glcm_features".to_string(),
+            features
+                .iter()
+                .map(|f| f.id())
+                .collect::<Vec<_>>()
+                .join(","),
+        ));
+        metadata.push((
+            "glcm_angles".to_string(),
+            angles
+                .iter()
+                .map(|a| a.to_string())
+                .collect::<Vec<_>>()
+                .join(","),
+        ));
         metadata.push(("glcm_levels".to_string(), levels.to_string()));
-        metadata.push(("glcm_direction_aggregation".to_string(), args
-            .get("direction_aggregation")
-            .and_then(|v| v.as_str())
-            .unwrap_or("mean")
-            .to_string()));
+        metadata.push((
+            "glcm_direction_aggregation".to_string(),
+            args.get("direction_aggregation")
+                .and_then(|v| v.as_str())
+                .unwrap_or("mean")
+                .to_string(),
+        ));
 
         let mut output = Raster::new(RasterConfig {
             rows: input.rows,
@@ -682,7 +713,8 @@ impl Tool for GlcmTextureTool {
             }
 
             if row_u % 10 == 0 {
-                coalescer.emit_unit_fraction(ctx.progress, (row_u as f64 / rows as f64).clamp(0.0, 1.0));
+                coalescer
+                    .emit_unit_fraction(ctx.progress, (row_u as f64 / rows as f64).clamp(0.0, 1.0));
             }
         }
 

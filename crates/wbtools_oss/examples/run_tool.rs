@@ -27,9 +27,7 @@ impl ProgressSink for StdoutProgress {
 fn print_usage() {
     eprintln!("Usage:");
     eprintln!("  cargo run -p wbtools_oss --example run_tool -- list");
-    eprintln!(
-        "  cargo run -p wbtools_oss --example run_tool -- run <tool_id> '<json-args>'"
-    );
+    eprintln!("  cargo run -p wbtools_oss --example run_tool -- run <tool_id> '<json-args>'");
     eprintln!("Example:");
     eprintln!(
         "  cargo run -p wbtools_oss --example run_tool -- run add '{{\"input1\":\"a.tif\",\"input2\":\"b.tif\",\"output\":\"sum.tif\"}}'"
@@ -37,8 +35,8 @@ fn print_usage() {
 }
 
 fn parse_args(json_text: &str) -> Result<ToolArgs, String> {
-    let value: Value = serde_json::from_str(json_text)
-        .map_err(|e| format!("invalid JSON arguments: {e}"))?;
+    let value: Value =
+        serde_json::from_str(json_text).map_err(|e| format!("invalid JSON arguments: {e}"))?;
 
     let map = value
         .as_object()

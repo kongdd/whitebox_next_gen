@@ -1,18 +1,18 @@
-use serde_json::json;
 use rayon::prelude::*;
+use serde_json::json;
 use std::collections::BTreeMap;
 use std::f64::consts::PI;
 use std::path::Path;
 use std::time::Instant;
-use time::{OffsetDateTime, format_description::well_known::Rfc3339};
+use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use wbcore::{
     parse_optional_output_path, LicenseTier, Tool, ToolArgs, ToolCategory, ToolContext, ToolError,
     ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSpec, ToolRunResult,
     ToolStability,
 };
+use wbprojection::Crs;
 use wbraster::DataType;
 use wbraster::{ResolvedOpticalBundle, SensorBundleRegistry};
-use wbprojection::Crs;
 
 use crate::memory_store;
 use crate::tools::slope_aspect_from_dem;
@@ -45,7 +45,9 @@ fn current_utc_rfc3339() -> String {
     let mut month = 1u64;
     let mut remaining = doy;
     for &md in month_days {
-        if remaining < md { break; }
+        if remaining < md {
+            break;
+        }
         remaining -= md;
         month += 1;
     }
@@ -76,7 +78,9 @@ fn write_raster(r: &wbraster::Raster, path: &str, label: &str) -> Result<(), Too
     if let Some(parent) = Path::new(path).parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                ToolError::Execution(format!("failed creating output directory for '{label}': {e}"))
+                ToolError::Execution(format!(
+                    "failed creating output directory for '{label}': {e}"
+                ))
             })?;
         }
     }
@@ -94,8 +98,7 @@ fn write_summary(path: &str, value: &serde_json::Value) -> Result<(), ToolError>
     }
     std::fs::write(
         path,
-        serde_json::to_string_pretty(value)
-            .map_err(|e| ToolError::Execution(e.to_string()))?,
+        serde_json::to_string_pretty(value).map_err(|e| ToolError::Execution(e.to_string()))?,
     )
     .map_err(|e| ToolError::Execution(format!("failed writing summary JSON: {e}")))
 }
@@ -114,8 +117,8 @@ fn same_grid(left: &wbraster::Raster, right: &wbraster::Raster) -> bool {
         && left.cols == right.cols
         && (left.x_min - right.x_min).abs() <= EPS
         && (left.y_min - right.y_min).abs() <= EPS
-    && (left.x_max() - right.x_max()).abs() <= EPS
-    && (left.y_max() - right.y_max()).abs() <= EPS
+        && (left.x_max() - right.x_max()).abs() <= EPS
+        && (left.y_max() - right.y_max()).abs() <= EPS
 }
 
 fn harmonize_to_reference(
@@ -203,7 +206,9 @@ fn build_reflectance_stack(
 
 /// Convert degrees to radians.
 #[inline]
-fn deg2rad(d: f64) -> f64 { d * PI / 180.0 }
+fn deg2rad(d: f64) -> f64 {
+    d * PI / 180.0
+}
 
 /// Cosine of the solar incidence angle between a surface normal and the solar beam.
 ///
@@ -212,7 +217,12 @@ fn deg2rad(d: f64) -> f64 { d * PI / 180.0 }
 /// `solar_zenith_rad` — solar zenith angle in radians
 /// `solar_azimuth_rad` — solar azimuth in radians (measured clockwise from north)
 #[inline]
-fn cos_incidence(slope_rad: f64, aspect_rad: f64, solar_zenith_rad: f64, solar_azimuth_rad: f64) -> f64 {
+fn cos_incidence(
+    slope_rad: f64,
+    aspect_rad: f64,
+    solar_zenith_rad: f64,
+    solar_azimuth_rad: f64,
+) -> f64 {
     let cos_sz = solar_zenith_rad.cos();
     let sin_sz = solar_zenith_rad.sin();
     let cos_slope = slope_rad.cos();
@@ -227,7 +237,11 @@ fn cos_incidence(slope_rad: f64, aspect_rad: f64, solar_zenith_rad: f64, solar_a
 /// Returns `None` when the correction would be degenerate (m ≈ 0).
 #[inline]
 fn c_correction_factor(m: f64, b: f64) -> Option<f64> {
-    if m.abs() < 1e-8 { None } else { Some(b / m) }
+    if m.abs() < 1e-8 {
+        None
+    } else {
+        Some(b / m)
+    }
 }
 
 /// Apply C-correction to a reflectance value.
@@ -236,34 +250,65 @@ fn c_correction_factor(m: f64, b: f64) -> Option<f64> {
 #[inline]
 fn apply_c_correction(reflectance: f64, cos_z: f64, cos_i: f64, c: f64) -> f64 {
     let denom = cos_i + c;
-    if denom.abs() < 1e-10 { reflectance } else { reflectance * (cos_z + c) / denom }
+    if denom.abs() < 1e-10 {
+        reflectance
+    } else {
+        reflectance * (cos_z + c) / denom
+    }
 }
 
 // ── linear regression helpers ────────────────────────────────────────────────
 
-struct LinRegResult { m: f64, b: f64, r_squared: f64, n: usize }
+struct LinRegResult {
+    m: f64,
+    b: f64,
+    r_squared: f64,
+    n: usize,
+}
 
 /// Ordinary least-squares regression of y on x from paired slices.
 fn ols(x: &[f64], y: &[f64]) -> LinRegResult {
     let n = x.len().min(y.len());
     if n < 2 {
-        return LinRegResult { m: 0.0, b: 0.0, r_squared: 0.0, n };
+        return LinRegResult {
+            m: 0.0,
+            b: 0.0,
+            r_squared: 0.0,
+            n,
+        };
     }
     let sum_x: f64 = x[..n].iter().sum();
     let sum_y: f64 = y[..n].iter().sum();
     let sum_xx: f64 = x[..n].iter().map(|v| v * v).sum();
-    let sum_xy: f64 = x[..n].iter().zip(y[..n].iter()).map(|(xi, yi)| xi * yi).sum();
+    let sum_xy: f64 = x[..n]
+        .iter()
+        .zip(y[..n].iter())
+        .map(|(xi, yi)| xi * yi)
+        .sum();
     let n_f = n as f64;
     let denom = n_f * sum_xx - sum_x * sum_x;
     if denom.abs() < 1e-15 {
-        return LinRegResult { m: 0.0, b: sum_y / n_f, r_squared: 0.0, n };
+        return LinRegResult {
+            m: 0.0,
+            b: sum_y / n_f,
+            r_squared: 0.0,
+            n,
+        };
     }
     let m = (n_f * sum_xy - sum_x * sum_y) / denom;
     let b = (sum_y - m * sum_x) / n_f;
     let mean_y = sum_y / n_f;
     let ss_tot: f64 = y[..n].iter().map(|yi| (yi - mean_y).powi(2)).sum();
-    let ss_res: f64 = y[..n].iter().zip(x[..n].iter()).map(|(yi, xi)| (yi - (m * xi + b)).powi(2)).sum();
-    let r_squared = if ss_tot.abs() < 1e-15 { 0.0 } else { 1.0 - ss_res / ss_tot };
+    let ss_res: f64 = y[..n]
+        .iter()
+        .zip(x[..n].iter())
+        .map(|(yi, xi)| (yi - (m * xi + b)).powi(2))
+        .sum();
+    let r_squared = if ss_tot.abs() < 1e-15 {
+        0.0
+    } else {
+        1.0 - ss_res / ss_tot
+    };
     LinRegResult { m, b, r_squared, n }
 }
 
@@ -580,7 +625,9 @@ fn raster_centroid_lonlat(raster: &wbraster::Raster) -> Result<(f64, f64), ToolE
     let x = raster.x_min + raster.cell_size_x * raster.cols as f64 * 0.5;
     let y = raster.y_min + raster.cell_size_y * raster.rows as f64 * 0.5;
     let epsg = raster.crs.epsg.ok_or_else(|| {
-        ToolError::Validation("cannot infer centroid lon/lat: raster CRS EPSG is missing".to_string())
+        ToolError::Validation(
+            "cannot infer centroid lon/lat: raster CRS EPSG is missing".to_string(),
+        )
     })?;
     let src = Crs::from_epsg(epsg)
         .map_err(|e| ToolError::Validation(format!("cannot build source CRS EPSG:{epsg}: {e}")))?;
@@ -592,19 +639,17 @@ fn raster_centroid_lonlat(raster: &wbraster::Raster) -> Result<(f64, f64), ToolE
 
 fn solar_position_from_utc(lat_deg: f64, lon_deg: f64, dt: OffsetDateTime) -> (f64, f64) {
     let day = dt.ordinal() as f64;
-    let minutes_utc = (dt.hour() as f64) * 60.0 + (dt.minute() as f64) + (dt.second() as f64) / 60.0;
+    let minutes_utc =
+        (dt.hour() as f64) * 60.0 + (dt.minute() as f64) + (dt.second() as f64) / 60.0;
     let gamma = 2.0 * PI / 365.0 * (day - 1.0 + (minutes_utc / 60.0 - 12.0) / 24.0);
 
     let eq_time = 229.18
-        * (0.000075
-            + 0.001868 * gamma.cos()
+        * (0.000075 + 0.001868 * gamma.cos()
             - 0.032077 * gamma.sin()
             - 0.014615 * (2.0 * gamma).cos()
             - 0.040849 * (2.0 * gamma).sin());
 
-    let decl = 0.006918
-        - 0.399912 * gamma.cos()
-        + 0.070257 * gamma.sin()
+    let decl = 0.006918 - 0.399912 * gamma.cos() + 0.070257 * gamma.sin()
         - 0.006758 * (2.0 * gamma).cos()
         + 0.000907 * (2.0 * gamma).sin()
         - 0.002697 * (3.0 * gamma).cos()
@@ -624,7 +669,9 @@ fn solar_position_from_utc(lat_deg: f64, lon_deg: f64, dt: OffsetDateTime) -> (f
     let cos_zenith = (lat.sin() * decl.sin() + lat.cos() * decl.cos() * ha.cos()).clamp(-1.0, 1.0);
     let zenith = cos_zenith.acos().to_degrees();
 
-    let az = ha.sin().atan2(ha.cos() * lat.sin() - decl.tan() * lat.cos());
+    let az = ha
+        .sin()
+        .atan2(ha.cos() * lat.sin() - decl.tan() * lat.cos());
     let mut azimuth = az.to_degrees() + 180.0;
     if azimuth < 0.0 {
         azimuth += 360.0;
@@ -683,7 +730,10 @@ impl Tool for TerrainCorrectedOpticalTool {
         defaults.insert("solar_mode".to_string(), json!("auto"));
         defaults.insert("solar_zenith_deg".to_string(), json!(40.0));
         defaults.insert("solar_azimuth_deg".to_string(), json!(165.0));
-        defaults.insert("acquisition_datetime_utc".to_string(), serde_json::Value::Null);
+        defaults.insert(
+            "acquisition_datetime_utc".to_string(),
+            serde_json::Value::Null,
+        );
         defaults.insert("latitude".to_string(), serde_json::Value::Null);
         defaults.insert("longitude".to_string(), serde_json::Value::Null);
         defaults.insert("profile".to_string(), json!("balanced"));
@@ -747,7 +797,9 @@ impl Tool for TerrainCorrectedOpticalTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         args.get("input_dem")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'input_dem' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'input_dem' is required".to_string())
+            })?;
 
         let bundle_root = args.get("bundle_root").and_then(|v| v.as_str());
         let has_red = args.get("input_red").and_then(|v| v.as_str()).is_some();
@@ -763,15 +815,22 @@ impl Tool for TerrainCorrectedOpticalTool {
 
         if matches!(solar_mode, SolarResolveMode::Manual) {
             for key in &["solar_zenith_deg", "solar_azimuth_deg"] {
-                args.get(*key)
-                    .and_then(|v| v.as_f64())
-                    .ok_or_else(|| ToolError::Validation(format!("parameter '{key}' is required and must be numeric in manual solar_mode")))?;
+                args.get(*key).and_then(|v| v.as_f64()).ok_or_else(|| {
+                    ToolError::Validation(format!(
+                        "parameter '{key}' is required and must be numeric in manual solar_mode"
+                    ))
+                })?;
             }
         }
 
-        if let Some(dt) = args.get("acquisition_datetime_utc").and_then(|v| v.as_str()) {
+        if let Some(dt) = args
+            .get("acquisition_datetime_utc")
+            .and_then(|v| v.as_str())
+        {
             OffsetDateTime::parse(dt, &Rfc3339).map_err(|e| {
-                ToolError::Validation(format!("parameter 'acquisition_datetime_utc' must be RFC3339 UTC: {e}"))
+                ToolError::Validation(format!(
+                    "parameter 'acquisition_datetime_utc' must be RFC3339 UTC: {e}"
+                ))
             })?;
         }
 
@@ -836,8 +895,10 @@ impl Tool for TerrainCorrectedOpticalTool {
 
         let _ = QaMaskFormat::parse(args.get("qa_mask_format").and_then(|v| v.as_str()))?;
         let strategy = MaskStrategy::parse(args.get("mask_strategy").and_then(|v| v.as_str()))?;
-        if matches!(strategy, MaskStrategy::QaOnly | MaskStrategy::QaPlusHeuristic)
-            && args.get("qa_mask").and_then(|v| v.as_str()).is_none()
+        if matches!(
+            strategy,
+            MaskStrategy::QaOnly | MaskStrategy::QaPlusHeuristic
+        ) && args.get("qa_mask").and_then(|v| v.as_str()).is_none()
             && bundle_root.is_none()
         {
             return Err(ToolError::Validation(
@@ -874,7 +935,8 @@ impl Tool for TerrainCorrectedOpticalTool {
             })?
         } else {
             return Err(ToolError::Validation(
-                "parameter 'input_red' is required unless 'bundle_root' provides a red band".to_string(),
+                "parameter 'input_red' is required unless 'bundle_root' provides a red band"
+                    .to_string(),
             ));
         };
 
@@ -889,26 +951,33 @@ impl Tool for TerrainCorrectedOpticalTool {
             })?
         } else {
             return Err(ToolError::Validation(
-                "parameter 'input_nir' is required unless 'bundle_root' provides a NIR band".to_string(),
+                "parameter 'input_nir' is required unless 'bundle_root' provides a NIR band"
+                    .to_string(),
             ));
         };
 
-        let dem_path = args.get("input_dem").and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'input_dem' is required".to_string()))?;
-        let green_path: Option<String> = if let Some(path) = args.get("input_green").and_then(|v| v.as_str()) {
-            Some(path.to_string())
-        } else {
-            resolved_bundle
-                .as_ref()
-                .and_then(|bundle| bundle.green_path.clone())
-        };
-        let blue_path: Option<String> = if let Some(path) = args.get("input_blue").and_then(|v| v.as_str()) {
-            Some(path.to_string())
-        } else {
-            resolved_bundle
-                .as_ref()
-                .and_then(|bundle| bundle.blue_path.clone())
-        };
+        let dem_path = args
+            .get("input_dem")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'input_dem' is required".to_string())
+            })?;
+        let green_path: Option<String> =
+            if let Some(path) = args.get("input_green").and_then(|v| v.as_str()) {
+                Some(path.to_string())
+            } else {
+                resolved_bundle
+                    .as_ref()
+                    .and_then(|bundle| bundle.green_path.clone())
+            };
+        let blue_path: Option<String> =
+            if let Some(path) = args.get("input_blue").and_then(|v| v.as_str()) {
+                Some(path.to_string())
+            } else {
+                resolved_bundle
+                    .as_ref()
+                    .and_then(|bundle| bundle.blue_path.clone())
+            };
         let solar_mode = SolarResolveMode::parse(args.get("solar_mode").and_then(|v| v.as_str()))?;
         let solar_zenith_manual = args.get("solar_zenith_deg").and_then(|v| v.as_f64());
         let solar_azimuth_manual = args.get("solar_azimuth_deg").and_then(|v| v.as_f64());
@@ -923,52 +992,69 @@ impl Tool for TerrainCorrectedOpticalTool {
         });
         let latitude_arg = args.get("latitude").and_then(|v| v.as_f64());
         let longitude_arg = args.get("longitude").and_then(|v| v.as_f64());
-        let profile = args.get("profile").and_then(|v| v.as_str()).unwrap_or("balanced");
+        let profile = args
+            .get("profile")
+            .and_then(|v| v.as_str())
+            .unwrap_or("balanced");
         let cloud_threshold_override = args.get("cloud_threshold").and_then(|v| v.as_f64());
         let shadow_threshold_override = args.get("shadow_threshold").and_then(|v| v.as_f64());
-        let (qa_mask_path, qa_mask_auto_format_hint) = if let Some(path) = args.get("qa_mask").and_then(|v| v.as_str()) {
-            (Some(path.to_string()), None)
-        } else if let Some(bundle) = resolved_bundle.as_ref() {
-            if let Some(path) = bundle.qa_scl_path.clone() {
-                (
-                    Some(path),
-                    Some(QaMaskFormat::Sentinel2Scl),
-                )
-            } else if let Some(path) = bundle.qa_qa60_path.clone() {
-                (
-                    Some(path),
-                    Some(QaMaskFormat::Sentinel2Qa60),
-                )
+        let (qa_mask_path, qa_mask_auto_format_hint) =
+            if let Some(path) = args.get("qa_mask").and_then(|v| v.as_str()) {
+                (Some(path.to_string()), None)
+            } else if let Some(bundle) = resolved_bundle.as_ref() {
+                if let Some(path) = bundle.qa_scl_path.clone() {
+                    (Some(path), Some(QaMaskFormat::Sentinel2Scl))
+                } else if let Some(path) = bundle.qa_qa60_path.clone() {
+                    (Some(path), Some(QaMaskFormat::Sentinel2Qa60))
+                } else {
+                    (None, None)
+                }
             } else {
                 (None, None)
-            }
-        } else {
-            (None, None)
-        };
-        let qa_mask_format_requested = QaMaskFormat::parse(args.get("qa_mask_format").and_then(|v| v.as_str()))?;
-        let mask_strategy = MaskStrategy::parse(args.get("mask_strategy").and_then(|v| v.as_str()))?;
-        if matches!(mask_strategy, MaskStrategy::QaOnly | MaskStrategy::QaPlusHeuristic)
-            && qa_mask_path.is_none()
+            };
+        let qa_mask_format_requested =
+            QaMaskFormat::parse(args.get("qa_mask_format").and_then(|v| v.as_str()))?;
+        let mask_strategy =
+            MaskStrategy::parse(args.get("mask_strategy").and_then(|v| v.as_str()))?;
+        if matches!(
+            mask_strategy,
+            MaskStrategy::QaOnly | MaskStrategy::QaPlusHeuristic
+        ) && qa_mask_path.is_none()
         {
             return Err(ToolError::Validation(
                 "mask_strategy requires QA data, but no QA mask was provided or discovered from the sensor bundle"
                     .to_string(),
             ));
         }
-        let z_factor = args.get("z_factor").and_then(|v| v.as_f64()).unwrap_or(1.0).max(0.0001);
-        let output_prefix = args.get("output_prefix").and_then(|v| v.as_str()).unwrap_or("terrain_corrected").to_string();
+        let z_factor = args
+            .get("z_factor")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0)
+            .max(0.0001);
+        let output_prefix = args
+            .get("output_prefix")
+            .and_then(|v| v.as_str())
+            .unwrap_or("terrain_corrected")
+            .to_string();
 
         let ps = profile_settings(profile);
         let run_t0 = Instant::now();
         let mut stage_timings_ms: BTreeMap<String, f64> = BTreeMap::new();
 
         // ── Step 1: Load optical bands ───────────────────────────────────────
-        ctx.progress.info("terrain_corrected_optical_analytics: step 1/5 – loading optical bands");
+        ctx.progress
+            .info("terrain_corrected_optical_analytics: step 1/5 – loading optical bands");
         let step1_t0 = Instant::now();
         let red = load_raster(&red_path, "input_red")?;
         let nir_raw = load_raster(&nir_path, "input_nir")?;
-        let green_raw = green_path.as_deref().map(|p| load_raster(p, "input_green")).transpose()?;
-        let blue_raw = blue_path.as_deref().map(|p| load_raster(p, "input_blue")).transpose()?;
+        let green_raw = green_path
+            .as_deref()
+            .map(|p| load_raster(p, "input_green"))
+            .transpose()?;
+        let blue_raw = blue_path
+            .as_deref()
+            .map(|p| load_raster(p, "input_blue"))
+            .transpose()?;
         let dem_raw = load_raster(dem_path, "input_dem")?;
 
         let nir = harmonize_to_reference(
@@ -1030,7 +1116,9 @@ impl Tool for TerrainCorrectedOpticalTool {
 
         let qa_mask_format_detected = if let Some(ref q) = qa_mask_harmonized {
             match qa_mask_format_requested {
-                QaMaskFormat::Auto => qa_mask_auto_format_hint.unwrap_or_else(|| infer_qa_mask_format(q)),
+                QaMaskFormat::Auto => {
+                    qa_mask_auto_format_hint.unwrap_or_else(|| infer_qa_mask_format(q))
+                }
                 other => other,
             }
         } else {
@@ -1052,10 +1140,15 @@ impl Tool for TerrainCorrectedOpticalTool {
         let (solar_zenith_deg, solar_azimuth_deg, solar_resolution_source) = match solar_mode {
             SolarResolveMode::Manual => {
                 let z = solar_zenith_manual.ok_or_else(|| {
-                    ToolError::Validation("parameter 'solar_zenith_deg' is required in manual solar_mode".to_string())
+                    ToolError::Validation(
+                        "parameter 'solar_zenith_deg' is required in manual solar_mode".to_string(),
+                    )
                 })?;
                 let a = solar_azimuth_manual.ok_or_else(|| {
-                    ToolError::Validation("parameter 'solar_azimuth_deg' is required in manual solar_mode".to_string())
+                    ToolError::Validation(
+                        "parameter 'solar_azimuth_deg' is required in manual solar_mode"
+                            .to_string(),
+                    )
                 })?;
                 (z, a, "manual".to_string())
             }
@@ -1115,14 +1208,15 @@ impl Tool for TerrainCorrectedOpticalTool {
                                 "parameter 'acquisition_datetime_utc' must be RFC3339 UTC: {e}"
                             ))
                         })?;
-                        let (lon, lat) = if let (Some(lat), Some(lon)) = (latitude_arg, longitude_arg) {
-                            (lon, lat)
-                        } else {
-                            let (lon, lat) = raster_centroid_lonlat(&red)?;
-                            resolved_latitude = Some(lat);
-                            resolved_longitude = Some(lon);
-                            (lon, lat)
-                        };
+                        let (lon, lat) =
+                            if let (Some(lat), Some(lon)) = (latitude_arg, longitude_arg) {
+                                (lon, lat)
+                            } else {
+                                let (lon, lat) = raster_centroid_lonlat(&red)?;
+                                resolved_latitude = Some(lat);
+                                resolved_longitude = Some(lon);
+                                (lon, lat)
+                            };
                         let (z, a) = solar_position_from_utc(lat, lon, dt);
                         (z, a, "datetime_location".to_string())
                     } else {
@@ -1157,9 +1251,9 @@ impl Tool for TerrainCorrectedOpticalTool {
         };
 
         if !(0.0..=90.0).contains(&solar_zenith_deg) {
-            return Err(ToolError::Validation(
-                format!("resolved solar_zenith_deg={solar_zenith_deg:.3} is outside [0, 90]"),
-            ));
+            return Err(ToolError::Validation(format!(
+                "resolved solar_zenith_deg={solar_zenith_deg:.3} is outside [0, 90]"
+            )));
         }
 
         let solar_zenith_rad = deg2rad(solar_zenith_deg);
@@ -1167,8 +1261,8 @@ impl Tool for TerrainCorrectedOpticalTool {
         let cos_z = solar_zenith_rad.cos();
 
         let (radiometric_scale, scale_mode) = infer_radiometric_scale(&red, &nir);
-        let cloud_threshold = cloud_threshold_override
-            .unwrap_or(ps.cloud_threshold_fraction * radiometric_scale);
+        let cloud_threshold =
+            cloud_threshold_override.unwrap_or(ps.cloud_threshold_fraction * radiometric_scale);
         let shadow_threshold = shadow_threshold_override
             .unwrap_or(ps.cloud_shadow_threshold_fraction * radiometric_scale);
         if shadow_threshold >= cloud_threshold {
@@ -1199,7 +1293,8 @@ impl Tool for TerrainCorrectedOpticalTool {
         );
 
         // ── Step 2: Compute slope and aspect from DEM ────────────────────────
-        ctx.progress.info("terrain_corrected_optical_analytics: step 2/5 – slope and aspect from DEM");
+        ctx.progress
+            .info("terrain_corrected_optical_analytics: step 2/5 – slope and aspect from DEM");
         let step2_t0 = Instant::now();
 
         let (slope_raster, aspect_raster) = slope_aspect_from_dem(&dem_harmonized, z_factor)?;
@@ -1241,7 +1336,8 @@ impl Tool for TerrainCorrectedOpticalTool {
             }
 
             let heuristic_cloud = rv > cloud_threshold && nv > cloud_threshold;
-            let heuristic_shadow = !heuristic_cloud && rv < shadow_threshold && nv < shadow_threshold;
+            let heuristic_shadow =
+                !heuristic_cloud && rv < shadow_threshold && nv < shadow_threshold;
             if heuristic_cloud {
                 heuristic_cloud_count += 1;
             } else if heuristic_shadow {
@@ -1303,7 +1399,11 @@ impl Tool for TerrainCorrectedOpticalTool {
                 .max(-1.0)
                 .min(1.0);
 
-            let cf = if cos_i.abs() < ps.min_cos_i { 1.0 } else { cos_z / cos_i.max(1e-6) };
+            let cf = if cos_i.abs() < ps.min_cos_i {
+                1.0
+            } else {
+                cos_z / cos_i.max(1e-6)
+            };
             correction_factor.data.set_f64(i, cf);
 
             // Sample reflectance/cos_i pairs for regression.
@@ -1319,7 +1419,9 @@ impl Tool for TerrainCorrectedOpticalTool {
         );
 
         // ── Step 4: C-correction regression and reflectance correction ────────
-        ctx.progress.info("terrain_corrected_optical_analytics: step 4/5 – C-correction and reflectance stack");
+        ctx.progress.info(
+            "terrain_corrected_optical_analytics: step 4/5 – C-correction and reflectance stack",
+        );
         let step4_t0 = Instant::now();
 
         let reg_red = ols(&sample_cos_i, &sample_red_refl);
@@ -1340,7 +1442,9 @@ impl Tool for TerrainCorrectedOpticalTool {
                 let flat_idx = step_idx * ps.regression_sample_step;
                 if flat_idx < n {
                     let gv = g.data.get_f64(flat_idx);
-                    if !g.is_nodata(gv) { sg.push(gv); }
+                    if !g.is_nodata(gv) {
+                        sg.push(gv);
+                    }
                 }
             }
             let reg_green = ols(&sample_cos_i[..sg.len().min(sample_cos_i.len())], &sg);
@@ -1356,7 +1460,9 @@ impl Tool for TerrainCorrectedOpticalTool {
                 let flat_idx = step_idx * ps.regression_sample_step;
                 if flat_idx < n {
                     let bv = b.data.get_f64(flat_idx);
-                    if !b.is_nodata(bv) { sb.push(bv); }
+                    if !b.is_nodata(bv) {
+                        sb.push(bv);
+                    }
                 }
             }
             let reg_blue = ols(&sample_cos_i[..sb.len().min(sample_cos_i.len())], &sb);
@@ -1388,10 +1494,7 @@ impl Tool for TerrainCorrectedOpticalTool {
                     .as_ref()
                     .map(|g| g.data.get_f64(i))
                     .unwrap_or(nodata_r);
-                let default_b = blue
-                    .as_ref()
-                    .map(|b| b.data.get_f64(i))
-                    .unwrap_or(nodata_r);
+                let default_b = blue.as_ref().map(|b| b.data.get_f64(i)).unwrap_or(nodata_r);
 
                 if red.is_nodata(rv)
                     || nir.is_nodata(nv)
@@ -1468,7 +1571,13 @@ impl Tool for TerrainCorrectedOpticalTool {
                     (cos_i / cos_z.max(0.01)).clamp(0.0, 1.0) * 0.85 + 0.10
                 };
 
-                CorrectedCell { cr, cn, cg, cb, conf }
+                CorrectedCell {
+                    cr,
+                    cn,
+                    cg,
+                    cb,
+                    conf,
+                }
             })
             .collect();
 
@@ -1489,7 +1598,8 @@ impl Tool for TerrainCorrectedOpticalTool {
         );
 
         // ── Step 5: Write outputs ────────────────────────────────────────────
-        ctx.progress.info("terrain_corrected_optical_analytics: step 5/5 – writing outputs");
+        ctx.progress
+            .info("terrain_corrected_optical_analytics: step 5/5 – writing outputs");
         let step5_t0 = Instant::now();
 
         let red_out = format!("{}_red_corrected.tif", output_prefix);
@@ -1534,11 +1644,7 @@ impl Tool for TerrainCorrectedOpticalTool {
             corrected_green.as_ref(),
             corrected_blue.as_ref(),
         );
-        write_raster(
-            &reflectance_stack,
-            &stack_out,
-            "surface_reflectance_stack",
-        )?;
+        write_raster(&reflectance_stack, &stack_out, "surface_reflectance_stack")?;
         stage_timings_ms.insert(
             "step5_write_outputs".to_string(),
             step5_t0.elapsed().as_secs_f64() * 1_000.0,
@@ -1553,8 +1659,9 @@ impl Tool for TerrainCorrectedOpticalTool {
             .map(|(k, v)| format!("{k}={v:.1}ms"))
             .collect::<Vec<_>>()
             .join(", ");
-        ctx.progress
-            .info(&format!("terrain_corrected_optical_analytics: timings {timings_summary}"));
+        ctx.progress.info(&format!(
+            "terrain_corrected_optical_analytics: timings {timings_summary}"
+        ));
 
         let generated_at_utc = current_utc_rfc3339();
 
@@ -1725,7 +1832,10 @@ mod tests {
         let solar_azimuth_rad = deg2rad(165.0);
         let ci = cos_incidence(slope_rad, aspect_rad, solar_zenith_rad, solar_azimuth_rad);
         let expected = solar_zenith_rad.cos();
-        assert!((ci - expected).abs() < 1e-10, "expected {expected}, got {ci}");
+        assert!(
+            (ci - expected).abs() < 1e-10,
+            "expected {expected}, got {ci}"
+        );
     }
 
     #[test]

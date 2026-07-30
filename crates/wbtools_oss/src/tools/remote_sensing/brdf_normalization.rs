@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 /// BRDF Normalization — single-scene angular reflectance correction.
 ///
 /// Normalizes directional reflectance effects caused by varying solar and view
@@ -10,7 +11,6 @@
 /// parameters, nadir-corrected reflectance across orbits) use the Pro-tier
 /// `brdf_surface_reflectance_consistency` tool.
 use serde_json::json;
-use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::f64::consts::PI;
 use std::path::Path;
@@ -46,7 +46,9 @@ fn write_raster(r: &Raster, path: &str, label: &str) -> Result<(), ToolError> {
     if let Some(parent) = Path::new(path).parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                ToolError::Execution(format!("failed creating output directory for '{label}': {e}"))
+                ToolError::Execution(format!(
+                    "failed creating output directory for '{label}': {e}"
+                ))
             })?;
         }
     }
@@ -55,11 +57,18 @@ fn write_raster(r: &Raster, path: &str, label: &str) -> Result<(), ToolError> {
 }
 
 #[inline]
-fn deg2rad(d: f64) -> f64 { d * PI / 180.0 }
+fn deg2rad(d: f64) -> f64 {
+    d * PI / 180.0
+}
 
 /// Cosine of the solar incidence angle between surface normal and solar beam.
 #[inline]
-fn cos_incidence(slope_rad: f64, aspect_rad: f64, solar_zenith_rad: f64, solar_azimuth_rad: f64) -> f64 {
+fn cos_incidence(
+    slope_rad: f64,
+    aspect_rad: f64,
+    solar_zenith_rad: f64,
+    solar_azimuth_rad: f64,
+) -> f64 {
     let cos_sz = solar_zenith_rad.cos();
     let sin_sz = solar_zenith_rad.sin();
     let cos_slope = slope_rad.cos();
@@ -70,14 +79,22 @@ fn cos_incidence(slope_rad: f64, aspect_rad: f64, solar_zenith_rad: f64, solar_a
 /// C-correction factor: b / m from OLS regression of reflectance on cos_i.
 #[inline]
 fn c_correction_factor(m: f64, b: f64) -> Option<f64> {
-    if m.abs() < 1e-8 { None } else { Some(b / m) }
+    if m.abs() < 1e-8 {
+        None
+    } else {
+        Some(b / m)
+    }
 }
 
 /// Apply C-correction: ρ_out = ρ_in * (cos_z + c) / (cos_i + c).
 #[inline]
 fn apply_c_correction(reflectance: f64, cos_z: f64, cos_i: f64, c: f64) -> f64 {
     let denom = cos_i + c;
-    if denom.abs() < 1e-10 { reflectance } else { reflectance * (cos_z + c) / denom }
+    if denom.abs() < 1e-10 {
+        reflectance
+    } else {
+        reflectance * (cos_z + c) / denom
+    }
 }
 
 /// Minnaert correction: ρ_out = ρ_in * cos_z^k / (cos_i * cos_e)^k
@@ -85,22 +102,38 @@ fn apply_c_correction(reflectance: f64, cos_z: f64, cos_i: f64, c: f64) -> f64 {
 #[inline]
 fn apply_minnaert(reflectance: f64, cos_z: f64, cos_i: f64, k: f64) -> f64 {
     let denom = (cos_i * cos_z).powf(k);
-    if denom < 1e-10 { reflectance } else { reflectance * cos_z.powf(k) / denom }
+    if denom < 1e-10 {
+        reflectance
+    } else {
+        reflectance * cos_z.powf(k) / denom
+    }
 }
 
-struct LinReg { m: f64, b: f64 }
+struct LinReg {
+    m: f64,
+    b: f64,
+}
 
 fn ols(x: &[f64], y: &[f64]) -> LinReg {
     let n = x.len().min(y.len());
-    if n < 2 { return LinReg { m: 0.0, b: 0.0 }; }
+    if n < 2 {
+        return LinReg { m: 0.0, b: 0.0 };
+    }
     let sum_x: f64 = x[..n].iter().sum();
     let sum_y: f64 = y[..n].iter().sum();
     let sum_xx: f64 = x[..n].iter().map(|v| v * v).sum();
-    let sum_xy: f64 = x[..n].iter().zip(y[..n].iter()).map(|(xi, yi)| xi * yi).sum();
+    let sum_xy: f64 = x[..n]
+        .iter()
+        .zip(y[..n].iter())
+        .map(|(xi, yi)| xi * yi)
+        .sum();
     let n_f = n as f64;
     let denom = n_f * sum_xx - sum_x * sum_x;
     if denom.abs() < 1e-15 {
-        return LinReg { m: 0.0, b: sum_y / n_f };
+        return LinReg {
+            m: 0.0,
+            b: sum_y / n_f,
+        };
     }
     let m = (n_f * sum_xy - sum_x * sum_y) / denom;
     let b = (sum_y - m * sum_x) / n_f;
@@ -174,62 +207,102 @@ impl Tool for BrdfNormalizationTool {
         args.get("input_raster")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| ToolError::Validation("parameter 'input_raster' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'input_raster' is required".to_string())
+            })?;
         args.get("input_dem")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| ToolError::Validation("parameter 'input_dem' is required".to_string()))?;
-        let zenith = args.get("solar_zenith_deg")
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'input_dem' is required".to_string())
+            })?;
+        let zenith = args
+            .get("solar_zenith_deg")
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| ToolError::Validation("parameter 'solar_zenith_deg' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'solar_zenith_deg' is required".to_string())
+            })?;
         if !(0.0..90.0).contains(&zenith) {
-            return Err(ToolError::Validation("parameter 'solar_zenith_deg' must be in [0, 90)".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'solar_zenith_deg' must be in [0, 90)".to_string(),
+            ));
         }
-        let azimuth = args.get("solar_azimuth_deg")
+        let azimuth = args
+            .get("solar_azimuth_deg")
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| ToolError::Validation("parameter 'solar_azimuth_deg' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'solar_azimuth_deg' is required".to_string())
+            })?;
         if !(0.0..=360.0).contains(&azimuth) {
-            return Err(ToolError::Validation("parameter 'solar_azimuth_deg' must be in [0, 360]".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'solar_azimuth_deg' must be in [0, 360]".to_string(),
+            ));
         }
         if let Some(method) = args.get("method").and_then(|v| v.as_str()) {
             if !matches!(method, "c_correction" | "minnaert") {
                 return Err(ToolError::Validation(
-                    "parameter 'method' must be one of: c_correction, minnaert".to_string()
+                    "parameter 'method' must be one of: c_correction, minnaert".to_string(),
                 ));
             }
         }
         if let Some(k) = args.get("minnaert_k").and_then(|v| v.as_f64()) {
             if !(0.0..=1.0).contains(&k) {
-                return Err(ToolError::Validation("parameter 'minnaert_k' must be in [0, 1]".to_string()));
+                return Err(ToolError::Validation(
+                    "parameter 'minnaert_k' must be in [0, 1]".to_string(),
+                ));
             }
         }
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = args.get("input_raster")
+        let input_path = args
+            .get("input_raster")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'input_raster' is required".to_string()))?
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'input_raster' is required".to_string())
+            })?
             .to_string();
-        let dem_path = args.get("input_dem")
+        let dem_path = args
+            .get("input_dem")
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'input_dem' is required".to_string()))?
             .to_string();
-        let solar_zenith_deg = args.get("solar_zenith_deg").and_then(|v| v.as_f64())
-            .ok_or_else(|| ToolError::Validation("parameter 'solar_zenith_deg' is required".to_string()))?;
-        let solar_azimuth_deg = args.get("solar_azimuth_deg").and_then(|v| v.as_f64())
-            .ok_or_else(|| ToolError::Validation("parameter 'solar_azimuth_deg' is required".to_string()))?;
-        let method = args.get("method").and_then(|v| v.as_str()).unwrap_or("c_correction");
-        let minnaert_k = args.get("minnaert_k").and_then(|v| v.as_f64()).unwrap_or(0.5);
+        let solar_zenith_deg = args
+            .get("solar_zenith_deg")
+            .and_then(|v| v.as_f64())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'solar_zenith_deg' is required".to_string())
+            })?;
+        let solar_azimuth_deg = args
+            .get("solar_azimuth_deg")
+            .and_then(|v| v.as_f64())
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'solar_azimuth_deg' is required".to_string())
+            })?;
+        let method = args
+            .get("method")
+            .and_then(|v| v.as_str())
+            .unwrap_or("c_correction");
+        let minnaert_k = args
+            .get("minnaert_k")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.5);
         let z_factor = args.get("z_factor").and_then(|v| v.as_f64()).unwrap_or(1.0);
-        let output_prefix = args.get("output_prefix").and_then(|v| v.as_str()).unwrap_or("brdf_normalized").to_string();
+        let output_prefix = args
+            .get("output_prefix")
+            .and_then(|v| v.as_str())
+            .unwrap_or("brdf_normalized")
+            .to_string();
 
-        ctx.progress.info("brdf_normalization: loading input raster and DEM");
+        ctx.progress
+            .info("brdf_normalization: loading input raster and DEM");
         let input = load_raster(&input_path, "input_raster")?;
         let dem = load_raster(&dem_path, "input_dem")?;
 
         // Compute slope and aspect from DEM.
-        ctx.progress.info("brdf_normalization: computing slope and aspect from DEM");
+        ctx.progress
+            .info("brdf_normalization: computing slope and aspect from DEM");
         let (slope_raster, aspect_raster) = slope_aspect_from_dem(&dem, z_factor)?;
 
         let solar_zenith_rad = deg2rad(solar_zenith_deg);
@@ -247,15 +320,29 @@ impl Tool for BrdfNormalizationTool {
         for i in (0..n).step_by(sample_step) {
             let sv = slope_raster.data.get_f64(i);
             let av = aspect_raster.data.get_f64(i);
-            if slope_raster.is_nodata(sv) || aspect_raster.is_nodata(av) { continue; }
-            let cos_i = cos_incidence(deg2rad(sv), deg2rad(av), solar_zenith_rad, solar_azimuth_rad);
-            if cos_i < 0.05 { continue; }
+            if slope_raster.is_nodata(sv) || aspect_raster.is_nodata(av) {
+                continue;
+            }
+            let cos_i = cos_incidence(
+                deg2rad(sv),
+                deg2rad(av),
+                solar_zenith_rad,
+                solar_azimuth_rad,
+            );
+            if cos_i < 0.05 {
+                continue;
+            }
             let mut all_valid = true;
             for b in 0..num_bands {
                 let v = input.data.get_f64(b * n + i);
-                if input.is_nodata(v) { all_valid = false; break; }
+                if input.is_nodata(v) {
+                    all_valid = false;
+                    break;
+                }
             }
-            if !all_valid { continue; }
+            if !all_valid {
+                continue;
+            }
             sample_cos_i.push(cos_i);
             for b in 0..num_bands {
                 sample_refl[b].push(input.data.get_f64(b * n + i));
@@ -264,15 +351,19 @@ impl Tool for BrdfNormalizationTool {
 
         // Compute per-band C factors (C-correction) or use Minnaert k.
         let c_factors: Vec<f64> = if method == "c_correction" {
-            sample_refl.iter().map(|band_samples| {
-                let reg = ols(&sample_cos_i, band_samples);
-                c_correction_factor(reg.m, reg.b).unwrap_or(1.0)
-            }).collect()
+            sample_refl
+                .iter()
+                .map(|band_samples| {
+                    let reg = ols(&sample_cos_i, band_samples);
+                    c_correction_factor(reg.m, reg.b).unwrap_or(1.0)
+                })
+                .collect()
         } else {
             vec![minnaert_k; num_bands] // reuse slot for k value
         };
 
-        ctx.progress.info("brdf_normalization: applying normalization");
+        ctx.progress
+            .info("brdf_normalization: applying normalization");
         let mut normalized = input.clone();
         let mut delta_raster = {
             // delta is single-band mean across all bands
@@ -299,8 +390,13 @@ impl Tool for BrdfNormalizationTool {
                 let has_geom = !(slope_raster.is_nodata(sv) || aspect_raster.is_nodata(av));
 
                 let cos_i = if has_geom {
-                    cos_incidence(deg2rad(sv), deg2rad(av), solar_zenith_rad, solar_azimuth_rad)
-                        .clamp(-1.0, 1.0)
+                    cos_incidence(
+                        deg2rad(sv),
+                        deg2rad(av),
+                        solar_zenith_rad,
+                        solar_azimuth_rad,
+                    )
+                    .clamp(-1.0, 1.0)
                 } else {
                     0.0
                 };
@@ -327,7 +423,11 @@ impl Tool for BrdfNormalizationTool {
                     band_values.push(corrected);
                 }
 
-                let mean_delta = if valid_bands > 0 { delta_sum / valid_bands as f64 } else { input.nodata };
+                let mean_delta = if valid_bands > 0 {
+                    delta_sum / valid_bands as f64
+                } else {
+                    input.nodata
+                };
                 (band_values, mean_delta)
             })
             .collect();

@@ -62,7 +62,11 @@ fn bench_bilateral_filters(c: &mut Criterion) {
     group.bench_function("bilateral_sigma1.5_12.0", |b| {
         b.iter(|| {
             let out = registry
-                .run_tool("bilateral_filter", black_box(&bilateral_args), black_box(&ctx))
+                .run_tool(
+                    "bilateral_filter",
+                    black_box(&bilateral_args),
+                    black_box(&ctx),
+                )
                 .expect("bilateral_filter benchmark run failed");
             black_box(out);
         })

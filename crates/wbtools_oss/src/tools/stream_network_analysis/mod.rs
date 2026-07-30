@@ -13,19 +13,24 @@ use std::sync::Arc;
 
 use rayon::prelude::*;
 use serde_json::json;
-use wbcore::{PercentCoalescer, 
-    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor,
-    param_schema_map, ToolParamSchema, ToolParamSpec, ToolRunResult, ToolStability, ToolVectorGeometry,
+use wbcore::{
+    param_schema_map, parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg,
+    LicenseTier, PercentCoalescer, Tool, ToolArgs, ToolCategory, ToolContext, ToolError,
+    ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSchema, ToolParamSpec,
+    ToolRunResult, ToolStability, ToolVectorGeometry,
 };
 use wbraster::{DataType, Raster, RasterConfig, RasterFormat};
-use wbvector::{Coord, Crs, FieldDef, FieldType, FieldValue, Geometry, GeometryType, Layer, VectorFormat};
 use wbvector::memory_store as vector_memory_store;
+use wbvector::{
+    Coord, Crs, FieldDef, FieldType, FieldValue, Geometry, GeometryType, Layer, VectorFormat,
+};
 
-use crate::memory_store;
 use super::flow_algorithms::{D8FlowAccumTool, D8PointerTool};
+use crate::memory_store;
 mod pro_stream_tools;
-pub use pro_stream_tools::{PruneVectorStreamsTool, RiverCenterlinesTool, RidgeAndValleyVectorsTool};
+pub use pro_stream_tools::{
+    PruneVectorStreamsTool, RidgeAndValleyVectorsTool, RiverCenterlinesTool,
+};
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Tool Structs
@@ -60,7 +65,9 @@ pub struct VectorStreamNetworkAnalysisTool;
 
 pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolParamSchema>> {
     match tool_id {
-        "strahler_stream_order" | "horton_stream_order" | "hack_stream_order"
+        "strahler_stream_order"
+        | "horton_stream_order"
+        | "hack_stream_order"
         | "shreve_stream_magnitude" => Some(param_schema_map(&[
             ("d8_pntr", ToolParamSchema::input_raster()),
             ("streams", ToolParamSchema::input_raster()),
@@ -70,7 +77,10 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         ])),
         "burn_streams" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
-            ("streams", ToolParamSchema::input_vector(ToolVectorGeometry::Line)),
+            (
+                "streams",
+                ToolParamSchema::input_vector(ToolVectorGeometry::Line),
+            ),
             ("decrement_value", ToolParamSchema::scalar_float()),
             ("gradient_distance", ToolParamSchema::scalar_integer()),
             ("output", ToolParamSchema::output_raster()),
@@ -78,10 +88,16 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         "horton_ratios" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
             ("streams_raster", ToolParamSchema::input_raster()),
-            ("output", ToolParamSchema::output(wbcore::ToolDatasetSchema::File)),
+            (
+                "output",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
+            ),
         ])),
         "prune_vector_streams" => Some(param_schema_map(&[
-            ("streams", ToolParamSchema::input_vector(ToolVectorGeometry::Line)),
+            (
+                "streams",
+                ToolParamSchema::input_vector(ToolVectorGeometry::Line),
+            ),
             ("dem", ToolParamSchema::input_raster()),
             ("threshold", ToolParamSchema::scalar_float()),
             ("snap_distance", ToolParamSchema::scalar_float()),
@@ -129,17 +145,20 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
             ("zero_background", ToolParamSchema::bool()),
             ("output", ToolParamSchema::output_raster()),
         ])),
-        "stream_link_identifier" | "stream_link_class" | "distance_to_outlet"
-        | "length_of_upstream_channels" | "farthest_channel_head"
-        | "find_main_stem" | "tributary_identifier" | "topological_stream_order" => {
-            Some(param_schema_map(&[
-                ("d8_pntr", ToolParamSchema::input_raster()),
-                ("streams", ToolParamSchema::input_raster()),
-                ("esri_pntr", ToolParamSchema::bool()),
-                ("zero_background", ToolParamSchema::bool()),
-                ("output", ToolParamSchema::output_raster()),
-            ]))
-        }
+        "stream_link_identifier"
+        | "stream_link_class"
+        | "distance_to_outlet"
+        | "length_of_upstream_channels"
+        | "farthest_channel_head"
+        | "find_main_stem"
+        | "tributary_identifier"
+        | "topological_stream_order" => Some(param_schema_map(&[
+            ("d8_pntr", ToolParamSchema::input_raster()),
+            ("streams", ToolParamSchema::input_raster()),
+            ("esri_pntr", ToolParamSchema::bool()),
+            ("zero_background", ToolParamSchema::bool()),
+            ("output", ToolParamSchema::output_raster()),
+        ])),
         "remove_short_streams" => Some(param_schema_map(&[
             ("d8_pntr", ToolParamSchema::input_raster()),
             ("streams", ToolParamSchema::input_raster()),
@@ -208,7 +227,10 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
             ("streams_raster", ToolParamSchema::input_raster()),
             ("dem", ToolParamSchema::input_raster()),
             ("esri_pntr", ToolParamSchema::bool()),
-            ("output", ToolParamSchema::output(wbcore::ToolDatasetSchema::File)),
+            (
+                "output",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
+            ),
         ])),
         "long_profile_from_points" => Some(param_schema_map(&[
             ("d8_pntr", ToolParamSchema::input_raster()),
@@ -218,7 +240,10 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
             ),
             ("dem", ToolParamSchema::input_raster()),
             ("esri_pntr", ToolParamSchema::bool()),
-            ("output", ToolParamSchema::output(wbcore::ToolDatasetSchema::File)),
+            (
+                "output",
+                ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
+            ),
         ])),
         "repair_stream_vector_topology" => Some(param_schema_map(&[
             (
@@ -234,7 +259,10 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
             ),
         ])),
         "vector_stream_network_analysis" => Some(param_schema_map(&[
-            ("streams", ToolParamSchema::input_vector(ToolVectorGeometry::Line)),
+            (
+                "streams",
+                ToolParamSchema::input_vector(ToolVectorGeometry::Line),
+            ),
             ("dem", ToolParamSchema::input_raster()),
             ("max_ridge_cutting_height", ToolParamSchema::scalar_float()),
             ("snap_distance", ToolParamSchema::scalar_float()),
@@ -389,7 +417,8 @@ fn vec_to_raster(template: &Raster, data: &[f64], data_type: DataType) -> Raster
         crs: template.crs.clone(),
         metadata: template.metadata.clone(),
     };
-    Raster::from_data(cfg, data.to_vec()).expect("vec_to_raster data length should match template dimensions")
+    Raster::from_data(cfg, data.to_vec())
+        .expect("vec_to_raster data length should match template dimensions")
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -465,7 +494,8 @@ impl Tool for StrahlerStreamOrderTool {
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         parse_raster_path_arg(args, "d8_pntr")?;
-        parse_raster_path_arg(args, "streams").or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
+        parse_raster_path_arg(args, "streams")
+            .or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
         Ok(())
     }
 
@@ -474,8 +504,14 @@ impl Tool for StrahlerStreamOrderTool {
         let streams_path = parse_raster_path_arg(args, "streams")
             .or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
         let output_path = parse_optional_output_path(args, "output")?;
-        let esri_style = args.get("esri_pntr").and_then(|v| v.as_bool()).unwrap_or(false);
-        let zero_background = args.get("zero_background").and_then(|v| v.as_bool()).unwrap_or(false);
+        let esri_style = args
+            .get("esri_pntr")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let zero_background = args
+            .get("zero_background")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         let pntr = D8Core::load_raster(&d8_pntr_path)?;
         let streams = D8Core::load_raster(&streams_path)?;
@@ -540,7 +576,10 @@ impl Tool for StrahlerStreamOrderTool {
                 let row_n = (row as isize + D8Core::D_Y[dir_idx]) as usize;
                 let col_n = (col as isize + D8Core::D_X[dir_idx]) as usize;
 
-                if row_n < rows && col_n < cols && streams.get(0, row_n as isize, col_n as isize) > 0.0 {
+                if row_n < rows
+                    && col_n < cols
+                    && streams.get(0, row_n as isize, col_n as isize) > 0.0
+                {
                     let order_val_n = output.get(0, row_n as isize, col_n as isize);
                     if order_val == order_val_n {
                         output.set_unchecked(0, row_n as isize, col_n as isize, order_val + 1.0);
@@ -555,10 +594,16 @@ impl Tool for StrahlerStreamOrderTool {
                 }
             }
 
-            coalescer.emit_unit_fraction(ctx.progress, ((row * cols + col) as f64) / ((rows * cols) as f64));
+            coalescer.emit_unit_fraction(
+                ctx.progress,
+                ((row * cols + col) as f64) / ((rows * cols) as f64),
+            );
         }
 
-        Ok(D8Core::build_result(D8Core::write_or_store_output(output, output_path)?))
+        Ok(D8Core::build_result(D8Core::write_or_store_output(
+            output,
+            output_path,
+        )?))
     }
 }
 
@@ -623,8 +668,9 @@ fn write_or_store_vector(layer: Layer, output: Option<String>) -> Result<String,
 fn ensure_parent_dir(path: &str) -> Result<(), ToolError> {
     if let Some(parent) = Path::new(path).parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| ToolError::Execution(format!("failed creating output directory: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ToolError::Execution(format!("failed creating output directory: {}", e))
+            })?;
         }
     }
     Ok(())
@@ -666,7 +712,9 @@ fn output_html_path(args: &ToolArgs) -> Result<String, ToolError> {
         .or_else(|| args.get("output_html_file"))
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| ToolError::Validation("missing required parameter 'output' for HTML output".to_string()))
+        .ok_or_else(|| {
+            ToolError::Validation("missing required parameter 'output' for HTML output".to_string())
+        })
 }
 
 fn render_profile_html(title: &str, profiles: &[(Vec<f64>, Vec<f64>)]) -> String {
@@ -866,7 +914,9 @@ fn sample_profile_from_start(
         x = xn;
     }
     if cells.len() < 2 {
-        return Err(ToolError::Execution("profile path contains fewer than two cells".to_string()));
+        return Err(ToolError::Execution(
+            "profile path contains fewer than two cells".to_string(),
+        ));
     }
     let mut xs = Vec::with_capacity(cells.len());
     let mut ys = Vec::with_capacity(cells.len());
@@ -911,7 +961,11 @@ fn endpoint_key(c: &Coord, tol: f64) -> (i64, i64) {
     ((c.x / scale).round() as i64, (c.y / scale).round() as i64)
 }
 
-fn collect_link_key_nodes(lines: &[Vec<Coord>], snap_dist: f64, precision_sq: f64) -> Vec<Vec<(i64, i64)>> {
+fn collect_link_key_nodes(
+    lines: &[Vec<Coord>],
+    snap_dist: f64,
+    precision_sq: f64,
+) -> Vec<Vec<(i64, i64)>> {
     let mut endpoints = Vec::<(Coord, usize)>::new();
     for (i, line) in lines.iter().enumerate() {
         if line.len() < 2 {
@@ -1085,7 +1139,13 @@ fn project_point_to_segment(p: &Coord, a: &Coord, b: &Coord) -> (Coord, f64, f64
     (c.clone(), coord_distance(&c, p), tc)
 }
 
-fn segment_intersection_point(a1: &Coord, a2: &Coord, b1: &Coord, b2: &Coord, tol: f64) -> Option<Coord> {
+fn segment_intersection_point(
+    a1: &Coord,
+    a2: &Coord,
+    b1: &Coord,
+    b2: &Coord,
+    tol: f64,
+) -> Option<Coord> {
     let x1 = a1.x;
     let y1 = a1.y;
     let x2 = a2.x;
@@ -1156,8 +1216,10 @@ fn split_lines_at_intersections(lines: Vec<Vec<Coord>>, tol: f64) -> Vec<Vec<Coo
                     let b1 = &lines[j][sj];
                     let b2 = &lines[j][sj + 1];
                     if let Some(p) = segment_intersection_point(a1, a2, b1, b2, tol) {
-                        let near_i_endpoint = coord_eq_tol(&p, a1, tol) || coord_eq_tol(&p, a2, tol);
-                        let near_j_endpoint = coord_eq_tol(&p, b1, tol) || coord_eq_tol(&p, b2, tol);
+                        let near_i_endpoint =
+                            coord_eq_tol(&p, a1, tol) || coord_eq_tol(&p, a2, tol);
+                        let near_j_endpoint =
+                            coord_eq_tol(&p, b1, tol) || coord_eq_tol(&p, b2, tol);
                         if near_i_endpoint && near_j_endpoint {
                             continue;
                         }
@@ -1216,7 +1278,8 @@ fn fix_dangling_arcs(mut lines: Vec<Vec<Coord>>, snap_dist: f64, tol: f64) -> Ve
                     continue;
                 }
                 for sj in 0..(lines[j].len() - 1) {
-                    let (proj, dist, _t) = project_point_to_segment(&endpoint, &lines[j][sj], &lines[j][sj + 1]);
+                    let (proj, dist, _t) =
+                        project_point_to_segment(&endpoint, &lines[j][sj], &lines[j][sj + 1]);
                     if dist <= snap_dist {
                         if let Some((_, _, _, best_dist)) = best {
                             if dist < best_dist {
@@ -1259,18 +1322,35 @@ fn sample_dem_at_coord(dem: &Raster, coord: &Coord) -> Option<f64> {
 }
 
 fn line_length(line: &[Coord]) -> f64 {
-    line.windows(2).map(|seg| coord_distance(&seg[0], &seg[1])).sum()
+    line.windows(2)
+        .map(|seg| coord_distance(&seg[0], &seg[1]))
+        .sum()
 }
 
 fn parse_d8_stream_inputs(
     args: &ToolArgs,
-) -> Result<(Arc<Raster>, Arc<Raster>, Option<std::path::PathBuf>, bool, bool), ToolError> {
+) -> Result<
+    (
+        Arc<Raster>,
+        Arc<Raster>,
+        Option<std::path::PathBuf>,
+        bool,
+        bool,
+    ),
+    ToolError,
+> {
     let d8_pntr_path = parse_raster_path_arg(args, "d8_pntr")?;
     let streams_path = parse_raster_path_arg(args, "streams")
         .or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
     let output_path = parse_optional_output_path(args, "output")?;
-    let esri_style = args.get("esri_pntr").and_then(|v| v.as_bool()).unwrap_or(false);
-    let zero_background = args.get("zero_background").and_then(|v| v.as_bool()).unwrap_or(false);
+    let esri_style = args
+        .get("esri_pntr")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let zero_background = args
+        .get("zero_background")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     let pntr = D8Core::load_raster(&d8_pntr_path)?;
     let streams = D8Core::load_raster(&streams_path)?;
@@ -1305,7 +1385,16 @@ fn grid_lengths(pntr: &Raster) -> [f64; 8] {
     let cell_size_x = pntr.cell_size_x.abs();
     let cell_size_y = pntr.cell_size_y.abs();
     let diag = (cell_size_x * cell_size_x + cell_size_y * cell_size_y).sqrt();
-    [diag, cell_size_x, diag, cell_size_y, diag, cell_size_x, diag, cell_size_y]
+    [
+        diag,
+        cell_size_x,
+        diag,
+        cell_size_y,
+        diag,
+        cell_size_x,
+        diag,
+        cell_size_y,
+    ]
 }
 
 fn compute_stream_inflow_counts_parallel(
@@ -1393,15 +1482,24 @@ fn compute_link_id_raster(
     output
 }
 
-fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+fn run_stream_tool_fallback(
+    id: &str,
+    args: &ToolArgs,
+    ctx: &ToolContext,
+) -> Result<ToolRunResult, ToolError> {
     match id {
         "stream_link_identifier" => {
-            let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+            let (pntr, streams, output_path, esri_style, zero_background) =
+                parse_d8_stream_inputs(args)?;
             let out = compute_link_id_raster(&pntr, &streams, esri_style, zero_background);
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "stream_link_class" => {
-            let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+            let (pntr, streams, output_path, esri_style, zero_background) =
+                parse_d8_stream_inputs(args)?;
             let rows = pntr.rows;
             let cols = pntr.cols;
             let pntr_nodata = pntr.nodata;
@@ -1457,7 +1555,10 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     out.set_unchecked(0, row as isize, col as isize, 5.0);
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "stream_link_length" => {
             let d8_pntr_path = parse_raster_path_arg(args, "d8_pntr")
@@ -1476,14 +1577,17 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
             let pntr = D8Core::load_raster(&d8_pntr_path)?;
             let mut streams = D8Core::load_raster(&streams_path)?.as_ref().clone();
             if streams.rows != pntr.rows || streams.cols != pntr.cols {
-                return Err(ToolError::Validation("Input rasters must have the same dimensions".to_string()));
+                return Err(ToolError::Validation(
+                    "Input rasters must have the same dimensions".to_string(),
+                ));
             }
             let rows = pntr.rows;
             let cols = pntr.cols;
             let nodata = streams.nodata;
             let pntr_matches = D8Core::build_pntr_matches(esri_style);
             let lengths = grid_lengths(&pntr);
-            let use_input_link_ids = args.get("linkid").is_some() || args.get("streams_id_raster").is_some();
+            let use_input_link_ids =
+                args.get("linkid").is_some() || args.get("streams_id_raster").is_some();
             let link_id = if use_input_link_ids {
                 streams.clone()
             } else {
@@ -1493,7 +1597,12 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 for row in 0..rows {
                     for col in 0..cols {
                         let lid = link_id.get(0, row as isize, col as isize);
-                        streams.set_unchecked(0, row as isize, col as isize, if lid > 0.0 { 1.0 } else { 0.0 });
+                        streams.set_unchecked(
+                            0,
+                            row as isize,
+                            col as isize,
+                            if lid > 0.0 { 1.0 } else { 0.0 },
+                        );
                     }
                 }
             }
@@ -1515,16 +1624,25 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 for col in 0..cols {
                     if streams.get(0, row as isize, col as isize) > 0.0 {
                         let lid = link_id.get(0, row as isize, col as isize) as i64;
-                        out.set_unchecked(0, row as isize, col as isize, *link_len.get(&lid).unwrap_or(&0.0));
+                        out.set_unchecked(
+                            0,
+                            row as isize,
+                            col as isize,
+                            *link_len.get(&lid).unwrap_or(&0.0),
+                        );
                     } else {
                         out.set_unchecked(0, row as isize, col as isize, nodata);
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "distance_to_outlet" => {
-            let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+            let (pntr, streams, output_path, esri_style, zero_background) =
+                parse_d8_stream_inputs(args)?;
             let rows = pntr.rows;
             let cols = pntr.cols;
             let nodata = streams.nodata;
@@ -1549,7 +1667,11 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                             break;
                         }
                         if let Some((yn, xn, idx)) = downstream_cell(&pntr, y, x, &pntr_matches) {
-                            let step = if streams.get(0, yn as isize, xn as isize) > 0.0 { lengths[idx] } else { 0.0 };
+                            let step = if streams.get(0, yn as isize, xn as isize) > 0.0 {
+                                lengths[idx]
+                            } else {
+                                0.0
+                            };
                             path.push((y, x, step));
                             if streams.get(0, yn as isize, xn as isize) <= 0.0 {
                                 y = yn;
@@ -1563,7 +1685,11 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                             break;
                         }
                     }
-                    let mut base = if y < rows && x < cols && dist[y][x] >= 0.0 { dist[y][x] } else { 0.0 };
+                    let mut base = if y < rows && x < cols && dist[y][x] >= 0.0 {
+                        dist[y][x]
+                    } else {
+                        0.0
+                    };
                     for (py, px, step) in path.into_iter().rev() {
                         base += step;
                         dist[py][px] = base;
@@ -1582,10 +1708,14 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "length_of_upstream_channels" => {
-            let (pntr, streams, output_path, esri_style, _zero_background) = parse_d8_stream_inputs(args)?;
+            let (pntr, streams, output_path, esri_style, _zero_background) =
+                parse_d8_stream_inputs(args)?;
             let rows = pntr.rows;
             let cols = pntr.cols;
             let nodata = streams.nodata;
@@ -1630,10 +1760,14 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "farthest_channel_head" => {
-            let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+            let (pntr, streams, output_path, esri_style, zero_background) =
+                parse_d8_stream_inputs(args)?;
             let rows = pntr.rows;
             let cols = pntr.cols;
             let nodata = streams.nodata;
@@ -1679,10 +1813,14 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "find_main_stem" => {
-            let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+            let (pntr, streams, output_path, esri_style, zero_background) =
+                parse_d8_stream_inputs(args)?;
             let rows = pntr.rows;
             let cols = pntr.cols;
             let nodata = streams.nodata;
@@ -1771,10 +1909,14 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "tributary_identifier" => {
-            let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+            let (pntr, streams, output_path, esri_style, zero_background) =
+                parse_d8_stream_inputs(args)?;
             let rows = pntr.rows;
             let cols = pntr.cols;
             let nodata = streams.nodata;
@@ -1829,11 +1971,18 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "remove_short_streams" => {
-            let min_length = args.get("min_length").and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let (pntr, streams, output_path, esri_style, _zero_background) = parse_d8_stream_inputs(args)?;
+            let min_length = args
+                .get("min_length")
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.0);
+            let (pntr, streams, output_path, esri_style, _zero_background) =
+                parse_d8_stream_inputs(args)?;
             let rows = pntr.rows;
             let cols = pntr.cols;
             let nodata = streams.nodata;
@@ -1858,16 +2007,29 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 for col in 0..cols {
                     if streams.get(0, row as isize, col as isize) > 0.0 {
                         let lid = link_id.get(0, row as isize, col as isize) as i64;
-                        out.set_unchecked(0, row as isize, col as isize, if link_len.get(&lid).copied().unwrap_or(0.0) >= min_length { 1.0 } else { 0.0 });
+                        out.set_unchecked(
+                            0,
+                            row as isize,
+                            col as isize,
+                            if link_len.get(&lid).copied().unwrap_or(0.0) >= min_length {
+                                1.0
+                            } else {
+                                0.0
+                            },
+                        );
                     } else {
                         out.set_unchecked(0, row as isize, col as isize, nodata);
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "topological_stream_order" => {
-            let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+            let (pntr, streams, output_path, esri_style, zero_background) =
+                parse_d8_stream_inputs(args)?;
             let rows = pntr.rows;
             let cols = pntr.cols;
             let nodata = streams.nodata;
@@ -1930,13 +2092,17 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "stream_slope_continuous" => {
             let dem_path = parse_raster_path_arg(args, "dem")
                 .or_else(|_| parse_raster_path_arg(args, "input_dem"))?;
             let dem = D8Core::load_raster(&dem_path)?;
-            let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+            let (pntr, streams, output_path, esri_style, zero_background) =
+                parse_d8_stream_inputs(args)?;
             if dem.rows != pntr.rows || dem.cols != pntr.cols {
                 return Err(ToolError::Validation(
                     "Input DEM and stream rasters must have the same dimensions".to_string(),
@@ -1987,7 +2153,9 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
 
                     // Elevation and distance to downslope neighbour.
                     let mut z_dn = dem.get(0, row, col);
-                    if let Some((rn, cn, i)) = downstream_cell(&pntr, row as usize, col as usize, &pntr_matches) {
+                    if let Some((rn, cn, i)) =
+                        downstream_cell(&pntr, row as usize, col as usize, &pntr_matches)
+                    {
                         let zd = dem.get(0, rn as isize, cn as isize);
                         if zd != dem_nodata {
                             z_dn = zd;
@@ -2010,7 +2178,10 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 let col = (idx % cols) as isize;
                 out.set_unchecked(0, row, col, val);
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "stream_link_slope" => {
             let dem_path = parse_raster_path_arg(args, "dem")
@@ -2031,7 +2202,9 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
             let pntr = D8Core::load_raster(&d8_pntr_path)?;
             let mut streams = D8Core::load_raster(&streams_path)?.as_ref().clone();
             if streams.rows != pntr.rows || streams.cols != pntr.cols {
-                return Err(ToolError::Validation("Input rasters must have the same dimensions".to_string()));
+                return Err(ToolError::Validation(
+                    "Input rasters must have the same dimensions".to_string(),
+                ));
             }
             if dem.rows != pntr.rows || dem.cols != pntr.cols {
                 return Err(ToolError::Validation(
@@ -2043,7 +2216,8 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
             let nodata = streams.nodata;
             let pntr_matches = D8Core::build_pntr_matches(esri_style);
             let lengths = grid_lengths(&pntr);
-            let use_input_link_ids = args.get("linkid").is_some() || args.get("streams_id_raster").is_some();
+            let use_input_link_ids =
+                args.get("linkid").is_some() || args.get("streams_id_raster").is_some();
             let link_id = if use_input_link_ids {
                 streams.clone()
             } else {
@@ -2054,7 +2228,12 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 for row in 0..rows {
                     for col in 0..cols {
                         let lid = link_id.get(0, row as isize, col as isize);
-                        streams.set_unchecked(0, row as isize, col as isize, if lid > 0.0 { 1.0 } else { 0.0 });
+                        streams.set_unchecked(
+                            0,
+                            row as isize,
+                            col as isize,
+                            if lid > 0.0 { 1.0 } else { 0.0 },
+                        );
                     }
                 }
             }
@@ -2112,7 +2291,10 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "extract_streams" => {
             let input = parse_raster_path_arg(args, "flow_accumulation")
@@ -2151,10 +2333,14 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
             for (idx, &val) in out_vals.iter().enumerate() {
                 out.set_unchecked(0, (idx / cols) as isize, (idx % cols) as isize, val);
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "extract_valleys" => {
-            let input = parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
+            let input = parse_raster_path_arg(args, "dem")
+                .or_else(|_| parse_raster_path_arg(args, "input"))?;
             let line_thin = args
                 .get("line_thin")
                 .or_else(|| args.get("thin"))
@@ -2234,7 +2420,9 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                                 out.set_unchecked(0, row, col, 0.0);
                                 continue;
                             }
-                            cell_data.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                            cell_data.sort_by(|a, b| {
+                                a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                            });
                             let lower_quartile = ((n as f64) / 4.0).floor() as usize;
                             let is_valley = z <= cell_data[lower_quartile];
                             out.set_unchecked(0, row, col, if is_valley { 1.0 } else { 0.0 });
@@ -2254,8 +2442,9 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                             let s = dem.get(0, row + 1, col);
                             let e = dem.get(0, row, col + 1);
                             let w = dem.get(0, row, col - 1);
-                            let is_valley = (!dem.is_nodata(n) && !dem.is_nodata(s) && n > z && s > z)
-                                || (!dem.is_nodata(e) && !dem.is_nodata(w) && e > z && w > z);
+                            let is_valley =
+                                (!dem.is_nodata(n) && !dem.is_nodata(s) && n > z && s > z)
+                                    || (!dem.is_nodata(e) && !dem.is_nodata(w) && e > z && w > z);
                             out.set_unchecked(0, row, col, if is_valley { 1.0 } else { 0.0 });
                         }
                     }
@@ -2350,13 +2539,25 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "raster_streams_to_vector" => {
-            let streams_path = parse_raster_path_arg(args, "streams_raster").or_else(|_| parse_raster_path_arg(args, "streams"))?;
-            let d8_pntr_path = parse_raster_path_arg(args, "d8_pntr").or_else(|_| parse_raster_path_arg(args, "d8_pointer"))?;
-            let esri_style = args.get("esri_pntr").or_else(|| args.get("esri_pointer")).and_then(|v| v.as_bool()).unwrap_or(false);
-            let all_vertices = args.get("all_vertices").and_then(|v| v.as_bool()).unwrap_or(false);
+            let streams_path = parse_raster_path_arg(args, "streams_raster")
+                .or_else(|_| parse_raster_path_arg(args, "streams"))?;
+            let d8_pntr_path = parse_raster_path_arg(args, "d8_pntr")
+                .or_else(|_| parse_raster_path_arg(args, "d8_pointer"))?;
+            let esri_style = args
+                .get("esri_pntr")
+                .or_else(|| args.get("esri_pointer"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let all_vertices = args
+                .get("all_vertices")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let output = args
                 .get("output")
                 .or_else(|| args.get("output_vector"))
@@ -2365,7 +2566,9 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
             let streams = D8Core::load_raster(&streams_path)?;
             let pntr = D8Core::load_raster(&d8_pntr_path)?;
             if streams.rows != pntr.rows || streams.cols != pntr.cols {
-                return Err(ToolError::Validation("Input rasters must have the same dimensions".to_string()));
+                return Err(ToolError::Validation(
+                    "Input rasters must have the same dimensions".to_string(),
+                ));
             }
             let rows = streams.rows;
             let cols = streams.cols;
@@ -2414,7 +2617,10 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     let dir = pntr.get(0, y as isize, x as isize) as usize;
                     let add_here = all_vertices || dir != prev_dir;
                     if add_here {
-                        coords.push(Coord::xy(pntr.col_center_x(x as isize), pntr.row_center_y(y as isize)));
+                        coords.push(Coord::xy(
+                            pntr.col_center_x(x as isize),
+                            pntr.row_center_y(y as isize),
+                        ));
                         prev_dir = dir;
                     }
                     if let Some((yn, xn, _idx)) = downstream_cell(&pntr, y, x, &pntr_matches) {
@@ -2425,7 +2631,10 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                             num_inflowing[y][x] = -1;
                             continue;
                         }
-                        coords.push(Coord::xy(pntr.col_center_x(xn as isize), pntr.row_center_y(yn as isize)));
+                        coords.push(Coord::xy(
+                            pntr.col_center_x(xn as isize),
+                            pntr.row_center_y(yn as isize),
+                        ));
                         if next_val > 0.0 {
                             stack.push((yn, xn));
                         }
@@ -2433,11 +2642,17 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     break;
                 }
                 if coords.len() > 1 {
-                    layer.add_feature(
-                        Some(Geometry::line_string(coords)),
-                        &[("FID", FieldValue::Integer(fid)), ("STRM_VAL", FieldValue::Float(stream_val))],
-                    )
-                    .map_err(|e| ToolError::Execution(format!("failed building output feature: {}", e)))?;
+                    layer
+                        .add_feature(
+                            Some(Geometry::line_string(coords)),
+                            &[
+                                ("FID", FieldValue::Integer(fid)),
+                                ("STRM_VAL", FieldValue::Float(stream_val)),
+                            ],
+                        )
+                        .map_err(|e| {
+                            ToolError::Execution(format!("failed building output feature: {}", e))
+                        })?;
                     fid += 1;
                 }
             }
@@ -2451,8 +2666,14 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 .or_else(|_| parse_raster_path_arg(args, "base"))
                 .or_else(|_| parse_raster_path_arg(args, "base_raster"))?;
             let output_path = parse_optional_output_path(args, "output")?;
-            let zero_background = args.get("zero_background").and_then(|v| v.as_bool()).unwrap_or(false);
-            let use_feature_id = args.get("use_feature_id").and_then(|v| v.as_bool()).unwrap_or(false);
+            let zero_background = args
+                .get("zero_background")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let use_feature_id = args
+                .get("use_feature_id")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let layer = load_vector(&input_vector)?;
             let mut out = D8Core::load_raster(&reference)?.as_ref().clone();
             out.data_type = DataType::I16;
@@ -2463,7 +2684,11 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 }
             }
             for (idx, feat) in layer.features.iter().enumerate() {
-                let burn = if use_feature_id { (idx + 1) as f64 } else { 1.0 };
+                let burn = if use_feature_id {
+                    (idx + 1) as f64
+                } else {
+                    1.0
+                };
                 if let Some(geom) = &feat.geometry {
                     match geom {
                         Geometry::LineString(coords) => {
@@ -2482,23 +2707,41 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     }
                 }
             }
-            Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+            Ok(D8Core::build_result(D8Core::write_or_store_output(
+                out,
+                output_path,
+            )?))
         }
         "long_profile" => {
-            let d8_pntr_path = parse_raster_path_arg(args, "d8_pntr").or_else(|_| parse_raster_path_arg(args, "d8_pointer"))?;
-            let streams_path = parse_raster_path_arg(args, "streams_raster").or_else(|_| parse_raster_path_arg(args, "streams"))?;
-            let dem_path = parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input_dem"))?;
+            let d8_pntr_path = parse_raster_path_arg(args, "d8_pntr")
+                .or_else(|_| parse_raster_path_arg(args, "d8_pointer"))?;
+            let streams_path = parse_raster_path_arg(args, "streams_raster")
+                .or_else(|_| parse_raster_path_arg(args, "streams"))?;
+            let dem_path = parse_raster_path_arg(args, "dem")
+                .or_else(|_| parse_raster_path_arg(args, "input_dem"))?;
             let output = output_html_path(args)?;
-            let esri_style = args.get("esri_pntr").or_else(|| args.get("esri_pointer")).and_then(|v| v.as_bool()).unwrap_or(false);
+            let esri_style = args
+                .get("esri_pntr")
+                .or_else(|| args.get("esri_pointer"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let pntr = D8Core::load_raster(&d8_pntr_path)?;
             let streams = D8Core::load_raster(&streams_path)?;
             let dem = D8Core::load_raster(&dem_path)?;
-            if pntr.rows != streams.rows || pntr.cols != streams.cols || pntr.rows != dem.rows || pntr.cols != dem.cols {
-                return Err(ToolError::Validation("Input rasters must have the same dimensions".to_string()));
+            if pntr.rows != streams.rows
+                || pntr.cols != streams.cols
+                || pntr.rows != dem.rows
+                || pntr.cols != dem.cols
+            {
+                return Err(ToolError::Validation(
+                    "Input rasters must have the same dimensions".to_string(),
+                ));
             }
             let mut profiles = Vec::new();
             for head in stream_heads(&streams, &pntr, esri_style) {
-                if let Ok(profile) = sample_profile_from_start(head, &pntr, &dem, Some(&streams), esri_style) {
+                if let Ok(profile) =
+                    sample_profile_from_start(head, &pntr, &dem, Some(&streams), esri_style)
+                {
                     profiles.push(profile);
                 }
             }
@@ -2508,30 +2751,48 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
             Ok(D8Core::build_result(output))
         }
         "long_profile_from_points" => {
-            let d8_pntr_path = parse_raster_path_arg(args, "d8_pntr").or_else(|_| parse_raster_path_arg(args, "d8_pointer"))?;
-            let points_path = parse_vector_path_arg(args, "points").or_else(|_| parse_vector_path_arg(args, "input_points"))?;
-            let dem_path = parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input_dem"))?;
+            let d8_pntr_path = parse_raster_path_arg(args, "d8_pntr")
+                .or_else(|_| parse_raster_path_arg(args, "d8_pointer"))?;
+            let points_path = parse_vector_path_arg(args, "points")
+                .or_else(|_| parse_vector_path_arg(args, "input_points"))?;
+            let dem_path = parse_raster_path_arg(args, "dem")
+                .or_else(|_| parse_raster_path_arg(args, "input_dem"))?;
             let output = output_html_path(args)?;
-            let esri_style = args.get("esri_pntr").or_else(|| args.get("esri_pointer")).and_then(|v| v.as_bool()).unwrap_or(false);
+            let esri_style = args
+                .get("esri_pntr")
+                .or_else(|| args.get("esri_pointer"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let pntr = D8Core::load_raster(&d8_pntr_path)?;
             let dem = D8Core::load_raster(&dem_path)?;
             if pntr.rows != dem.rows || pntr.cols != dem.cols {
-                return Err(ToolError::Validation("Input rasters must have the same dimensions".to_string()));
+                return Err(ToolError::Validation(
+                    "Input rasters must have the same dimensions".to_string(),
+                ));
             }
             let points = load_vector(&points_path)?;
             let mut profiles = Vec::new();
             for feat in &points.features {
                 if let Some(Geometry::Point(coord)) = &feat.geometry {
                     if let Some((row, col)) = point_to_row_col(&dem, coord.x, coord.y) {
-                        if let Ok(profile) = sample_profile_from_start((row as usize, col as usize), &pntr, &dem, None, esri_style) {
+                        if let Ok(profile) = sample_profile_from_start(
+                            (row as usize, col as usize),
+                            &pntr,
+                            &dem,
+                            None,
+                            esri_style,
+                        ) {
                             profiles.push(profile);
                         }
                     }
                 }
             }
             ensure_parent_dir(&output)?;
-            std::fs::write(&output, render_profile_html("Long Profile From Points", &profiles))
-                .map_err(|e| ToolError::Execution(format!("failed writing html output: {}", e)))?;
+            std::fs::write(
+                &output,
+                render_profile_html("Long Profile From Points", &profiles),
+            )
+            .map_err(|e| ToolError::Execution(format!("failed writing html output: {}", e)))?;
             Ok(D8Core::build_result(output))
         }
         "repair_stream_vector_topology" => {
@@ -2541,9 +2802,15 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 .get("output")
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
-            let snap_dist = args.get("snap").or_else(|| args.get("snap_dist")).and_then(|v| v.as_f64()).unwrap_or(0.001);
+            let snap_dist = args
+                .get("snap")
+                .or_else(|| args.get("snap_dist"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.001);
             if snap_dist <= 0.0 {
-                return Err(ToolError::Validation("snap distance must be greater than zero".to_string()));
+                return Err(ToolError::Validation(
+                    "snap distance must be greater than zero".to_string(),
+                ));
             }
             let layer = load_vector(&input)?;
             let mut lines = line_geometries(&layer);
@@ -2577,7 +2844,9 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     Some(Geometry::line_string(line)),
                     &[("FID", FieldValue::Integer((idx + 1) as i64))],
                 )
-                .map_err(|e| ToolError::Execution(format!("failed building repaired stream layer: {}", e)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed building repaired stream layer: {}", e))
+                })?;
             }
             Ok(D8Core::build_result(write_or_store_vector(out, output)?))
         }
@@ -2591,7 +2860,11 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 .get("output")
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
-            let snap_dist = args.get("snap").or_else(|| args.get("snap_distance")).and_then(|v| v.as_f64()).unwrap_or(0.001);
+            let snap_dist = args
+                .get("snap")
+                .or_else(|| args.get("snap_distance"))
+                .and_then(|v| v.as_f64())
+                .unwrap_or(0.001);
             let max_ridge_cutting_height = args
                 .get("max_ridge_cutting_height")
                 .and_then(|v| v.as_f64())
@@ -2637,7 +2910,9 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 let up = endpoint_key(&line[0], tol);
                 let down = endpoint_key(line.last().unwrap(), tol);
                 node_coord.entry(up).or_insert_with(|| line[0].clone());
-                node_coord.entry(down).or_insert_with(|| line.last().cloned().unwrap());
+                node_coord
+                    .entry(down)
+                    .or_insert_with(|| line.last().cloned().unwrap());
                 links.push(LinkInfo {
                     length: line_length(&line),
                     geom: line,
@@ -2672,8 +2947,15 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 let chosen = cands
                     .into_iter()
                     .filter(|cand| *cand != idx)
-                    .filter(|cand| links[*cand].min_elev <= links[idx].min_elev + max_ridge_cutting_height)
-                    .min_by(|a, b| links[*a].min_elev.partial_cmp(&links[*b].min_elev).unwrap_or(std::cmp::Ordering::Equal));
+                    .filter(|cand| {
+                        links[*cand].min_elev <= links[idx].min_elev + max_ridge_cutting_height
+                    })
+                    .min_by(|a, b| {
+                        links[*a]
+                            .min_elev
+                            .partial_cmp(&links[*b].min_elev)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
                 downstream_of[idx] = chosen;
             }
             for (idx, ds) in downstream_of.iter().enumerate() {
@@ -2697,7 +2979,8 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     if let Some(ds) = downstream_of[idx] {
                         let new_dist = links[idx].length + dist2mouth[ds];
                         let new_nodes = ds_nodes[ds] + 1;
-                        if (dist2mouth[idx] - new_dist).abs() > 1.0e-9 || ds_nodes[idx] != new_nodes {
+                        if (dist2mouth[idx] - new_dist).abs() > 1.0e-9 || ds_nodes[idx] != new_nodes
+                        {
                             dist2mouth[idx] = new_dist;
                             ds_nodes[idx] = new_nodes;
                             changed = true;
@@ -2747,10 +3030,11 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                     if ups.is_empty() {
                         break;
                     }
-                    let best = ups
-                        .iter()
-                        .copied()
-                        .max_by(|a, b| max_ups[*a].partial_cmp(&max_ups[*b]).unwrap_or(std::cmp::Ordering::Equal));
+                    let best = ups.iter().copied().max_by(|a, b| {
+                        max_ups[*a]
+                            .partial_cmp(&max_ups[*b])
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
                     for up in ups {
                         if Some(*up) != best {
                             hack[*up] = hack_order + 1;
@@ -2808,15 +3092,33 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 }
             }
 
-            let output_confluences = args.get("confluences_output").and_then(|v| v.as_str()).map(|s| s.to_string())
-                .or_else(|| output.as_deref().map(|p| p.replace(".shp", "_confluences.shp")));
-            let output_outlets = args.get("outlets_output").and_then(|v| v.as_str()).map(|s| s.to_string())
+            let output_confluences = args
+                .get("confluences_output")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    output
+                        .as_deref()
+                        .map(|p| p.replace(".shp", "_confluences.shp"))
+                });
+            let output_outlets = args
+                .get("outlets_output")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
                 .or_else(|| output.as_deref().map(|p| p.replace(".shp", "_outlets.shp")));
-            let output_heads = args.get("channel_heads_output").and_then(|v| v.as_str()).map(|s| s.to_string())
-                .or_else(|| output.as_deref().map(|p| p.replace(".shp", "_channel_heads.shp")));
+            let output_heads = args
+                .get("channel_heads_output")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    output
+                        .as_deref()
+                        .map(|p| p.replace(".shp", "_channel_heads.shp"))
+                });
 
             let input_crs = layer.crs.clone();
-            let mut out_lines = Layer::new("stream_network_analysis").with_geom_type(GeometryType::LineString);
+            let mut out_lines =
+                Layer::new("stream_network_analysis").with_geom_type(GeometryType::LineString);
             out_lines.crs = input_crs.clone();
             for field in [
                 ("FID", FieldType::Integer),
@@ -2839,28 +3141,46 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 out_lines.add_field(FieldDef::new(field.0, field.1));
             }
             for (idx, link) in links.iter().enumerate() {
-                out_lines.add_feature(
-                    Some(Geometry::line_string(link.geom.clone())),
-                    &[
-                        ("FID", FieldValue::Integer((idx + 1) as i64)),
-                        ("TUCL", FieldValue::Float(tucl[idx])),
-                        ("MAXUPSDIST", FieldValue::Float(max_ups[idx])),
-                        ("MIN_ELEV", FieldValue::Float(link.min_elev)),
-                        ("MAX_ELEV", FieldValue::Float(link.max_elev)),
-                        ("OUTLET", FieldValue::Integer(outlet_id[idx])),
-                        ("HORTON", FieldValue::Integer(horton[idx])),
-                        ("STRAHLER", FieldValue::Integer(strahler[idx])),
-                        ("SHREVE", FieldValue::Integer(shreve[idx])),
-                        ("HACK", FieldValue::Integer(hack[idx])),
-                        ("DIST2MOUTH", FieldValue::Float(dist2mouth[idx])),
-                        ("DS_NODES", FieldValue::Integer(ds_nodes[idx])),
-                        ("IS_OUTLET", FieldValue::Integer(if downstream_of[idx].is_none() { 1 } else { 0 })),
-                        ("DS_LINK_ID", FieldValue::Integer(downstream_of[idx].map(|v| (v + 1) as i64).unwrap_or(0))),
-                        ("MAINSTEM", FieldValue::Integer(mainstream[idx])),
-                        ("TRIB_ID", FieldValue::Integer(trib_id[idx])),
-                    ],
-                )
-                .map_err(|e| ToolError::Execution(format!("failed building stream analysis output: {}", e)))?;
+                out_lines
+                    .add_feature(
+                        Some(Geometry::line_string(link.geom.clone())),
+                        &[
+                            ("FID", FieldValue::Integer((idx + 1) as i64)),
+                            ("TUCL", FieldValue::Float(tucl[idx])),
+                            ("MAXUPSDIST", FieldValue::Float(max_ups[idx])),
+                            ("MIN_ELEV", FieldValue::Float(link.min_elev)),
+                            ("MAX_ELEV", FieldValue::Float(link.max_elev)),
+                            ("OUTLET", FieldValue::Integer(outlet_id[idx])),
+                            ("HORTON", FieldValue::Integer(horton[idx])),
+                            ("STRAHLER", FieldValue::Integer(strahler[idx])),
+                            ("SHREVE", FieldValue::Integer(shreve[idx])),
+                            ("HACK", FieldValue::Integer(hack[idx])),
+                            ("DIST2MOUTH", FieldValue::Float(dist2mouth[idx])),
+                            ("DS_NODES", FieldValue::Integer(ds_nodes[idx])),
+                            (
+                                "IS_OUTLET",
+                                FieldValue::Integer(if downstream_of[idx].is_none() {
+                                    1
+                                } else {
+                                    0
+                                }),
+                            ),
+                            (
+                                "DS_LINK_ID",
+                                FieldValue::Integer(
+                                    downstream_of[idx].map(|v| (v + 1) as i64).unwrap_or(0),
+                                ),
+                            ),
+                            ("MAINSTEM", FieldValue::Integer(mainstream[idx])),
+                            ("TRIB_ID", FieldValue::Integer(trib_id[idx])),
+                        ],
+                    )
+                    .map_err(|e| {
+                        ToolError::Execution(format!(
+                            "failed building stream analysis output: {}",
+                            e
+                        ))
+                    })?;
             }
 
             let mut confluences = Layer::new("confluences").with_geom_type(GeometryType::Point);
@@ -2886,8 +3206,16 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 let in_deg = node_degree_in.get(key).copied().unwrap_or(0);
                 if in_deg >= 2 {
                     confluences
-                        .add_feature(Some(Geometry::point(coord.x, coord.y)), &[("FID", FieldValue::Integer(fid))])
-                        .map_err(|e| ToolError::Execution(format!("failed building confluence output: {}", e)))?;
+                        .add_feature(
+                            Some(Geometry::point(coord.x, coord.y)),
+                            &[("FID", FieldValue::Integer(fid))],
+                        )
+                        .map_err(|e| {
+                            ToolError::Execution(format!(
+                                "failed building confluence output: {}",
+                                e
+                            ))
+                        })?;
                     fid += 1;
                 }
             }
@@ -2895,8 +3223,13 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
             for outlet in &outlets {
                 let c = node_coord.get(&links[*outlet].down_key).cloned().unwrap();
                 outlets_layer
-                    .add_feature(Some(Geometry::point(c.x, c.y)), &[("FID", FieldValue::Integer(fid))])
-                    .map_err(|e| ToolError::Execution(format!("failed building outlet output: {}", e)))?;
+                    .add_feature(
+                        Some(Geometry::point(c.x, c.y)),
+                        &[("FID", FieldValue::Integer(fid))],
+                    )
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed building outlet output: {}", e))
+                    })?;
                 fid += 1;
             }
             fid = 1;
@@ -2904,8 +3237,16 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
                 if upstream_of[idx].is_empty() {
                     let c = node_coord.get(&links[idx].up_key).cloned().unwrap();
                     heads_layer
-                        .add_feature(Some(Geometry::point(c.x, c.y)), &[("FID", FieldValue::Integer(fid))])
-                        .map_err(|e| ToolError::Execution(format!("failed building channel head output: {}", e)))?;
+                        .add_feature(
+                            Some(Geometry::point(c.x, c.y)),
+                            &[("FID", FieldValue::Integer(fid))],
+                        )
+                        .map_err(|e| {
+                            ToolError::Execution(format!(
+                                "failed building channel head output: {}",
+                                e
+                            ))
+                        })?;
                     fid += 1;
                 }
             }
@@ -2920,7 +3261,10 @@ fn run_stream_tool_fallback(id: &str, args: &ToolArgs, ctx: &ToolContext) -> Res
             outputs.insert("confluences".to_string(), json!(confluences_path));
             outputs.insert("outlets".to_string(), json!(outlets_path));
             outputs.insert("channel_heads".to_string(), json!(heads_path));
-            Ok(ToolRunResult { outputs, ..Default::default() })
+            Ok(ToolRunResult {
+                outputs,
+                ..Default::default()
+            })
         }
         _ => StrahlerStreamOrderTool.run(args, ctx),
     }
@@ -2935,11 +3279,31 @@ impl Tool for HortonStreamOrderTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "d8_pntr", description: "D8 flow pointer raster", required: true },
-                ToolParamSpec { name: "streams", description: "Stream raster", required: true },
-                ToolParamSpec { name: "esri_pntr", description: "Use ESRI-style pointer", required: false },
-                ToolParamSpec { name: "zero_background", description: "Assign zero to background", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "d8_pntr",
+                    description: "D8 flow pointer raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "streams",
+                    description: "Stream raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "esri_pntr",
+                    description: "Use ESRI-style pointer",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "zero_background",
+                    description: "Assign zero to background",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -2965,12 +3329,14 @@ impl Tool for HortonStreamOrderTool {
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         parse_raster_path_arg(args, "d8_pntr")?;
-        parse_raster_path_arg(args, "streams").or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
+        parse_raster_path_arg(args, "streams")
+            .or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+        let (pntr, streams, output_path, esri_style, zero_background) =
+            parse_d8_stream_inputs(args)?;
         let rows = pntr.rows;
         let cols = pntr.cols;
         let n = rows * cols;
@@ -2995,18 +3361,18 @@ impl Tool for HortonStreamOrderTool {
         //   trib_length: f32  (4 bytes) — longest upstream path reaching this cell
         //   trib_id    : i32  (4 bytes) — which tributary this cell belongs to
         // Total ≈ 21 bytes/cell, roughly half the previous allocation.
-        let mut downstream  = vec![u32::MAX; n];
-        let mut down_len    = vec![0.0f32; n];
-        let mut order_buf   = vec![0.0f32; n];
-        let mut num_inf     = vec![-1i8; n];
+        let mut downstream = vec![u32::MAX; n];
+        let mut down_len = vec![0.0f32; n];
+        let mut order_buf = vec![0.0f32; n];
+        let mut num_inf = vec![-1i8; n];
         let mut trib_length = vec![f32::NEG_INFINITY; n];
-        let mut trib_id     = vec![-1i32; n];
+        let mut trib_id = vec![-1i32; n];
 
         // Per-tributary metadata (number of entries = number of headwaters).
         let mut channel_heads: Vec<u32> = Vec::new();
-        let mut max_order:     Vec<f32> = Vec::new();
-        let mut stack:         Vec<u32> = Vec::new();
-        let mut current_id = 0i32;   // 0-based; t_idx = trib_id[cell] as usize
+        let mut max_order: Vec<f32> = Vec::new();
+        let mut stack: Vec<u32> = Vec::new();
+        let mut current_id = 0i32; // 0-based; t_idx = trib_id[cell] as usize
 
         // Single combined initialisation pass — mirrors Strahler's structure.
         for row in 0..rows {
@@ -3019,11 +3385,14 @@ impl Tool for HortonStreamOrderTool {
                         let d = pntr_matches[dir_val];
                         let rn = row as isize + D8Core::D_Y[d];
                         let cn = col as isize + D8Core::D_X[d];
-                        if rn >= 0 && cn >= 0 && rn < rows as isize && cn < cols as isize
+                        if rn >= 0
+                            && cn >= 0
+                            && rn < rows as isize
+                            && cn < cols as isize
                             && streams.get(0, rn, cn) > 0.0
                         {
                             downstream[i] = (rn as usize * cols + cn as usize) as u32;
-                            down_len[i]   = lengths[d] as f32;
+                            down_len[i] = lengths[d] as f32;
                         }
                     }
 
@@ -3031,20 +3400,29 @@ impl Tool for HortonStreamOrderTool {
                     num_inf[i] = c;
                     if c == 0 {
                         // Headwater: seed the traversal stack.
-                        trib_id[i]     = current_id;
+                        trib_id[i] = current_id;
                         trib_length[i] = 0.0;
-                        order_buf[i]   = 1.0;
+                        order_buf[i] = 1.0;
                         channel_heads.push(i as u32);
                         max_order.push(1.0);
                         stack.push(i as u32);
                         current_id += 1;
                     }
                     // Non-headwater stream cells keep order_buf[i] = 0.0 (initialised above).
-                    out.set_unchecked(0, row as isize, col as isize, if c == 0 { 1.0 } else { 0.0 });
+                    out.set_unchecked(
+                        0,
+                        row as isize,
+                        col as isize,
+                        if c == 0 { 1.0 } else { 0.0 },
+                    );
                 } else {
                     // Non-stream cell: set output background/nodata.
                     let pv = pntr.get(0, row as isize, col as isize);
-                    let v = if pv != pntr_nodata { background } else { nodata };
+                    let v = if pv != pntr_nodata {
+                        background
+                    } else {
+                        nodata
+                    };
                     out.set_unchecked(0, row as isize, col as isize, v);
                 }
             }
@@ -3056,10 +3434,10 @@ impl Tool for HortonStreamOrderTool {
         // above the new order.
         let coalescer = PercentCoalescer::new(1, 99);
         while let Some(cell_u32) = stack.pop() {
-            let cell    = cell_u32 as usize;
-            let trib    = trib_id[cell];
+            let cell = cell_u32 as usize;
+            let trib = trib_id[cell];
             let order_v = order_buf[cell];
-            let dn_u32  = downstream[cell];
+            let dn_u32 = downstream[cell];
 
             if dn_u32 != u32::MAX {
                 let dn = dn_u32 as usize;
@@ -3068,7 +3446,7 @@ impl Tool for HortonStreamOrderTool {
                 let new_len = trib_length[cell] + down_len[cell];
                 if trib_length[dn] < new_len {
                     trib_length[dn] = new_len;
-                    trib_id[dn]     = trib;
+                    trib_id[dn] = trib;
                 }
 
                 // Strahler order accumulation.
@@ -3128,7 +3506,10 @@ impl Tool for HortonStreamOrderTool {
             }
         }
 
-        Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+        Ok(D8Core::build_result(D8Core::write_or_store_output(
+            out,
+            output_path,
+        )?))
     }
 }
 
@@ -3141,11 +3522,31 @@ impl Tool for HackStreamOrderTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "d8_pntr", description: "D8 flow pointer raster", required: true },
-                ToolParamSpec { name: "streams", description: "Stream raster", required: true },
-                ToolParamSpec { name: "esri_pntr", description: "Use ESRI-style pointer", required: false },
-                ToolParamSpec { name: "zero_background", description: "Assign zero to background", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "d8_pntr",
+                    description: "D8 flow pointer raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "streams",
+                    description: "Stream raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "esri_pntr",
+                    description: "Use ESRI-style pointer",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "zero_background",
+                    description: "Assign zero to background",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -3167,12 +3568,14 @@ impl Tool for HackStreamOrderTool {
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         parse_raster_path_arg(args, "d8_pntr")?;
-        parse_raster_path_arg(args, "streams").or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
+        parse_raster_path_arg(args, "streams")
+            .or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+        let (pntr, streams, output_path, esri_style, zero_background) =
+            parse_d8_stream_inputs(args)?;
         let rows = pntr.rows;
         let cols = pntr.cols;
         let n = rows * cols;
@@ -3286,7 +3689,10 @@ impl Tool for HackStreamOrderTool {
                 }
             }
         }
-        Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+        Ok(D8Core::build_result(D8Core::write_or_store_output(
+            out,
+            output_path,
+        )?))
     }
 }
 
@@ -3299,11 +3705,31 @@ impl Tool for ShreveStreamMagnitudeTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "d8_pntr", description: "D8 flow pointer raster", required: true },
-                ToolParamSpec { name: "streams", description: "Stream raster", required: true },
-                ToolParamSpec { name: "esri_pntr", description: "Use ESRI-style pointer", required: false },
-                ToolParamSpec { name: "zero_background", description: "Assign zero to background", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "d8_pntr",
+                    description: "D8 flow pointer raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "streams",
+                    description: "Stream raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "esri_pntr",
+                    description: "Use ESRI-style pointer",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "zero_background",
+                    description: "Assign zero to background",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -3325,12 +3751,14 @@ impl Tool for ShreveStreamMagnitudeTool {
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         parse_raster_path_arg(args, "d8_pntr")?;
-        parse_raster_path_arg(args, "streams").or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
+        parse_raster_path_arg(args, "streams")
+            .or_else(|_| parse_raster_path_arg(args, "streams_raster"))?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let (pntr, streams, output_path, esri_style, zero_background) = parse_d8_stream_inputs(args)?;
+        let (pntr, streams, output_path, esri_style, zero_background) =
+            parse_d8_stream_inputs(args)?;
         let rows = pntr.rows;
         let cols = pntr.cols;
         let nodata = streams.nodata;
@@ -3375,7 +3803,10 @@ impl Tool for ShreveStreamMagnitudeTool {
                 }
             }
         }
-        Ok(D8Core::build_result(D8Core::write_or_store_output(out, output_path)?))
+        Ok(D8Core::build_result(D8Core::write_or_store_output(
+            out,
+            output_path,
+        )?))
     }
 }
 
@@ -3392,9 +3823,21 @@ macro_rules! create_stream_tool_impl {
                     category: ToolCategory::Raster,
                     license_tier: LicenseTier::Open,
                     params: vec![
-                        ToolParamSpec { name: "d8_pntr", description: "D8 flow pointer raster", required: true },
-                        ToolParamSpec { name: "streams_raster", description: "Stream raster", required: true },
-                        ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                        ToolParamSpec {
+                            name: "d8_pntr",
+                            description: "D8 flow pointer raster",
+                            required: true,
+                        },
+                        ToolParamSpec {
+                            name: "streams_raster",
+                            description: "Stream raster",
+                            required: true,
+                        },
+                        ToolParamSpec {
+                            name: "output",
+                            description: "Output raster path",
+                            required: false,
+                        },
                     ],
                 }
             }
@@ -3425,24 +3868,114 @@ macro_rules! create_stream_tool_impl {
     };
 }
 
-create_stream_tool_impl!(TopologicalStreamOrderTool, "topological_stream_order", "Topological Stream Order", "Assigns topological stream order based on link count.");
-create_stream_tool_impl!(StreamLinkIdentifierTool, "stream_link_identifier", "Stream Link Identifier", "Assigns unique ID to each stream link.");
-create_stream_tool_impl!(StreamLinkClassTool, "stream_link_class", "Stream Link Class", "Classifies stream links as interior, exterior, or source.");
-create_stream_tool_impl!(StreamLinkLengthTool, "stream_link_length", "Stream Link Length", "Calculates total length for each stream link.");
-create_stream_tool_impl!(StreamLinkSlopeTool, "stream_link_slope", "Stream Link Slope", "Calculates average slope for each stream link.");
-create_stream_tool_impl!(StreamSlopeContinuousTool, "stream_slope_continuous", "Stream Slope Continuous", "Calculates slope value for each stream cell.");
-create_stream_tool_impl!(DistanceToOutletTool, "distance_to_outlet", "Distance to Outlet", "Calculates downstream distance to outlet for each stream cell.");
-create_stream_tool_impl!(LengthOfUpstreamChannelsTool, "length_of_upstream_channels", "Length of Upstream Channels", "Calculates total upstream channel length.");
-create_stream_tool_impl!(FindMainStemTool, "find_main_stem", "Find Main Stem", "Identifies main stem of stream network.");
-create_stream_tool_impl!(FarthestChannelHeadTool, "farthest_channel_head", "Farthest Channel Head", "Calculates distance to most distant channel head.");
-create_stream_tool_impl!(TributaryIdentifierTool, "tributary_identifier", "Tributary Identifier", "Assigns unique ID to each tributary.");
-create_stream_tool_impl!(RemoveShortStreamsTool, "remove_short_streams", "Remove Short Streams", "Removes stream links shorter than minimum length.");
-create_stream_tool_impl!(ExtractValleysTool, "extract_valleys", "Extract Valleys", "Extracts valleys from DEM.");
-create_stream_tool_impl!(RasterStreamsToVectorTool, "raster_streams_to_vector", "Raster Streams to Vector", "Converts raster stream network to vector.");
-create_stream_tool_impl!(RasterizeStreamsTool, "rasterize_streams", "Rasterize Streams", "Rasterizes vector stream network.");
-create_stream_tool_impl!(LongProfileTool, "long_profile", "Long Profile", "Creates longitudinal stream profile.");
-create_stream_tool_impl!(LongProfileFromPointsTool, "long_profile_from_points", "Long Profile from Points", "Creates long profile from vector points.");
-create_stream_tool_impl!(RepairStreamVectorTopologyTool, "repair_stream_vector_topology", "Repair Stream Vector Topology", "Repairs topology of vector stream network.");
+create_stream_tool_impl!(
+    TopologicalStreamOrderTool,
+    "topological_stream_order",
+    "Topological Stream Order",
+    "Assigns topological stream order based on link count."
+);
+create_stream_tool_impl!(
+    StreamLinkIdentifierTool,
+    "stream_link_identifier",
+    "Stream Link Identifier",
+    "Assigns unique ID to each stream link."
+);
+create_stream_tool_impl!(
+    StreamLinkClassTool,
+    "stream_link_class",
+    "Stream Link Class",
+    "Classifies stream links as interior, exterior, or source."
+);
+create_stream_tool_impl!(
+    StreamLinkLengthTool,
+    "stream_link_length",
+    "Stream Link Length",
+    "Calculates total length for each stream link."
+);
+create_stream_tool_impl!(
+    StreamLinkSlopeTool,
+    "stream_link_slope",
+    "Stream Link Slope",
+    "Calculates average slope for each stream link."
+);
+create_stream_tool_impl!(
+    StreamSlopeContinuousTool,
+    "stream_slope_continuous",
+    "Stream Slope Continuous",
+    "Calculates slope value for each stream cell."
+);
+create_stream_tool_impl!(
+    DistanceToOutletTool,
+    "distance_to_outlet",
+    "Distance to Outlet",
+    "Calculates downstream distance to outlet for each stream cell."
+);
+create_stream_tool_impl!(
+    LengthOfUpstreamChannelsTool,
+    "length_of_upstream_channels",
+    "Length of Upstream Channels",
+    "Calculates total upstream channel length."
+);
+create_stream_tool_impl!(
+    FindMainStemTool,
+    "find_main_stem",
+    "Find Main Stem",
+    "Identifies main stem of stream network."
+);
+create_stream_tool_impl!(
+    FarthestChannelHeadTool,
+    "farthest_channel_head",
+    "Farthest Channel Head",
+    "Calculates distance to most distant channel head."
+);
+create_stream_tool_impl!(
+    TributaryIdentifierTool,
+    "tributary_identifier",
+    "Tributary Identifier",
+    "Assigns unique ID to each tributary."
+);
+create_stream_tool_impl!(
+    RemoveShortStreamsTool,
+    "remove_short_streams",
+    "Remove Short Streams",
+    "Removes stream links shorter than minimum length."
+);
+create_stream_tool_impl!(
+    ExtractValleysTool,
+    "extract_valleys",
+    "Extract Valleys",
+    "Extracts valleys from DEM."
+);
+create_stream_tool_impl!(
+    RasterStreamsToVectorTool,
+    "raster_streams_to_vector",
+    "Raster Streams to Vector",
+    "Converts raster stream network to vector."
+);
+create_stream_tool_impl!(
+    RasterizeStreamsTool,
+    "rasterize_streams",
+    "Rasterize Streams",
+    "Rasterizes vector stream network."
+);
+create_stream_tool_impl!(
+    LongProfileTool,
+    "long_profile",
+    "Long Profile",
+    "Creates longitudinal stream profile."
+);
+create_stream_tool_impl!(
+    LongProfileFromPointsTool,
+    "long_profile_from_points",
+    "Long Profile from Points",
+    "Creates long profile from vector points."
+);
+create_stream_tool_impl!(
+    RepairStreamVectorTopologyTool,
+    "repair_stream_vector_topology",
+    "Repair Stream Vector Topology",
+    "Repairs topology of vector stream network."
+);
 
 impl Tool for ExtractStreamsTool {
     fn metadata(&self) -> ToolMetadata {
@@ -3460,7 +3993,8 @@ impl Tool for ExtractStreamsTool {
                 },
                 ToolParamSpec {
                     name: "threshold",
-                    description: "Minimum accumulation value required to be part of a stream channel.",
+                    description:
+                        "Minimum accumulation value required to be part of a stream channel.",
                     required: false,
                 },
                 ToolParamSpec {
@@ -3495,12 +4029,15 @@ impl Tool for ExtractStreamsTool {
                 },
                 ToolParamDescriptor {
                     name: "threshold".to_string(),
-                    description: "Minimum accumulation value required to be part of a stream channel.".to_string(),
+                    description:
+                        "Minimum accumulation value required to be part of a stream channel."
+                            .to_string(),
                     required: false,
                 },
                 ToolParamDescriptor {
                     name: "zero_background".to_string(),
-                    description: "If true, non-stream background is 0 instead of NoData.".to_string(),
+                    description: "If true, non-stream background is 0 instead of NoData."
+                        .to_string(),
                     required: false,
                 },
                 ToolParamDescriptor {
@@ -3625,7 +4162,11 @@ impl Tool for VectorStreamNetworkAnalysisTool {
                     args
                 },
             }],
-            tags: vec!["stream_network".to_string(), "vector".to_string(), "hydrology".to_string()],
+            tags: vec![
+                "stream_network".to_string(),
+                "vector".to_string(),
+                "hydrology".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3668,13 +4209,17 @@ impl Tool for BurnStreamsTool {
         ToolManifest {
             id: "burn_streams".to_string(),
             display_name: "Burn Streams".to_string(),
-            summary: "Burns a stream network into a DEM by decreasing stream-cell elevations.".to_string(),
+            summary: "Burns a stream network into a DEM by decreasing stream-cell elevations."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![],
-            tags: vec!["stream_network".to_string(), "dem_preprocessing".to_string()],
+            tags: vec![
+                "stream_network".to_string(),
+                "dem_preprocessing".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3682,13 +4227,23 @@ impl Tool for BurnStreamsTool {
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
         parse_raster_path_arg(args, "dem")?;
         parse_vector_path_arg(args, "streams")?;
-        let decrement = args.get("decrement_value").and_then(|v| v.as_f64()).unwrap_or(5.0);
+        let decrement = args
+            .get("decrement_value")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(5.0);
         if !decrement.is_finite() || decrement < 0.0 {
-            return Err(ToolError::Validation("decrement_value must be a non-negative finite number".to_string()));
+            return Err(ToolError::Validation(
+                "decrement_value must be a non-negative finite number".to_string(),
+            ));
         }
-        let gd = args.get("gradient_distance").and_then(|v| v.as_i64()).unwrap_or(5);
+        let gd = args
+            .get("gradient_distance")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(5);
         if gd < 0 {
-            return Err(ToolError::Validation("gradient_distance must be >= 0".to_string()));
+            return Err(ToolError::Validation(
+                "gradient_distance must be >= 0".to_string(),
+            ));
         }
         Ok(())
     }
@@ -3717,10 +4272,16 @@ impl Tool for BurnStreamsTool {
             }
         }
 
-        let dem_path   = parse_raster_path_arg(args, "dem")?;
+        let dem_path = parse_raster_path_arg(args, "dem")?;
         let streams_path = parse_vector_path_arg(args, "streams")?;
-        let decrement  = args.get("decrement_value").and_then(|v| v.as_f64()).unwrap_or(5.0);
-        let grad_dist  = args.get("gradient_distance").and_then(|v| v.as_i64()).unwrap_or(5);
+        let decrement = args
+            .get("decrement_value")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(5.0);
+        let grad_dist = args
+            .get("gradient_distance")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(5);
         let output_path = parse_optional_output_path(args, "output")?;
 
         ctx.progress.info("reading DEM");
@@ -3748,7 +4309,9 @@ impl Tool for BurnStreamsTool {
             .outputs
             .get("path")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Execution("rasterize_streams returned no path".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Execution("rasterize_streams returned no path".to_string())
+            })?;
         let streams_raster = D8Core::load_raster(streams_raster_path)?;
         let stream_data = raster_to_vec(&streams_raster);
         let dem_data = raster_to_vec(&dem);
@@ -3757,17 +4320,15 @@ impl Tool for BurnStreamsTool {
         let mut burned = dem_data.clone();
         if grad_dist <= 0 {
             ctx.progress.info("applying flat elevation decrement");
-            burned
-                .par_iter_mut()
-                .enumerate()
-                .for_each(|(i, z)| {
-                    if *z != nodata && stream_data[i] > 0.0 {
-                        *z -= decrement;
-                    }
-                });
+            burned.par_iter_mut().enumerate().for_each(|(i, z)| {
+                if *z != nodata && stream_data[i] > 0.0 {
+                    *z -= decrement;
+                }
+            });
         } else {
             // Calculate Euclidean distance from streams using bounded Dijkstra
-            ctx.progress.info("computing euclidean distance from streams");
+            ctx.progress
+                .info("computing euclidean distance from streams");
             let large = f64::INFINITY;
             let mut dist: Vec<f64> = vec![large; n_cells];
 
@@ -3786,11 +4347,16 @@ impl Tool for BurnStreamsTool {
             // Weighted 8-neighbour propagation, bounded by the gradient threshold.
             let dx = [1isize, -1, 0, 0, 1, -1, 1, -1];
             let dy = [0isize, 0, 1, -1, 1, 1, -1, -1];
-            let dd = [res_x, res_x, res_y, res_y,
-                      (res_x * res_x + res_y * res_y).sqrt(),
-                      (res_x * res_x + res_y * res_y).sqrt(),
-                      (res_x * res_x + res_y * res_y).sqrt(),
-                      (res_x * res_x + res_y * res_y).sqrt()];
+            let dd = [
+                res_x,
+                res_x,
+                res_y,
+                res_y,
+                (res_x * res_x + res_y * res_y).sqrt(),
+                (res_x * res_x + res_y * res_y).sqrt(),
+                (res_x * res_x + res_y * res_y).sqrt(),
+                (res_x * res_x + res_y * res_y).sqrt(),
+            ];
 
             let dist_threshold = grad_dist as f64 * grid_res;
 
@@ -3806,7 +4372,9 @@ impl Tool for BurnStreamsTool {
                 for k in 0..8 {
                     let nr = r as isize + dy[k];
                     let nc = c as isize + dx[k];
-                    if nr < 0 || nc < 0 || nr >= rows as isize || nc >= cols as isize { continue; }
+                    if nr < 0 || nc < 0 || nr >= rows as isize || nc >= cols as isize {
+                        continue;
+                    }
                     let idx = (nr as usize) * cols + (nc as usize);
                     if dem_data[idx] == nodata {
                         continue;
@@ -3820,21 +4388,18 @@ impl Tool for BurnStreamsTool {
             }
 
             ctx.progress.info("applying gradient decrement");
-            burned
-                .par_iter_mut()
-                .enumerate()
-                .for_each(|(i, z)| {
-                    if *z == nodata {
-                        return;
-                    }
-                    let d: f64 = dist[i];
-                    if !d.is_finite() || d >= dist_threshold {
-                        return;
-                    }
-                    // burned_dem = dem + clamp((d - threshold) / threshold, min=-1, max=0) * decrement
-                    let factor = ((d - dist_threshold) / dist_threshold).clamp(-1.0, 0.0);
-                    *z += factor * decrement;
-                });
+            burned.par_iter_mut().enumerate().for_each(|(i, z)| {
+                if *z == nodata {
+                    return;
+                }
+                let d: f64 = dist[i];
+                if !d.is_finite() || d >= dist_threshold {
+                    return;
+                }
+                // burned_dem = dem + clamp((d - threshold) / threshold, min=-1, max=0) * decrement
+                let factor = ((d - dist_threshold) / dist_threshold).clamp(-1.0, 0.0);
+                *z += factor * decrement;
+            });
         }
 
         let mut output = vec_to_raster(&dem, &burned, DataType::F32);
@@ -3847,7 +4412,10 @@ impl Tool for BurnStreamsTool {
         outputs.insert("__wbw_type__".to_string(), json!("raster"));
         outputs.insert("path".to_string(), json!(locator));
         outputs.insert("active_band".to_string(), json!(0));
-        Ok(ToolRunResult { outputs, ..Default::default() })
+        Ok(ToolRunResult {
+            outputs,
+            ..Default::default()
+        })
     }
 }
 
@@ -3875,13 +4443,18 @@ impl Tool for HortonRatiosTool {
         ToolManifest {
             id: "horton_ratios".to_string(),
             display_name: "Horton Ratios".to_string(),
-            summary: "Calculates Horton bifurcation, length, drainage-area, and slope ratios.".to_string(),
+            summary: "Calculates Horton bifurcation, length, drainage-area, and slope ratios."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["stream_network".to_string(), "geomorphometry".to_string(), "statistics".to_string()],
+            tags: vec![
+                "stream_network".to_string(),
+                "geomorphometry".to_string(),
+                "statistics".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3894,13 +4467,13 @@ impl Tool for HortonRatiosTool {
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let dem_path     = parse_raster_path_arg(args, "dem")?;
+        let dem_path = parse_raster_path_arg(args, "dem")?;
         let streams_path = parse_raster_path_arg(args, "streams_raster")
             .or_else(|_| parse_raster_path_arg(args, "streams"))?;
-        let report_path  = parse_optional_output_path(args, "output")?;
+        let report_path = parse_optional_output_path(args, "output")?;
 
         ctx.progress.info("reading DEM and streams");
-        let dem     = D8Core::load_raster(&dem_path)?;
+        let dem = D8Core::load_raster(&dem_path)?;
         let streams = D8Core::load_raster(&streams_path)?;
         let rows = dem.rows;
         let cols = dem.cols;
@@ -3912,7 +4485,9 @@ impl Tool for HortonRatiosTool {
             let mut a = ToolArgs::new();
             a.insert("dem".to_string(), json!(dem_path));
             let pntr_result = D8PointerTool.run(&a, ctx)?;
-            let pntr_path = pntr_result.outputs.get("path")
+            let pntr_path = pntr_result
+                .outputs
+                .get("path")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| ToolError::Execution("d8_pointer returned no path".to_string()))?;
             let out = D8Core::load_raster(pntr_path)?;
@@ -3927,7 +4502,7 @@ impl Tool for HortonRatiosTool {
         let strahler = {
             let mut a = ToolArgs::new();
             a.insert("d8_pntr".to_string(), json!(dem_path)); // will be overridden
-            // Serialize pntr to memory store
+                                                              // Serialize pntr to memory store
             let mid = memory_store::put_raster_arc(Arc::clone(&pntr));
             let mp = memory_store::make_raster_memory_path(&mid);
             a.insert("d8_pntr".to_string(), json!(mp));
@@ -3940,7 +4515,9 @@ impl Tool for HortonRatiosTool {
             let _ = memory_store::remove_raster_by_id(&mid);
             let _ = memory_store::remove_raster_by_id(&sid);
             let r = r?;
-            let path = r.outputs.get("path")
+            let path = r
+                .outputs
+                .get("path")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| ToolError::Execution("strahler returned no path".to_string()))?;
             let out = D8Core::load_raster(path)?;
@@ -3999,18 +4576,30 @@ impl Tool for HortonRatiosTool {
             loop {
                 stream_link_id[(rn as usize) * cols + (cn as usize)] = link_id;
                 let fd = pntr.get(0, rn, cn);
-                if fd <= 0.0 { break; }
+                if fd <= 0.0 {
+                    break;
+                }
                 let n = (fd as u64).trailing_zeros() as usize;
-                if n >= 8 { break; }
+                if n >= 8 {
+                    break;
+                }
                 rn += D_Y[n];
                 cn += D_X[n];
-                if rn < 0 || cn < 0 || rn >= rows as isize || cn >= cols as isize { break; }
+                if rn < 0 || cn < 0 || rn >= rows as isize || cn >= cols as isize {
+                    break;
+                }
                 let nso = strahler.get(0, rn, cn);
-                if nso <= 0.0 { break; }
+                if nso <= 0.0 {
+                    break;
+                }
                 let nidx = (rn as usize) * cols + (cn as usize);
-                if stream_link_id[nidx] > 0 { break; }
+                if stream_link_id[nidx] > 0 {
+                    break;
+                }
                 num_inflowing_mut[nidx] -= 1;
-                if num_inflowing_mut[nidx] >= 1 { break; }
+                if num_inflowing_mut[nidx] >= 1 {
+                    break;
+                }
                 if nso != so {
                     so = nso;
                     link_id += 1;
@@ -4032,8 +4621,13 @@ impl Tool for HortonRatiosTool {
             let r = D8FlowAccumTool.run(&a, ctx);
             let _ = memory_store::remove_raster_by_id(&pntr_mid);
             let r = r?;
-            let p = r.outputs.get("path").and_then(|v| v.as_str())
-                .ok_or_else(|| ToolError::Execution("d8_flow_accum returned no path".to_string()))?;
+            let p = r
+                .outputs
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    ToolError::Execution("d8_flow_accum returned no path".to_string())
+                })?;
             let out = D8Core::load_raster(p)?;
             if memory_store::raster_is_memory_path(p) {
                 let _ = memory_store::remove_raster_by_path(p);
@@ -4068,8 +4662,13 @@ impl Tool for HortonRatiosTool {
             a.insert("esri_pntr".to_string(), json!(false));
             a.insert("zero_background".to_string(), json!(true));
             let r = StreamLinkSlopeTool.run(&a, ctx)?;
-            let p = r.outputs.get("path").and_then(|v| v.as_str())
-                .ok_or_else(|| ToolError::Execution("stream_link_slope returned no path".to_string()))?;
+            let p = r
+                .outputs
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    ToolError::Execution("stream_link_slope returned no path".to_string())
+                })?;
             let out = D8Core::load_raster(p)?;
             if memory_store::raster_is_memory_path(p) {
                 let _ = memory_store::remove_raster_by_path(p);
@@ -4086,8 +4685,13 @@ impl Tool for HortonRatiosTool {
             a.insert("esri_pntr".to_string(), json!(false));
             a.insert("zero_background".to_string(), json!(true));
             let r = StreamLinkLengthTool.run(&a, ctx)?;
-            let p = r.outputs.get("path").and_then(|v| v.as_str())
-                .ok_or_else(|| ToolError::Execution("stream_link_length returned no path".to_string()))?;
+            let p = r
+                .outputs
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    ToolError::Execution("stream_link_length returned no path".to_string())
+                })?;
             let out = D8Core::load_raster(p)?;
             if memory_store::raster_is_memory_path(p) {
                 let _ = memory_store::remove_raster_by_path(p);
@@ -4101,47 +4705,88 @@ impl Tool for HortonRatiosTool {
         // ── Aggregate per-link statistics (parallel fold + merge) ────────────
         ctx.progress.info("aggregating link statistics");
         // Each thread accumulates its own HashMaps; merge at the end.
-        type LinkStats = (HashMap<i32, i32>, HashMap<i32, f64>, HashMap<i32, f64>, HashMap<i32, f64>, i32);
+        type LinkStats = (
+            HashMap<i32, i32>,
+            HashMap<i32, f64>,
+            HashMap<i32, f64>,
+            HashMap<i32, f64>,
+            i32,
+        );
         let (link_order, link_length, link_area, link_slope, max_order) = (0..rows * cols)
             .into_par_iter()
             .fold(
-                || (HashMap::<i32, i32>::new(), HashMap::<i32, f64>::new(), HashMap::<i32, f64>::new(), HashMap::<i32, f64>::new(), 0i32),
+                || {
+                    (
+                        HashMap::<i32, i32>::new(),
+                        HashMap::<i32, f64>::new(),
+                        HashMap::<i32, f64>::new(),
+                        HashMap::<i32, f64>::new(),
+                        0i32,
+                    )
+                },
                 |mut acc: LinkStats, idx| {
                     let row = (idx / cols) as isize;
                     let col = (idx % cols) as isize;
                     let id = stream_link_id[idx];
-                    if id == 0 { return acc; }
+                    if id == 0 {
+                        return acc;
+                    }
                     let z = dem.get(0, row, col);
-                    if z == nodata { return acc; }
+                    if z == nodata {
+                        return acc;
+                    }
                     let order = strahler.get(0, row, col) as i32;
-                    if order > acc.4 { acc.4 = order; }
+                    if order > acc.4 {
+                        acc.4 = order;
+                    }
                     acc.0.insert(id, order);
                     acc.1.insert(id, link_length_raster.get(0, row, col));
                     let area = d8_accum.get(0, row, col);
                     let e = acc.2.entry(id).or_insert(0.0);
-                    if area > *e { *e = area; }
+                    if area > *e {
+                        *e = area;
+                    }
                     acc.3.insert(id, link_slope_raster.get(0, row, col));
                     acc
                 },
             )
             .reduce(
-                || (HashMap::new(), HashMap::new(), HashMap::new(), HashMap::new(), 0i32),
+                || {
+                    (
+                        HashMap::new(),
+                        HashMap::new(),
+                        HashMap::new(),
+                        HashMap::new(),
+                        0i32,
+                    )
+                },
                 |mut a: LinkStats, b: LinkStats| {
-                    for (id, ord) in b.0 { a.0.insert(id, ord); }
-                    for (id, len) in b.1 { a.1.insert(id, len); }
+                    for (id, ord) in b.0 {
+                        a.0.insert(id, ord);
+                    }
+                    for (id, len) in b.1 {
+                        a.1.insert(id, len);
+                    }
                     for (id, area) in b.2 {
                         let e = a.2.entry(id).or_insert(0.0);
-                        if area > *e { *e = area; }
+                        if area > *e {
+                            *e = area;
+                        }
                     }
-                    for (id, slp) in b.3 { a.3.insert(id, slp); }
-                    if b.4 > a.4 { a.4 = b.4; }
+                    for (id, slp) in b.3 {
+                        a.3.insert(id, slp);
+                    }
+                    if b.4 > a.4 {
+                        a.4 = b.4;
+                    }
                     a
                 },
             );
 
         if max_order < 2 {
             return Err(ToolError::Execution(
-                "stream network has fewer than 2 Strahler orders; cannot compute Horton ratios".to_string(),
+                "stream network has fewer than 2 Strahler orders; cannot compute Horton ratios"
+                    .to_string(),
             ));
         }
 
@@ -4149,52 +4794,84 @@ impl Tool for HortonRatiosTool {
         let log_linear_slope = |xs: &[f64], ys_raw: &[f64]| -> f64 {
             let n = xs.len() as f64;
             let ys: Vec<f64> = ys_raw.iter().map(|y| y.ln()).collect();
-            let sum_x:  f64 = xs.iter().sum();
-            let sum_y:  f64 = ys.iter().sum();
+            let sum_x: f64 = xs.iter().sum();
+            let sum_y: f64 = ys.iter().sum();
             let sum_xy: f64 = xs.iter().zip(ys.iter()).map(|(x, y)| x * y).sum();
             let sum_xx: f64 = xs.iter().map(|x| x * x).sum();
             let denom = n * sum_xx - sum_x * sum_x;
-            if denom.abs() < 1e-12 { return 999.0; }
+            if denom.abs() < 1e-12 {
+                return 999.0;
+            }
             (n * sum_xy - sum_x * sum_y) / denom
         };
 
-        let mut stream_num   = vec![0i32; max_order as usize];
+        let mut stream_num = vec![0i32; max_order as usize];
         let mut total_length = vec![0.0f64; max_order as usize];
-        let mut total_area   = vec![0.0f64; max_order as usize];
-        let mut total_slope  = vec![0.0f64; max_order as usize];
+        let mut total_area = vec![0.0f64; max_order as usize];
+        let mut total_slope = vec![0.0f64; max_order as usize];
         for (id, &order) in &link_order {
             let o = (order - 1) as usize;
             stream_num[o] += 1;
-            if let Some(&l) = link_length.get(id) { total_length[o] += l; }
-            if let Some(&a) = link_area.get(id)   { total_area[o] += a; }
-            if let Some(&s) = link_slope.get(id)  { total_slope[o] += s; }
+            if let Some(&l) = link_length.get(id) {
+                total_length[o] += l;
+            }
+            if let Some(&a) = link_area.get(id) {
+                total_area[o] += a;
+            }
+            if let Some(&s) = link_slope.get(id) {
+                total_slope[o] += s;
+            }
         }
 
         let xs: Vec<f64> = (1..=max_order as usize)
             .filter(|&o| stream_num[o - 1] > 0)
             .map(|o| o as f64)
             .collect();
-        let y_counts:  Vec<f64> = xs.iter().map(|&x| stream_num[(x as usize) - 1] as f64).collect();
-        let y_lengths: Vec<f64> = xs.iter().map(|&x| {
-            let o = (x as usize) - 1;
-            let n = stream_num[o];
-            if n > 0 { total_length[o] / n as f64 } else { 1.0 }
-        }).collect();
-        let y_areas: Vec<f64> = xs.iter().map(|&x| {
-            let o = (x as usize) - 1;
-            let n = stream_num[o];
-            if n > 0 { total_area[o] / n as f64 } else { 1.0 }
-        }).collect();
-        let y_slopes: Vec<f64> = xs.iter().map(|&x| {
-            let o = (x as usize) - 1;
-            let n = stream_num[o];
-            if n > 0 { total_slope[o] / n as f64 } else { 1.0 }
-        }).collect();
+        let y_counts: Vec<f64> = xs
+            .iter()
+            .map(|&x| stream_num[(x as usize) - 1] as f64)
+            .collect();
+        let y_lengths: Vec<f64> = xs
+            .iter()
+            .map(|&x| {
+                let o = (x as usize) - 1;
+                let n = stream_num[o];
+                if n > 0 {
+                    total_length[o] / n as f64
+                } else {
+                    1.0
+                }
+            })
+            .collect();
+        let y_areas: Vec<f64> = xs
+            .iter()
+            .map(|&x| {
+                let o = (x as usize) - 1;
+                let n = stream_num[o];
+                if n > 0 {
+                    total_area[o] / n as f64
+                } else {
+                    1.0
+                }
+            })
+            .collect();
+        let y_slopes: Vec<f64> = xs
+            .iter()
+            .map(|&x| {
+                let o = (x as usize) - 1;
+                let n = stream_num[o];
+                if n > 0 {
+                    total_slope[o] / n as f64
+                } else {
+                    1.0
+                }
+            })
+            .collect();
 
         let bifurcation_ratio = (-log_linear_slope(&xs, &y_counts)).exp();
-        let length_ratio      = ( log_linear_slope(&xs, &y_lengths)).exp();
-        let area_ratio        = ( log_linear_slope(&xs, &y_areas)).exp();
-        let slope_ratio       = (-log_linear_slope(&xs, &y_slopes)).exp();
+        let length_ratio = (log_linear_slope(&xs, &y_lengths)).exp();
+        let area_ratio = (log_linear_slope(&xs, &y_areas)).exp();
+        let slope_ratio = (-log_linear_slope(&xs, &y_slopes)).exp();
 
         ctx.progress.info(&format!(
             "Bifurcation ratio: {:.4}\nLength ratio: {:.4}\nArea ratio: {:.4}\nSlope ratio: {:.4}",
@@ -4212,29 +4889,48 @@ impl Tool for HortonRatiosTool {
 
         let mut outputs = BTreeMap::new();
         outputs.insert("bifurcation_ratio".to_string(), json!(bifurcation_ratio));
-        outputs.insert("length_ratio".to_string(),      json!(length_ratio));
-        outputs.insert("area_ratio".to_string(),        json!(area_ratio));
-        outputs.insert("slope_ratio".to_string(),       json!(slope_ratio));
+        outputs.insert("length_ratio".to_string(), json!(length_ratio));
+        outputs.insert("area_ratio".to_string(), json!(area_ratio));
+        outputs.insert("slope_ratio".to_string(), json!(slope_ratio));
         outputs.insert("__wbw_type__".to_string(), json!("tuple"));
 
         if let Some(path) = report_path {
             if let Some(parent) = path.parent() {
                 if !parent.as_os_str().is_empty() {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|e| ToolError::Execution(format!("failed creating output dir: {e}")))?;
+                    std::fs::create_dir_all(parent).map_err(|e| {
+                        ToolError::Execution(format!("failed creating output dir: {e}"))
+                    })?;
                 }
             }
             std::fs::write(&path, &report_text)
                 .map_err(|e| ToolError::Execution(format!("failed writing report: {e}")))?;
-            outputs.insert("report_path".to_string(), json!(path.to_string_lossy().to_string()));
+            outputs.insert(
+                "report_path".to_string(),
+                json!(path.to_string_lossy().to_string()),
+            );
         }
 
         // Build the items array after report_path may have been inserted, so the
         // 5th element matches the stub: tuple[float, float, float, float, str | None]
-        let report_path_val = outputs.get("report_path").cloned().unwrap_or(serde_json::Value::Null);
-        outputs.insert("items".to_string(), json!([bifurcation_ratio, length_ratio, area_ratio, slope_ratio, report_path_val]));
+        let report_path_val = outputs
+            .get("report_path")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        outputs.insert(
+            "items".to_string(),
+            json!([
+                bifurcation_ratio,
+                length_ratio,
+                area_ratio,
+                slope_ratio,
+                report_path_val
+            ]),
+        );
 
         ctx.progress.progress(1.0);
-        Ok(ToolRunResult { outputs, ..Default::default() })
+        Ok(ToolRunResult {
+            outputs,
+            ..Default::default()
+        })
     }
 }

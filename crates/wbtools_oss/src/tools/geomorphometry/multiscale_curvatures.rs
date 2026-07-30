@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use rayon::prelude::*;
 use serde_json::json;
-use wbprojection::{Crs, EpsgIdentifyPolicy, identify_epsg_from_wkt_with_policy};
-use wbcore::{PercentCoalescer, 
-    parse_optional_output_path, parse_raster_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor,
-    ToolParamSpec, ToolRunResult, ToolStability,
+use wbcore::{
+    parse_optional_output_path, parse_raster_path_arg, LicenseTier, PercentCoalescer, Tool,
+    ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
+    ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
 };
+use wbprojection::{identify_epsg_from_wkt_with_policy, Crs, EpsgIdentifyPolicy};
 use wbraster::{memory_store, Raster, RasterConfig, RasterFormat};
 
 pub struct MultiscaleCurvaturesTool;
@@ -185,13 +185,12 @@ impl MultiscaleCurvaturesTool {
     }
 
     fn raster_is_geographic(input: &Raster) -> bool {
-        let epsg = input.crs.epsg.or_else(|| {
-            input
-                .crs
-                .wkt
-                .as_deref()
-                .and_then(|w| identify_epsg_from_wkt_with_policy(w, EpsgIdentifyPolicy::Lenient))
-        });
+        let epsg =
+            input.crs.epsg.or_else(|| {
+                input.crs.wkt.as_deref().and_then(|w| {
+                    identify_epsg_from_wkt_with_policy(w, EpsgIdentifyPolicy::Lenient)
+                })
+            });
 
         if let Some(code) = epsg {
             if let Ok(crs) = Crs::from_epsg(code) {
@@ -210,8 +209,7 @@ impl MultiscaleCurvaturesTool {
         let lon2 = lon2_deg.to_radians();
         let dlat = lat2 - lat1;
         let dlon = lon2 - lon1;
-        let a = (dlat / 2.0).sin().powi(2)
-            + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
+        let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
         let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
         r * c
     }
@@ -465,7 +463,12 @@ impl MultiscaleCurvaturesTool {
         widths
     }
 
-    fn smooth_band_legacy_like(input: &Raster, band: isize, radius: isize, nodata: f64) -> Vec<f64> {
+    fn smooth_band_legacy_like(
+        input: &Raster,
+        band: isize,
+        radius: isize,
+        nodata: f64,
+    ) -> Vec<f64> {
         let rows = input.rows as isize;
         let cols = input.cols as isize;
         let mut base = vec![nodata; (rows * cols) as usize];
@@ -501,16 +504,32 @@ impl MultiscaleCurvaturesTool {
         out
     }
 
-    fn pick_or_center(smoothed: &[f64], rows: isize, cols: isize, r: isize, c: isize, dr: isize, dc: isize) -> f64 {
+    fn pick_or_center(
+        smoothed: &[f64],
+        rows: isize,
+        cols: isize,
+        r: isize,
+        c: isize,
+        dr: isize,
+        dc: isize,
+    ) -> f64 {
         let rr = (r + dr).clamp(0, rows - 1);
         let cc = (c + dc).clamp(0, cols - 1);
         let center = smoothed[(r * cols + c) as usize];
         let v = smoothed[(rr * cols + cc) as usize];
-        if v.is_finite() { v } else { center }
+        if v.is_finite() {
+            v
+        } else {
+            center
+        }
     }
 
     fn finite_or_zero(v: f64) -> f64 {
-        if v.is_finite() { v } else { 0.0 }
+        if v.is_finite() {
+            v
+        } else {
+            0.0
+        }
     }
 
     fn compute_curvature_value_projected(
@@ -540,15 +559,34 @@ impl MultiscaleCurvaturesTool {
         let r = 1.0 / (35.0 * res * res)
             * (2.0 * (z[0] + z[4] + z[5] + z[9] + z[10] + z[14] + z[15] + z[19] + z[20] + z[24])
                 - 2.0 * (z[2] + z[7] + z[12] + z[17] + z[22])
-                - z[1] - z[3] - z[6] - z[8] - z[11] - z[13] - z[16] - z[18] - z[21] - z[23]);
+                - z[1]
+                - z[3]
+                - z[6]
+                - z[8]
+                - z[11]
+                - z[13]
+                - z[16]
+                - z[18]
+                - z[21]
+                - z[23]);
 
         let t = 1.0 / (35.0 * res * res)
             * (2.0 * (z[0] + z[1] + z[2] + z[3] + z[4] + z[20] + z[21] + z[22] + z[23] + z[24])
                 - 2.0 * (z[10] + z[11] + z[12] + z[13] + z[14])
-                - z[5] - z[6] - z[7] - z[8] - z[9] - z[15] - z[16] - z[17] - z[18] - z[19]);
+                - z[5]
+                - z[6]
+                - z[7]
+                - z[8]
+                - z[9]
+                - z[15]
+                - z[16]
+                - z[17]
+                - z[18]
+                - z[19]);
 
         let s = 1.0 / (100.0 * res * res)
-            * (z[8] + z[16] - z[6] - z[18] + 4.0 * (z[4] + z[20] - z[0] - z[24])
+            * (z[8] + z[16] - z[6] - z[18]
+                + 4.0 * (z[4] + z[20] - z[0] - z[24])
                 + 2.0 * (z[3] + z[9] + z[15] + z[21] - z[1] - z[5] - z[19] - z[23]));
 
         let p = 1.0 / (420.0 * res)
@@ -569,21 +607,26 @@ impl MultiscaleCurvaturesTool {
 
         let g = 1.0 / (10.0 * res.powi(3))
             * (z[4] + z[9] + z[14] + z[19] + z[24] - z[0] - z[5] - z[10] - z[15] - z[20]
-                + 2.0 * (z[1] + z[6] + z[11] + z[16] + z[21] - z[3] - z[8] - z[13] - z[18] - z[23]));
+                + 2.0
+                    * (z[1] + z[6] + z[11] + z[16] + z[21] - z[3] - z[8] - z[13] - z[18] - z[23]));
 
         let m = 1.0 / (70.0 * res.powi(3))
-            * (z[6] + z[16] - z[8] - z[18] + 4.0 * (z[4] + z[10] + z[24] - z[0] - z[14] - z[20])
-                + 2.0 * (z[3] + z[5] + z[11] + z[15] + z[23] - z[1] - z[9] - z[13] - z[19] - z[21]));
+            * (z[6] + z[16] - z[8] - z[18]
+                + 4.0 * (z[4] + z[10] + z[24] - z[0] - z[14] - z[20])
+                + 2.0
+                    * (z[3] + z[5] + z[11] + z[15] + z[23] - z[1] - z[9] - z[13] - z[19] - z[21]));
 
         let k = 1.0 / (70.0 * res.powi(3))
-            * (z[16] + z[18] - z[6] - z[8] + 4.0 * (z[0] + z[4] + z[22] - z[2] - z[20] - z[24])
+            * (z[16] + z[18] - z[6] - z[8]
+                + 4.0 * (z[0] + z[4] + z[22] - z[2] - z[20] - z[24])
                 + 2.0 * (z[5] + z[9] + z[17] + z[21] + z[23] - z[1] - z[3] - z[7] - z[15] - z[19]));
 
         let w = 1.0 + p * p + q * q;
         let g2 = p * p + q * q;
 
-        let mean_curv = Self::finite_or_zero(-((1.0 + q * q) * r - 2.0 * p * q * s + (1.0 + p * p) * t)
-            / (2.0 * w.powf(1.5)));
+        let mean_curv = Self::finite_or_zero(
+            -((1.0 + q * q) * r - 2.0 * p * q * s + (1.0 + p * p) * t) / (2.0 * w.powf(1.5)),
+        );
         let gaussian_curv = Self::finite_or_zero((r * t - s * s) / w.powi(2));
         let disc = (mean_curv * mean_curv - gaussian_curv).max(0.0);
         let sqrt_disc = disc.sqrt();
@@ -599,13 +642,17 @@ impl MultiscaleCurvaturesTool {
             )
         };
 
-        let curvedness = Self::finite_or_zero(((minimal_curv * minimal_curv + maximal_curv * maximal_curv) / 2.0).sqrt());
+        let curvedness = Self::finite_or_zero(
+            ((minimal_curv * minimal_curv + maximal_curv * maximal_curv) / 2.0).sqrt(),
+        );
         let shape_index = {
             let denom = maximal_curv - minimal_curv;
             if denom.abs() <= f64::EPSILON {
                 0.0
             } else {
-                Self::finite_or_zero(2.0 / std::f64::consts::PI * ((maximal_curv + minimal_curv) / denom).atan())
+                Self::finite_or_zero(
+                    2.0 / std::f64::consts::PI * ((maximal_curv + minimal_curv) / denom).atan(),
+                )
             }
         };
         let unsphericity = Self::finite_or_zero(sqrt_disc);
@@ -701,9 +748,12 @@ impl MultiscaleCurvaturesTool {
 
         let phi1 = input.row_center_y(r0);
         let lambda1 = input.col_center_x(c0);
-        let b = Self::haversine_distance_m(phi1, lambda1, phi1, input.col_center_x(c0 - 1)).max(f64::EPSILON);
-        let d = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(r0 + 1), lambda1).max(f64::EPSILON);
-        let e = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(r0 - 1), lambda1).max(f64::EPSILON);
+        let b = Self::haversine_distance_m(phi1, lambda1, phi1, input.col_center_x(c0 - 1))
+            .max(f64::EPSILON);
+        let d = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(r0 + 1), lambda1)
+            .max(f64::EPSILON);
+        let e = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(r0 - 1), lambda1)
+            .max(f64::EPSILON);
         let a = Self::haversine_distance_m(
             input.row_center_y(r0 + 1),
             input.col_center_x(c0),
@@ -724,15 +774,13 @@ impl MultiscaleCurvaturesTool {
             + a * a * (z[6] + z[8] - 2.0 * z[7]))
             / (a.powi(4) + b.powi(4) + c.powi(4));
 
-        let t = 2.0
-            / (3.0 * d * e * (d + e) * (a.powi(4) + b.powi(4) + c.powi(4)))
+        let t = 2.0 / (3.0 * d * e * (d + e) * (a.powi(4) + b.powi(4) + c.powi(4)))
             * ((d * (a.powi(4) + b.powi(4) + b * b * c * c) - c * c * e * (a * a - b * b))
                 * (z[0] + z[2])
                 - (d * (a.powi(4) + c.powi(4) + b * b * c * c)
                     + e * (a.powi(4) + c.powi(4) + a * a * b * b))
                     * (z[3] + z[5])
-                + (e * (b.powi(4) + c.powi(4) + a * a * b * b)
-                    + a * a * d * (b * b - c * c))
+                + (e * (b.powi(4) + c.powi(4) + a * a * b * b) + a * a * d * (b * b - c * c))
                     * (z[6] + z[8])
                 + d * (b.powi(4) * (z[1] - 3.0 * z[4])
                     + c.powi(4) * (3.0 * z[1] - z[4])
@@ -740,8 +788,7 @@ impl MultiscaleCurvaturesTool {
                 + e * (a.powi(4) * (3.0 * z[7] - z[4])
                     + b.powi(4) * (z[7] - 3.0 * z[4])
                     + (c.powi(4) - 2.0 * a * a * b * b) * (z[7] - z[4]))
-                - 2.0 * (a * a * d * (b * b - c * c) * z[7]
-                    - c * c * e * (a * a - b * b) * z[1]));
+                - 2.0 * (a * a * d * (b * b - c * c) * z[7] - c * c * e * (a * a - b * b) * z[1]));
 
         let s = (c * (a * a * (d + e) + b * b * e) * (z[2] - z[0])
             - b * (a * a * d - c * c * e) * (z[3] - z[5])
@@ -762,14 +809,17 @@ impl MultiscaleCurvaturesTool {
                 - (e * e * (b.powi(4) + c.powi(4) + a * a * b * b)
                     - a * a * d * d * (b * b - c * c))
                     * (z[6] + z[8])
-                + d * d * (b.powi(4) * (z[1] - 3.0 * z[4])
-                    + c.powi(4) * (3.0 * z[1] - z[4])
-                    + (a.powi(4) - 2.0 * b * b * c * c) * (z[1] - z[4]))
-                + e * e * (a.powi(4) * (z[4] - 3.0 * z[7])
-                    + b.powi(4) * (3.0 * z[4] - z[7])
-                    + (c.powi(4) - 2.0 * a * a * b * b) * (z[4] - z[7]))
-                - 2.0 * (a * a * d * d * (b * b - c * c) * z[7]
-                    + c * c * e * e * (a * a - b * b) * z[1]));
+                + d * d
+                    * (b.powi(4) * (z[1] - 3.0 * z[4])
+                        + c.powi(4) * (3.0 * z[1] - z[4])
+                        + (a.powi(4) - 2.0 * b * b * c * c) * (z[1] - z[4]))
+                + e * e
+                    * (a.powi(4) * (z[4] - 3.0 * z[7])
+                        + b.powi(4) * (3.0 * z[4] - z[7])
+                        + (c.powi(4) - 2.0 * a * a * b * b) * (z[4] - z[7]))
+                - 2.0
+                    * (a * a * d * d * (b * b - c * c) * z[7]
+                        + c * c * e * e * (a * a - b * b) * z[1]));
 
         let w = 1.0 + p * p + q * q;
         let g2 = p * p + q * q;
@@ -777,11 +827,12 @@ impl MultiscaleCurvaturesTool {
         // Optimization 2: Autovectorization improvements - use mul_add and avoid powf(1.5)
         let w_sqrt = w.sqrt();
         let w_pow_1p5 = w * w_sqrt; // w^1.5 = w * sqrt(w)
-        
-        let mean_curv = Self::finite_or_zero(-((1.0 + q * q).mul_add(r, 
-            (1.0 + p * p).mul_add(t, -2.0 * p * q * s)))
-            / (2.0 * w_pow_1p5));
-        
+
+        let mean_curv = Self::finite_or_zero(
+            -((1.0 + q * q).mul_add(r, (1.0 + p * p).mul_add(t, -2.0 * p * q * s)))
+                / (2.0 * w_pow_1p5),
+        );
+
         // Optimization 2: Replace powi(2) with multiplication
         let gaussian_curv = Self::finite_or_zero((r * t - s * s) / (w * w));
         let disc = (mean_curv * mean_curv - gaussian_curv).max(0.0);
@@ -799,13 +850,17 @@ impl MultiscaleCurvaturesTool {
         };
 
         // Optimization 2: Replace powi(2) with multiplication
-        let curvedness = Self::finite_or_zero(((minimal_curv * minimal_curv + maximal_curv * maximal_curv) / 2.0).sqrt());
+        let curvedness = Self::finite_or_zero(
+            ((minimal_curv * minimal_curv + maximal_curv * maximal_curv) / 2.0).sqrt(),
+        );
         let shape_index = {
             let denom = maximal_curv - minimal_curv;
             if denom.abs() <= f64::EPSILON {
                 0.0
             } else {
-                Self::finite_or_zero(2.0 / std::f64::consts::PI * ((maximal_curv + minimal_curv) / denom).atan())
+                Self::finite_or_zero(
+                    2.0 / std::f64::consts::PI * ((maximal_curv + minimal_curv) / denom).atan(),
+                )
             }
         };
         let unsphericity = Self::finite_or_zero(sqrt_disc);
@@ -821,19 +876,25 @@ impl MultiscaleCurvaturesTool {
         let horizontal_curv = if g2 <= f64::EPSILON {
             0.0
         } else {
-            Self::finite_or_zero((q * q.mul_add(r, p * p.mul_add(t, -2.0 * p * q * s))) / (g2 * w_sqrt))
+            Self::finite_or_zero(
+                (q * q.mul_add(r, p * p.mul_add(t, -2.0 * p * q * s))) / (g2 * w_sqrt),
+            )
         };
         let plan_curv = if g2 <= f64::EPSILON {
             0.0
         } else {
             // Optimization 2: Replace powi(3) with multiplication chain
             let g2_sqrt = g2.sqrt();
-            Self::finite_or_zero(-(q * q.mul_add(r, p * p.mul_add(t, -2.0 * p * q * s)) / (g2 * g2_sqrt)))
+            Self::finite_or_zero(
+                -(q * q.mul_add(r, p * p.mul_add(t, -2.0 * p * q * s)) / (g2 * g2_sqrt)),
+            )
         };
         let profile_curv = if g2 <= f64::EPSILON {
             0.0
         } else {
-            Self::finite_or_zero(-(p * p.mul_add(r, q * q.mul_add(t, 2.0 * p * q * s)) / (g2 * w_pow_1p5)))
+            Self::finite_or_zero(
+                -(p * p.mul_add(r, q * q.mul_add(t, 2.0 * p * q * s)) / (g2 * w_pow_1p5)),
+            )
         };
         let ring_curv = if g2 <= f64::EPSILON {
             0.0
@@ -845,7 +906,9 @@ impl MultiscaleCurvaturesTool {
         let tan_curv = if g2 <= f64::EPSILON {
             0.0
         } else {
-            Self::finite_or_zero(-(q * q.mul_add(r, p * p.mul_add(t, -2.0 * p * q * s))) / (g2 * w_sqrt))
+            Self::finite_or_zero(
+                -(q * q.mul_add(r, p * p.mul_add(t, -2.0 * p * q * s))) / (g2 * w_sqrt),
+            )
         };
         let total_curv = Self::finite_or_zero(r * r + 2.0 * s * s + t * t);
 
@@ -871,7 +934,12 @@ impl MultiscaleCurvaturesTool {
         }
     }
 
-    fn apply_log(v: f64, log_multiplier: f64, curv_type: CurvatureType, log_transform: bool) -> f64 {
+    fn apply_log(
+        v: f64,
+        log_multiplier: f64,
+        curv_type: CurvatureType,
+        log_transform: bool,
+    ) -> f64 {
         if !log_transform {
             return v;
         }
@@ -959,22 +1027,26 @@ impl MultiscaleCurvaturesTool {
                                     res,
                                 )
                             };
-                            v = Self::apply_log(v, log_multiplier, cfg.curv_type, cfg.log_transform);
+                            v = Self::apply_log(
+                                v,
+                                log_multiplier,
+                                cfg.curv_type,
+                                cfg.log_transform,
+                            );
                             row[idx] = if v.is_finite() { v } else { 0.0 };
                         }
                     });
 
                 if cfg.standardize {
-                    let (sum, sum_sq, count) = curv.iter().fold(
-                        (0.0f64, 0.0f64, 0usize),
-                        |(acc, acc_sq, n), v| {
-                            if *v == nodata {
-                                (acc, acc_sq, n)
-                            } else {
-                                (acc + *v, acc_sq + *v * *v, n + 1)
-                            }
-                        },
-                    );
+                    let (sum, sum_sq, count) =
+                        curv.iter()
+                            .fold((0.0f64, 0.0f64, 0usize), |(acc, acc_sq, n), v| {
+                                if *v == nodata {
+                                    (acc, acc_sq, n)
+                                } else {
+                                    (acc + *v, acc_sq + *v * *v, n + 1)
+                                }
+                            });
 
                     if count > 0 {
                         let mean = sum / count as f64;
@@ -1022,10 +1094,14 @@ impl MultiscaleCurvaturesTool {
                 let end = start + cols as usize;
                 output_mag
                     .set_row_slice(band, r, &best_mag[start..end])
-                    .map_err(|e| ToolError::Execution(format!("failed writing magnitude row {r}: {e}")))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing magnitude row {r}: {e}"))
+                    })?;
                 output_scale
                     .set_row_slice(band, r, &best_scale[start..end])
-                    .map_err(|e| ToolError::Execution(format!("failed writing scale row {r}: {e}")))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing scale row {r}: {e}"))
+                    })?;
             }
         }
 
@@ -1135,13 +1211,15 @@ impl Tool for MultiscaleCurvaturesTool {
         ToolManifest {
             id: "multiscale_curvatures".to_string(),
             display_name: "Multiscale Curvatures".to_string(),
-            summary: "Calculates multiscale curvatures and curvature-based indices from a DEM.".to_string(),
+            summary: "Calculates multiscale curvatures and curvature-based indices from a DEM."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
                 ToolParamDescriptor {
                     name: "input".to_string(),
-                    description: "Input DEM raster path or typed raster object. Alias: dem.".to_string(),
+                    description: "Input DEM raster path or typed raster object. Alias: dem."
+                        .to_string(),
                     required: true,
                 },
                 ToolParamDescriptor {
@@ -1193,7 +1271,8 @@ impl Tool for MultiscaleCurvaturesTool {
             defaults,
             examples: vec![ToolExample {
                 name: "scale_mosaic_unsphericity".to_string(),
-                description: "Create a multiscale unsphericity magnitude raster and scale mosaic.".to_string(),
+                description: "Create a multiscale unsphericity magnitude raster and scale mosaic."
+                    .to_string(),
                 args: example_args,
             }],
             tags: vec![
@@ -1213,10 +1292,14 @@ impl Tool for MultiscaleCurvaturesTool {
         let _ = Self::parse_output_scale(args)?;
         let cfg = Self::parse_config(args);
         if cfg.step < 1 {
-            return Err(ToolError::Validation("parameter 'step' must be >= 1".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'step' must be >= 1".to_string(),
+            ));
         }
         if cfg.num_steps < 1 {
-            return Err(ToolError::Validation("parameter 'num_steps' must be >= 1".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'num_steps' must be >= 1".to_string(),
+            ));
         }
         Ok(())
     }
@@ -1305,6 +1388,9 @@ mod tests {
             }
         }
 
-        assert!(differs, "expected legacy-like large-scale smoothing to differ from direct Gaussian smoothing");
+        assert!(
+            differs,
+            "expected legacy-like large-scale smoothing to differ from direct Gaussian smoothing"
+        );
     }
 }

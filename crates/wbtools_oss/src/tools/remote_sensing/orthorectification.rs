@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 /// Orthorectification — DEM-based geometric correction of raw satellite/aerial imagery.
 ///
 /// Removes geometric distortions caused by terrain relief displacement and sensor
@@ -16,7 +17,6 @@
 /// applied using the image's existing geotransform. This is less accurate but
 /// sufficient for gently sloping terrain.
 use serde_json::json;
-use rayon::prelude::*;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -64,8 +64,7 @@ struct RpcModel {
 ///   1, L, P, H, L*P, L*H, P*H, L², P², H²,
 ///   L*P*H, L³, L*P², L*H², L²*P, P³, P*H², L²*H, P²*H, H³
 fn poly20(c: &[f64; 20], p: f64, l: f64, h: f64) -> f64 {
-    c[0]
-        + c[1] * l
+    c[0] + c[1] * l
         + c[2] * p
         + c[3] * h
         + c[4] * l * p
@@ -114,7 +113,9 @@ impl RpcModel {
             let (proj_line, proj_samp) = self.project(lat, lon, hgt_m);
             let dl = target_line - proj_line;
             let ds = target_samp - proj_samp;
-            if dl.abs() < eps && ds.abs() < eps { break; }
+            if dl.abs() < eps && ds.abs() < eps {
+                break;
+            }
             // Numerical Jacobian with a small perturbation.
             let dlat = 1e-5; // ~1 m in lat
             let dlon = 1e-5;
@@ -125,7 +126,9 @@ impl RpcModel {
             let j10 = (ps_lat - proj_samp) / dlat;
             let j11 = (ps_lon - proj_samp) / dlon;
             let det = j00 * j11 - j01 * j10;
-            if det.abs() < 1e-15 { return None; }
+            if det.abs() < 1e-15 {
+                return None;
+            }
             lat += (j11 * dl - j01 * ds) / det;
             lon += (-j10 * dl + j00 * ds) / det;
         }
@@ -143,14 +146,14 @@ impl RpcModel {
         let find_val = |key: &str| -> Option<&str> {
             meta.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
         };
-        let get = |key: &str| -> Option<f64> {
-            find_val(key).and_then(|v| v.trim().parse::<f64>().ok())
-        };
+        let get =
+            |key: &str| -> Option<f64> { find_val(key).and_then(|v| v.trim().parse::<f64>().ok()) };
         let get_arr = |prefix: &str| -> Option<[f64; 20]> {
             let mut arr = [0.0f64; 20];
             for i in 0..20 {
                 let key = format!("{}_{}", prefix, i + 1);
-                arr[i] = meta.iter()
+                arr[i] = meta
+                    .iter()
                     .find(|(k, _)| k == &key)
                     .and_then(|(_, v)| v.trim().parse::<f64>().ok())?;
             }
@@ -158,10 +161,13 @@ impl RpcModel {
         };
         let get_arr_csv = |key: &str| -> Option<[f64; 20]> {
             let s = find_val(key)?;
-            let parts: Vec<f64> = s.split_whitespace()
+            let parts: Vec<f64> = s
+                .split_whitespace()
                 .filter_map(|t| t.trim_matches(',').parse::<f64>().ok())
                 .collect();
-            if parts.len() < 20 { return None; }
+            if parts.len() < 20 {
+                return None;
+            }
             let mut arr = [0.0f64; 20];
             arr.copy_from_slice(&parts[..20]);
             Some(arr)
@@ -178,21 +184,30 @@ impl RpcModel {
         let line_scale = get("LINE_SCALE").or_else(|| get("RPC_LINE_SCALE"))?;
         let samp_scale = get("SAMP_SCALE").or_else(|| get("RPC_SAMP_SCALE"))?;
 
-        let line_num = get_arr("LINE_NUM_COEFF")
-            .or_else(|| get_arr_csv("LINE_NUM_COEFF"))?;
-        let line_den = get_arr("LINE_DEN_COEFF")
-            .or_else(|| get_arr_csv("LINE_DEN_COEFF"))?;
-        let samp_num = get_arr("SAMP_NUM_COEFF")
-            .or_else(|| get_arr_csv("SAMP_NUM_COEFF"))?;
-        let samp_den = get_arr("SAMP_DEN_COEFF")
-            .or_else(|| get_arr_csv("SAMP_DEN_COEFF"))?;
+        let line_num = get_arr("LINE_NUM_COEFF").or_else(|| get_arr_csv("LINE_NUM_COEFF"))?;
+        let line_den = get_arr("LINE_DEN_COEFF").or_else(|| get_arr_csv("LINE_DEN_COEFF"))?;
+        let samp_num = get_arr("SAMP_NUM_COEFF").or_else(|| get_arr_csv("SAMP_NUM_COEFF"))?;
+        let samp_den = get_arr("SAMP_DEN_COEFF").or_else(|| get_arr_csv("SAMP_DEN_COEFF"))?;
 
         Some(RpcModel {
-            lat_off, lon_off, hgt_off,
-            lat_scale, lon_scale, hgt_scale,
-            line_off, samp_off, line_scale, samp_scale,
-            line: RpcCoeffs { num: line_num, den: line_den },
-            samp: RpcCoeffs { num: samp_num, den: samp_den },
+            lat_off,
+            lon_off,
+            hgt_off,
+            lat_scale,
+            lon_scale,
+            hgt_scale,
+            line_off,
+            samp_off,
+            line_scale,
+            samp_scale,
+            line: RpcCoeffs {
+                num: line_num,
+                den: line_den,
+            },
+            samp: RpcCoeffs {
+                num: samp_num,
+                den: samp_den,
+            },
         })
     }
 }
@@ -228,10 +243,14 @@ fn dem_elevation_at(dem: &Raster, lat_deg: f64, lon_deg: f64) -> f64 {
 
 /// Sample source image at fractional (col, row) using bilinear interpolation.
 fn sample_bilinear(src: &Raster, band: usize, col_f: f64, row_f: f64) -> f64 {
-    if col_f < 0.0 || row_f < 0.0 { return src.nodata; }
+    if col_f < 0.0 || row_f < 0.0 {
+        return src.nodata;
+    }
     let c0 = col_f.floor() as usize;
     let r0 = row_f.floor() as usize;
-    if c0 >= src.cols - 1 || r0 >= src.rows - 1 { return src.nodata; }
+    if c0 >= src.cols - 1 || r0 >= src.rows - 1 {
+        return src.nodata;
+    }
     let c1 = c0 + 1;
     let r1 = r0 + 1;
     let n = src.rows * src.cols;
@@ -245,8 +264,7 @@ fn sample_bilinear(src: &Raster, band: usize, col_f: f64, row_f: f64) -> f64 {
     }
     let dc = col_f - c0 as f64;
     let dr = row_f - r0 as f64;
-    (1.0 - dr) * ((1.0 - dc) * v00 + dc * v01)
-        + dr * ((1.0 - dc) * v10 + dc * v11)
+    (1.0 - dr) * ((1.0 - dc) * v00 + dc * v01) + dr * ((1.0 - dc) * v10 + dc * v11)
 }
 
 // ── Helper I/O ───────────────────────────────────────────────────────────────
@@ -268,7 +286,9 @@ fn write_raster(r: &Raster, path: &str, label: &str) -> Result<(), ToolError> {
     if let Some(parent) = Path::new(path).parent() {
         if !parent.as_os_str().is_empty() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                ToolError::Execution(format!("failed creating output directory for '{label}': {e}"))
+                ToolError::Execution(format!(
+                    "failed creating output directory for '{label}': {e}"
+                ))
             })?;
         }
     }
@@ -345,22 +365,27 @@ impl Tool for OrthorectificationTool {
         args.get("input_raster")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| ToolError::Validation("parameter 'input_raster' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'input_raster' is required".to_string())
+            })?;
         args.get("input_dem")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
-            .ok_or_else(|| ToolError::Validation("parameter 'input_dem' is required".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'input_dem' is required".to_string())
+            })?;
         if let Some(method) = args.get("resample_method").and_then(|v| v.as_str()) {
             if !matches!(method, "nearest" | "bilinear" | "cubic") {
                 return Err(ToolError::Validation(
-                    "parameter 'resample_method' must be one of: nearest, bilinear, cubic".to_string()
+                    "parameter 'resample_method' must be one of: nearest, bilinear, cubic"
+                        .to_string(),
                 ));
             }
         }
         if let Some(epsg) = args.get("output_epsg").and_then(|v| v.as_u64()) {
             if epsg < 1024 || epsg > 32767 {
                 return Err(ToolError::Validation(
-                    "parameter 'output_epsg' must be a valid EPSG code (1024–32767)".to_string()
+                    "parameter 'output_epsg' must be a valid EPSG code (1024–32767)".to_string(),
                 ));
             }
         }
@@ -368,25 +393,37 @@ impl Tool for OrthorectificationTool {
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let input_path = args.get("input_raster")
+        let input_path = args
+            .get("input_raster")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| ToolError::Validation("parameter 'input_raster' is required".to_string()))?
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'input_raster' is required".to_string())
+            })?
             .to_string();
-        let dem_path = args.get("input_dem")
+        let dem_path = args
+            .get("input_dem")
             .and_then(|v| v.as_str())
             .ok_or_else(|| ToolError::Validation("parameter 'input_dem' is required".to_string()))?
             .to_string();
-        let output_epsg = args.get("output_epsg").and_then(|v| v.as_u64()).unwrap_or(4326) as u32;
-        let resample_str = args.get("resample_method").and_then(|v| v.as_str()).unwrap_or("bilinear");
+        let output_epsg = args
+            .get("output_epsg")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(4326) as u32;
+        let resample_str = args
+            .get("resample_method")
+            .and_then(|v| v.as_str())
+            .unwrap_or("bilinear");
         let output_path = parse_optional_output_path(args, "output")?
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_else(|| "orthorectified.tif".to_string());
 
-        ctx.progress.info("orthorectification: loading input raster and DEM");
+        ctx.progress
+            .info("orthorectification: loading input raster and DEM");
         let src = load_raster(&input_path, "input_raster")?;
         let dem = load_raster(&dem_path, "input_dem")?;
 
-        let nodata_val = args.get("nodata_value")
+        let nodata_val = args
+            .get("nodata_value")
             .and_then(|v| v.as_f64())
             .unwrap_or(src.nodata);
 
@@ -408,7 +445,7 @@ impl Tool for OrthorectificationTool {
             ctx.progress.info(
                 "orthorectification: no RPC metadata found — falling back to \
                  affine reprojection (terrain displacement not corrected). \
-                 Embed RPC coefficients in image metadata for full orthorectification."
+                 Embed RPC coefficients in image metadata for full orthorectification.",
             );
         }
 
@@ -422,7 +459,8 @@ impl Tool for OrthorectificationTool {
 
         // Determine output resolution.
         let approx_gsd = src.cell_size_x.abs().max(src.cell_size_y.abs());
-        let out_res = args.get("output_resolution")
+        let out_res = args
+            .get("output_resolution")
             .and_then(|v| v.as_f64())
             .unwrap_or(approx_gsd);
 
@@ -451,7 +489,8 @@ impl Tool for OrthorectificationTool {
 
         let rpc_ref = rpc.as_ref();
 
-        ctx.progress.info("orthorectification: projecting output pixels to source");
+        ctx.progress
+            .info("orthorectification: projecting output pixels to source");
 
         // For each output pixel: (col, row) → (lon, lat) → dem_hgt → rpc_inverse → (src_col, src_row) → sample.
         let pixel_values: Vec<Vec<f64>> = (0..out_rows)
@@ -489,9 +528,21 @@ impl Tool for OrthorectificationTool {
                             "nearest" => {
                                 let sc = src_col_f.round() as isize;
                                 let sr = src_row_f.round() as isize;
-                                if sc >= 0 && sr >= 0 && (sc as usize) < src.cols && (sr as usize) < src.rows {
-                                    let v = src.data.get_f64(b * src.rows * src.cols + sr as usize * src.cols + sc as usize);
-                                    if src.is_nodata(v) { nodata_val } else { v }
+                                if sc >= 0
+                                    && sr >= 0
+                                    && (sc as usize) < src.cols
+                                    && (sr as usize) < src.rows
+                                {
+                                    let v = src.data.get_f64(
+                                        b * src.rows * src.cols
+                                            + sr as usize * src.cols
+                                            + sc as usize,
+                                    );
+                                    if src.is_nodata(v) {
+                                        nodata_val
+                                    } else {
+                                        v
+                                    }
                                 } else {
                                     nodata_val
                                 }
@@ -501,7 +552,11 @@ impl Tool for OrthorectificationTool {
                                 // cubic would require a 4×4 kernel — bilinear is sufficient
                                 // for most orthorectification use cases.
                                 let v = sample_bilinear(&src, b, src_col_f, src_row_f);
-                                if src.is_nodata(v) { nodata_val } else { v }
+                                if src.is_nodata(v) {
+                                    nodata_val
+                                } else {
+                                    v
+                                }
                             }
                         };
                         row_band_values[b * out_cols + c] = v;
@@ -515,7 +570,10 @@ impl Tool for OrthorectificationTool {
         for (r, row_vals) in pixel_values.into_iter().enumerate() {
             for b in 0..num_bands {
                 for c in 0..out_cols {
-                    ortho.data.set_f64(b * out_rows * out_cols + r * out_cols + c, row_vals[b * out_cols + c]);
+                    ortho.data.set_f64(
+                        b * out_rows * out_cols + r * out_cols + c,
+                        row_vals[b * out_cols + c],
+                    );
                 }
             }
         }
@@ -585,12 +643,24 @@ mod tests {
         samp_num[1] = 1.0; // samp = L
         samp_den[0] = 1.0;
         let rpc = RpcModel {
-            lat_off: 45.0, lon_off: -75.0, hgt_off: 100.0,
-            lat_scale: 1.0, lon_scale: 1.0, hgt_scale: 500.0,
-            line_off: 5000.0, samp_off: 5000.0,
-            line_scale: 5000.0, samp_scale: 5000.0,
-            line: RpcCoeffs { num: line_num, den: line_den },
-            samp: RpcCoeffs { num: samp_num, den: samp_den },
+            lat_off: 45.0,
+            lon_off: -75.0,
+            hgt_off: 100.0,
+            lat_scale: 1.0,
+            lon_scale: 1.0,
+            hgt_scale: 500.0,
+            line_off: 5000.0,
+            samp_off: 5000.0,
+            line_scale: 5000.0,
+            samp_scale: 5000.0,
+            line: RpcCoeffs {
+                num: line_num,
+                den: line_den,
+            },
+            samp: RpcCoeffs {
+                num: samp_num,
+                den: samp_den,
+            },
         };
         let lat = 45.3;
         let lon = -74.7;
@@ -598,8 +668,16 @@ mod tests {
         let (line, samp) = rpc.project(lat, lon, hgt);
         // Inverse should recover approximate lat/lon.
         if let Some((lat2, lon2)) = rpc.inverse(line, samp, hgt) {
-            assert!((lat2 - lat).abs() < 0.01, "lat roundtrip error: {}", (lat2 - lat).abs());
-            assert!((lon2 - lon).abs() < 0.01, "lon roundtrip error: {}", (lon2 - lon).abs());
+            assert!(
+                (lat2 - lat).abs() < 0.01,
+                "lat roundtrip error: {}",
+                (lat2 - lat).abs()
+            );
+            assert!(
+                (lon2 - lon).abs() < 0.01,
+                "lon roundtrip error: {}",
+                (lon2 - lon).abs()
+            );
         }
     }
 }

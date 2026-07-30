@@ -3,9 +3,10 @@
 
 use rayon::prelude::*;
 use serde_json::json;
-use wbcore::{PercentCoalescer, 
-    parse_optional_output_path, parse_raster_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolManifest, ToolMetadata, ToolParamSpec, ToolRunResult, ToolStability,
+use wbcore::{
+    parse_optional_output_path, parse_raster_path_arg, LicenseTier, PercentCoalescer, Tool,
+    ToolArgs, ToolCategory, ToolContext, ToolError, ToolManifest, ToolMetadata, ToolParamSpec,
+    ToolRunResult, ToolStability,
 };
 use wbraster::Raster;
 
@@ -23,18 +24,29 @@ impl OpennessCore {
     fn load_raster(path: &str) -> Result<Raster, ToolError> {
         if memory_store::raster_is_memory_path(path) {
             let id = memory_store::raster_path_to_id(path).ok_or_else(|| {
-                ToolError::Validation("parameter 'input' has malformed in-memory raster path".to_string())
+                ToolError::Validation(
+                    "parameter 'input' has malformed in-memory raster path".to_string(),
+                )
             })?;
             return memory_store::get_raster_by_id(id).ok_or_else(|| {
-                ToolError::Validation(format!("parameter 'input' references unknown in-memory raster id '{}'", id))
+                ToolError::Validation(format!(
+                    "parameter 'input' references unknown in-memory raster id '{}'",
+                    id
+                ))
             });
         }
-        Raster::read(path).map_err(|e| ToolError::Execution(format!("failed to read raster: {}", e)))
+        Raster::read(path)
+            .map_err(|e| ToolError::Execution(format!("failed to read raster: {}", e)))
     }
 
-    fn write_or_store_output(raster: Raster, output_path: Option<&str>) -> Result<String, ToolError> {
+    fn write_or_store_output(
+        raster: Raster,
+        output_path: Option<&str>,
+    ) -> Result<String, ToolError> {
         if let Some(path) = output_path {
-            raster.write(path, wbraster::RasterFormat::GeoTiff).map_err(|e| ToolError::Execution(format!("failed to write raster: {}", e)))?;
+            raster
+                .write(path, wbraster::RasterFormat::GeoTiff)
+                .map_err(|e| ToolError::Execution(format!("failed to write raster: {}", e)))?;
             Ok(path.to_string())
         } else {
             let id = memory_store::put_raster(raster);
@@ -61,10 +73,26 @@ Applications: (1) Landform classification (high positive=ridge, low negative=bas
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input DEM raster path or typed raster object.", required: true },
-                ToolParamSpec { name: "dist", description: "Search distance in cells (default 20).", required: false },
-                ToolParamSpec { name: "pos_output", description: "Optional output path for positive openness.", required: false },
-                ToolParamSpec { name: "neg_output", description: "Optional output path for negative openness.", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input DEM raster path or typed raster object.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "dist",
+                    description: "Search distance in cells (default 20).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "pos_output",
+                    description: "Optional output path for positive openness.",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "neg_output",
+                    description: "Optional output path for negative openness.",
+                    required: false,
+                },
             ],
         }
     }
@@ -121,7 +149,10 @@ Applications: (1) Landform classification (high positive=ridge, low negative=bas
         // For now, process only the first band
         let band = 0isize;
 
-        ctx.progress.info(&format!("running openness with search_dist={}", search_dist));
+        ctx.progress.info(&format!(
+            "running openness with search_dist={}",
+            search_dist
+        ));
 
         // Process all rows in parallel
         let results: Vec<(Vec<f64>, Vec<f64>)> = (0..rows)
@@ -263,15 +294,25 @@ Applications: (1) Landform classification (high positive=ridge, low negative=bas
         for (r, (pos_row, neg_row)) in results.into_iter().enumerate() {
             pos_output
                 .set_row_slice(band, r as isize, &pos_row)
-                .map_err(|e| ToolError::Execution(format!("failed writing pos row {}: {}", r, e)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed writing pos row {}: {}", r, e))
+                })?;
             neg_output
                 .set_row_slice(band, r as isize, &neg_row)
-                .map_err(|e| ToolError::Execution(format!("failed writing neg row {}: {}", r, e)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed writing neg row {}: {}", r, e))
+                })?;
             coalescer.emit_unit_fraction(ctx.progress, r as f64 / rows as f64);
         }
 
-        let pos_out_path = Self::write_or_store_output(pos_output, pos_output_path.as_ref().map(|p| p.to_str()).flatten())?;
-        let neg_out_path = Self::write_or_store_output(neg_output, neg_output_path.as_ref().map(|p| p.to_str()).flatten())?;
+        let pos_out_path = Self::write_or_store_output(
+            pos_output,
+            pos_output_path.as_ref().map(|p| p.to_str()).flatten(),
+        )?;
+        let neg_out_path = Self::write_or_store_output(
+            neg_output,
+            neg_output_path.as_ref().map(|p| p.to_str()).flatten(),
+        )?;
 
         Ok(Self::build_result(pos_out_path, neg_out_path))
     }
@@ -350,7 +391,15 @@ mod tests {
         // For flat surface, all directions see zero slope, so openness should be 90°
         let pos_v = pos_out.get(0, 5, 5);
         let neg_v = neg_out.get(0, 5, 5);
-        assert!((pos_v - 90.0).abs() < 1e-4, "expected pos ~90, got {}", pos_v);
-        assert!((neg_v - 90.0).abs() < 1e-4, "expected neg ~90, got {}", neg_v);
+        assert!(
+            (pos_v - 90.0).abs() < 1e-4,
+            "expected pos ~90, got {}",
+            pos_v
+        );
+        assert!(
+            (neg_v - 90.0).abs() < 1e-4,
+            "expected neg ~90, got {}",
+            neg_v
+        );
     }
 }

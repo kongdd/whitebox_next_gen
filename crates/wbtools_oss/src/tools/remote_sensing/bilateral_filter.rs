@@ -3,6 +3,7 @@ use std::f64::consts::PI;
 use std::sync::Arc;
 
 use super::color_support;
+use crate::memory_store;
 use rayon::prelude::*;
 use serde_json::json;
 use wbcore::{
@@ -12,7 +13,6 @@ use wbcore::{
 };
 use wbraster::color_math::{hsi2value, value2hsi, value2i};
 use wbraster::{Raster, RasterFormat};
-use crate::memory_store;
 
 pub struct BilateralFilterTool;
 pub struct HighPassBilateralFilterTool;
@@ -242,7 +242,11 @@ impl Tool for BilateralFilterTool {
                 .get("sigma_int")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(1.0);
-            if v < 0.001 { 0.001 } else { v }
+            if v < 0.001 {
+                0.001
+            } else {
+                v
+            }
         };
 
         let treat_as_rgb_requested = args
@@ -262,11 +266,8 @@ impl Tool for BilateralFilterTool {
 
         // Prefer explicit metadata-based interpretation and optional caller override,
         // with an optional 3-band heuristic fallback for common RGB imagery.
-        let rgb_mode = color_support::detect_rgb_mode(
-            &input,
-            treat_as_rgb_requested,
-            assume_three_band_rgb,
-        );
+        let rgb_mode =
+            color_support::detect_rgb_mode(&input, treat_as_rgb_requested, assume_three_band_rgb);
         let treat_as_rgb = matches!(rgb_mode, color_support::RgbMode::Packed);
 
         let rows = input.rows;
@@ -335,7 +336,11 @@ impl Tool for BilateralFilterTool {
                             let nx = col + dxv[a];
                             let ny = row + dyv[a];
                             let zn_raw = inp.get(band, ny, nx);
-                            let zn = if treat_as_rgb { value2i(zn_raw) } else { zn_raw };
+                            let zn = if treat_as_rgb {
+                                value2i(zn_raw)
+                            } else {
+                                zn_raw
+                            };
                             neighbor_vals[a] = zn;
                             if !inp.is_nodata(zn_raw) {
                                 let diff = zn - z;
@@ -379,8 +384,7 @@ impl Tool for BilateralFilterTool {
                     })?;
             }
 
-            ctx.progress
-                .progress((band_idx + 1) as f64 / bands as f64);
+            ctx.progress.progress((band_idx + 1) as f64 / bands as f64);
         }
 
         // ------------------------------------------------------------------
@@ -534,7 +538,11 @@ impl Tool for HighPassBilateralFilterTool {
                 .get("sigma_int")
                 .and_then(|v| v.as_f64())
                 .unwrap_or(1.0);
-            if v < 0.001 { 0.001 } else { v }
+            if v < 0.001 {
+                0.001
+            } else {
+                v
+            }
         };
 
         let treat_as_rgb_requested = args
@@ -552,11 +560,8 @@ impl Tool for HighPassBilateralFilterTool {
 
         let input = BilateralFilterTool::load_raster(&input_path)?;
 
-        let rgb_mode = color_support::detect_rgb_mode(
-            &input,
-            treat_as_rgb_requested,
-            assume_three_band_rgb,
-        );
+        let rgb_mode =
+            color_support::detect_rgb_mode(&input, treat_as_rgb_requested, assume_three_band_rgb);
         let treat_as_rgb = matches!(rgb_mode, color_support::RgbMode::Packed);
 
         let rows = input.rows;
@@ -607,7 +612,11 @@ impl Tool for HighPassBilateralFilterTool {
                             let nx = col + dxv[a];
                             let ny = row + dyv[a];
                             let zn_raw = inp.get(band, ny, nx);
-                            let zn = if treat_as_rgb { value2i(zn_raw) } else { zn_raw };
+                            let zn = if treat_as_rgb {
+                                value2i(zn_raw)
+                            } else {
+                                zn_raw
+                            };
                             neighbor_vals[a] = zn;
                             if !inp.is_nodata(zn_raw) {
                                 let diff = zn - z;
@@ -642,8 +651,7 @@ impl Tool for HighPassBilateralFilterTool {
                     })?;
             }
 
-            ctx.progress
-                .progress((band_idx + 1) as f64 / bands as f64);
+            ctx.progress.progress((band_idx + 1) as f64 / bands as f64);
         }
 
         let output_locator = if let Some(output_path) = output_path {
@@ -733,7 +741,13 @@ mod tests {
         args.insert("sigma_int".to_string(), json!(10.0));
 
         let result = BilateralFilterTool.run(&args, &make_ctx()).unwrap();
-        let out_path = result.outputs.get("path").unwrap().as_str().unwrap().to_string();
+        let out_path = result
+            .outputs
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         assert!(out_path.starts_with("memory://raster/"));
 
         let out_id = memory_store::raster_path_to_id(&out_path).unwrap();
@@ -743,7 +757,10 @@ mod tests {
                 let v = out_raster.get(0, row, col);
                 assert!(
                     (v - 42.0).abs() < 1e-9,
-                    "expected 42.0 at ({},{}) but got {}", row, col, v
+                    "expected 42.0 at ({},{}) but got {}",
+                    row,
+                    col,
+                    v
                 );
             }
         }
@@ -761,7 +778,11 @@ mod tests {
 
         let result = BilateralFilterTool.run(&args, &make_ctx()).unwrap();
         let out_path = result.outputs.get("path").unwrap().as_str().unwrap();
-        assert!(out_path.starts_with("memory://raster/"), "expected memory path, got {}", out_path);
+        assert!(
+            out_path.starts_with("memory://raster/"),
+            "expected memory path, got {}",
+            out_path
+        );
     }
 
     #[test]
@@ -776,7 +797,13 @@ mod tests {
         args.insert("sigma_int".to_string(), json!(10.0));
 
         let result = HighPassBilateralFilterTool.run(&args, &make_ctx()).unwrap();
-        let out_path = result.outputs.get("path").unwrap().as_str().unwrap().to_string();
+        let out_path = result
+            .outputs
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         assert!(out_path.starts_with("memory://raster/"));
 
         let out_id = memory_store::raster_path_to_id(&out_path).unwrap();
@@ -784,7 +811,13 @@ mod tests {
         for row in 0..20isize {
             for col in 0..20isize {
                 let v = out_raster.get(0, row, col);
-                assert!(v.abs() < 1e-7, "expected near-zero high-pass value at ({},{}) but got {}", row, col, v);
+                assert!(
+                    v.abs() < 1e-7,
+                    "expected near-zero high-pass value at ({},{}) but got {}",
+                    row,
+                    col,
+                    v
+                );
             }
         }
     }

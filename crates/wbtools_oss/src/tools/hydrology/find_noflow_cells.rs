@@ -48,7 +48,11 @@ impl Tool for FindNoflowCellsTool {
                 description: "Identify pits, flats, and edge no-flow cells in a DEM".to_string(),
                 args: ToolArgs::new(),
             }],
-            tags: vec!["hydrology".to_string(), "diagnostics".to_string(), "dem".to_string()],
+            tags: vec![
+                "hydrology".to_string(),
+                "diagnostics".to_string(),
+                "dem".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }

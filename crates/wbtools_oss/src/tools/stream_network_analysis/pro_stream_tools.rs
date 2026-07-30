@@ -1,27 +1,26 @@
+use crate::{
+    memory_store,
+    tools::{ClosingTool, ElevationPercentileTool, RemoveRasterPolygonHolesTool, SlopeTool},
+};
+use rayon::prelude::*;
 /// Professional stream network analysis tools
 ///
 /// This module contains premium tools for advanced stream analysis:
 /// - Prune vector streams
 /// - River centerlines extraction
 /// - Ridge and valley vectors
-
 use serde_json::json;
-use rayon::prelude::*;
-use std::collections::HashMap;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
+use std::collections::HashMap;
 use std::sync::Arc;
 use wbcore::{
-    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
+    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier, Tool,
+    ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
     ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
 };
 use wbraster::Raster;
 use wbvector::{Coord, Feature, Geometry, GeometryType, Layer, VectorFormat};
-use crate::{
-    memory_store,
-    tools::{ElevationPercentileTool, SlopeTool, RemoveRasterPolygonHolesTool, ClosingTool},
-};
 
 pub struct PruneVectorStreamsTool;
 pub struct RiverCenterlinesTool;
@@ -37,8 +36,12 @@ fn build_result(path: String) -> ToolRunResult {
 }
 
 fn detect_vector_format(path: &str) -> Result<VectorFormat, ToolError> {
-    VectorFormat::detect(path)
-        .map_err(|e| ToolError::Validation(format!("could not determine vector format for '{}': {}", path, e)))
+    VectorFormat::detect(path).map_err(|e| {
+        ToolError::Validation(format!(
+            "could not determine vector format for '{}': {}",
+            path, e
+        ))
+    })
 }
 
 fn load_vector_mem(path: &str, label: &str) -> Result<Layer, ToolError> {
@@ -66,12 +69,17 @@ fn coord_distance_sq(a: &Coord, b: &Coord) -> f64 {
 }
 
 fn line_length(line: &[Coord]) -> f64 {
-    line.windows(2).map(|seg| coord_distance(&seg[0], &seg[1])).sum()
+    line.windows(2)
+        .map(|seg| coord_distance(&seg[0], &seg[1]))
+        .sum()
 }
 
 fn endpoint_key(coord: &Coord, snap_dist: f64) -> (i64, i64) {
     if snap_dist <= 0.0 {
-        ((coord.x * 1.0e9).round() as i64, (coord.y * 1.0e9).round() as i64)
+        (
+            (coord.x * 1.0e9).round() as i64,
+            (coord.y * 1.0e9).round() as i64,
+        )
     } else {
         (
             (coord.x / snap_dist).round() as i64,
@@ -206,7 +214,15 @@ fn rc_index(row: usize, col: usize, cols: usize) -> usize {
     row * cols + col
 }
 
-fn rc_draw_line(mask: &mut [u8], rows: usize, cols: usize, r1: isize, c1: isize, r2: isize, c2: isize) {
+fn rc_draw_line(
+    mask: &mut [u8],
+    rows: usize,
+    cols: usize,
+    r1: isize,
+    c1: isize,
+    r2: isize,
+    c2: isize,
+) {
     let mut x0 = c1;
     let mut y0 = r1;
     let x1 = c2;
@@ -238,8 +254,14 @@ fn rc_draw_line(mask: &mut [u8], rows: usize, cols: usize, r1: isize, c1: isize,
 
 fn rc_neighbor_offsets() -> [(isize, isize); 8] {
     [
-        (0, 1), (-1, 1), (-1, 0), (-1, -1),
-        (0, -1), (1, -1), (1, 0), (1, 1),
+        (0, 1),
+        (-1, 1),
+        (-1, 0),
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (1, 0),
+        (1, 1),
     ]
 }
 
@@ -277,7 +299,11 @@ fn snap_line_endpoints(lines: &mut [Vec<Coord>], snap_dist: f64) {
     }
 }
 
-fn collect_link_key_nodes(lines: &[Vec<Coord>], snap_dist: f64, precision_sq: f64) -> Vec<Vec<(i64, i64)>> {
+fn collect_link_key_nodes(
+    lines: &[Vec<Coord>],
+    snap_dist: f64,
+    precision_sq: f64,
+) -> Vec<Vec<(i64, i64)>> {
     let mut endpoints = Vec::<(Coord, usize)>::new();
     for (i, line) in lines.iter().enumerate() {
         if line.len() < 2 {
@@ -380,19 +406,14 @@ impl Tool for PruneVectorStreamsTool {
                 description: "Prune streams with magnitude < 2".to_string(),
                 args: ToolArgs::new(),
             }],
-            tags: vec![
-                "stream_network".to_string(),
-                "vector".to_string(),
-            ],
+            tags: vec!["stream_network".to_string(), "vector".to_string()],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        parse_vector_path_arg(args, "streams")
-            .or_else(|_| parse_vector_path_arg(args, "input"))?;
-        parse_raster_path_arg(args, "dem")
-            .or_else(|_| parse_raster_path_arg(args, "input_dem"))?;
+        parse_vector_path_arg(args, "streams").or_else(|_| parse_vector_path_arg(args, "input"))?;
+        parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input_dem"))?;
         Ok(())
     }
 
@@ -539,8 +560,14 @@ impl Tool for PruneVectorStreamsTool {
             }
             let mut is_exterior = false;
             let mut z_neigh = f64::INFINITY;
-            let e1 = endpoint_links.get(&links[i].up_key).cloned().unwrap_or_default();
-            let e2 = endpoint_links.get(&links[i].down_key).cloned().unwrap_or_default();
+            let e1 = endpoint_links
+                .get(&links[i].up_key)
+                .cloned()
+                .unwrap_or_default();
+            let e2 = endpoint_links
+                .get(&links[i].down_key)
+                .cloned()
+                .unwrap_or_default();
 
             let mut n1 = 0usize;
             for id in e1 {
@@ -596,7 +623,11 @@ impl Tool for PruneVectorStreamsTool {
                     let mut up_open = 0usize;
                     if let Some(nbrs) = endpoint_links.get(&links[link].up_key) {
                         for id in nbrs {
-                            if *id != link && !links[*id].is_beyond_edge && !have_visited[*id] && !is_outlet_link[*id] {
+                            if *id != link
+                                && !links[*id].is_beyond_edge
+                                && !have_visited[*id]
+                                && !is_outlet_link[*id]
+                            {
                                 up_open += 1;
                             }
                         }
@@ -607,7 +638,11 @@ impl Tool for PruneVectorStreamsTool {
                         let mut down_open = 0usize;
                         if let Some(nbrs) = endpoint_links.get(&links[link].down_key) {
                             for id in nbrs {
-                                if *id != link && !links[*id].is_beyond_edge && !have_visited[*id] && !is_outlet_link[*id] {
+                                if *id != link
+                                    && !links[*id].is_beyond_edge
+                                    && !have_visited[*id]
+                                    && !is_outlet_link[*id]
+                                {
                                     down_open += 1;
                                 }
                             }
@@ -615,8 +650,10 @@ impl Tool for PruneVectorStreamsTool {
                         if down_open > 0 {
                             links[link].up_pt.clone()
                         } else {
-                            let z1 = sample_dem_at_coord(&dem, &links[link].up_pt).unwrap_or(f64::INFINITY);
-                            let z2 = sample_dem_at_coord(&dem, &links[link].down_pt).unwrap_or(f64::INFINITY);
+                            let z1 = sample_dem_at_coord(&dem, &links[link].up_pt)
+                                .unwrap_or(f64::INFINITY);
+                            let z2 = sample_dem_at_coord(&dem, &links[link].down_pt)
+                                .unwrap_or(f64::INFINITY);
                             if z1 <= z2 {
                                 links[link].up_pt.clone()
                             } else {
@@ -629,7 +666,11 @@ impl Tool for PruneVectorStreamsTool {
                     let mut candidates: Vec<(usize, f64)> = Vec::new();
                     let snap_sq = snap_distance * snap_distance;
                     for id in 0..links.len() {
-                        if !links[id].is_beyond_edge && have_visited[id] && is_exterior_link[id] && id != link {
+                        if !links[id].is_beyond_edge
+                            && have_visited[id]
+                            && is_exterior_link[id]
+                            && id != link
+                        {
                             let d1 = coord_distance_sq(&down_pt, &links[id].up_pt);
                             let d2 = coord_distance_sq(&down_pt, &links[id].down_pt);
                             let d = d1.min(d2);
@@ -752,7 +793,9 @@ impl Tool for PruneVectorStreamsTool {
 
         // Legacy-style tributary ID assignment, preserving main-stem branch by max link_mag.
         let mut trib_num = vec![0usize; links.len()];
-        let outlets: Vec<usize> = (0..links.len()).filter(|&i| downstream_of[i].is_none()).collect();
+        let outlets: Vec<usize> = (0..links.len())
+            .filter(|&i| downstream_of[i].is_none())
+            .collect();
         let mut current_trib = 0usize;
         let mut stack: Vec<usize> = Vec::new();
         for outlet in outlets {
@@ -764,10 +807,11 @@ impl Tool for PruneVectorStreamsTool {
             if upstream_of[i].is_empty() {
                 continue;
             }
-            let max_link = upstream_of[i]
-                .iter()
-                .copied()
-                .max_by(|a, b| link_mag[*a].partial_cmp(&link_mag[*b]).unwrap_or(std::cmp::Ordering::Equal));
+            let max_link = upstream_of[i].iter().copied().max_by(|a, b| {
+                link_mag[*a]
+                    .partial_cmp(&link_mag[*b])
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
             for up in &upstream_of[i] {
                 stack.push(*up);
                 if Some(*up) == max_link {
@@ -901,7 +945,11 @@ impl Tool for RiverCenterlinesTool {
             for col in 0..cols {
                 let z = water.get(0, row as isize, col as isize);
                 let i = rc_index(row, col, cols);
-                dist[i] = if water.is_nodata(z) || z <= 0.0 { 0.0 } else { f32::INFINITY };
+                dist[i] = if water.is_nodata(z) || z <= 0.0 {
+                    0.0
+                } else {
+                    f32::INFINITY
+                };
             }
         }
 
@@ -1025,8 +1073,18 @@ impl Tool for RiverCenterlinesTool {
         }
 
         // Traditional iterative line thinning.
-        let elements1 = [[6usize, 7, 0, 4, 3, 2], [0, 1, 2, 4, 5, 6], [2, 3, 4, 6, 7, 0], [4, 5, 6, 0, 1, 2]];
-        let elements2 = [[7usize, 0, 1, 3, 5], [1, 2, 3, 5, 7], [3, 4, 5, 7, 1], [5, 6, 7, 1, 3]];
+        let elements1 = [
+            [6usize, 7, 0, 4, 3, 2],
+            [0, 1, 2, 4, 5, 6],
+            [2, 3, 4, 6, 7, 0],
+            [4, 5, 6, 0, 1, 2],
+        ];
+        let elements2 = [
+            [7usize, 0, 1, 3, 5],
+            [1, 2, 3, 5, 7],
+            [3, 4, 5, 7, 1],
+            [5, 6, 7, 1, 3],
+        ];
         let vals1 = [0u8, 0, 0, 1, 1, 1];
         let vals2 = [0u8, 0, 0, 1, 1];
         let nbs = rc_neighbor_offsets();
@@ -1121,19 +1179,24 @@ impl Tool for RiverCenterlinesTool {
 
         // Legacy-like braid fix: connect nearby disconnected branch tips and remove isolated artifacts.
         let braid_offsets: [(isize, isize); 16] = [
-            (-2, -2), (-1, -2), (0, -2), (1, -2), (2, -2),
-            (-2, -1),                             (2, -1),
-            (-2, 0),                              (2, 0),
-            (-2, 1),                              (2, 1),
-            (-2, 2), (-1, 2), (0, 2), (1, 2), (2, 2),
+            (-2, -2),
+            (-1, -2),
+            (0, -2),
+            (1, -2),
+            (2, -2),
+            (-2, -1),
+            (2, -1),
+            (-2, 0),
+            (2, 0),
+            (-2, 1),
+            (2, 1),
+            (-2, 2),
+            (-1, 2),
+            (0, 2),
+            (1, 2),
+            (2, 2),
         ];
-        let braid_connector: [usize; 16] = [
-            6, 7, 7, 7, 0,
-            5,       1,
-            5,       1,
-            5,       1,
-            4, 3, 3, 3, 2,
-        ];
+        let braid_connector: [usize; 16] = [6, 7, 7, 7, 0, 5, 1, 5, 1, 5, 1, 4, 3, 3, 3, 2];
         for row in 0..rows {
             for col in 0..cols {
                 let i = rc_index(row, col, cols);
@@ -1232,7 +1295,9 @@ impl Tool for RiverCenterlinesTool {
                 for (dr, dc) in &nbs {
                     let rn = row as isize + *dr;
                     let cn = col as isize + *dc;
-                    if rc_in_bounds(rn, cn, rows, cols) && thin[rc_index(rn as usize, cn as usize, cols)] == 1 {
+                    if rc_in_bounds(rn, cn, rows, cols)
+                        && thin[rc_index(rn as usize, cn as usize, cols)] == 1
+                    {
                         deg += 1;
                     }
                 }
@@ -1289,7 +1354,9 @@ impl Tool for RiverCenterlinesTool {
             for (dr, dc) in &nbs {
                 let rn = r + *dr;
                 let cn = c + *dc;
-                if rc_in_bounds(rn, cn, rows, cols) && thin[rc_index(rn as usize, cn as usize, cols)] == 1 {
+                if rc_in_bounds(rn, cn, rows, cols)
+                    && thin[rc_index(rn as usize, cn as usize, cols)] == 1
+                {
                     v.push((rn, cn));
                 }
             }
@@ -1316,7 +1383,10 @@ impl Tool for RiverCenterlinesTool {
                         break;
                     }
                     visited[ci] = true;
-                    coords.push(Coord::xy(water.col_center_x(cur.1), water.row_center_y(cur.0)));
+                    coords.push(Coord::xy(
+                        water.col_center_x(cur.1),
+                        water.row_center_y(cur.0),
+                    ));
 
                     let mut nexts = get_neighbors(cur.0, cur.1, &thin);
                     if let Some(p) = prev {
@@ -1351,7 +1421,10 @@ impl Tool for RiverCenterlinesTool {
                         break;
                     }
                     visited[ci] = true;
-                    coords.push(Coord::xy(water.col_center_x(cur.1), water.row_center_y(cur.0)));
+                    coords.push(Coord::xy(
+                        water.col_center_x(cur.1),
+                        water.row_center_y(cur.0),
+                    ));
 
                     let mut nexts = get_neighbors(cur.0, cur.1, &thin);
                     if let Some(p) = prev {
@@ -1365,7 +1438,10 @@ impl Tool for RiverCenterlinesTool {
                     if cur == start {
                         let si = rc_index(start.0 as usize, start.1 as usize, cols);
                         if !visited[si] {
-                            coords.push(Coord::xy(water.col_center_x(start.1), water.row_center_y(start.0)));
+                            coords.push(Coord::xy(
+                                water.col_center_x(start.1),
+                                water.row_center_y(start.0),
+                            ));
                             visited[si] = true;
                         }
                         break;
@@ -1399,14 +1475,16 @@ impl Tool for RiverCenterlinesTool {
 
         if let Some(parent) = std::path::Path::new(&output_path).parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| ToolError::Execution(format!("failed creating output directory: {}", e)))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    ToolError::Execution(format!("failed creating output directory: {}", e))
+                })?;
             }
         }
 
         let fmt = detect_vector_format(&output_path)?;
-        wbvector::write(&layer, &output_path, fmt)
-            .map_err(|e| ToolError::Execution(format!("failed writing centerline vector: {}", e)))?;
+        wbvector::write(&layer, &output_path, fmt).map_err(|e| {
+            ToolError::Execution(format!("failed writing centerline vector: {}", e))
+        })?;
 
         Ok(build_result(output_path))
     }
@@ -1480,13 +1558,41 @@ impl Tool for RidgeAndValleyVectorsTool {
             category: ToolCategory::Terrain,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamDescriptor { name: "dem".to_string(), description: "Input DEM raster.".to_string(), required: true },
-                ToolParamDescriptor { name: "filter_size".to_string(), description: "Neighbourhood size for elevation percentile.".to_string(), required: false },
-                ToolParamDescriptor { name: "ep_threshold".to_string(), description: "Elevation percentile threshold [5, 50].".to_string(), required: false },
-                ToolParamDescriptor { name: "slope_threshold".to_string(), description: "Minimum slope threshold in degrees.".to_string(), required: false },
-                ToolParamDescriptor { name: "min_length".to_string(), description: "Minimum centreline length in cells.".to_string(), required: false },
-                ToolParamDescriptor { name: "output_ridges".to_string(), description: "Output ridge centrelines path.".to_string(), required: false },
-                ToolParamDescriptor { name: "output_valleys".to_string(), description: "Output valley centrelines path.".to_string(), required: false },
+                ToolParamDescriptor {
+                    name: "dem".to_string(),
+                    description: "Input DEM raster.".to_string(),
+                    required: true,
+                },
+                ToolParamDescriptor {
+                    name: "filter_size".to_string(),
+                    description: "Neighbourhood size for elevation percentile.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "ep_threshold".to_string(),
+                    description: "Elevation percentile threshold [5, 50].".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "slope_threshold".to_string(),
+                    description: "Minimum slope threshold in degrees.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "min_length".to_string(),
+                    description: "Minimum centreline length in cells.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output_ridges".to_string(),
+                    description: "Output ridge centrelines path.".to_string(),
+                    required: false,
+                },
+                ToolParamDescriptor {
+                    name: "output_valleys".to_string(),
+                    description: "Output valley centrelines path.".to_string(),
+                    required: false,
+                },
             ],
             defaults,
             examples: vec![ToolExample {
@@ -1494,34 +1600,57 @@ impl Tool for RidgeAndValleyVectorsTool {
                 description: "Extract ridge and valley vectors from a DEM.".to_string(),
                 args: example_args,
             }],
-            tags: vec!["geomorphometry".to_string(), "ridges".to_string(), "valleys".to_string(), "vector".to_string(), "legacy-port".to_string()],
+            tags: vec![
+                "geomorphometry".to_string(),
+                "ridges".to_string(),
+                "valleys".to_string(),
+                "vector".to_string(),
+                "legacy-port".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        parse_raster_path_arg(args, "dem")
-            .or_else(|_| parse_raster_path_arg(args, "input"))?;
+        parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
         Ok(())
     }
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-        let dem_path = parse_raster_path_arg(args, "dem")
-            .or_else(|_| parse_raster_path_arg(args, "input"))?;
-        let filter_size = args.get("filter_size").and_then(|v| v.as_u64()).unwrap_or(11) as usize;
-        let mut ep_threshold = args.get("ep_threshold").and_then(|v| v.as_f64()).unwrap_or(30.0);
+        let dem_path =
+            parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
+        let filter_size = args
+            .get("filter_size")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(11) as usize;
+        let mut ep_threshold = args
+            .get("ep_threshold")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(30.0);
         ep_threshold = ep_threshold.clamp(5.0, 50.0);
-        let slope_threshold = args.get("slope_threshold").and_then(|v| v.as_f64()).unwrap_or(0.0).max(0.0);
-        let min_length = args.get("min_length").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
-        let ridges_path = args.get("output_ridges").and_then(|v| v.as_str())
+        let slope_threshold = args
+            .get("slope_threshold")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0)
+            .max(0.0);
+        let min_length = args
+            .get("min_length")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(20) as usize;
+        let ridges_path = args
+            .get("output_ridges")
+            .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("{}_ridges.geojson", dem_path));
-        let valleys_path = args.get("output_valleys").and_then(|v| v.as_str())
+        let valleys_path = args
+            .get("output_valleys")
+            .and_then(|v| v.as_str())
             .map(|s| s.to_string())
             .unwrap_or_else(|| format!("{}_valleys.geojson", dem_path));
 
         // Step 1: Compute elevation percentile
-        ctx.progress.info("ridge_and_valley_vectors: computing elevation percentile");
+        ctx.progress
+            .info("ridge_and_valley_vectors: computing elevation percentile");
         let mut a = ToolArgs::new();
         a.insert("input".to_string(), json!(dem_path));
         a.insert("filter_size_x".to_string(), json!(filter_size));
@@ -1531,14 +1660,16 @@ impl Tool for RidgeAndValleyVectorsTool {
         let ep_path = get_path_from_result(&r)?;
 
         // Step 2: Compute slope
-        ctx.progress.info("ridge_and_valley_vectors: computing slope");
+        ctx.progress
+            .info("ridge_and_valley_vectors: computing slope");
         let mut a = ToolArgs::new();
         a.insert("input".to_string(), json!(dem_path));
         let r = SlopeTool.run(&a, ctx)?;
         let slope_path = get_path_from_result(&r)?;
 
         // Step 3: Build ridge and valley binary rasters
-        ctx.progress.info("ridge_and_valley_vectors: building ridge/valley masks");
+        ctx.progress
+            .info("ridge_and_valley_vectors: building ridge/valley masks");
         let ep = load_raster_mem(&ep_path, "ep")?;
         let slope = load_raster_mem(&slope_path, "slope")?;
         let rows = ep.rows;
@@ -1560,8 +1691,16 @@ impl Tool for RidgeAndValleyVectorsTool {
                     (-1.0, -1.0)
                 } else {
                     (
-                        if ep_v > ridge_threshold && sl_v > slope_threshold { 1.0 } else { 0.0 },
-                        if ep_v < ep_threshold && sl_v > slope_threshold { 1.0 } else { 0.0 },
+                        if ep_v > ridge_threshold && sl_v > slope_threshold {
+                            1.0
+                        } else {
+                            0.0
+                        },
+                        if ep_v < ep_threshold && sl_v > slope_threshold {
+                            1.0
+                        } else {
+                            0.0
+                        },
                     )
                 }
             })
@@ -1575,19 +1714,25 @@ impl Tool for RidgeAndValleyVectorsTool {
         let valley_mem = raster_mem(valley_raster);
 
         // Step 4: Remove small holes, then morphological closing, then centrelines — for ridges
-        ctx.progress.info("ridge_and_valley_vectors: extracting ridge centrelines");
+        ctx.progress
+            .info("ridge_and_valley_vectors: extracting ridge centrelines");
         let ridge_vec_path = run_ridge_valley_pipeline(ctx, &ridge_mem, min_length, &ridges_path)?;
 
         // Step 5: Same pipeline for valleys
-        ctx.progress.info("ridge_and_valley_vectors: extracting valley centrelines");
-        let valley_vec_path = run_ridge_valley_pipeline(ctx, &valley_mem, min_length, &valleys_path)?;
+        ctx.progress
+            .info("ridge_and_valley_vectors: extracting valley centrelines");
+        let valley_vec_path =
+            run_ridge_valley_pipeline(ctx, &valley_mem, min_length, &valleys_path)?;
 
         let mut outputs = std::collections::BTreeMap::new();
         outputs.insert("ridges_path".to_string(), json!(ridge_vec_path));
         outputs.insert("valleys_path".to_string(), json!(valley_vec_path));
         // Also expose as "path" (ridges) for single-output consumers
         outputs.insert("path".to_string(), json!(ridges_path));
-        Ok(ToolRunResult { outputs, ..Default::default() })
+        Ok(ToolRunResult {
+            outputs,
+            ..Default::default()
+        })
     }
 }
 
@@ -1603,9 +1748,12 @@ fn run_ridge_valley_pipeline(
     a.insert("threshold".to_string(), json!(10));
     a.insert("use_diagonals".to_string(), json!(true));
     let r = RemoveRasterPolygonHolesTool.run(&a, ctx)?;
-    let no_holes_path = r.outputs.get("path")
+    let no_holes_path = r
+        .outputs
+        .get("path")
         .and_then(|v: &serde_json::Value| v.as_str())
-        .ok_or_else(|| ToolError::Execution("remove_holes returned no path".to_string()))?.to_string();
+        .ok_or_else(|| ToolError::Execution("remove_holes returned no path".to_string()))?
+        .to_string();
 
     // Morphological closing (simplify shapes)
     let mut a = ToolArgs::new();
@@ -1613,9 +1761,12 @@ fn run_ridge_valley_pipeline(
     a.insert("filter_size_x".to_string(), json!(5));
     a.insert("filter_size_y".to_string(), json!(5));
     let r = ClosingTool.run(&a, ctx)?;
-    let closed_path = r.outputs.get("path")
+    let closed_path = r
+        .outputs
+        .get("path")
         .and_then(|v: &serde_json::Value| v.as_str())
-        .ok_or_else(|| ToolError::Execution("closing returned no path".to_string()))?.to_string();
+        .ok_or_else(|| ToolError::Execution("closing returned no path".to_string()))?
+        .to_string();
 
     // Extract centrelines via RiverCenterlinesTool
     let mut a = ToolArgs::new();
@@ -1624,7 +1775,9 @@ fn run_ridge_valley_pipeline(
     a.insert("search_radius".to_string(), json!(9));
     a.insert("output".to_string(), json!(output_path));
     let r = RiverCenterlinesTool.run(&a, ctx)?;
-    r.outputs.get("path").and_then(|v| v.as_str())
+    r.outputs
+        .get("path")
+        .and_then(|v| v.as_str())
         .map(|s| s.to_string())
         .ok_or_else(|| ToolError::Execution("river_centerlines returned no path".to_string()))
 }

@@ -16,9 +16,21 @@ Interpret results as validation of variogram model fit. Poor CV statistics sugge
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "training_points", description: "Training point layer", required: true },
-                ToolParamSpec { name: "field", description: "Field with values", required: true },
-                ToolParamSpec { name: "variogram_json", description: "Fitted variogram JSON", required: true },
+                ToolParamSpec {
+                    name: "training_points",
+                    description: "Training point layer",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "field",
+                    description: "Field with values",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "variogram_json",
+                    description: "Fitted variogram JSON",
+                    required: true,
+                },
             ],
         }
     }
@@ -48,7 +60,7 @@ Interpret results as validation of variogram model fit. Poor CV statistics sugge
                 description: "Validate kriging model using LOOCV".to_string(),
                 args: example_args,
             }],
-            tags: vec!["geostatistics".to_string(), "kriging".to_string(), "model-validation".to_string(), "statistics".to_string()],
+            tags: vec!["geostatistics".to_string(), "kriging".to_string(), "model-validation".to_string(), "statistics".to_string(), "spatial_statistics".to_string()],
             stability: ToolStability::Stable,
         }
     }
@@ -62,7 +74,7 @@ Interpret results as validation of variogram model fit. Poor CV statistics sugge
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         ctx.progress.info("Kriging Cross-Validation (LOOCV)");
-        
+
         let training = load_vector_arg(args, "training_points")?;
         let field_name = parse_string_arg(args, "field")?;
         let vario_json_str = parse_string_arg(args, "variogram_json")?;
@@ -71,10 +83,11 @@ Interpret results as validation of variogram model fit. Poor CV statistics sugge
         let vario_obj: Value = serde_json::from_str(&vario_json_str)
             .map_err(|e| ToolError::Execution(format!("Variogram JSON parse error: {}", e)))?;
 
-        let family_str = vario_obj.get("family")
+        let family_str = vario_obj
+            .get("family")
             .and_then(|v| v.as_str())
             .unwrap_or("exponential");
-        
+
         let family = match family_str {
             "spherical" => VariogramModelFamily::Spherical,
             "exponential" => VariogramModelFamily::Exponential,
@@ -82,11 +95,26 @@ Interpret results as validation of variogram model fit. Poor CV statistics sugge
             _ => return Err(ToolError::Execution("Invalid variogram family".to_string())),
         };
 
-        let nugget = vario_obj.get("nugget").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let partial_sill = vario_obj.get("partial_sill").and_then(|v| v.as_f64()).unwrap_or(1.0);
-        let range = vario_obj.get("range").and_then(|v| v.as_f64()).unwrap_or(100.0);
-        let wrss = vario_obj.get("wrss").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let condition_number = vario_obj.get("condition_number").and_then(|v| v.as_f64()).unwrap_or(1.0);
+        let nugget = vario_obj
+            .get("nugget")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let partial_sill = vario_obj
+            .get("partial_sill")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0);
+        let range = vario_obj
+            .get("range")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(100.0);
+        let wrss = vario_obj
+            .get("wrss")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+        let condition_number = vario_obj
+            .get("condition_number")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(1.0);
 
         let vario = wbspatialstats::variogram::VariogramModel {
             family,
@@ -98,8 +126,9 @@ Interpret results as validation of variogram model fit. Poor CV statistics sugge
         };
 
         // Extract training points
-        let field_idx = training.schema.field_index(&field_name)
-            .ok_or_else(|| ToolError::Validation(format!("field '{}' does not exist", field_name)))?;
+        let field_idx = training.schema.field_index(&field_name).ok_or_else(|| {
+            ToolError::Validation(format!("field '{}' does not exist", field_name))
+        })?;
 
         let mut coords = Vec::new();
         let mut values = Vec::new();
@@ -125,11 +154,14 @@ Interpret results as validation of variogram model fit. Poor CV statistics sugge
 
         if coords.len() < 4 {
             return Err(ToolError::Execution(
-                "At least 4 training points required for LOOCV".to_string()
+                "At least 4 training points required for LOOCV".to_string(),
             ));
         }
 
-        ctx.progress.info(&format!("Running LOOCV with {} training points", coords.len()));
+        ctx.progress.info(&format!(
+            "Running LOOCV with {} training points",
+            coords.len()
+        ));
 
         // Run LOOCV
         let cv_metrics = LeaveOneOutCV::validate(&coords, &values, &vario)
@@ -153,9 +185,14 @@ Interpret results as validation of variogram model fit. Poor CV statistics sugge
             }),
         );
 
-        ctx.progress.info(&format!("LOOCV complete: RMSE={:.3}, correlation={:.3}", 
-            cv_metrics.rmse, cv_metrics.correlation));
+        ctx.progress.info(&format!(
+            "LOOCV complete: RMSE={:.3}, correlation={:.3}",
+            cv_metrics.rmse, cv_metrics.correlation
+        ));
 
-        Ok(ToolRunResult { outputs, ..Default::default() })
+        Ok(ToolRunResult {
+            outputs,
+            ..Default::default()
+        })
     }
 }

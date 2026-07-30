@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use rayon::prelude::*;
 use serde_json::json;
-use wbprojection::{Crs, EpsgIdentifyPolicy, identify_epsg_from_wkt_with_policy};
-use wbcore::{PercentCoalescer, 
-    parse_optional_output_path, parse_raster_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor,
-    ToolParamSpec, ToolRunResult, ToolStability,
+use wbcore::{
+    parse_optional_output_path, parse_raster_path_arg, LicenseTier, PercentCoalescer, Tool,
+    ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
+    ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
 };
+use wbprojection::{identify_epsg_from_wkt_with_policy, Crs, EpsgIdentifyPolicy};
 use wbraster::{Raster, RasterFormat};
 
 use crate::memory_store;
@@ -55,12 +55,24 @@ impl CurvatureOp {
 
     fn summary(self) -> &'static str {
         match self {
-            Self::Plan => r#"Calculates plan (contour) curvature measuring convergence/divergence of flow across contour lines. Positive values (convergent) indicate flow concentration toward center (concave); negative values (divergent) indicate flow dispersal away from center (convex). Identifies lateral flow concentration zones (valleys) vs. dispersal zones (ridges). Essential for predicting soil moisture distribution and landslide susceptibility."#,
-            Self::Profile => r#"Calculates profile (downslope) curvature measuring flow acceleration/deceleration along slope direction. Positive values (concave) indicate flow acceleration zones (erosional); negative values (convex) indicate flow deceleration zones (depositional). Reveals slope form: concave (valley bottoms, erosion), convex (ridges, material removal), linear (transitional)."#,
-            Self::Tangential => r#"Calculates tangential curvature (E-W direction component), similar to plan curvature but directional. Used for comprehensive curvature characterization capturing lateral flow divergence perpendicular to slope direction. Often combined with profile for full 3D curvature understanding."#,
-            Self::Total => r#"Calculates total curvature (quadratic mean of principal curvatures). Scalar metric independent of direction. High values indicate highly curved terrain (peaks, pits); low values indicate planar terrain. Useful as dimensionless roughness metric for terrain classification and anomaly detection."#,
-            Self::Mean => r#"Calculates mean curvature (average of principal curvatures). Related to total curvature but emphasizes surface smoothness. Values close to 0 indicate smooth terrain; high values indicate abrupt curvature changes. Useful for surface characterization and breakline detection."#,
-            Self::Gaussian => r#"Calculates Gaussian (intrinsic) curvature (product of principal curvatures). Indicates local surface topology: positive (bowl/dome), negative (saddle), zero (cylindrical). Classifies terrain into landform categories: convex features (ridges), concave features (valleys), saddle features (passes/gaps). Used in advanced landform classification."#,
+            Self::Plan => {
+                r#"Calculates plan (contour) curvature measuring convergence/divergence of flow across contour lines. Positive values (convergent) indicate flow concentration toward center (concave); negative values (divergent) indicate flow dispersal away from center (convex). Identifies lateral flow concentration zones (valleys) vs. dispersal zones (ridges). Essential for predicting soil moisture distribution and landslide susceptibility."#
+            }
+            Self::Profile => {
+                r#"Calculates profile (downslope) curvature measuring flow acceleration/deceleration along slope direction. Positive values (concave) indicate flow acceleration zones (erosional); negative values (convex) indicate flow deceleration zones (depositional). Reveals slope form: concave (valley bottoms, erosion), convex (ridges, material removal), linear (transitional)."#
+            }
+            Self::Tangential => {
+                r#"Calculates tangential curvature (E-W direction component), similar to plan curvature but directional. Used for comprehensive curvature characterization capturing lateral flow divergence perpendicular to slope direction. Often combined with profile for full 3D curvature understanding."#
+            }
+            Self::Total => {
+                r#"Calculates total curvature (quadratic mean of principal curvatures). Scalar metric independent of direction. High values indicate highly curved terrain (peaks, pits); low values indicate planar terrain. Useful as dimensionless roughness metric for terrain classification and anomaly detection."#
+            }
+            Self::Mean => {
+                r#"Calculates mean curvature (average of principal curvatures). Related to total curvature but emphasizes surface smoothness. Values close to 0 indicate smooth terrain; high values indicate abrupt curvature changes. Useful for surface characterization and breakline detection."#
+            }
+            Self::Gaussian => {
+                r#"Calculates Gaussian (intrinsic) curvature (product of principal curvatures). Indicates local surface topology: positive (bowl/dome), negative (saddle), zero (cylindrical). Classifies terrain into landform categories: convex features (ridges), concave features (valleys), saddle features (passes/gaps). Used in advanced landform classification."#
+            }
         }
     }
 
@@ -122,13 +134,12 @@ impl PlanCurvatureTool {
     }
 
     fn raster_is_geographic(input: &Raster) -> bool {
-        let epsg = input.crs.epsg.or_else(|| {
-            input
-                .crs
-                .wkt
-                .as_deref()
-                .and_then(|w| identify_epsg_from_wkt_with_policy(w, EpsgIdentifyPolicy::Lenient))
-        });
+        let epsg =
+            input.crs.epsg.or_else(|| {
+                input.crs.wkt.as_deref().and_then(|w| {
+                    identify_epsg_from_wkt_with_policy(w, EpsgIdentifyPolicy::Lenient)
+                })
+            });
 
         if let Some(code) = epsg {
             if let Ok(crs) = Crs::from_epsg(code) {
@@ -147,26 +158,41 @@ impl PlanCurvatureTool {
         let lon2 = lon2_deg.to_radians();
         let dlat = lat2 - lat1;
         let dlon = lon2 - lon1;
-        let a = (dlat / 2.0).sin().powi(2)
-            + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
+        let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
         let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
         r * c
     }
 
-    fn neighbourhood(input: &Raster, band: isize, row: isize, col: isize, z_factor: f64) -> Option<[f64; 9]> {
+    fn neighbourhood(
+        input: &Raster,
+        band: isize,
+        row: isize,
+        col: isize,
+        z_factor: f64,
+    ) -> Option<[f64; 9]> {
         let z5 = input.get(band, row, col);
         if input.is_nodata(z5) {
             return None;
         }
         let offsets = [
-            (-1isize, -1isize), (0, -1), (1, -1),
-            (-1, 0),          (0, 0),  (1, 0),
-            (-1, 1),          (0, 1),  (1, 1),
+            (-1isize, -1isize),
+            (0, -1),
+            (1, -1),
+            (-1, 0),
+            (0, 0),
+            (1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
         ];
         let mut z = [0.0f64; 9];
         for (i, (ox, oy)) in offsets.iter().enumerate() {
             let v = input.get(band, row + *oy, col + *ox);
-            z[i] = if input.is_nodata(v) { z5 * z_factor } else { v * z_factor };
+            z[i] = if input.is_nodata(v) {
+                z5 * z_factor
+            } else {
+                v * z_factor
+            };
         }
         Some(z)
     }
@@ -211,9 +237,12 @@ impl PlanCurvatureTool {
 
         let phi1 = input.row_center_y(row);
         let lambda1 = input.col_center_x(col);
-        let b = Self::haversine_distance_m(phi1, lambda1, phi1, input.col_center_x(col - 1)).max(f64::EPSILON);
-        let d = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(row + 1), lambda1).max(f64::EPSILON);
-        let e = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(row - 1), lambda1).max(f64::EPSILON);
+        let b = Self::haversine_distance_m(phi1, lambda1, phi1, input.col_center_x(col - 1))
+            .max(f64::EPSILON);
+        let d = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(row + 1), lambda1)
+            .max(f64::EPSILON);
+        let e = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(row - 1), lambda1)
+            .max(f64::EPSILON);
 
         let a = Self::haversine_distance_m(
             input.row_center_y(row + 1),
@@ -235,15 +264,13 @@ impl PlanCurvatureTool {
             + a * a * (z[6] + z[8] - 2.0 * z[7]))
             / (a.powi(4) + b.powi(4) + c.powi(4));
 
-        let t = 2.0
-            / (3.0 * d * e * (d + e) * (a.powi(4) + b.powi(4) + c.powi(4)))
+        let t = 2.0 / (3.0 * d * e * (d + e) * (a.powi(4) + b.powi(4) + c.powi(4)))
             * ((d * (a.powi(4) + b.powi(4) + b * b * c * c) - c * c * e * (a * a - b * b))
                 * (z[0] + z[2])
                 - (d * (a.powi(4) + c.powi(4) + b * b * c * c)
                     + e * (a.powi(4) + c.powi(4) + a * a * b * b))
                     * (z[3] + z[5])
-                + (e * (b.powi(4) + c.powi(4) + a * a * b * b)
-                    + a * a * d * (b * b - c * c))
+                + (e * (b.powi(4) + c.powi(4) + a * a * b * b) + a * a * d * (b * b - c * c))
                     * (z[6] + z[8])
                 + d * (b.powi(4) * (z[1] - 3.0 * z[4])
                     + c.powi(4) * (3.0 * z[1] - z[4])
@@ -251,8 +278,7 @@ impl PlanCurvatureTool {
                 + e * (a.powi(4) * (3.0 * z[7] - z[4])
                     + b.powi(4) * (z[7] - 3.0 * z[4])
                     + (c.powi(4) - 2.0 * a * a * b * b) * (z[7] - z[4]))
-                - 2.0 * (a * a * d * (b * b - c * c) * z[7]
-                    - c * c * e * (a * a - b * b) * z[1]));
+                - 2.0 * (a * a * d * (b * b - c * c) * z[7] - c * c * e * (a * a - b * b) * z[1]));
 
         let s = (c * (a * a * (d + e) + b * b * e) * (z[2] - z[0])
             - b * (a * a * d - c * c * e) * (z[3] - z[5])
@@ -273,14 +299,17 @@ impl PlanCurvatureTool {
                 - (e * e * (b.powi(4) + c.powi(4) + a * a * b * b)
                     - a * a * d * d * (b * b - c * c))
                     * (z[6] + z[8])
-                + d * d * (b.powi(4) * (z[1] - 3.0 * z[4])
-                    + c.powi(4) * (3.0 * z[1] - z[4])
-                    + (a.powi(4) - 2.0 * b * b * c * c) * (z[1] - z[4]))
-                + e * e * (a.powi(4) * (z[4] - 3.0 * z[7])
-                    + b.powi(4) * (3.0 * z[4] - z[7])
-                    + (c.powi(4) - 2.0 * a * a * b * b) * (z[4] - z[7]))
-                - 2.0 * (a * a * d * d * (b * b - c * c) * z[7]
-                    + c * c * e * e * (a * a - b * b) * z[1]));
+                + d * d
+                    * (b.powi(4) * (z[1] - 3.0 * z[4])
+                        + c.powi(4) * (3.0 * z[1] - z[4])
+                        + (a.powi(4) - 2.0 * b * b * c * c) * (z[1] - z[4]))
+                + e * e
+                    * (a.powi(4) * (z[4] - 3.0 * z[7])
+                        + b.powi(4) * (3.0 * z[4] - z[7])
+                        + (c.powi(4) - 2.0 * a * a * b * b) * (z[4] - z[7]))
+                - 2.0
+                    * (a * a * d * d * (b * b - c * c) * z[7]
+                        + c * c * e * e * (a * a - b * b) * z[1]));
 
         Some((p, q, r2, s, t))
     }
@@ -314,10 +343,12 @@ impl PlanCurvatureTool {
     }
 
     #[allow(dead_code)]
-    fn projected_5x5_derivs(z: &[f64; 25], res: f64) -> (f64, f64, f64, f64, f64, f64, f64, f64, f64) {
+    fn projected_5x5_derivs(
+        z: &[f64; 25],
+        res: f64,
+    ) -> (f64, f64, f64, f64, f64, f64, f64, f64, f64) {
         let r = 1.0 / (35.0 * res * res)
-            * (2.0
-                * (z[0] + z[4] + z[5] + z[9] + z[10] + z[14] + z[15] + z[19] + z[20] + z[24])
+            * (2.0 * (z[0] + z[4] + z[5] + z[9] + z[10] + z[14] + z[15] + z[19] + z[20] + z[24])
                 - 2.0 * (z[2] + z[7] + z[12] + z[17] + z[22])
                 - z[1]
                 - z[3]
@@ -345,92 +376,41 @@ impl PlanCurvatureTool {
                 - z[19]);
 
         let s = 1.0 / (100.0 * res * res)
-            * (z[8]
-                + z[16]
-                - z[6]
-                - z[18]
+            * (z[8] + z[16] - z[6] - z[18]
                 + 4.0 * (z[4] + z[20] - z[0] - z[24])
                 + 2.0 * (z[3] + z[9] + z[15] + z[21] - z[1] - z[5] - z[19] - z[23]));
 
         let p = 1.0 / (420.0 * res)
             * (44.0 * (z[3] + z[23] - z[1] - z[21])
-                + 31.0
-                    * (z[0] + z[20] - z[4] - z[24] + 2.0 * (z[8] + z[18] - z[6] - z[16]))
+                + 31.0 * (z[0] + z[20] - z[4] - z[24] + 2.0 * (z[8] + z[18] - z[6] - z[16]))
                 + 17.0 * (z[14] - z[10] + 4.0 * (z[13] - z[11]))
                 + 5.0 * (z[9] + z[19] - z[5] - z[15]));
 
         let q = 1.0 / (420.0 * res)
             * (44.0 * (z[5] + z[9] - z[15] - z[19])
-                + 31.0
-                    * (z[20] + z[24] - z[0] - z[4] + 2.0 * (z[6] + z[8] - z[16] - z[18]))
+                + 31.0 * (z[20] + z[24] - z[0] - z[4] + 2.0 * (z[6] + z[8] - z[16] - z[18]))
                 + 17.0 * (z[2] - z[22] + 4.0 * (z[7] - z[17]))
                 + 5.0 * (z[1] + z[3] - z[21] - z[23]));
 
         let h = 1.0 / (10.0 * res.powi(3))
-            * (z[0]
-                + z[1]
-                + z[2]
-                + z[3]
-                + z[4]
-                - z[20]
-                - z[21]
-                - z[22]
-                - z[23]
-                - z[24]
-                + 2.0
-                    * (z[15] + z[16] + z[17] + z[18] + z[19]
-                        - z[5]
-                        - z[6]
-                        - z[7]
-                        - z[8]
-                        - z[9]));
+            * (z[0] + z[1] + z[2] + z[3] + z[4] - z[20] - z[21] - z[22] - z[23] - z[24]
+                + 2.0 * (z[15] + z[16] + z[17] + z[18] + z[19] - z[5] - z[6] - z[7] - z[8] - z[9]));
 
         let g = 1.0 / (10.0 * res.powi(3))
-            * (z[4]
-                + z[9]
-                + z[14]
-                + z[19]
-                + z[24]
-                - z[0]
-                - z[5]
-                - z[10]
-                - z[15]
-                - z[20]
+            * (z[4] + z[9] + z[14] + z[19] + z[24] - z[0] - z[5] - z[10] - z[15] - z[20]
                 + 2.0
-                    * (z[1] + z[6] + z[11] + z[16] + z[21]
-                        - z[3]
-                        - z[8]
-                        - z[13]
-                        - z[18]
-                        - z[23]));
+                    * (z[1] + z[6] + z[11] + z[16] + z[21] - z[3] - z[8] - z[13] - z[18] - z[23]));
 
         let m = 1.0 / (70.0 * res.powi(3))
-            * (z[6]
-                + z[16]
-                - z[8]
-                - z[18]
+            * (z[6] + z[16] - z[8] - z[18]
                 + 4.0 * (z[4] + z[10] + z[24] - z[0] - z[14] - z[20])
                 + 2.0
-                    * (z[3] + z[5] + z[11] + z[15] + z[23]
-                        - z[1]
-                        - z[9]
-                        - z[13]
-                        - z[19]
-                        - z[21]));
+                    * (z[3] + z[5] + z[11] + z[15] + z[23] - z[1] - z[9] - z[13] - z[19] - z[21]));
 
         let k = 1.0 / (70.0 * res.powi(3))
-            * (z[16]
-                + z[18]
-                - z[6]
-                - z[8]
+            * (z[16] + z[18] - z[6] - z[8]
                 + 4.0 * (z[0] + z[4] + z[22] - z[2] - z[20] - z[24])
-                + 2.0
-                    * (z[5] + z[9] + z[17] + z[21] + z[23]
-                        - z[1]
-                        - z[3]
-                        - z[7]
-                        - z[15]
-                        - z[19]));
+                + 2.0 * (z[5] + z[9] + z[17] + z[21] + z[23] - z[1] - z[3] - z[7] - z[15] - z[19]));
 
         (p, q, r, s, t, h, g, m, k)
     }
@@ -591,8 +571,7 @@ impl PlanCurvatureTool {
                         }
                     }
 
-                    next
-                        .par_chunks_mut(cols)
+                    next.par_chunks_mut(cols)
                         .enumerate()
                         .for_each(|(row, row_out)| {
                             let mut y1 = row as isize - midpoint - 1;
@@ -625,8 +604,7 @@ impl PlanCurvatureTool {
                                 let x1u = x1 as usize;
                                 let x2u = x2 as usize;
 
-                                let num_cells = get_u32(&i_n, y2u, x2u)
-                                    + get_u32(&i_n, y1u, x1u)
+                                let num_cells = get_u32(&i_n, y2u, x2u) + get_u32(&i_n, y1u, x1u)
                                     - get_u32(&i_n, y1u, x2u)
                                     - get_u32(&i_n, y2u, x1u);
 
@@ -843,7 +821,11 @@ impl PlanCurvatureTool {
         curv
     }
 
-    fn run_with_op(op: CurvatureOp, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_with_op(
+        op: CurvatureOp,
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let z_factor = Self::parse_z_factor(args);
@@ -881,9 +863,9 @@ impl PlanCurvatureTool {
                                 let row = row_idx as isize;
                                 for c in 0..cols {
                                     let col = c as isize;
-                                    let Some((p, q, r2, s, t)) =
-                                        Self::derivatives_geographic(input, band, row, col, z_factor)
-                                    else {
+                                    let Some((p, q, r2, s, t)) = Self::derivatives_geographic(
+                                        input, band, row, col, z_factor,
+                                    ) else {
                                         continue;
                                     };
 
@@ -933,7 +915,11 @@ impl PlanCurvatureTool {
                                     }
                                     let z_center = z5_raw * z_factor;
                                     let read_scaled = |rr: isize, cc: isize| -> f64 {
-                                        if rr < 0 || cc < 0 || rr >= rows as isize || cc >= cols as isize {
+                                        if rr < 0
+                                            || cc < 0
+                                            || rr >= rows as isize
+                                            || cc >= cols as isize
+                                        {
                                             return z_center;
                                         }
                                         let v = band_buf[rr as usize * cols + cc as usize];
@@ -973,7 +959,8 @@ impl PlanCurvatureTool {
                                         read_scaled(row + 2, col + 2),
                                     ];
 
-                                    let (p, q, r2, s, t, _, _, _, _) = Self::projected_5x5_derivs(&z, res);
+                                    let (p, q, r2, s, t, _, _, _, _) =
+                                        Self::projected_5x5_derivs(&z, res);
                                     row_out[c] = Self::curvature_value(
                                         op,
                                         p,
@@ -997,12 +984,12 @@ impl PlanCurvatureTool {
             drop(tx);
 
             for _ in 0..rows {
-                let (r, row) = rx
-                    .recv()
-                    .map_err(|e| ToolError::Execution(format!("failed receiving row data: {}", e)))?;
-                output
-                    .set_row_slice(band, r as isize, &row)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                let (r, row) = rx.recv().map_err(|e| {
+                    ToolError::Execution(format!("failed receiving row data: {}", e))
+                })?;
+                output.set_row_slice(band, r as isize, &row).map_err(|e| {
+                    ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                })?;
             }
 
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
@@ -1090,7 +1077,13 @@ mod tests {
         let input_path = memory_store::make_raster_memory_path(&id);
         args.insert("input".to_string(), json!(input_path));
         let result = tool.run(args, &make_ctx()).unwrap();
-        let out_path = result.outputs.get("path").unwrap().as_str().unwrap().to_string();
+        let out_path = result
+            .outputs
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         let out_id = memory_store::raster_path_to_id(&out_path).unwrap();
         memory_store::get_raster_by_id(out_id).unwrap()
     }
@@ -1101,7 +1094,11 @@ mod tests {
         args.insert("z_factor".to_string(), json!(1.0));
         args.insert("log_transform".to_string(), json!(false));
 
-        let plan = run_with_memory(&PlanCurvatureTool, &mut args.clone(), make_constant_raster(20, 20, 10.0));
+        let plan = run_with_memory(
+            &PlanCurvatureTool,
+            &mut args.clone(),
+            make_constant_raster(20, 20, 10.0),
+        );
         let prof = run_with_memory(
             &ProfileCurvatureTool,
             &mut args.clone(),

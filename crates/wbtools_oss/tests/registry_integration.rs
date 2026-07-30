@@ -1,9 +1,11 @@
 use serde_json::json;
 use std::sync::Mutex;
 use wbcore::{CapabilityProvider, LicenseTier, ProgressSink, ToolArgs, ToolContext, ToolError};
-use wbtools_oss::{register_default_tools, ToolRegistry};
 use wblidar::{Crs as LidarCrs, GpsTime, PointCloud, PointRecord, Rgb16};
-use wbraster::{memory_store as raster_memory_store, CrsInfo, DataType, Raster, RasterConfig, RasterFormat};
+use wbraster::{
+    memory_store as raster_memory_store, CrsInfo, DataType, Raster, RasterConfig, RasterFormat,
+};
+use wbtools_oss::{register_default_tools, ToolRegistry};
 use wbvector::{Coord, Feature, Geometry, GeometryType, Layer, VectorFormat};
 
 struct OpenOnly;
@@ -299,7 +301,10 @@ fn vehicle_routing_cvrp_builds_capacity_constrained_routes() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(12.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(12.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -316,7 +321,9 @@ fn vehicle_routing_cvrp_builds_capacity_constrained_routes() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
     for (x, demand) in [(1.0, 2.0), (2.5, 2.0), (10.0, 2.0)] {
         stops
             .add_feature(
@@ -328,13 +335,25 @@ fn vehicle_routing_cvrp_builds_capacity_constrained_routes() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("vehicle_capacity".to_string(), json!(4.0));
     args.insert("max_vehicles".to_string(), json!(2));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
     args.insert(
         "assignment_output".to_string(),
         json!(assign_out.to_string_lossy().to_string()),
@@ -345,10 +364,18 @@ fn vehicle_routing_cvrp_builds_capacity_constrained_routes() {
         .expect("vehicle_routing_cvrp run");
 
     let routes = wbvector::read(&routes_out).expect("read routes");
-    assert_eq!(routes.features.len(), 2, "expected two routes under capacity 4.0");
+    assert_eq!(
+        routes.features.len(),
+        2,
+        "expected two routes under capacity 4.0"
+    );
 
     let assignments = wbvector::read(&assign_out).expect("read assignments");
-    assert_eq!(assignments.features.len(), 3, "all stops should be assigned");
+    assert_eq!(
+        assignments.features.len(),
+        3,
+        "all stops should be assigned"
+    );
 
     let served = result
         .outputs
@@ -389,7 +416,10 @@ fn vehicle_routing_cvrp_respects_max_route_distance() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(8.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(8.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -406,7 +436,9 @@ fn vehicle_routing_cvrp_respects_max_route_distance() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
     for x in [2.0, 4.0, 6.0] {
         stops
             .add_feature(
@@ -418,23 +450,56 @@ fn vehicle_routing_cvrp_respects_max_route_distance() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("vehicle_capacity".to_string(), json!(10.0));
     args.insert("max_vehicles".to_string(), json!(2));
     args.insert("max_route_distance".to_string(), json!(8.0));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_cvrp", &args, &context(&caps))
         .expect("vehicle_routing_cvrp run");
 
-    assert_eq!(result.outputs.get("route_count").and_then(|v| v.as_u64()), Some(1));
-    assert_eq!(result.outputs.get("served_stop_count").and_then(|v| v.as_u64()), Some(2));
-    assert_eq!(result.outputs.get("unserved_stop_count").and_then(|v| v.as_u64()), Some(1));
-    assert_eq!(result.outputs.get("max_route_distance").and_then(|v| v.as_f64()), Some(8.0));
+    assert_eq!(
+        result.outputs.get("route_count").and_then(|v| v.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("served_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(2)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("unserved_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("max_route_distance")
+            .and_then(|v| v.as_f64()),
+        Some(8.0)
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&depot_path);
@@ -461,7 +526,10 @@ fn vehicle_routing_cvrp_respects_max_route_time() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(8.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(8.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -478,7 +546,9 @@ fn vehicle_routing_cvrp_respects_max_route_time() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
     for x in [2.0, 4.0, 6.0] {
         stops
             .add_feature(
@@ -490,23 +560,53 @@ fn vehicle_routing_cvrp_respects_max_route_time() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("vehicle_capacity".to_string(), json!(10.0));
     args.insert("max_vehicles".to_string(), json!(1));
     args.insert("travel_speed".to_string(), json!(1.0));
     args.insert("max_route_time".to_string(), json!(8.0));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_cvrp", &args, &context(&caps))
         .expect("vehicle_routing_cvrp run");
 
-    assert_eq!(result.outputs.get("served_stop_count").and_then(|v| v.as_u64()), Some(2));
-    assert_eq!(result.outputs.get("unserved_stop_count").and_then(|v| v.as_u64()), Some(1));
-    assert_eq!(result.outputs.get("max_route_time").and_then(|v| v.as_f64()), Some(8.0));
+    assert_eq!(
+        result
+            .outputs
+            .get("served_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(2)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("unserved_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("max_route_time")
+            .and_then(|v| v.as_f64()),
+        Some(8.0)
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&depot_path);
@@ -533,7 +633,10 @@ fn vehicle_routing_cvrp_total_cost_includes_vehicle_fixed_cost() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(6.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(6.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -550,7 +653,9 @@ fn vehicle_routing_cvrp_total_cost_includes_vehicle_fixed_cost() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
     for x in [1.0, 2.0, 5.0] {
         stops
             .add_feature(
@@ -562,14 +667,26 @@ fn vehicle_routing_cvrp_total_cost_includes_vehicle_fixed_cost() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("vehicle_capacity".to_string(), json!(2.0));
     args.insert("max_vehicles".to_string(), json!(2));
     args.insert("vehicle_fixed_cost".to_string(), json!(10.0));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_cvrp", &args, &context(&caps))
@@ -618,7 +735,10 @@ fn vehicle_routing_cvrp_priority_field_prefers_required_stops() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(6.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(6.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -635,8 +755,12 @@ fn vehicle_routing_cvrp_priority_field_prefers_required_stops() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("priority", FieldType::Text));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("priority", FieldType::Text));
     for (x, priority) in [(1.0, "low"), (5.0, "required")] {
         stops
             .add_feature(
@@ -651,22 +775,52 @@ fn vehicle_routing_cvrp_priority_field_prefers_required_stops() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("priority_field".to_string(), json!("priority"));
     args.insert("vehicle_capacity".to_string(), json!(1.0));
     args.insert("max_vehicles".to_string(), json!(1));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_cvrp", &args, &context(&caps))
         .expect("vehicle_routing_cvrp run");
 
-    assert_eq!(result.outputs.get("served_stop_count").and_then(|v| v.as_u64()), Some(1));
-    assert_eq!(result.outputs.get("served_required_stop_count").and_then(|v| v.as_u64()), Some(1));
-    assert_eq!(result.outputs.get("unserved_required_stop_count").and_then(|v| v.as_u64()), Some(0));
+    assert_eq!(
+        result
+            .outputs
+            .get("served_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("served_required_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("unserved_required_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(0)
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&depot_path);
@@ -694,7 +848,10 @@ fn vehicle_routing_cvrp_local_optimization_reduces_route_distance() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(-4.0, -4.0), Coord::xy(0.0, 2.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(-4.0, -4.0),
+                Coord::xy(0.0, 2.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -711,8 +868,16 @@ fn vehicle_routing_cvrp_local_optimization_reduces_route_distance() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    for coord in [(-3.0, -3.0), (-3.0, -2.0), (-3.0, -1.0), (-3.0, 1.0), (-2.0, -3.0)] {
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    for coord in [
+        (-3.0, -3.0),
+        (-3.0, -2.0),
+        (-3.0, -1.0),
+        (-3.0, 1.0),
+        (-2.0, -3.0),
+    ] {
         stops
             .add_feature(
                 Some(Geometry::Point(Coord::xy(coord.0, coord.1))),
@@ -723,14 +888,26 @@ fn vehicle_routing_cvrp_local_optimization_reduces_route_distance() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut baseline_args = ToolArgs::new();
-    baseline_args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    baseline_args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    baseline_args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    baseline_args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    baseline_args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    baseline_args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     baseline_args.insert("demand_field".to_string(), json!("demand"));
     baseline_args.insert("vehicle_capacity".to_string(), json!(10.0));
     baseline_args.insert("max_vehicles".to_string(), json!(1));
     baseline_args.insert("apply_local_optimization".to_string(), json!(false));
-    baseline_args.insert("output".to_string(), json!(baseline_out.to_string_lossy().to_string()));
+    baseline_args.insert(
+        "output".to_string(),
+        json!(baseline_out.to_string_lossy().to_string()),
+    );
 
     let baseline_result = registry
         .run("vehicle_routing_cvrp", &baseline_args, &context(&caps))
@@ -738,7 +915,10 @@ fn vehicle_routing_cvrp_local_optimization_reduces_route_distance() {
 
     let mut optimized_args = baseline_args.clone();
     optimized_args.insert("apply_local_optimization".to_string(), json!(true));
-    optimized_args.insert("output".to_string(), json!(optimized_out.to_string_lossy().to_string()));
+    optimized_args.insert(
+        "output".to_string(),
+        json!(optimized_out.to_string_lossy().to_string()),
+    );
 
     let optimized_result = registry
         .run("vehicle_routing_cvrp", &optimized_args, &context(&caps))
@@ -749,7 +929,10 @@ fn vehicle_routing_cvrp_local_optimization_reduces_route_distance() {
     assert_eq!(baseline_routes.features.len(), 1);
     assert_eq!(optimized_routes.features.len(), 1);
 
-    let distance_idx = baseline_routes.schema.field_index("DISTANCE").expect("DISTANCE field");
+    let distance_idx = baseline_routes
+        .schema
+        .field_index("DISTANCE")
+        .expect("DISTANCE field");
     let baseline_distance = match &baseline_routes.features[0].attributes[distance_idx] {
         FieldValue::Float(v) => *v,
         other => panic!("expected float DISTANCE, got {:?}", other),
@@ -761,11 +944,17 @@ fn vehicle_routing_cvrp_local_optimization_reduces_route_distance() {
 
     assert!(optimized_distance + 1.0e-9 < baseline_distance);
     assert_eq!(
-        baseline_result.outputs.get("optimized_route_count").and_then(|v| v.as_u64()),
+        baseline_result
+            .outputs
+            .get("optimized_route_count")
+            .and_then(|v| v.as_u64()),
         Some(0)
     );
     assert_eq!(
-        optimized_result.outputs.get("optimized_route_count").and_then(|v| v.as_u64()),
+        optimized_result
+            .outputs
+            .get("optimized_route_count")
+            .and_then(|v| v.as_u64()),
         Some(1)
     );
 
@@ -796,7 +985,10 @@ fn vehicle_routing_cvrp_benchmark_local_optimization_outperforms_phase3_greedy_b
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(-5.0, -5.0), Coord::xy(4.0, 1.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(-5.0, -5.0),
+                Coord::xy(4.0, 1.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -813,8 +1005,18 @@ fn vehicle_routing_cvrp_benchmark_local_optimization_outperforms_phase3_greedy_b
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    for coord in [(-5.0, -5.0), (-5.0, -4.0), (-5.0, -3.0), (-5.0, -2.0), (-5.0, -1.0), (-5.0, 1.0), (4.0, -3.0)] {
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    for coord in [
+        (-5.0, -5.0),
+        (-5.0, -4.0),
+        (-5.0, -3.0),
+        (-5.0, -2.0),
+        (-5.0, -1.0),
+        (-5.0, 1.0),
+        (4.0, -3.0),
+    ] {
         stops
             .add_feature(
                 Some(Geometry::Point(Coord::xy(coord.0, coord.1))),
@@ -825,14 +1027,26 @@ fn vehicle_routing_cvrp_benchmark_local_optimization_outperforms_phase3_greedy_b
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut baseline_args = ToolArgs::new();
-    baseline_args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    baseline_args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    baseline_args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    baseline_args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    baseline_args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    baseline_args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     baseline_args.insert("demand_field".to_string(), json!("demand"));
     baseline_args.insert("vehicle_capacity".to_string(), json!(4.0));
     baseline_args.insert("max_vehicles".to_string(), json!(2));
     baseline_args.insert("apply_local_optimization".to_string(), json!(false));
-    baseline_args.insert("output".to_string(), json!(baseline_out.to_string_lossy().to_string()));
+    baseline_args.insert(
+        "output".to_string(),
+        json!(baseline_out.to_string_lossy().to_string()),
+    );
 
     let baseline_result = registry
         .run("vehicle_routing_cvrp", &baseline_args, &context(&caps))
@@ -840,7 +1054,10 @@ fn vehicle_routing_cvrp_benchmark_local_optimization_outperforms_phase3_greedy_b
 
     let mut optimized_args = baseline_args.clone();
     optimized_args.insert("apply_local_optimization".to_string(), json!(true));
-    optimized_args.insert("output".to_string(), json!(optimized_out.to_string_lossy().to_string()));
+    optimized_args.insert(
+        "output".to_string(),
+        json!(optimized_out.to_string_lossy().to_string()),
+    );
 
     let optimized_result = registry
         .run("vehicle_routing_cvrp", &optimized_args, &context(&caps))
@@ -857,10 +1074,28 @@ fn vehicle_routing_cvrp_benchmark_local_optimization_outperforms_phase3_greedy_b
         .and_then(|v| v.as_f64())
         .expect("optimized total_distance");
 
-    assert_eq!(baseline_result.outputs.get("route_count").and_then(|v| v.as_u64()), Some(2));
-    assert_eq!(optimized_result.outputs.get("route_count").and_then(|v| v.as_u64()), Some(2));
+    assert_eq!(
+        baseline_result
+            .outputs
+            .get("route_count")
+            .and_then(|v| v.as_u64()),
+        Some(2)
+    );
+    assert_eq!(
+        optimized_result
+            .outputs
+            .get("route_count")
+            .and_then(|v| v.as_u64()),
+        Some(2)
+    );
     assert!(optimized_distance + 1.0e-9 < baseline_distance);
-    assert_eq!(optimized_result.outputs.get("optimized_route_count").and_then(|v| v.as_u64()), Some(1));
+    assert_eq!(
+        optimized_result
+            .outputs
+            .get("optimized_route_count")
+            .and_then(|v| v.as_u64()),
+        Some(1)
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&depot_path);
@@ -889,7 +1124,10 @@ fn vehicle_routing_cvrp_simulated_annealing_refines_or_matches_baseline_distance
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(-4.0, -4.0), Coord::xy(2.0, 2.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(-4.0, -4.0),
+                Coord::xy(2.0, 2.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -906,8 +1144,16 @@ fn vehicle_routing_cvrp_simulated_annealing_refines_or_matches_baseline_distance
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    for coord in [(-3.0, -3.0), (-3.0, -2.0), (-3.0, -1.0), (-3.0, 1.0), (-2.0, -3.0)] {
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    for coord in [
+        (-3.0, -3.0),
+        (-3.0, -2.0),
+        (-3.0, -1.0),
+        (-3.0, 1.0),
+        (-2.0, -3.0),
+    ] {
         stops
             .add_feature(
                 Some(Geometry::Point(Coord::xy(coord.0, coord.1))),
@@ -918,15 +1164,27 @@ fn vehicle_routing_cvrp_simulated_annealing_refines_or_matches_baseline_distance
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut baseline_args = ToolArgs::new();
-    baseline_args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    baseline_args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    baseline_args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    baseline_args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    baseline_args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    baseline_args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     baseline_args.insert("demand_field".to_string(), json!("demand"));
     baseline_args.insert("vehicle_capacity".to_string(), json!(10.0));
     baseline_args.insert("max_vehicles".to_string(), json!(1));
     baseline_args.insert("apply_local_optimization".to_string(), json!(false));
     baseline_args.insert("apply_simulated_annealing".to_string(), json!(false));
-    baseline_args.insert("output".to_string(), json!(baseline_out.to_string_lossy().to_string()));
+    baseline_args.insert(
+        "output".to_string(),
+        json!(baseline_out.to_string_lossy().to_string()),
+    );
 
     let baseline_result = registry
         .run("vehicle_routing_cvrp", &baseline_args, &context(&caps))
@@ -938,7 +1196,10 @@ fn vehicle_routing_cvrp_simulated_annealing_refines_or_matches_baseline_distance
     annealed_args.insert("sa_initial_temperature".to_string(), json!(1.0));
     annealed_args.insert("sa_cooling_rate".to_string(), json!(0.995));
     annealed_args.insert("sa_seed".to_string(), json!(7));
-    annealed_args.insert("output".to_string(), json!(annealed_out.to_string_lossy().to_string()));
+    annealed_args.insert(
+        "output".to_string(),
+        json!(annealed_out.to_string_lossy().to_string()),
+    );
 
     let annealed_result = registry
         .run("vehicle_routing_cvrp", &annealed_args, &context(&caps))
@@ -967,7 +1228,10 @@ fn vehicle_routing_cvrp_simulated_annealing_refines_or_matches_baseline_distance
         Some(true)
     );
     assert_eq!(
-        annealed_result.outputs.get("sa_seed").and_then(|v| v.as_u64()),
+        annealed_result
+            .outputs
+            .get("sa_seed")
+            .and_then(|v| v.as_u64()),
         Some(7)
     );
 
@@ -998,7 +1262,10 @@ fn vehicle_routing_vrptw_reports_lateness() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(4.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(4.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -1015,10 +1282,18 @@ fn vehicle_routing_vrptw_reports_lateness() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_start", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_end", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("service_time", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_start", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_end", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("service_time", FieldType::Float));
 
     stops
         .add_feature(
@@ -1045,9 +1320,18 @@ fn vehicle_routing_vrptw_reports_lateness() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("tw_start_field".to_string(), json!("tw_start"));
     args.insert("tw_end_field".to_string(), json!("tw_end"));
@@ -1055,7 +1339,10 @@ fn vehicle_routing_vrptw_reports_lateness() {
     args.insert("vehicle_capacity".to_string(), json!(10.0));
     args.insert("travel_speed".to_string(), json!(1.0));
     args.insert("start_time".to_string(), json!(0.0));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
     args.insert(
         "assignment_output".to_string(),
         json!(assign_out.to_string_lossy().to_string()),
@@ -1109,7 +1396,10 @@ fn vehicle_routing_vrptw_hard_windows_report_infeasible_stops() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(4.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(4.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -1126,10 +1416,18 @@ fn vehicle_routing_vrptw_hard_windows_report_infeasible_stops() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_start", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_end", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("service_time", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_start", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_end", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("service_time", FieldType::Float));
 
     stops
         .add_feature(
@@ -1156,9 +1454,18 @@ fn vehicle_routing_vrptw_hard_windows_report_infeasible_stops() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("tw_start_field".to_string(), json!("tw_start"));
     args.insert("tw_end_field".to_string(), json!("tw_end"));
@@ -1168,7 +1475,10 @@ fn vehicle_routing_vrptw_hard_windows_report_infeasible_stops() {
     args.insert("start_time".to_string(), json!(0.0));
     args.insert("enforce_time_windows".to_string(), json!(true));
     args.insert("allowed_lateness".to_string(), json!(0.0));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_vrptw", &args, &context(&caps))
@@ -1191,7 +1501,10 @@ fn vehicle_routing_vrptw_hard_windows_report_infeasible_stops() {
         .expect("time_window_infeasible_stop_count output");
     assert_eq!(served, 1, "strict windows should only serve first stop");
     assert_eq!(unserved, 1, "strict windows should leave one stop unserved");
-    assert_eq!(tw_infeasible, 1, "strict windows should report one infeasible stop");
+    assert_eq!(
+        tw_infeasible, 1,
+        "strict windows should report one infeasible stop"
+    );
 
     let routes = wbvector::read(&routes_out).expect("read routes");
     assert_eq!(routes.features.len(), 1);
@@ -1221,7 +1534,10 @@ fn vehicle_routing_vrptw_respects_max_route_time() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(8.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(8.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -1238,10 +1554,18 @@ fn vehicle_routing_vrptw_respects_max_route_time() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_start", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_end", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("service_time", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_start", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_end", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("service_time", FieldType::Float));
     for x in [2.0, 4.0, 6.0] {
         stops
             .add_feature(
@@ -1258,9 +1582,18 @@ fn vehicle_routing_vrptw_respects_max_route_time() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("tw_start_field".to_string(), json!("tw_start"));
     args.insert("tw_end_field".to_string(), json!("tw_end"));
@@ -1270,15 +1603,36 @@ fn vehicle_routing_vrptw_respects_max_route_time() {
     args.insert("start_time".to_string(), json!(0.0));
     args.insert("max_vehicles".to_string(), json!(1));
     args.insert("max_route_time".to_string(), json!(8.0));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_vrptw", &args, &context(&caps))
         .expect("vehicle_routing_vrptw run");
 
-    assert_eq!(result.outputs.get("served_stop_count").and_then(|v| v.as_u64()), Some(2));
-    assert_eq!(result.outputs.get("unserved_stop_count").and_then(|v| v.as_u64()), Some(1));
-    assert_eq!(result.outputs.get("max_route_time").and_then(|v| v.as_f64()), Some(8.0));
+    assert_eq!(
+        result
+            .outputs
+            .get("served_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(2)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("unserved_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("max_route_time")
+            .and_then(|v| v.as_f64()),
+        Some(8.0)
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&depot_path);
@@ -1305,7 +1659,10 @@ fn vehicle_routing_vrptw_respects_max_route_distance() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(8.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(8.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -1322,10 +1679,18 @@ fn vehicle_routing_vrptw_respects_max_route_distance() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_start", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_end", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("service_time", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_start", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_end", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("service_time", FieldType::Float));
     for x in [2.0, 4.0, 6.0] {
         stops
             .add_feature(
@@ -1342,9 +1707,18 @@ fn vehicle_routing_vrptw_respects_max_route_distance() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("tw_start_field".to_string(), json!("tw_start"));
     args.insert("tw_end_field".to_string(), json!("tw_end"));
@@ -1353,14 +1727,29 @@ fn vehicle_routing_vrptw_respects_max_route_distance() {
     args.insert("travel_speed".to_string(), json!(1.0));
     args.insert("start_time".to_string(), json!(0.0));
     args.insert("max_route_distance".to_string(), json!(8.0));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_vrptw", &args, &context(&caps))
         .expect("vehicle_routing_vrptw run");
 
-    assert_eq!(result.outputs.get("served_stop_count").and_then(|v| v.as_u64()), Some(2));
-    assert_eq!(result.outputs.get("unserved_stop_count").and_then(|v| v.as_u64()), Some(1));
+    assert_eq!(
+        result
+            .outputs
+            .get("served_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(2)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("unserved_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(1)
+    );
     assert_eq!(
         result
             .outputs
@@ -1368,7 +1757,13 @@ fn vehicle_routing_vrptw_respects_max_route_distance() {
             .and_then(|v| v.as_u64()),
         Some(1)
     );
-    assert_eq!(result.outputs.get("max_route_distance").and_then(|v| v.as_f64()), Some(8.0));
+    assert_eq!(
+        result
+            .outputs
+            .get("max_route_distance")
+            .and_then(|v| v.as_f64()),
+        Some(8.0)
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&depot_path);
@@ -1395,7 +1790,10 @@ fn vehicle_routing_vrptw_respects_depot_close_time() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(8.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(8.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -1412,10 +1810,18 @@ fn vehicle_routing_vrptw_respects_depot_close_time() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_start", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_end", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("service_time", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_start", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_end", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("service_time", FieldType::Float));
     for x in [2.0, 4.0, 6.0] {
         stops
             .add_feature(
@@ -1432,9 +1838,18 @@ fn vehicle_routing_vrptw_respects_depot_close_time() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("tw_start_field".to_string(), json!("tw_start"));
     args.insert("tw_end_field".to_string(), json!("tw_end"));
@@ -1443,13 +1858,22 @@ fn vehicle_routing_vrptw_respects_depot_close_time() {
     args.insert("travel_speed".to_string(), json!(1.0));
     args.insert("start_time".to_string(), json!(0.0));
     args.insert("depot_close_time".to_string(), json!(9.0));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_vrptw", &args, &context(&caps))
         .expect("vehicle_routing_vrptw run");
 
-    assert_eq!(result.outputs.get("served_stop_count").and_then(|v| v.as_u64()), Some(2));
+    assert_eq!(
+        result
+            .outputs
+            .get("served_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(2)
+    );
     assert_eq!(
         result
             .outputs
@@ -1457,7 +1881,13 @@ fn vehicle_routing_vrptw_respects_depot_close_time() {
             .and_then(|v| v.as_u64()),
         Some(1)
     );
-    assert_eq!(result.outputs.get("depot_close_time").and_then(|v| v.as_f64()), Some(9.0));
+    assert_eq!(
+        result
+            .outputs
+            .get("depot_close_time")
+            .and_then(|v| v.as_f64()),
+        Some(9.0)
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&depot_path);
@@ -1484,7 +1914,10 @@ fn vehicle_routing_vrptw_total_cost_includes_vehicle_fixed_cost() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(6.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(6.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -1501,10 +1934,18 @@ fn vehicle_routing_vrptw_total_cost_includes_vehicle_fixed_cost() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_start", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_end", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("service_time", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_start", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_end", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("service_time", FieldType::Float));
     for x in [1.0, 2.0, 5.0] {
         stops
             .add_feature(
@@ -1521,9 +1962,18 @@ fn vehicle_routing_vrptw_total_cost_includes_vehicle_fixed_cost() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("tw_start_field".to_string(), json!("tw_start"));
     args.insert("tw_end_field".to_string(), json!("tw_end"));
@@ -1532,7 +1982,10 @@ fn vehicle_routing_vrptw_total_cost_includes_vehicle_fixed_cost() {
     args.insert("travel_speed".to_string(), json!(1.0));
     args.insert("vehicle_fixed_cost".to_string(), json!(10.0));
     args.insert("max_vehicles".to_string(), json!(2));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_vrptw", &args, &context(&caps))
@@ -1581,7 +2034,10 @@ fn vehicle_routing_vrptw_priority_field_prefers_required_stops() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(6.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(6.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -1598,11 +2054,21 @@ fn vehicle_routing_vrptw_priority_field_prefers_required_stops() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("priority", FieldType::Text));
-    stops.schema.add_field(FieldDef::new("tw_start", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_end", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("service_time", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("priority", FieldType::Text));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_start", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_end", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("service_time", FieldType::Float));
     for (x, priority) in [(1.0, "low"), (5.0, "required")] {
         stops
             .add_feature(
@@ -1620,9 +2086,18 @@ fn vehicle_routing_vrptw_priority_field_prefers_required_stops() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("priority_field".to_string(), json!("priority"));
     args.insert("tw_start_field".to_string(), json!("tw_start"));
@@ -1632,15 +2107,36 @@ fn vehicle_routing_vrptw_priority_field_prefers_required_stops() {
     args.insert("max_vehicles".to_string(), json!(1));
     args.insert("max_stops_per_vehicle".to_string(), json!(1));
     args.insert("use_priority_scoring".to_string(), json!(true));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_vrptw", &args, &context(&caps))
         .expect("vehicle_routing_vrptw run");
 
-    assert_eq!(result.outputs.get("served_stop_count").and_then(|v| v.as_u64()), Some(1));
-    assert_eq!(result.outputs.get("served_required_stop_count").and_then(|v| v.as_u64()), Some(1));
-    assert_eq!(result.outputs.get("unserved_required_stop_count").and_then(|v| v.as_u64()), Some(0));
+    assert_eq!(
+        result
+            .outputs
+            .get("served_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("served_required_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("unserved_required_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(0)
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&depot_path);
@@ -1669,7 +2165,10 @@ fn vehicle_routing_pickup_delivery_enforces_pair_precedence() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(12.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(12.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -1686,9 +2185,15 @@ fn vehicle_routing_pickup_delivery_enforces_pair_precedence() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("request_id", FieldType::Text));
-    stops.schema.add_field(FieldDef::new("stop_type", FieldType::Text));
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("request_id", FieldType::Text));
+    stops
+        .schema
+        .add_field(FieldDef::new("stop_type", FieldType::Text));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
 
     for (x, request_id, stop_type, demand) in [
         (1.0, "R1", "pickup", 3.0),
@@ -1710,15 +2215,27 @@ fn vehicle_routing_pickup_delivery_enforces_pair_precedence() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("request_id_field".to_string(), json!("request_id"));
     args.insert("stop_type_field".to_string(), json!("stop_type"));
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("vehicle_capacity".to_string(), json!(5.0));
     args.insert("max_vehicles".to_string(), json!(1));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
     args.insert(
         "assignment_output".to_string(),
         json!(assign_out.to_string_lossy().to_string()),
@@ -1742,10 +2259,18 @@ fn vehicle_routing_pickup_delivery_enforces_pair_precedence() {
     assert_eq!(unserved, 0);
 
     let routes = wbvector::read(&routes_out).expect("read routes");
-    assert_eq!(routes.features.len(), 1, "expected one route for two requests");
+    assert_eq!(
+        routes.features.len(),
+        1,
+        "expected one route for two requests"
+    );
 
     let assignments = wbvector::read(&assign_out).expect("read assignments");
-    assert_eq!(assignments.features.len(), 4, "expected pickup+delivery for each request");
+    assert_eq!(
+        assignments.features.len(),
+        4,
+        "expected pickup+delivery for each request"
+    );
 
     let request_idx = assignments
         .schema
@@ -1786,9 +2311,14 @@ fn vehicle_routing_pickup_delivery_enforces_pair_precedence() {
     }
 
     for (request_id, (pickup_seq, delivery_seq)) in visit_map {
-        let p = pickup_seq.unwrap_or_else(|| panic!("missing pickup visit for request {request_id}"));
-        let d = delivery_seq.unwrap_or_else(|| panic!("missing delivery visit for request {request_id}"));
-        assert!(p < d, "pickup must precede delivery for request {request_id}");
+        let p =
+            pickup_seq.unwrap_or_else(|| panic!("missing pickup visit for request {request_id}"));
+        let d = delivery_seq
+            .unwrap_or_else(|| panic!("missing delivery visit for request {request_id}"));
+        assert!(
+            p < d,
+            "pickup must precede delivery for request {request_id}"
+        );
     }
 
     let _ = std::fs::remove_file(&network_path);
@@ -1817,7 +2347,10 @@ fn vehicle_routing_vrptw_relaxed_windows_serves_municipal_scenario() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(8.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(8.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -1834,10 +2367,18 @@ fn vehicle_routing_vrptw_relaxed_windows_serves_municipal_scenario() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_start", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_end", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("service_time", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_start", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_end", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("service_time", FieldType::Float));
 
     for (x, tw_end) in [(1.0, 4.0), (3.0, 3.0), (6.0, 5.0)] {
         stops
@@ -1855,9 +2396,18 @@ fn vehicle_routing_vrptw_relaxed_windows_serves_municipal_scenario() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("tw_start_field".to_string(), json!("tw_start"));
     args.insert("tw_end_field".to_string(), json!("tw_end"));
@@ -1866,7 +2416,10 @@ fn vehicle_routing_vrptw_relaxed_windows_serves_municipal_scenario() {
     args.insert("travel_speed".to_string(), json!(1.0));
     args.insert("enforce_time_windows".to_string(), json!(true));
     args.insert("allowed_lateness".to_string(), json!(3.5));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_vrptw", &args, &context(&caps))
@@ -1882,8 +2435,14 @@ fn vehicle_routing_vrptw_relaxed_windows_serves_municipal_scenario() {
         .get("time_window_infeasible_stop_count")
         .and_then(|v| v.as_u64())
         .expect("time_window_infeasible_stop_count output");
-    assert_eq!(served, 3, "relaxed windows should serve all municipal stops");
-    assert_eq!(tw_infeasible, 0, "relaxed windows should avoid infeasible pruning");
+    assert_eq!(
+        served, 3,
+        "relaxed windows should serve all municipal stops"
+    );
+    assert_eq!(
+        tw_infeasible, 0,
+        "relaxed windows should avoid infeasible pruning"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&depot_path);
@@ -1911,7 +2470,10 @@ fn vehicle_routing_vrptw_benchmark_priority_scoring_reduces_total_lateness_vs_ph
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(4.0, 2.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(4.0, 2.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -1928,10 +2490,18 @@ fn vehicle_routing_vrptw_benchmark_priority_scoring_reduces_total_lateness_vs_ph
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_start", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_end", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("service_time", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_start", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_end", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("service_time", FieldType::Float));
 
     for (x, y, tw_end) in [
         (1.0, 0.0, 5.0),
@@ -1955,9 +2525,18 @@ fn vehicle_routing_vrptw_benchmark_priority_scoring_reduces_total_lateness_vs_ph
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut baseline_args = ToolArgs::new();
-    baseline_args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    baseline_args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    baseline_args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    baseline_args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    baseline_args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    baseline_args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     baseline_args.insert("demand_field".to_string(), json!("demand"));
     baseline_args.insert("tw_start_field".to_string(), json!("tw_start"));
     baseline_args.insert("tw_end_field".to_string(), json!("tw_end"));
@@ -1967,7 +2546,10 @@ fn vehicle_routing_vrptw_benchmark_priority_scoring_reduces_total_lateness_vs_ph
     baseline_args.insert("start_time".to_string(), json!(0.0));
     baseline_args.insert("max_vehicles".to_string(), json!(1));
     baseline_args.insert("use_priority_scoring".to_string(), json!(false));
-    baseline_args.insert("output".to_string(), json!(baseline_out.to_string_lossy().to_string()));
+    baseline_args.insert(
+        "output".to_string(),
+        json!(baseline_out.to_string_lossy().to_string()),
+    );
 
     let baseline_result = registry
         .run("vehicle_routing_vrptw", &baseline_args, &context(&caps))
@@ -1975,7 +2557,10 @@ fn vehicle_routing_vrptw_benchmark_priority_scoring_reduces_total_lateness_vs_ph
 
     let mut scored_args = baseline_args.clone();
     scored_args.insert("use_priority_scoring".to_string(), json!(true));
-    scored_args.insert("output".to_string(), json!(scored_out.to_string_lossy().to_string()));
+    scored_args.insert(
+        "output".to_string(),
+        json!(scored_out.to_string_lossy().to_string()),
+    );
 
     let scored_result = registry
         .run("vehicle_routing_vrptw", &scored_args, &context(&caps))
@@ -1994,11 +2579,17 @@ fn vehicle_routing_vrptw_benchmark_priority_scoring_reduces_total_lateness_vs_ph
 
     assert!(scored_lateness + 1.0e-9 < baseline_lateness);
     assert_eq!(
-        baseline_result.outputs.get("use_priority_scoring").and_then(|v| v.as_bool()),
+        baseline_result
+            .outputs
+            .get("use_priority_scoring")
+            .and_then(|v| v.as_bool()),
         Some(false)
     );
     assert_eq!(
-        scored_result.outputs.get("use_priority_scoring").and_then(|v| v.as_bool()),
+        scored_result
+            .outputs
+            .get("use_priority_scoring")
+            .and_then(|v| v.as_bool()),
         Some(true)
     );
 
@@ -2030,7 +2621,10 @@ fn vehicle_routing_cvrp_multi_depot_profile_restrictions_dispatch_matching_vehic
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(10.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -2039,10 +2633,18 @@ fn vehicle_routing_cvrp_multi_depot_profile_restrictions_dispatch_matching_vehic
     let mut depots = Layer::new("depots")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    depots.schema.add_field(FieldDef::new("depot_id", FieldType::Text));
-    depots.schema.add_field(FieldDef::new("veh_count", FieldType::Integer));
-    depots.schema.add_field(FieldDef::new("veh_cap", FieldType::Float));
-    depots.schema.add_field(FieldDef::new("veh_profile", FieldType::Text));
+    depots
+        .schema
+        .add_field(FieldDef::new("depot_id", FieldType::Text));
+    depots
+        .schema
+        .add_field(FieldDef::new("veh_count", FieldType::Integer));
+    depots
+        .schema
+        .add_field(FieldDef::new("veh_cap", FieldType::Float));
+    depots
+        .schema
+        .add_field(FieldDef::new("veh_profile", FieldType::Text));
     depots
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -2070,7 +2672,9 @@ fn vehicle_routing_cvrp_multi_depot_profile_restrictions_dispatch_matching_vehic
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
     stops
         .schema
         .add_field(FieldDef::new("allowed_profiles", FieldType::Text));
@@ -2095,17 +2699,32 @@ fn vehicle_routing_cvrp_multi_depot_profile_restrictions_dispatch_matching_vehic
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
-    args.insert("allowed_vehicle_profiles_field".to_string(), json!("allowed_profiles"));
+    args.insert(
+        "allowed_vehicle_profiles_field".to_string(),
+        json!("allowed_profiles"),
+    );
     args.insert("depot_id_field".to_string(), json!("depot_id"));
     args.insert("vehicle_count_field".to_string(), json!("veh_count"));
     args.insert("vehicle_capacity_field".to_string(), json!("veh_cap"));
     args.insert("vehicle_profile_field".to_string(), json!("veh_profile"));
     args.insert("vehicle_capacity".to_string(), json!(2.0));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
     args.insert(
         "assignment_output".to_string(),
         json!(assign_out.to_string_lossy().to_string()),
@@ -2115,8 +2734,20 @@ fn vehicle_routing_cvrp_multi_depot_profile_restrictions_dispatch_matching_vehic
         .run("vehicle_routing_cvrp", &args, &context(&caps))
         .expect("vehicle_routing_cvrp run");
 
-    assert_eq!(result.outputs.get("served_stop_count").and_then(|v| v.as_u64()), Some(2));
-    assert_eq!(result.outputs.get("compatibility_infeasible_stop_count").and_then(|v| v.as_u64()), Some(0));
+    assert_eq!(
+        result
+            .outputs
+            .get("served_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(2)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("compatibility_infeasible_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(0)
+    );
 
     let assignments = wbvector::read(&assign_out).expect("read assignments");
     let depot_idx = assignments
@@ -2160,7 +2791,10 @@ fn vehicle_routing_vrptw_depot_break_window_triggers_break_usage() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(6.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(6.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -2169,9 +2803,15 @@ fn vehicle_routing_vrptw_depot_break_window_triggers_break_usage() {
     let mut depots = Layer::new("depots")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    depots.schema.add_field(FieldDef::new("b_start", FieldType::Float));
-    depots.schema.add_field(FieldDef::new("b_end", FieldType::Float));
-    depots.schema.add_field(FieldDef::new("b_dur", FieldType::Float));
+    depots
+        .schema
+        .add_field(FieldDef::new("b_start", FieldType::Float));
+    depots
+        .schema
+        .add_field(FieldDef::new("b_end", FieldType::Float));
+    depots
+        .schema
+        .add_field(FieldDef::new("b_dur", FieldType::Float));
     depots
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -2187,10 +2827,18 @@ fn vehicle_routing_vrptw_depot_break_window_triggers_break_usage() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_start", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("tw_end", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("service_time", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_start", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("tw_end", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("service_time", FieldType::Float));
     stops
         .add_feature(
             Some(Geometry::Point(Coord::xy(3.0, 0.0))),
@@ -2205,9 +2853,18 @@ fn vehicle_routing_vrptw_depot_break_window_triggers_break_usage() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("tw_start_field".to_string(), json!("tw_start"));
     args.insert("tw_end_field".to_string(), json!("tw_end"));
@@ -2218,15 +2875,27 @@ fn vehicle_routing_vrptw_depot_break_window_triggers_break_usage() {
     args.insert("break_end_field".to_string(), json!("b_end"));
     args.insert("break_duration_field".to_string(), json!("b_dur"));
     args.insert("objective_mode".to_string(), json!("minimize_lateness"));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_vrptw", &args, &context(&caps))
         .expect("vehicle_routing_vrptw run");
 
-    assert_eq!(result.outputs.get("break_route_count").and_then(|v| v.as_u64()), Some(1));
     assert_eq!(
-        result.outputs.get("objective_mode").and_then(|v| v.as_str()),
+        result
+            .outputs
+            .get("break_route_count")
+            .and_then(|v| v.as_u64()),
+        Some(1)
+    );
+    assert_eq!(
+        result
+            .outputs
+            .get("objective_mode")
+            .and_then(|v| v.as_str()),
         Some("minimize_lateness")
     );
 
@@ -2255,7 +2924,10 @@ fn vehicle_routing_cvrp_route_class_alias_fields_enforce_compatibility() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(8.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(8.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -2264,7 +2936,9 @@ fn vehicle_routing_cvrp_route_class_alias_fields_enforce_compatibility() {
     let mut depots = Layer::new("depots")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    depots.schema.add_field(FieldDef::new("route_class", FieldType::Text));
+    depots
+        .schema
+        .add_field(FieldDef::new("route_class", FieldType::Text));
     depots
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -2282,8 +2956,12 @@ fn vehicle_routing_cvrp_route_class_alias_fields_enforce_compatibility() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
-    stops.schema.add_field(FieldDef::new("allowed_class", FieldType::Text));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("allowed_class", FieldType::Text));
     stops
         .add_feature(
             Some(Geometry::Point(Coord::xy(1.0, 0.0))),
@@ -2305,20 +2983,44 @@ fn vehicle_routing_cvrp_route_class_alias_fields_enforce_compatibility() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("demand_field".to_string(), json!("demand"));
-    args.insert("allowed_route_classes_field".to_string(), json!("allowed_class"));
-    args.insert("vehicle_route_class_field".to_string(), json!("route_class"));
+    args.insert(
+        "allowed_route_classes_field".to_string(),
+        json!("allowed_class"),
+    );
+    args.insert(
+        "vehicle_route_class_field".to_string(),
+        json!("route_class"),
+    );
     args.insert("vehicle_capacity".to_string(), json!(3.0));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_cvrp", &args, &context(&caps))
         .expect("vehicle_routing_cvrp run");
 
-    assert_eq!(result.outputs.get("served_stop_count").and_then(|v| v.as_u64()), Some(2));
+    assert_eq!(
+        result
+            .outputs
+            .get("served_stop_count")
+            .and_then(|v| v.as_u64()),
+        Some(2)
+    );
     assert_eq!(
         result
             .outputs
@@ -2352,7 +3054,10 @@ fn vehicle_routing_pickup_delivery_logistics_benchmark_serves_all_requests() {
         .with_epsg(4326);
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(20.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(20.0, 0.0),
+            ])),
             &[],
         )
         .expect("add network line");
@@ -2369,15 +3074,17 @@ fn vehicle_routing_pickup_delivery_logistics_benchmark_serves_all_requests() {
     let mut stops = Layer::new("stops")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    stops.schema.add_field(FieldDef::new("request_id", FieldType::Text));
-    stops.schema.add_field(FieldDef::new("stop_type", FieldType::Text));
-    stops.schema.add_field(FieldDef::new("demand", FieldType::Float));
+    stops
+        .schema
+        .add_field(FieldDef::new("request_id", FieldType::Text));
+    stops
+        .schema
+        .add_field(FieldDef::new("stop_type", FieldType::Text));
+    stops
+        .schema
+        .add_field(FieldDef::new("demand", FieldType::Float));
 
-    let requests = [
-        ("R1", 1.0, 3.0),
-        ("R2", 3.0, 6.0),
-        ("R3", 5.0, 9.0),
-    ];
+    let requests = [("R1", 1.0, 3.0), ("R2", 3.0, 6.0), ("R3", 5.0, 9.0)];
     for (request_id, pickup_x, delivery_x) in requests {
         stops
             .add_feature(
@@ -2403,15 +3110,27 @@ fn vehicle_routing_pickup_delivery_logistics_benchmark_serves_all_requests() {
     wbvector::write(&stops, &stops_path, VectorFormat::GeoPackage).expect("write stops");
 
     let mut args = ToolArgs::new();
-    args.insert("network".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("depot_points".to_string(), json!(depot_path.to_string_lossy().to_string()));
-    args.insert("stop_points".to_string(), json!(stops_path.to_string_lossy().to_string()));
+    args.insert(
+        "network".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "depot_points".to_string(),
+        json!(depot_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "stop_points".to_string(),
+        json!(stops_path.to_string_lossy().to_string()),
+    );
     args.insert("request_id_field".to_string(), json!("request_id"));
     args.insert("stop_type_field".to_string(), json!("stop_type"));
     args.insert("demand_field".to_string(), json!("demand"));
     args.insert("vehicle_capacity".to_string(), json!(2.0));
     args.insert("max_vehicles".to_string(), json!(3));
-    args.insert("output".to_string(), json!(routes_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(routes_out.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("vehicle_routing_pickup_delivery", &args, &context(&caps))
@@ -2422,7 +3141,10 @@ fn vehicle_routing_pickup_delivery_logistics_benchmark_serves_all_requests() {
         .get("served_request_count")
         .and_then(|v| v.as_u64())
         .expect("served_request_count output");
-    assert_eq!(served_requests, 3, "all logistics requests should be served");
+    assert_eq!(
+        served_requests, 3,
+        "all logistics requests should be served"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&depot_path);
@@ -2458,7 +3180,8 @@ fn topology_validation_report_flags_invalid_line_and_polygon_features() {
             &[],
         )
         .expect("add invalid line");
-    wbvector::write(&lines, &line_input_path, VectorFormat::GeoJson).expect("write invalid line input");
+    wbvector::write(&lines, &line_input_path, VectorFormat::GeoJson)
+        .expect("write invalid line input");
 
     let mut polygons = Layer::new("issues")
         .with_geom_type(GeometryType::Polygon)
@@ -2478,29 +3201,50 @@ fn topology_validation_report_flags_invalid_line_and_polygon_features() {
             &[],
         )
         .expect("add invalid polygon");
-    wbvector::write(&polygons, &poly_input_path, VectorFormat::GeoJson).expect("write invalid polygon input");
+    wbvector::write(&polygons, &poly_input_path, VectorFormat::GeoJson)
+        .expect("write invalid polygon input");
 
     let mut line_args = ToolArgs::new();
-    line_args.insert("input".to_string(), json!(line_input_path.to_string_lossy().to_string()));
-    line_args.insert("output".to_string(), json!(line_csv.to_string_lossy().to_string()));
+    line_args.insert(
+        "input".to_string(),
+        json!(line_input_path.to_string_lossy().to_string()),
+    );
+    line_args.insert(
+        "output".to_string(),
+        json!(line_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("topology_validation_report", &line_args, &context(&caps))
         .expect("topology_validation_report run");
 
     let mut poly_args = ToolArgs::new();
-    poly_args.insert("input".to_string(), json!(poly_input_path.to_string_lossy().to_string()));
-    poly_args.insert("output".to_string(), json!(poly_csv.to_string_lossy().to_string()));
+    poly_args.insert(
+        "input".to_string(),
+        json!(poly_input_path.to_string_lossy().to_string()),
+    );
+    poly_args.insert(
+        "output".to_string(),
+        json!(poly_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("topology_validation_report", &poly_args, &context(&caps))
         .expect("topology_validation_report polygon run");
 
     let line_report = std::fs::read_to_string(&line_csv).expect("read topology line csv report");
     assert!(line_report.contains("feature_fid,geometry_type,issue_type,detail"));
-    assert!(line_report.contains("linestring_self_intersection"), "expected line self-intersection issue: {}", line_report);
+    assert!(
+        line_report.contains("linestring_self_intersection"),
+        "expected line self-intersection issue: {}",
+        line_report
+    );
 
     let poly_report = std::fs::read_to_string(&poly_csv).expect("read topology polygon csv report");
     assert!(poly_report.contains("feature_fid,geometry_type,issue_type,detail"));
-    assert!(poly_report.contains("polygon_topology_invalid"), "expected polygon topology issue: {}", poly_report);
+    assert!(
+        poly_report.contains("polygon_topology_invalid"),
+        "expected polygon topology issue: {}",
+        poly_report
+    );
 
     let _ = std::fs::remove_file(&line_input_path);
     let _ = std::fs::remove_file(&poly_input_path);
@@ -2538,20 +3282,41 @@ fn topology_rule_validate_reports_line_self_intersection() {
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write line input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("rule_set".to_string(), json!(["line_must_not_self_intersect"]));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
-    args.insert("report".to_string(), json!(report_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "rule_set".to_string(),
+        json!(["line_must_not_self_intersect"]),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "report".to_string(),
+        json!(report_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("topology_rule_validate", &args, &context(&caps))
         .expect("topology_rule_validate run");
 
     let out = wbvector::read(&output_path).expect("read rule-violation output");
-    assert!(!out.features.is_empty(), "expected at least one violation feature");
+    assert!(
+        !out.features.is_empty(),
+        "expected at least one violation feature"
+    );
 
-    let rule_type_idx = out.schema.field_index("RULE_TYPE").expect("RULE_TYPE field");
-    let feature_fid_idx = out.schema.field_index("FEATURE_FID").expect("FEATURE_FID field");
+    let rule_type_idx = out
+        .schema
+        .field_index("RULE_TYPE")
+        .expect("RULE_TYPE field");
+    let feature_fid_idx = out
+        .schema
+        .field_index("FEATURE_FID")
+        .expect("FEATURE_FID field");
     let mut found_expected_rule = false;
     for feature in &out.features {
         let rule_type = match &feature.attributes[rule_type_idx] {
@@ -2566,10 +3331,14 @@ fn topology_rule_validate_reports_line_self_intersection() {
             other => panic!("expected FEATURE_FID integer, got {:?}", other),
         }
     }
-    assert!(found_expected_rule, "expected line_must_not_self_intersect violation");
+    assert!(
+        found_expected_rule,
+        "expected line_must_not_self_intersect violation"
+    );
 
     let report_text = std::fs::read_to_string(&report_path).expect("read topology rule report");
-    let report_json: serde_json::Value = serde_json::from_str(&report_text).expect("parse topology rule report");
+    let report_json: serde_json::Value =
+        serde_json::from_str(&report_text).expect("parse topology rule report");
     let total = report_json
         .get("total_violations")
         .and_then(|v| v.as_u64())
@@ -2629,19 +3398,35 @@ fn topology_rule_validate_reports_polygon_overlap_pairwise() {
     wbvector::write(&polys, &input_path, VectorFormat::GeoPackage).expect("write polygon input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("rule_set".to_string(), json!(["polygon_must_not_overlap"]));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("topology_rule_validate", &args, &context(&caps))
         .expect("topology_rule_validate run");
 
     let out = wbvector::read(&output_path).expect("read polygon overlap violations");
-    assert_eq!(out.features.len(), 2, "expected one overlap violation per feature in the pair");
+    assert_eq!(
+        out.features.len(),
+        2,
+        "expected one overlap violation per feature in the pair"
+    );
 
-    let rule_type_idx = out.schema.field_index("RULE_TYPE").expect("RULE_TYPE field");
-    let related_idx = out.schema.field_index("RELATED_FID").expect("RELATED_FID field");
+    let rule_type_idx = out
+        .schema
+        .field_index("RULE_TYPE")
+        .expect("RULE_TYPE field");
+    let related_idx = out
+        .schema
+        .field_index("RELATED_FID")
+        .expect("RELATED_FID field");
     for feature in &out.features {
         let rule_type = match &feature.attributes[rule_type_idx] {
             FieldValue::Text(v) => v.as_str(),
@@ -2683,7 +3468,8 @@ fn topology_rule_validate_detects_point_not_on_line() {
         .expect("add point off line");
 
     // Now add a line separately - we need a mixed layer actually
-    wbvector::write(&layer, &input_path, VectorFormat::GeoPackage).expect("write points-only input");
+    wbvector::write(&layer, &input_path, VectorFormat::GeoPackage)
+        .expect("write points-only input");
 
     // For now, test with just points to confirm detection of no violations when no lines exist
     let mut args = ToolArgs::new();
@@ -2691,8 +3477,14 @@ fn topology_rule_validate_detects_point_not_on_line() {
         "input".to_string(),
         json!(input_path.to_string_lossy().to_string()),
     );
-    args.insert("rule_set".to_string(), json!(["point_must_be_covered_by_line"]));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "rule_set".to_string(),
+        json!(["point_must_be_covered_by_line"]),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("topology_rule_validate", &args, &context(&caps))
@@ -2700,7 +3492,11 @@ fn topology_rule_validate_detects_point_not_on_line() {
 
     let out = wbvector::read(&output_path).expect("read point coverage violations");
     // Points with no lines should all be flagged as not covered
-    assert_eq!(out.features.len(), 2, "both points should be flagged as not covered when no lines exist");
+    assert_eq!(
+        out.features.len(),
+        2,
+        "both points should be flagged as not covered when no lines exist"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&output_path);
@@ -2755,9 +3551,18 @@ fn topology_rule_validate_detects_line_dangles() {
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write line input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("rule_set".to_string(), json!(["line_must_not_have_dangles"]));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "rule_set".to_string(),
+        json!(["line_must_not_have_dangles"]),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("topology_rule_validate", &args, &context(&caps))
@@ -2766,7 +3571,10 @@ fn topology_rule_validate_detects_line_dangles() {
     let out = wbvector::read(&output_path).expect("read dangle violations");
     // The dangling line has 2 endpoints that don't connect, so expect 2 violation features
     assert!(!out.features.is_empty(), "expected dangle violations");
-    let rule_type_idx = out.schema.field_index("RULE_TYPE").expect("RULE_TYPE field");
+    let rule_type_idx = out
+        .schema
+        .field_index("RULE_TYPE")
+        .expect("RULE_TYPE field");
     for feature in &out.features {
         let rule_type = match &feature.attributes[rule_type_idx] {
             FieldValue::Text(v) => v.as_str(),
@@ -2818,10 +3626,19 @@ fn topology_rule_validate_detects_endpoint_snap_violations() {
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write line input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("rule_set".to_string(), json!(["line_endpoints_must_snap_within_tolerance"]));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "rule_set".to_string(),
+        json!(["line_endpoints_must_snap_within_tolerance"]),
+    );
     args.insert("snap_tolerance".to_string(), json!(0.5)); // Very tight tolerance
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("topology_rule_validate", &args, &context(&caps))
@@ -2833,7 +3650,10 @@ fn topology_rule_validate_detects_endpoint_snap_violations() {
         "expected endpoint snap violations with tight tolerance"
     );
 
-    let rule_type_idx = out.schema.field_index("RULE_TYPE").expect("RULE_TYPE field");
+    let rule_type_idx = out
+        .schema
+        .field_index("RULE_TYPE")
+        .expect("RULE_TYPE field");
     for feature in &out.features {
         let rule_type = match &feature.attributes[rule_type_idx] {
             FieldValue::Text(v) => v.as_str(),
@@ -2892,10 +3712,19 @@ fn topology_rule_validate_endpoint_snap_is_order_independent() {
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write line input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("rule_set".to_string(), json!(["line_endpoints_must_snap_within_tolerance"]));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "rule_set".to_string(),
+        json!(["line_endpoints_must_snap_within_tolerance"]),
+    );
     args.insert("snap_tolerance".to_string(), json!(0.2));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("topology_rule_validate", &args, &context(&caps))
@@ -2963,9 +3792,18 @@ fn topology_rule_validate_detects_polygon_gaps() {
     wbvector::write(&polys, &input_path, VectorFormat::GeoPackage).expect("write polygon input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("rule_set".to_string(), json!(["polygon_must_not_have_gaps"]));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "rule_set".to_string(),
+        json!(["polygon_must_not_have_gaps"]),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("topology_rule_validate", &args, &context(&caps))
@@ -3054,18 +3892,34 @@ fn topology_rule_validate_detects_polygon_gaps_in_sparse_set() {
     wbvector::write(&polys, &input_path, VectorFormat::GeoPackage).expect("write polygon input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("rule_set".to_string(), json!(["polygon_must_not_have_gaps"]));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "rule_set".to_string(),
+        json!(["polygon_must_not_have_gaps"]),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("topology_rule_validate", &args, &context(&caps))
         .expect("topology_rule_validate run for sparse gaps");
 
     let out = wbvector::read(&output_path).expect("read sparse gap violations");
-    assert_eq!(out.features.len(), 2, "expected one gap violation per polygon in the near pair only");
+    assert_eq!(
+        out.features.len(),
+        2,
+        "expected one gap violation per polygon in the near pair only"
+    );
 
-    let rule_type_idx = out.schema.field_index("RULE_TYPE").expect("RULE_TYPE field");
+    let rule_type_idx = out
+        .schema
+        .field_index("RULE_TYPE")
+        .expect("RULE_TYPE field");
     for feature in &out.features {
         let rule_type = match &feature.attributes[rule_type_idx] {
             FieldValue::Text(v) => v.as_str(),
@@ -3118,12 +3972,24 @@ fn topology_rule_autofix_dry_run_mode_preserves_input() {
 
     // Run autofix in dry_run mode
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("rule_set".to_string(), json!(["line_endpoints_must_snap_within_tolerance"]));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "rule_set".to_string(),
+        json!(["line_endpoints_must_snap_within_tolerance"]),
+    );
     args.insert("snap_tolerance".to_string(), json!(1.5));
     args.insert("dry_run".to_string(), json!(true));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
-    args.insert("change_report".to_string(), json!(report_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "change_report".to_string(),
+        json!(report_path.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("topology_rule_autofix", &args, &context(&caps))
@@ -3133,9 +3999,13 @@ fn topology_rule_autofix_dry_run_mode_preserves_input() {
     assert_eq!(result.outputs.get("dry_run_mode"), Some(&json!(true)));
 
     // Verify change report was created
-    assert!(report_path.exists(), "change report should be created in dry_run mode");
+    assert!(
+        report_path.exists(),
+        "change report should be created in dry_run mode"
+    );
     let report_text = std::fs::read_to_string(&report_path).expect("read change report");
-    let report: serde_json::Value = serde_json::from_str(&report_text).expect("parse change report");
+    let report: serde_json::Value =
+        serde_json::from_str(&report_text).expect("parse change report");
     assert_eq!(report.get("dry_run"), Some(&json!(true)));
 
     // Verify output wasn't created (dry_run mode)
@@ -3172,18 +4042,30 @@ fn topology_rule_autofix_commits_changes_when_not_dry_run() {
 
     // Run autofix in commit mode with large snap tolerance (should snap endpoints)
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("rule_set".to_string(), json!(["line_endpoints_must_snap_within_tolerance"]));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "rule_set".to_string(),
+        json!(["line_endpoints_must_snap_within_tolerance"]),
+    );
     args.insert("snap_tolerance".to_string(), json!(20.0));
     args.insert("dry_run".to_string(), json!(false));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("topology_rule_autofix", &args, &context(&caps))
         .expect("topology_rule_autofix commit should succeed");
 
     // Verify output was created
-    assert!(output_path.exists(), "output file should be created in commit mode");
+    assert!(
+        output_path.exists(),
+        "output file should be created in commit mode"
+    );
 
     // Read the output and verify snapping occurred (endpoints should be closer)
     let output = wbvector::read(&output_path).expect("read fixed output");
@@ -3234,11 +4116,20 @@ fn topology_rule_autofix_projects_points_onto_lines() {
     // Note: In real usage, you'd need a mixed geometry layer with lines and points
     // For this test, we verify the tool runs successfully (line detection would find zero lines)
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("rule_set".to_string(), json!(["point_must_be_covered_by_line"]));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "rule_set".to_string(),
+        json!(["point_must_be_covered_by_line"]),
+    );
     args.insert("snap_tolerance".to_string(), json!(1.0));
     args.insert("dry_run".to_string(), json!(false));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("topology_rule_autofix", &args, &context(&caps))
@@ -3269,12 +4160,18 @@ fn locate_points_along_routes_writes_measure_and_offset_attributes() {
         .with_epsg(4326);
     routes.push(Feature {
         fid: 11,
-        geometry: Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)])),
+        geometry: Some(Geometry::line_string(vec![
+            Coord::xy(0.0, 0.0),
+            Coord::xy(10.0, 0.0),
+        ])),
         attributes: vec![],
     });
     routes.push(Feature {
         fid: 22,
-        geometry: Some(Geometry::line_string(vec![Coord::xy(0.0, 10.0), Coord::xy(10.0, 10.0)])),
+        geometry: Some(Geometry::line_string(vec![
+            Coord::xy(0.0, 10.0),
+            Coord::xy(10.0, 10.0),
+        ])),
         attributes: vec![],
     });
     wbvector::write(&routes, &routes_path, VectorFormat::GeoPackage).expect("write routes");
@@ -3290,16 +4187,28 @@ fn locate_points_along_routes_writes_measure_and_offset_attributes() {
     wbvector::write(&points, &points_path, VectorFormat::GeoPackage).expect("write points");
 
     let mut args = ToolArgs::new();
-    args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
-    args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "routes".to_string(),
+        json!(routes_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("locate_points_along_routes", &args, &context(&caps))
         .expect("locate_points_along_routes run");
 
     let out = wbvector::read(&out_path).expect("read locate_points_along_routes output");
     assert_eq!(out.features.len(), 1);
-    let route_idx = out.schema.field_index("ROUTE_FID").expect("ROUTE_FID field");
+    let route_idx = out
+        .schema
+        .field_index("ROUTE_FID")
+        .expect("ROUTE_FID field");
     let measure_idx = out.schema.field_index("MEASURE").expect("MEASURE field");
     let offset_idx = out.schema.field_index("OFFSET").expect("OFFSET field");
     let locate_x_idx = out.schema.field_index("LOCATE_X").expect("LOCATE_X field");
@@ -3332,10 +4241,26 @@ fn locate_points_along_routes_writes_measure_and_offset_attributes() {
         other => panic!("expected numeric LOCATE_Y, got {:?}", other),
     };
 
-    assert!((measure - 2.0).abs() < 1.0e-9, "unexpected route measure: {}", measure);
-    assert!((offset - 3.0).abs() < 1.0e-9, "unexpected offset distance: {}", offset);
-    assert!((locate_x - 2.0).abs() < 1.0e-9, "unexpected locate x: {}", locate_x);
-    assert!((locate_y - 0.0).abs() < 1.0e-9, "unexpected locate y: {}", locate_y);
+    assert!(
+        (measure - 2.0).abs() < 1.0e-9,
+        "unexpected route measure: {}",
+        measure
+    );
+    assert!(
+        (offset - 3.0).abs() < 1.0e-9,
+        "unexpected offset distance: {}",
+        offset
+    );
+    assert!(
+        (locate_x - 2.0).abs() < 1.0e-9,
+        "unexpected locate x: {}",
+        locate_x
+    );
+    assert!(
+        (locate_y - 0.0).abs() < 1.0e-9,
+        "unexpected locate y: {}",
+        locate_y
+    );
 
     let _ = std::fs::remove_file(&routes_path);
     let _ = std::fs::remove_file(&points_path);
@@ -3358,10 +4283,15 @@ fn route_event_points_from_table_creates_measured_point_events() {
     let mut routes = Layer::new("routes")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    routes.schema.add_field(FieldDef::new("RID", FieldType::Text));
+    routes
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
     routes
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(10.0, 0.0),
+            ])),
             &[("RID", FieldValue::Text("R1".to_string()))],
         )
         .expect("add route feature");
@@ -3371,13 +4301,22 @@ fn route_event_points_from_table_creates_measured_point_events() {
         .expect("write point events csv");
 
     let mut args = ToolArgs::new();
-    args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "routes".to_string(),
+        json!(routes_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("measure_field".to_string(), json!("measure"));
     args.insert("route_id_field".to_string(), json!("RID"));
     args.insert("write_event_xy".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("route_event_points_from_table", &args, &context(&caps))
         .expect("route_event_points_from_table run");
@@ -3385,7 +4324,10 @@ fn route_event_points_from_table_creates_measured_point_events() {
     let out = wbvector::read(&out_path).expect("read routed point events");
     assert_eq!(out.features.len(), 1);
     let measure_idx = out.schema.field_index("MEASURE").expect("MEASURE field");
-    let label_idx = out.schema.field_index("EVT_label").expect("EVT_label field");
+    let label_idx = out
+        .schema
+        .field_index("EVT_label")
+        .expect("EVT_label field");
 
     let measure = match &out.features[0].attributes[measure_idx] {
         FieldValue::Float(v) => *v,
@@ -3393,9 +4335,16 @@ fn route_event_points_from_table_creates_measured_point_events() {
         other => panic!("expected numeric MEASURE, got {:?}", other),
     };
     assert!((measure - 3.0).abs() < 1.0e-9);
-    assert_eq!(out.features[0].attributes[label_idx], FieldValue::Text("School".to_string()));
+    assert_eq!(
+        out.features[0].attributes[label_idx],
+        FieldValue::Text("School".to_string())
+    );
 
-    match out.features[0].geometry.as_ref().expect("point event geometry") {
+    match out.features[0]
+        .geometry
+        .as_ref()
+        .expect("point event geometry")
+    {
         Geometry::Point(coord) => {
             assert!((coord.x - 3.0).abs() < 1.0e-9);
             assert!(coord.y.abs() < 1.0e-9);
@@ -3424,7 +4373,9 @@ fn route_event_lines_from_table_segments_routes_by_from_to_measures() {
     let mut routes = Layer::new("routes")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    routes.schema.add_field(FieldDef::new("RID", FieldType::Text));
+    routes
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
     routes
         .add_feature(
             Some(Geometry::line_string(vec![
@@ -3437,17 +4388,29 @@ fn route_event_lines_from_table_segments_routes_by_from_to_measures() {
         .expect("add route feature");
     wbvector::write(&routes, &routes_path, VectorFormat::GeoPackage).expect("write routes");
 
-    std::fs::write(&events_path, "route_id,from_m,to_m,name\nR1,2.0,8.0,SegmentA\n")
-        .expect("write line events csv");
+    std::fs::write(
+        &events_path,
+        "route_id,from_m,to_m,name\nR1,2.0,8.0,SegmentA\n",
+    )
+    .expect("write line events csv");
 
     let mut args = ToolArgs::new();
-    args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "routes".to_string(),
+        json!(routes_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("from_measure_field".to_string(), json!("from_m"));
     args.insert("to_measure_field".to_string(), json!("to_m"));
     args.insert("route_id_field".to_string(), json!("RID"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("route_event_lines_from_table", &args, &context(&caps))
         .expect("route_event_lines_from_table run");
@@ -3470,9 +4433,16 @@ fn route_event_lines_from_table_segments_routes_by_from_to_measures() {
     };
     assert!((from_m - 2.0).abs() < 1.0e-9);
     assert!((to_m - 8.0).abs() < 1.0e-9);
-    assert_eq!(out.features[0].attributes[name_idx], FieldValue::Text("SegmentA".to_string()));
+    assert_eq!(
+        out.features[0].attributes[name_idx],
+        FieldValue::Text("SegmentA".to_string())
+    );
 
-    match out.features[0].geometry.as_ref().expect("line event geometry") {
+    match out.features[0]
+        .geometry
+        .as_ref()
+        .expect("line event geometry")
+    {
         Geometry::MultiLineString(parts) => {
             assert_eq!(parts.len(), 1);
             let coords = &parts[0];
@@ -3505,10 +4475,15 @@ fn route_event_points_from_layer_creates_measured_point_events() {
     let mut routes = Layer::new("routes")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    routes.schema.add_field(FieldDef::new("RID", FieldType::Text));
+    routes
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
     routes
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(10.0, 0.0),
+            ])),
             &[("RID", FieldValue::Text("R1".to_string()))],
         )
         .expect("add route feature");
@@ -3517,9 +4492,15 @@ fn route_event_points_from_layer_creates_measured_point_events() {
     let mut events = Layer::new("events")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    events.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    events.schema.add_field(FieldDef::new("measure", FieldType::Float));
-    events.schema.add_field(FieldDef::new("name", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("measure", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("name", FieldType::Text));
     events
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -3535,13 +4516,22 @@ fn route_event_points_from_layer_creates_measured_point_events() {
     let expected_event_fid = persisted_events.features[0].fid as i64;
 
     let mut args = ToolArgs::new();
-    args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "routes".to_string(),
+        json!(routes_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("measure_field".to_string(), json!("measure"));
     args.insert("route_id_field".to_string(), json!("RID"));
     args.insert("write_event_xy".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("route_event_points_from_layer", &args, &context(&caps))
         .expect("route_event_points_from_layer run");
@@ -3549,7 +4539,10 @@ fn route_event_points_from_layer_creates_measured_point_events() {
     let out = wbvector::read(&out_path).expect("read routed point events from layer");
     assert_eq!(out.features.len(), 1);
     let measure_idx = out.schema.field_index("MEASURE").expect("MEASURE field");
-    let event_fid_idx = out.schema.field_index("EVENT_FID").expect("EVENT_FID field");
+    let event_fid_idx = out
+        .schema
+        .field_index("EVENT_FID")
+        .expect("EVENT_FID field");
     let event_x_idx = out.schema.field_index("EVENT_X").expect("EVENT_X field");
     let event_y_idx = out.schema.field_index("EVENT_Y").expect("EVENT_Y field");
     let name_idx = out.schema.field_index("EVT_name").expect("EVT_name field");
@@ -3575,9 +4568,16 @@ fn route_event_points_from_layer_creates_measured_point_events() {
     };
     assert!(event_x.abs() < 1.0e-9);
     assert!(event_y.abs() < 1.0e-9);
-    assert_eq!(out.features[0].attributes[name_idx], FieldValue::Text("StopA".to_string()));
+    assert_eq!(
+        out.features[0].attributes[name_idx],
+        FieldValue::Text("StopA".to_string())
+    );
 
-    match out.features[0].geometry.as_ref().expect("point event geometry") {
+    match out.features[0]
+        .geometry
+        .as_ref()
+        .expect("point event geometry")
+    {
         Geometry::Point(coord) => {
             assert!((coord.x - 4.0).abs() < 1.0e-9);
             assert!(coord.y.abs() < 1.0e-9);
@@ -3606,10 +4606,16 @@ fn route_event_lines_from_layer_segments_routes_by_from_to_measures() {
     let mut routes = Layer::new("routes")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    routes.schema.add_field(FieldDef::new("RID", FieldType::Text));
+    routes
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
     routes
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(5.0, 0.0), Coord::xy(10.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(5.0, 0.0),
+                Coord::xy(10.0, 0.0),
+            ])),
             &[("RID", FieldValue::Text("R1".to_string()))],
         )
         .expect("add route feature");
@@ -3618,10 +4624,18 @@ fn route_event_lines_from_layer_segments_routes_by_from_to_measures() {
     let mut events = Layer::new("events")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    events.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    events.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("to_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("name", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("name", FieldType::Text));
     events
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -3638,14 +4652,23 @@ fn route_event_lines_from_layer_segments_routes_by_from_to_measures() {
     let expected_event_fid = persisted_events.features[0].fid as i64;
 
     let mut args = ToolArgs::new();
-    args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "routes".to_string(),
+        json!(routes_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("from_measure_field".to_string(), json!("from_m"));
     args.insert("to_measure_field".to_string(), json!("to_m"));
     args.insert("route_id_field".to_string(), json!("RID"));
     args.insert("write_event_xy".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("route_event_lines_from_layer", &args, &context(&caps))
         .expect("route_event_lines_from_layer run");
@@ -3654,7 +4677,10 @@ fn route_event_lines_from_layer_segments_routes_by_from_to_measures() {
     assert_eq!(out.features.len(), 1);
     let from_idx = out.schema.field_index("FROM_M").expect("FROM_M field");
     let to_idx = out.schema.field_index("TO_M").expect("TO_M field");
-    let event_fid_idx = out.schema.field_index("EVENT_FID").expect("EVENT_FID field");
+    let event_fid_idx = out
+        .schema
+        .field_index("EVENT_FID")
+        .expect("EVENT_FID field");
     let event_x_idx = out.schema.field_index("EVENT_X").expect("EVENT_X field");
     let event_y_idx = out.schema.field_index("EVENT_Y").expect("EVENT_Y field");
     let name_idx = out.schema.field_index("EVT_name").expect("EVT_name field");
@@ -3687,9 +4713,16 @@ fn route_event_lines_from_layer_segments_routes_by_from_to_measures() {
     };
     assert!(event_x.abs() < 1.0e-9);
     assert!(event_y.abs() < 1.0e-9);
-    assert_eq!(out.features[0].attributes[name_idx], FieldValue::Text("Seg1".to_string()));
+    assert_eq!(
+        out.features[0].attributes[name_idx],
+        FieldValue::Text("Seg1".to_string())
+    );
 
-    match out.features[0].geometry.as_ref().expect("line event geometry") {
+    match out.features[0]
+        .geometry
+        .as_ref()
+        .expect("line event geometry")
+    {
         Geometry::MultiLineString(parts) => {
             assert_eq!(parts.len(), 1);
             assert!((parts[0][0].x - 1.0).abs() < 1.0e-9);
@@ -3719,16 +4752,24 @@ fn route_event_points_from_table_rejects_duplicate_route_ids() {
     let mut routes = Layer::new("routes")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    routes.schema.add_field(FieldDef::new("RID", FieldType::Text));
+    routes
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
     routes
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(10.0, 0.0),
+            ])),
             &[("RID", FieldValue::Text("R1".to_string()))],
         )
         .expect("add first route feature");
     routes
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 5.0), Coord::xy(10.0, 5.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 5.0),
+                Coord::xy(10.0, 5.0),
+            ])),
             &[("RID", FieldValue::Text("R1".to_string()))],
         )
         .expect("add second route feature");
@@ -3737,18 +4778,31 @@ fn route_event_points_from_table_rejects_duplicate_route_ids() {
     std::fs::write(&events_path, "route_id,measure\nR1,2.0\n").expect("write point events csv");
 
     let mut args = ToolArgs::new();
-    args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "routes".to_string(),
+        json!(routes_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("measure_field".to_string(), json!("measure"));
     args.insert("route_id_field".to_string(), json!("RID"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let err = registry
         .run("route_event_points_from_table", &args, &context(&caps))
         .expect_err("expected duplicate route id failure");
     let msg = err.to_string();
-    assert!(msg.contains("duplicate route identifier"), "unexpected error: {}", msg);
+    assert!(
+        msg.contains("duplicate route identifier"),
+        "unexpected error: {}",
+        msg
+    );
 
     let _ = std::fs::remove_file(&routes_path);
     let _ = std::fs::remove_file(&events_path);
@@ -3771,10 +4825,15 @@ fn route_event_lines_from_layer_rejects_equal_from_to_measures() {
     let mut routes = Layer::new("routes")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    routes.schema.add_field(FieldDef::new("RID", FieldType::Text));
+    routes
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
     routes
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(10.0, 0.0),
+            ])),
             &[("RID", FieldValue::Text("R1".to_string()))],
         )
         .expect("add route feature");
@@ -3783,9 +4842,15 @@ fn route_event_lines_from_layer_rejects_equal_from_to_measures() {
     let mut events = Layer::new("events")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    events.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    events.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("to_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
     events
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -3799,19 +4864,32 @@ fn route_event_lines_from_layer_rejects_equal_from_to_measures() {
     wbvector::write(&events, &events_path, VectorFormat::GeoPackage).expect("write events layer");
 
     let mut args = ToolArgs::new();
-    args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "routes".to_string(),
+        json!(routes_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("from_measure_field".to_string(), json!("from_m"));
     args.insert("to_measure_field".to_string(), json!("to_m"));
     args.insert("route_id_field".to_string(), json!("RID"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let err = registry
         .run("route_event_lines_from_layer", &args, &context(&caps))
         .expect_err("expected equal-measure failure");
     let msg = err.to_string();
-    assert!(msg.contains("equal from/to measures"), "unexpected error: {}", msg);
+    assert!(
+        msg.contains("equal from/to measures"),
+        "unexpected error: {}",
+        msg
+    );
 
     let _ = std::fs::remove_file(&routes_path);
     let _ = std::fs::remove_file(&events_path);
@@ -3834,10 +4912,15 @@ fn route_event_points_from_layer_can_disable_event_traceability_fields() {
     let mut routes = Layer::new("routes")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    routes.schema.add_field(FieldDef::new("RID", FieldType::Text));
+    routes
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
     routes
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(10.0, 0.0),
+            ])),
             &[("RID", FieldValue::Text("R1".to_string()))],
         )
         .expect("add route feature");
@@ -3846,8 +4929,12 @@ fn route_event_points_from_layer_can_disable_event_traceability_fields() {
     let mut events = Layer::new("events")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    events.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    events.schema.add_field(FieldDef::new("measure", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("measure", FieldType::Float));
     events
         .add_feature(
             Some(Geometry::Point(Coord::xy(100.0, 200.0))),
@@ -3860,14 +4947,23 @@ fn route_event_points_from_layer_can_disable_event_traceability_fields() {
     wbvector::write(&events, &events_path, VectorFormat::GeoPackage).expect("write events layer");
 
     let mut args = ToolArgs::new();
-    args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "routes".to_string(),
+        json!(routes_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("measure_field".to_string(), json!("measure"));
     args.insert("route_id_field".to_string(), json!("RID"));
     args.insert("write_event_fid".to_string(), json!(false));
     args.insert("write_event_xy".to_string(), json!(false));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("route_event_points_from_layer", &args, &context(&caps))
@@ -3900,10 +4996,15 @@ fn route_calibrate_sets_from_to_measures_from_control_points() {
     let mut routes = Layer::new("routes")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    routes.schema.add_field(FieldDef::new("RID", FieldType::Text));
+    routes
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
     routes
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(10.0, 0.0),
+            ])),
             &[("RID", FieldValue::Text("R1".to_string()))],
         )
         .expect("add route feature");
@@ -3912,8 +5013,12 @@ fn route_calibrate_sets_from_to_measures_from_control_points() {
     let mut controls = Layer::new("controls")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    controls.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    controls.schema.add_field(FieldDef::new("measure", FieldType::Float));
+    controls
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    controls
+        .schema
+        .add_field(FieldDef::new("measure", FieldType::Float));
     controls
         .add_feature(
             Some(Geometry::Point(Coord::xy(2.0, 0.0))),
@@ -3935,13 +5040,22 @@ fn route_calibrate_sets_from_to_measures_from_control_points() {
     wbvector::write(&controls, &controls_path, VectorFormat::GeoPackage).expect("write controls");
 
     let mut args = ToolArgs::new();
-    args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
-    args.insert("control_points".to_string(), json!(controls_path.to_string_lossy().to_string()));
+    args.insert(
+        "routes".to_string(),
+        json!(routes_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "control_points".to_string(),
+        json!(controls_path.to_string_lossy().to_string()),
+    );
     args.insert("control_measure_field".to_string(), json!("measure"));
     args.insert("route_id_field".to_string(), json!("RID"));
     args.insert("control_route_id_field".to_string(), json!("route_id"));
     args.insert("snap_tolerance".to_string(), json!(0.01));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("route_calibrate", &args, &context(&caps))
@@ -3949,10 +5063,22 @@ fn route_calibrate_sets_from_to_measures_from_control_points() {
 
     let out = wbvector::read(&out_path).expect("read calibrated routes");
     assert_eq!(out.features.len(), 1);
-    let from_idx = out.schema.field_index("from_measure").expect("from_measure field");
-    let to_idx = out.schema.field_index("to_measure").expect("to_measure field");
-    let status_idx = out.schema.field_index("calib_status").expect("calib_status field");
-    let count_idx = out.schema.field_index("control_count").expect("control_count field");
+    let from_idx = out
+        .schema
+        .field_index("from_measure")
+        .expect("from_measure field");
+    let to_idx = out
+        .schema
+        .field_index("to_measure")
+        .expect("to_measure field");
+    let status_idx = out
+        .schema
+        .field_index("calib_status")
+        .expect("calib_status field");
+    let count_idx = out
+        .schema
+        .field_index("control_count")
+        .expect("control_count field");
 
     let from_measure = match &out.features[0].attributes[from_idx] {
         FieldValue::Float(v) => *v,
@@ -3964,13 +5090,24 @@ fn route_calibrate_sets_from_to_measures_from_control_points() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric to_measure, got {:?}", other),
     };
-    assert!((from_measure - 0.0).abs() < 1.0e-9, "unexpected from_measure: {}", from_measure);
-    assert!((to_measure - 100.0).abs() < 1.0e-9, "unexpected to_measure: {}", to_measure);
+    assert!(
+        (from_measure - 0.0).abs() < 1.0e-9,
+        "unexpected from_measure: {}",
+        from_measure
+    );
+    assert!(
+        (to_measure - 100.0).abs() < 1.0e-9,
+        "unexpected to_measure: {}",
+        to_measure
+    );
     assert_eq!(
         out.features[0].attributes[status_idx],
         FieldValue::Text("calibrated".to_string())
     );
-    assert_eq!(out.features[0].attributes[count_idx], FieldValue::Integer(2));
+    assert_eq!(
+        out.features[0].attributes[count_idx],
+        FieldValue::Integer(2)
+    );
 
     let _ = std::fs::remove_file(&routes_path);
     let _ = std::fs::remove_file(&controls_path);
@@ -3993,12 +5130,21 @@ fn route_recalibrate_scales_measure_span_with_edited_geometry_length() {
     let mut original = Layer::new("original")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    original.schema.add_field(FieldDef::new("RID", FieldType::Text));
-    original.schema.add_field(FieldDef::new("from_measure", FieldType::Float));
-    original.schema.add_field(FieldDef::new("to_measure", FieldType::Float));
+    original
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
+    original
+        .schema
+        .add_field(FieldDef::new("from_measure", FieldType::Float));
+    original
+        .schema
+        .add_field(FieldDef::new("to_measure", FieldType::Float));
     original
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(10.0, 0.0),
+            ])),
             &[
                 ("RID", FieldValue::Text("R1".to_string())),
                 ("from_measure", FieldValue::Float(100.0)),
@@ -4006,25 +5152,40 @@ fn route_recalibrate_scales_measure_span_with_edited_geometry_length() {
             ],
         )
         .expect("add original route");
-    wbvector::write(&original, &original_path, VectorFormat::GeoPackage).expect("write original routes");
+    wbvector::write(&original, &original_path, VectorFormat::GeoPackage)
+        .expect("write original routes");
 
     let mut edited = Layer::new("edited")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    edited.schema.add_field(FieldDef::new("RID", FieldType::Text));
+    edited
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
     edited
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(20.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(20.0, 0.0),
+            ])),
             &[("RID", FieldValue::Text("R1".to_string()))],
         )
         .expect("add edited route");
     wbvector::write(&edited, &edited_path, VectorFormat::GeoPackage).expect("write edited routes");
 
     let mut args = ToolArgs::new();
-    args.insert("original_routes".to_string(), json!(original_path.to_string_lossy().to_string()));
-    args.insert("edited_routes".to_string(), json!(edited_path.to_string_lossy().to_string()));
+    args.insert(
+        "original_routes".to_string(),
+        json!(original_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "edited_routes".to_string(),
+        json!(edited_path.to_string_lossy().to_string()),
+    );
     args.insert("route_id_field".to_string(), json!("RID"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("route_recalibrate", &args, &context(&caps))
@@ -4032,9 +5193,18 @@ fn route_recalibrate_scales_measure_span_with_edited_geometry_length() {
 
     let out = wbvector::read(&out_path).expect("read recalibrated routes");
     assert_eq!(out.features.len(), 1);
-    let from_idx = out.schema.field_index("from_measure").expect("from_measure field");
-    let to_idx = out.schema.field_index("to_measure").expect("to_measure field");
-    let status_idx = out.schema.field_index("recalib_status").expect("recalib_status field");
+    let from_idx = out
+        .schema
+        .field_index("from_measure")
+        .expect("from_measure field");
+    let to_idx = out
+        .schema
+        .field_index("to_measure")
+        .expect("to_measure field");
+    let status_idx = out
+        .schema
+        .field_index("recalib_status")
+        .expect("recalib_status field");
 
     let from_measure = match &out.features[0].attributes[from_idx] {
         FieldValue::Float(v) => *v,
@@ -4046,8 +5216,16 @@ fn route_recalibrate_scales_measure_span_with_edited_geometry_length() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric to_measure, got {:?}", other),
     };
-    assert!((from_measure - 100.0).abs() < 1.0e-9, "unexpected from_measure: {}", from_measure);
-    assert!((to_measure - 300.0).abs() < 1.0e-9, "unexpected to_measure: {}", to_measure);
+    assert!(
+        (from_measure - 100.0).abs() < 1.0e-9,
+        "unexpected from_measure: {}",
+        from_measure
+    );
+    assert!(
+        (to_measure - 300.0).abs() < 1.0e-9,
+        "unexpected to_measure: {}",
+        to_measure
+    );
     assert_eq!(
         out.features[0].attributes[status_idx],
         FieldValue::Text("recalibrated_scaled".to_string())
@@ -4074,10 +5252,15 @@ fn route_calibrate_marks_non_monotonic_control_sequences() {
     let mut routes = Layer::new("routes")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(4326);
-    routes.schema.add_field(FieldDef::new("RID", FieldType::Text));
+    routes
+        .schema
+        .add_field(FieldDef::new("RID", FieldType::Text));
     routes
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(10.0, 0.0),
+            ])),
             &[("RID", FieldValue::Text("R1".to_string()))],
         )
         .expect("add route feature");
@@ -4086,8 +5269,12 @@ fn route_calibrate_marks_non_monotonic_control_sequences() {
     let mut controls = Layer::new("controls")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    controls.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    controls.schema.add_field(FieldDef::new("measure", FieldType::Float));
+    controls
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    controls
+        .schema
+        .add_field(FieldDef::new("measure", FieldType::Float));
     controls
         .add_feature(
             Some(Geometry::Point(Coord::xy(2.0, 0.0))),
@@ -4109,13 +5296,22 @@ fn route_calibrate_marks_non_monotonic_control_sequences() {
     wbvector::write(&controls, &controls_path, VectorFormat::GeoPackage).expect("write controls");
 
     let mut args = ToolArgs::new();
-    args.insert("routes".to_string(), json!(routes_path.to_string_lossy().to_string()));
-    args.insert("control_points".to_string(), json!(controls_path.to_string_lossy().to_string()));
+    args.insert(
+        "routes".to_string(),
+        json!(routes_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "control_points".to_string(),
+        json!(controls_path.to_string_lossy().to_string()),
+    );
     args.insert("control_measure_field".to_string(), json!("measure"));
     args.insert("route_id_field".to_string(), json!("RID"));
     args.insert("control_route_id_field".to_string(), json!("route_id"));
     args.insert("snap_tolerance".to_string(), json!(0.01));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("route_calibrate", &args, &context(&caps))
@@ -4123,7 +5319,10 @@ fn route_calibrate_marks_non_monotonic_control_sequences() {
 
     let out = wbvector::read(&out_path).expect("read calibrated routes");
     assert_eq!(out.features.len(), 1);
-    let status_idx = out.schema.field_index("calib_status").expect("calib_status field");
+    let status_idx = out
+        .schema
+        .field_index("calib_status")
+        .expect("calib_status field");
     assert_eq!(
         out.features[0].attributes[status_idx],
         FieldValue::Text("non_monotonic_controls".to_string())
@@ -4150,10 +5349,18 @@ fn route_event_split_splits_intervals_at_route_boundaries() {
     let mut events = Layer::new("events")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    events.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    events.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("to_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("name", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("name", FieldType::Text));
     events
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -4172,8 +5379,12 @@ fn route_event_split_splits_intervals_at_route_boundaries() {
     let mut boundaries = Layer::new("boundaries")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    boundaries.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    boundaries.schema.add_field(FieldDef::new("measure", FieldType::Float));
+    boundaries
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    boundaries
+        .schema
+        .add_field(FieldDef::new("measure", FieldType::Float));
     for m in [2.0, 5.0, 8.0] {
         boundaries
             .add_feature(
@@ -4185,17 +5396,27 @@ fn route_event_split_splits_intervals_at_route_boundaries() {
             )
             .expect("add boundary feature");
     }
-    wbvector::write(&boundaries, &boundaries_path, VectorFormat::GeoPackage).expect("write boundaries");
+    wbvector::write(&boundaries, &boundaries_path, VectorFormat::GeoPackage)
+        .expect("write boundaries");
 
     let mut args = ToolArgs::new();
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
-    args.insert("boundaries".to_string(), json!(boundaries_path.to_string_lossy().to_string()));
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "boundaries".to_string(),
+        json!(boundaries_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("from_measure_field".to_string(), json!("from_m"));
     args.insert("to_measure_field".to_string(), json!("to_m"));
     args.insert("boundary_route_field".to_string(), json!("route_id"));
     args.insert("boundary_measure_field".to_string(), json!("measure"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("route_event_split", &args, &context(&caps))
@@ -4205,10 +5426,21 @@ fn route_event_split_splits_intervals_at_route_boundaries() {
     assert_eq!(out.features.len(), 4);
     let from_idx = out.schema.field_index("from_m").expect("from_m field");
     let to_idx = out.schema.field_index("to_m").expect("to_m field");
-    let split_seq_idx = out.schema.field_index("split_seq").expect("split_seq field");
-    let parent_fid_idx = out.schema.field_index("parent_fid").expect("parent_fid field");
+    let split_seq_idx = out
+        .schema
+        .field_index("split_seq")
+        .expect("split_seq field");
+    let parent_fid_idx = out
+        .schema
+        .field_index("parent_fid")
+        .expect("parent_fid field");
 
-    let expected = [(0.0, 2.0, 1i64), (2.0, 5.0, 2i64), (5.0, 8.0, 3i64), (8.0, 10.0, 4i64)];
+    let expected = [
+        (0.0, 2.0, 1i64),
+        (2.0, 5.0, 2i64),
+        (5.0, 8.0, 3i64),
+        (8.0, 10.0, 4i64),
+    ];
     for (idx, feature) in out.features.iter().enumerate() {
         let from_m = match &feature.attributes[from_idx] {
             FieldValue::Float(v) => *v,
@@ -4254,10 +5486,18 @@ fn route_event_merge_merges_adjacent_compatible_events() {
     let mut events = Layer::new("events")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    events.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    events.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("to_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("speed", FieldType::Integer));
+    events
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("speed", FieldType::Integer));
 
     for (from_m, to_m, speed) in [(0.0, 3.0, 50i64), (3.0, 6.0, 50i64), (6.0, 10.0, 30i64)] {
         events
@@ -4275,12 +5515,18 @@ fn route_event_merge_merges_adjacent_compatible_events() {
     wbvector::write(&events, &events_path, VectorFormat::GeoPackage).expect("write events");
 
     let mut args = ToolArgs::new();
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("from_measure_field".to_string(), json!("from_m"));
     args.insert("to_measure_field".to_string(), json!("to_m"));
     args.insert("group_fields".to_string(), json!("route_id,speed"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("route_event_merge", &args, &context(&caps))
@@ -4292,7 +5538,10 @@ fn route_event_merge_merges_adjacent_compatible_events() {
     let from_idx = out.schema.field_index("from_m").expect("from_m field");
     let to_idx = out.schema.field_index("to_m").expect("to_m field");
     let speed_idx = out.schema.field_index("speed").expect("speed field");
-    let merge_count_idx = out.schema.field_index("merge_count").expect("merge_count field");
+    let merge_count_idx = out
+        .schema
+        .field_index("merge_count")
+        .expect("merge_count field");
 
     let mut observed = out
         .features
@@ -4350,10 +5599,18 @@ fn route_event_merge_rejects_overlaps_in_error_mode() {
     let mut events = Layer::new("events")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    events.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    events.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("to_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("speed", FieldType::Integer));
+    events
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("speed", FieldType::Integer));
 
     for (from_m, to_m) in [(0.0, 5.0), (4.0, 8.0)] {
         events
@@ -4371,19 +5628,29 @@ fn route_event_merge_rejects_overlaps_in_error_mode() {
     wbvector::write(&events, &events_path, VectorFormat::GeoPackage).expect("write events");
 
     let mut args = ToolArgs::new();
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("from_measure_field".to_string(), json!("from_m"));
     args.insert("to_measure_field".to_string(), json!("to_m"));
     args.insert("group_fields".to_string(), json!("route_id,speed"));
     args.insert("conflict_mode".to_string(), json!("error"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let err = registry
         .run("route_event_merge", &args, &context(&caps))
         .expect_err("expected overlap conflict in error mode");
     let msg = err.to_string();
-    assert!(msg.contains("overlapping events detected"), "unexpected error: {}", msg);
+    assert!(
+        msg.contains("overlapping events detected"),
+        "unexpected error: {}",
+        msg
+    );
 
     let _ = std::fs::remove_file(&events_path);
     let _ = std::fs::remove_file(&out_path);
@@ -4404,10 +5671,18 @@ fn route_event_merge_skips_overlaps_in_skip_mode() {
     let mut events = Layer::new("events")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    events.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    events.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("to_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("speed", FieldType::Integer));
+    events
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("speed", FieldType::Integer));
 
     for (from_m, to_m) in [(0.0, 5.0), (4.0, 8.0)] {
         events
@@ -4425,13 +5700,19 @@ fn route_event_merge_skips_overlaps_in_skip_mode() {
     wbvector::write(&events, &events_path, VectorFormat::GeoPackage).expect("write events");
 
     let mut args = ToolArgs::new();
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("event_route_field".to_string(), json!("route_id"));
     args.insert("from_measure_field".to_string(), json!("from_m"));
     args.insert("to_measure_field".to_string(), json!("to_m"));
     args.insert("group_fields".to_string(), json!("route_id,speed"));
     args.insert("conflict_mode".to_string(), json!("skip"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("route_event_merge", &args, &context(&caps))
@@ -4439,7 +5720,10 @@ fn route_event_merge_skips_overlaps_in_skip_mode() {
 
     let out = wbvector::read(&out_path).expect("read merged events");
     assert_eq!(out.features.len(), 2);
-    let merge_count_idx = out.schema.field_index("merge_count").expect("merge_count field");
+    let merge_count_idx = out
+        .schema
+        .field_index("merge_count")
+        .expect("merge_count field");
     for feature in &out.features {
         assert_eq!(feature.attributes[merge_count_idx], FieldValue::Integer(1));
     }
@@ -4464,10 +5748,18 @@ fn route_event_overlay_outputs_overlapping_intervals() {
     let mut primary = Layer::new("primary")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    primary.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    primary.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    primary.schema.add_field(FieldDef::new("to_m", FieldType::Float));
-    primary.schema.add_field(FieldDef::new("surface", FieldType::Text));
+    primary
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    primary
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    primary
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
+    primary
+        .schema
+        .add_field(FieldDef::new("surface", FieldType::Text));
     primary
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -4484,10 +5776,18 @@ fn route_event_overlay_outputs_overlapping_intervals() {
     let mut overlay = Layer::new("overlay")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    overlay.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    overlay.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    overlay.schema.add_field(FieldDef::new("to_m", FieldType::Float));
-    overlay.schema.add_field(FieldDef::new("speed", FieldType::Integer));
+    overlay
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    overlay
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    overlay
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
+    overlay
+        .schema
+        .add_field(FieldDef::new("speed", FieldType::Integer));
     overlay
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -4502,15 +5802,24 @@ fn route_event_overlay_outputs_overlapping_intervals() {
     wbvector::write(&overlay, &overlay_path, VectorFormat::GeoPackage).expect("write overlay");
 
     let mut args = ToolArgs::new();
-    args.insert("primary_events".to_string(), json!(primary_path.to_string_lossy().to_string()));
-    args.insert("overlay_events".to_string(), json!(overlay_path.to_string_lossy().to_string()));
+    args.insert(
+        "primary_events".to_string(),
+        json!(primary_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "overlay_events".to_string(),
+        json!(overlay_path.to_string_lossy().to_string()),
+    );
     args.insert("primary_route_field".to_string(), json!("route_id"));
     args.insert("primary_from_measure_field".to_string(), json!("from_m"));
     args.insert("primary_to_measure_field".to_string(), json!("to_m"));
     args.insert("overlay_route_field".to_string(), json!("route_id"));
     args.insert("overlay_from_measure_field".to_string(), json!("from_m"));
     args.insert("overlay_to_measure_field".to_string(), json!("to_m"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("route_event_overlay", &args, &context(&caps))
@@ -4521,10 +5830,19 @@ fn route_event_overlay_outputs_overlapping_intervals() {
     let route_idx = out.schema.field_index("ROUTE_ID").expect("ROUTE_ID field");
     let from_idx = out.schema.field_index("FROM_M").expect("FROM_M field");
     let to_idx = out.schema.field_index("TO_M").expect("TO_M field");
-    let pri_surface_idx = out.schema.field_index("PRI_surface").expect("PRI_surface field");
-    let ovr_speed_idx = out.schema.field_index("OVR_speed").expect("OVR_speed field");
+    let pri_surface_idx = out
+        .schema
+        .field_index("PRI_surface")
+        .expect("PRI_surface field");
+    let ovr_speed_idx = out
+        .schema
+        .field_index("OVR_speed")
+        .expect("OVR_speed field");
 
-    assert_eq!(out.features[0].attributes[route_idx], FieldValue::Text("R1".to_string()));
+    assert_eq!(
+        out.features[0].attributes[route_idx],
+        FieldValue::Text("R1".to_string())
+    );
     let from_m = match &out.features[0].attributes[from_idx] {
         FieldValue::Float(v) => *v,
         FieldValue::Integer(v) => *v as f64,
@@ -4541,7 +5859,10 @@ fn route_event_overlay_outputs_overlapping_intervals() {
         out.features[0].attributes[pri_surface_idx],
         FieldValue::Text("asphalt".to_string())
     );
-    assert_eq!(out.features[0].attributes[ovr_speed_idx], FieldValue::Integer(40));
+    assert_eq!(
+        out.features[0].attributes[ovr_speed_idx],
+        FieldValue::Integer(40)
+    );
 
     let _ = std::fs::remove_file(&primary_path);
     let _ = std::fs::remove_file(&overlay_path);
@@ -4564,9 +5885,15 @@ fn route_event_overlay_returns_empty_for_disjoint_intervals() {
     let mut primary = Layer::new("primary")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    primary.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    primary.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    primary.schema.add_field(FieldDef::new("to_m", FieldType::Float));
+    primary
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    primary
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    primary
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
     primary
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -4582,9 +5909,15 @@ fn route_event_overlay_returns_empty_for_disjoint_intervals() {
     let mut overlay = Layer::new("overlay")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    overlay.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    overlay.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    overlay.schema.add_field(FieldDef::new("to_m", FieldType::Float));
+    overlay
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    overlay
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    overlay
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
     overlay
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -4598,15 +5931,24 @@ fn route_event_overlay_returns_empty_for_disjoint_intervals() {
     wbvector::write(&overlay, &overlay_path, VectorFormat::GeoPackage).expect("write overlay");
 
     let mut args = ToolArgs::new();
-    args.insert("primary_events".to_string(), json!(primary_path.to_string_lossy().to_string()));
-    args.insert("overlay_events".to_string(), json!(overlay_path.to_string_lossy().to_string()));
+    args.insert(
+        "primary_events".to_string(),
+        json!(primary_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "overlay_events".to_string(),
+        json!(overlay_path.to_string_lossy().to_string()),
+    );
     args.insert("primary_route_field".to_string(), json!("route_id"));
     args.insert("primary_from_measure_field".to_string(), json!("from_m"));
     args.insert("primary_to_measure_field".to_string(), json!("to_m"));
     args.insert("overlay_route_field".to_string(), json!("route_id"));
     args.insert("overlay_from_measure_field".to_string(), json!("from_m"));
     args.insert("overlay_to_measure_field".to_string(), json!("to_m"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("route_event_overlay", &args, &context(&caps))
@@ -4636,9 +5978,15 @@ fn route_event_overlay_respects_min_overlap_length() {
     let mut primary = Layer::new("primary")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    primary.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    primary.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    primary.schema.add_field(FieldDef::new("to_m", FieldType::Float));
+    primary
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    primary
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    primary
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
     primary
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -4654,9 +6002,15 @@ fn route_event_overlay_respects_min_overlap_length() {
     let mut overlay = Layer::new("overlay")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    overlay.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    overlay.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    overlay.schema.add_field(FieldDef::new("to_m", FieldType::Float));
+    overlay
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    overlay
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    overlay
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
     overlay
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -4670,8 +6024,14 @@ fn route_event_overlay_respects_min_overlap_length() {
     wbvector::write(&overlay, &overlay_path, VectorFormat::GeoPackage).expect("write overlay");
 
     let mut args = ToolArgs::new();
-    args.insert("primary_events".to_string(), json!(primary_path.to_string_lossy().to_string()));
-    args.insert("overlay_events".to_string(), json!(overlay_path.to_string_lossy().to_string()));
+    args.insert(
+        "primary_events".to_string(),
+        json!(primary_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "overlay_events".to_string(),
+        json!(overlay_path.to_string_lossy().to_string()),
+    );
     args.insert("primary_route_field".to_string(), json!("route_id"));
     args.insert("primary_from_measure_field".to_string(), json!("from_m"));
     args.insert("primary_to_measure_field".to_string(), json!("to_m"));
@@ -4679,7 +6039,10 @@ fn route_event_overlay_respects_min_overlap_length() {
     args.insert("overlay_from_measure_field".to_string(), json!("from_m"));
     args.insert("overlay_to_measure_field".to_string(), json!("to_m"));
     args.insert("min_overlap_length".to_string(), json!(2.0));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("route_event_overlay", &args, &context(&caps))
@@ -4708,9 +6071,15 @@ fn route_measure_qa_detects_gaps_overlaps_non_monotonic_and_duplicates() {
     let mut events = Layer::new("events")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    events.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    events.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("to_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
 
     for (from_m, to_m) in [(0.0, 2.0), (3.0, 5.0), (4.0, 6.0), (4.0, 6.0), (1.0, 1.5)] {
         events
@@ -4727,11 +6096,17 @@ fn route_measure_qa_detects_gaps_overlaps_non_monotonic_and_duplicates() {
     wbvector::write(&events, &events_path, VectorFormat::GeoPackage).expect("write events");
 
     let mut args = ToolArgs::new();
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("route_field".to_string(), json!("route_id"));
     args.insert("from_measure_field".to_string(), json!("from_m"));
     args.insert("to_measure_field".to_string(), json!("to_m"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("route_measure_qa", &args, &context(&caps))
@@ -4739,7 +6114,10 @@ fn route_measure_qa_detects_gaps_overlaps_non_monotonic_and_duplicates() {
 
     let out = wbvector::read(&out_path).expect("read qa diagnostics");
     assert!(!out.features.is_empty());
-    let issue_idx = out.schema.field_index("ISSUE_TYPE").expect("ISSUE_TYPE field");
+    let issue_idx = out
+        .schema
+        .field_index("ISSUE_TYPE")
+        .expect("ISSUE_TYPE field");
 
     let mut seen_gap = false;
     let mut seen_overlap = false;
@@ -4813,9 +6191,15 @@ fn route_measure_qa_returns_zero_counts_for_clean_sequence() {
     let mut events = Layer::new("events")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    events.schema.add_field(FieldDef::new("route_id", FieldType::Text));
-    events.schema.add_field(FieldDef::new("from_m", FieldType::Float));
-    events.schema.add_field(FieldDef::new("to_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("route_id", FieldType::Text));
+    events
+        .schema
+        .add_field(FieldDef::new("from_m", FieldType::Float));
+    events
+        .schema
+        .add_field(FieldDef::new("to_m", FieldType::Float));
 
     for (from_m, to_m) in [(0.0, 2.0), (2.0, 4.0), (4.0, 7.0)] {
         events
@@ -4832,11 +6216,17 @@ fn route_measure_qa_returns_zero_counts_for_clean_sequence() {
     wbvector::write(&events, &events_path, VectorFormat::GeoPackage).expect("write events");
 
     let mut args = ToolArgs::new();
-    args.insert("events".to_string(), json!(events_path.to_string_lossy().to_string()));
+    args.insert(
+        "events".to_string(),
+        json!(events_path.to_string_lossy().to_string()),
+    );
     args.insert("route_field".to_string(), json!("route_id"));
     args.insert("from_measure_field".to_string(), json!("from_m"));
     args.insert("to_measure_field".to_string(), json!("to_m"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("route_measure_qa", &args, &context(&caps))
@@ -4844,7 +6234,14 @@ fn route_measure_qa_returns_zero_counts_for_clean_sequence() {
 
     let out = wbvector::read(&out_path).expect("read qa diagnostics");
     assert_eq!(out.features.len(), 0);
-    assert_eq!(result.outputs.get("gap_count").and_then(|v| v.as_u64()).unwrap_or(999), 0);
+    assert_eq!(
+        result
+            .outputs
+            .get("gap_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(999),
+        0
+    );
     assert_eq!(
         result
             .outputs
@@ -5006,9 +6403,16 @@ fn lidar_batch_a_tools_propagate_input_crs_to_output_rasters() {
     );
     nn_args.insert("resolution".to_string(), json!(0.5));
     nn_args.insert("search_radius".to_string(), json!(2.0));
-    nn_args.insert("output".to_string(), json!(nn_out.to_string_lossy().to_string()));
+    nn_args.insert(
+        "output".to_string(),
+        json!(nn_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("lidar_nearest_neighbour_gridding", &nn_args, &context(&caps))
+        .run(
+            "lidar_nearest_neighbour_gridding",
+            &nn_args,
+            &context(&caps),
+        )
         .expect("lidar_nearest_neighbour_gridding should run");
 
     let mut idw_args = ToolArgs::new();
@@ -5019,7 +6423,10 @@ fn lidar_batch_a_tools_propagate_input_crs_to_output_rasters() {
     idw_args.insert("resolution".to_string(), json!(0.5));
     idw_args.insert("weight".to_string(), json!(1.0));
     idw_args.insert("search_radius".to_string(), json!(2.0));
-    idw_args.insert("output".to_string(), json!(idw_out.to_string_lossy().to_string()));
+    idw_args.insert(
+        "output".to_string(),
+        json!(idw_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_idw_interpolation", &idw_args, &context(&caps))
         .expect("lidar_idw_interpolation should run");
@@ -5031,7 +6438,10 @@ fn lidar_batch_a_tools_propagate_input_crs_to_output_rasters() {
     );
     tin_args.insert("resolution".to_string(), json!(0.5));
     tin_args.insert("max_triangle_edge_length".to_string(), json!(10.0));
-    tin_args.insert("output".to_string(), json!(tin_out.to_string_lossy().to_string()));
+    tin_args.insert(
+        "output".to_string(),
+        json!(tin_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_tin_gridding", &tin_args, &context(&caps))
         .expect("lidar_tin_gridding should run");
@@ -5113,8 +6523,8 @@ fn lidar_batch_a_tools_propagate_wkt_only_crs_to_output_rasters() {
 
     let nn_id = raster_memory_store::raster_path_to_id(nn_path)
         .expect("nn output should be an in-memory raster path");
-    let nn = raster_memory_store::get_raster_by_id(nn_id)
-        .expect("in-memory raster should be present");
+    let nn =
+        raster_memory_store::get_raster_by_id(nn_id).expect("in-memory raster should be present");
     assert_eq!(nn.crs.epsg, None);
     assert_eq!(nn.crs.wkt.as_deref(), Some(wkt));
 
@@ -5163,12 +6573,18 @@ fn lidar_batch_a_supports_legacy_filter_aliases_and_thresholds() {
     );
     args.insert("resolution".to_string(), json!(1.0));
     args.insert("search_radius".to_string(), json!(10.0));
-    args.insert("interpolation_parameter".to_string(), json!("return_number"));
+    args.insert(
+        "interpolation_parameter".to_string(),
+        json!("return_number"),
+    );
     args.insert("returns".to_string(), json!("last"));
     args.insert("excluded_classes".to_string(), json!("1"));
     args.insert("min_elev".to_string(), json!(15.0));
     args.insert("max_elev".to_string(), json!(25.0));
-    args.insert("output".to_string(), json!(nn_out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(nn_out.to_string_lossy().to_string()),
+    );
 
     registry
         .run("lidar_nearest_neighbour_gridding", &args, &context(&caps))
@@ -5223,12 +6639,18 @@ fn lidar_idw_supports_legacy_filter_aliases_and_thresholds() {
     );
     args.insert("resolution".to_string(), json!(1.0));
     args.insert("search_radius".to_string(), json!(10.0));
-    args.insert("interpolation_parameter".to_string(), json!("return_number"));
+    args.insert(
+        "interpolation_parameter".to_string(),
+        json!("return_number"),
+    );
     args.insert("returns".to_string(), json!("last"));
     args.insert("exclude_cls".to_string(), json!("1"));
     args.insert("minz".to_string(), json!(15.0));
     args.insert("maxz".to_string(), json!(25.0));
-    args.insert("output".to_string(), json!(out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out.to_string_lossy().to_string()),
+    );
 
     registry
         .run("lidar_idw_interpolation", &args, &context(&caps))
@@ -5301,12 +6723,18 @@ fn lidar_tin_supports_legacy_filter_aliases_and_thresholds() {
     );
     args.insert("resolution".to_string(), json!(0.5));
     args.insert("max_triangle_edge_length".to_string(), json!(10.0));
-    args.insert("interpolation_parameter".to_string(), json!("return_number"));
+    args.insert(
+        "interpolation_parameter".to_string(),
+        json!("return_number"),
+    );
     args.insert("returns".to_string(), json!("last"));
     args.insert("excluded_classes".to_string(), json!("1"));
     args.insert("minz".to_string(), json!(15.0));
     args.insert("maxz".to_string(), json!(25.0));
-    args.insert("output".to_string(), json!(out.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out.to_string_lossy().to_string()),
+    );
 
     registry
         .run("lidar_tin_gridding", &args, &context(&caps))
@@ -5391,7 +6819,10 @@ fn lidar_rbf_and_sibson_run_and_propagate_crs() {
     rbf_args.insert("num_points".to_string(), json!(4));
     rbf_args.insert("func_type".to_string(), json!("gaussian"));
     rbf_args.insert("weight".to_string(), json!(0.2));
-    rbf_args.insert("output".to_string(), json!(rbf_out.to_string_lossy().to_string()));
+    rbf_args.insert(
+        "output".to_string(),
+        json!(rbf_out.to_string_lossy().to_string()),
+    );
     registry
         .run(
             "lidar_radial_basis_function_interpolation",
@@ -5406,7 +6837,10 @@ fn lidar_rbf_and_sibson_run_and_propagate_crs() {
         json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
     );
     sibson_args.insert("resolution".to_string(), json!(0.5));
-    sibson_args.insert("output".to_string(), json!(sibson_out.to_string_lossy().to_string()));
+    sibson_args.insert(
+        "output".to_string(),
+        json!(sibson_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_sibson_interpolation", &sibson_args, &context(&caps))
         .expect("lidar_sibson_interpolation should run");
@@ -5425,8 +6859,14 @@ fn lidar_rbf_and_sibson_run_and_propagate_crs() {
         let v = sibson.data.get_f64(idx);
         !sibson.is_nodata(v)
     });
-    assert!(rbf_has_values, "RBF output should contain interpolated cells");
-    assert!(sibson_has_values, "Sibson output should contain interpolated cells");
+    assert!(
+        rbf_has_values,
+        "RBF output should contain interpolated cells"
+    );
+    assert!(
+        sibson_has_values,
+        "Sibson output should contain interpolated cells"
+    );
 
     let _ = std::fs::remove_file(&lidar_path);
     let _ = std::fs::remove_file(&rbf_out);
@@ -5490,9 +6930,16 @@ fn lidar_batch_a_supports_time_and_rgb_interpolation_parameters() {
     time_args.insert("resolution".to_string(), json!(1.0));
     time_args.insert("search_radius".to_string(), json!(10.0));
     time_args.insert("interpolation_parameter".to_string(), json!("time"));
-    time_args.insert("output".to_string(), json!(time_out.to_string_lossy().to_string()));
+    time_args.insert(
+        "output".to_string(),
+        json!(time_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("lidar_nearest_neighbour_gridding", &time_args, &context(&caps))
+        .run(
+            "lidar_nearest_neighbour_gridding",
+            &time_args,
+            &context(&caps),
+        )
         .expect("lidar_nearest_neighbour_gridding should support time parameter");
 
     let mut rgb_args = ToolArgs::new();
@@ -5503,9 +6950,16 @@ fn lidar_batch_a_supports_time_and_rgb_interpolation_parameters() {
     rgb_args.insert("resolution".to_string(), json!(1.0));
     rgb_args.insert("search_radius".to_string(), json!(10.0));
     rgb_args.insert("interpolation_parameter".to_string(), json!("rgb"));
-    rgb_args.insert("output".to_string(), json!(rgb_out.to_string_lossy().to_string()));
+    rgb_args.insert(
+        "output".to_string(),
+        json!(rgb_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("lidar_nearest_neighbour_gridding", &rgb_args, &context(&caps))
+        .run(
+            "lidar_nearest_neighbour_gridding",
+            &rgb_args,
+            &context(&caps),
+        )
         .expect("lidar_nearest_neighbour_gridding should support rgb parameter");
 
     let time_raster = Raster::read(&time_out).expect("read time output");
@@ -5531,12 +6985,60 @@ fn lidar_rbf_poly_order_quadratic_is_functional() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: -1.0, y: -1.0, z: 3.5, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: -1.0, y: 1.0, z: 1.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: -1.0, z: 7.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 5.5, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: -0.5, y: 0.3, z: 1.855, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.4, y: -0.7, z: 4.8775, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: -1.0,
+                y: -1.0,
+                z: 3.5,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: -1.0,
+                y: 1.0,
+                z: 1.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: -1.0,
+                z: 7.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 5.5,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: -0.5,
+                y: 0.3,
+                z: 1.855,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.4,
+                y: -0.7,
+                z: 4.8775,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -5552,7 +7054,10 @@ fn lidar_rbf_poly_order_quadratic_is_functional() {
     none_args.insert("func_type".to_string(), json!("gaussian"));
     none_args.insert("weight".to_string(), json!(0.2));
     none_args.insert("poly_order".to_string(), json!("none"));
-    none_args.insert("output".to_string(), json!(none_out.to_string_lossy().to_string()));
+    none_args.insert(
+        "output".to_string(),
+        json!(none_out.to_string_lossy().to_string()),
+    );
     registry
         .run(
             "lidar_radial_basis_function_interpolation",
@@ -5563,7 +7068,10 @@ fn lidar_rbf_poly_order_quadratic_is_functional() {
 
     let mut quad_args = none_args.clone();
     quad_args.insert("poly_order".to_string(), json!("quadratic"));
-    quad_args.insert("output".to_string(), json!(quad_out.to_string_lossy().to_string()));
+    quad_args.insert(
+        "output".to_string(),
+        json!(quad_out.to_string_lossy().to_string()),
+    );
     registry
         .run(
             "lidar_radial_basis_function_interpolation",
@@ -5604,45 +7112,122 @@ fn lidar_phase1_batch_b_tools_run_and_propagate_crs() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 0.0, z: 11.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.0, y: 1.0, z: 12.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 13.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.5, y: 0.5, z: 14.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 11.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.0,
+                y: 1.0,
+                z: 12.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 13.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.5,
+                y: 0.5,
+                z: 14.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     cloud.write(&lidar_path).expect("write lidar input");
 
     let mut block_max_args = ToolArgs::new();
-    block_max_args.insert("input".to_string(), json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}));
+    block_max_args.insert(
+        "input".to_string(),
+        json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
+    );
     block_max_args.insert("resolution".to_string(), json!(0.5));
-    block_max_args.insert("output".to_string(), json!(block_max_out.to_string_lossy().to_string()));
-    registry.run("lidar_block_maximum", &block_max_args, &context(&caps)).expect("lidar_block_maximum should run");
+    block_max_args.insert(
+        "output".to_string(),
+        json!(block_max_out.to_string_lossy().to_string()),
+    );
+    registry
+        .run("lidar_block_maximum", &block_max_args, &context(&caps))
+        .expect("lidar_block_maximum should run");
 
     let mut block_min_args = block_max_args.clone();
-    block_min_args.insert("output".to_string(), json!(block_min_out.to_string_lossy().to_string()));
-    registry.run("lidar_block_minimum", &block_min_args, &context(&caps)).expect("lidar_block_minimum should run");
+    block_min_args.insert(
+        "output".to_string(),
+        json!(block_min_out.to_string_lossy().to_string()),
+    );
+    registry
+        .run("lidar_block_minimum", &block_min_args, &context(&caps))
+        .expect("lidar_block_minimum should run");
 
     let mut density_args = ToolArgs::new();
-    density_args.insert("input".to_string(), json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}));
+    density_args.insert(
+        "input".to_string(),
+        json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
+    );
     density_args.insert("resolution".to_string(), json!(0.5));
     density_args.insert("search_radius".to_string(), json!(1.0));
-    density_args.insert("output".to_string(), json!(density_out.to_string_lossy().to_string()));
-    registry.run("lidar_point_density", &density_args, &context(&caps)).expect("lidar_point_density should run");
+    density_args.insert(
+        "output".to_string(),
+        json!(density_out.to_string_lossy().to_string()),
+    );
+    registry
+        .run("lidar_point_density", &density_args, &context(&caps))
+        .expect("lidar_point_density should run");
 
     let mut dsm_args = ToolArgs::new();
-    dsm_args.insert("input".to_string(), json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}));
+    dsm_args.insert(
+        "input".to_string(),
+        json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
+    );
     dsm_args.insert("resolution".to_string(), json!(0.5));
     dsm_args.insert("search_radius".to_string(), json!(0.5));
-    dsm_args.insert("output".to_string(), json!(dsm_out.to_string_lossy().to_string()));
-    registry.run("lidar_digital_surface_model", &dsm_args, &context(&caps)).expect("lidar_digital_surface_model should run");
+    dsm_args.insert(
+        "output".to_string(),
+        json!(dsm_out.to_string_lossy().to_string()),
+    );
+    registry
+        .run("lidar_digital_surface_model", &dsm_args, &context(&caps))
+        .expect("lidar_digital_surface_model should run");
 
     let mut hs_args = ToolArgs::new();
-    hs_args.insert("input".to_string(), json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}));
+    hs_args.insert(
+        "input".to_string(),
+        json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
+    );
     hs_args.insert("resolution".to_string(), json!(0.5));
-    hs_args.insert("output".to_string(), json!(hs_out.to_string_lossy().to_string()));
-    registry.run("lidar_hillshade", &hs_args, &context(&caps)).expect("lidar_hillshade should run");
+    hs_args.insert(
+        "output".to_string(),
+        json!(hs_out.to_string_lossy().to_string()),
+    );
+    registry
+        .run("lidar_hillshade", &hs_args, &context(&caps))
+        .expect("lidar_hillshade should run");
 
     for out in [&block_max_out, &block_min_out, &density_out, &dsm_out] {
         let raster = Raster::read(out).expect("read lidar phase-1 batch-b output");
@@ -5651,7 +7236,11 @@ fn lidar_phase1_batch_b_tools_run_and_propagate_crs() {
             let v = raster.data.get_f64(idx);
             !raster.is_nodata(v)
         });
-        assert!(has_values, "output should contain at least one interpolated value: {}", out.to_string_lossy());
+        assert!(
+            has_values,
+            "output should contain at least one interpolated value: {}",
+            out.to_string_lossy()
+        );
     }
 
     let hs = Raster::read(&hs_out).expect("read lidar hillshade output");
@@ -5681,19 +7270,83 @@ fn lidar_phase1_batch_mode_without_input_processes_tiles() {
 
     let cloud_a = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 0.0, z: 11.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.0, y: 1.0, z: 12.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 13.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 11.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.0,
+                y: 1.0,
+                z: 12.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 13.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let cloud_b = PointCloud {
         points: vec![
-            PointRecord { x: 2.0, y: 2.0, z: 20.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 2.0, z: 21.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 3.0, z: 22.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 3.0, z: 23.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 2.0,
+                y: 2.0,
+                z: 20.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 2.0,
+                z: 21.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 3.0,
+                z: 22.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 3.0,
+                z: 23.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -5705,33 +7358,50 @@ fn lidar_phase1_batch_mode_without_input_processes_tiles() {
 
     let mut max_args = ToolArgs::new();
     max_args.insert("resolution".to_string(), json!(1.0));
-    let max_res = registry.run("lidar_block_maximum", &max_args, &context(&caps)).expect("lidar_block_maximum batch run");
+    let max_res = registry
+        .run("lidar_block_maximum", &max_args, &context(&caps))
+        .expect("lidar_block_maximum batch run");
 
     let mut min_args = ToolArgs::new();
     min_args.insert("resolution".to_string(), json!(1.0));
-    let min_res = registry.run("lidar_block_minimum", &min_args, &context(&caps)).expect("lidar_block_minimum batch run");
+    let min_res = registry
+        .run("lidar_block_minimum", &min_args, &context(&caps))
+        .expect("lidar_block_minimum batch run");
 
     let mut density_args = ToolArgs::new();
     density_args.insert("resolution".to_string(), json!(1.0));
     density_args.insert("search_radius".to_string(), json!(1.25));
-    let density_res = registry.run("lidar_point_density", &density_args, &context(&caps)).expect("lidar_point_density batch run");
+    let density_res = registry
+        .run("lidar_point_density", &density_args, &context(&caps))
+        .expect("lidar_point_density batch run");
 
     let mut dsm_args = ToolArgs::new();
     dsm_args.insert("resolution".to_string(), json!(1.0));
     dsm_args.insert("search_radius".to_string(), json!(0.75));
-    let dsm_res = registry.run("lidar_digital_surface_model", &dsm_args, &context(&caps)).expect("lidar_digital_surface_model batch run");
+    let dsm_res = registry
+        .run("lidar_digital_surface_model", &dsm_args, &context(&caps))
+        .expect("lidar_digital_surface_model batch run");
 
     let mut hs_args = ToolArgs::new();
     hs_args.insert("resolution".to_string(), json!(1.0));
     hs_args.insert("search_radius".to_string(), json!(1.5));
-    let hs_res = registry.run("lidar_hillshade", &hs_args, &context(&caps)).expect("lidar_hillshade batch run");
+    let hs_res = registry
+        .run("lidar_hillshade", &hs_args, &context(&caps))
+        .expect("lidar_hillshade batch run");
 
     std::env::set_current_dir(&old_cwd).expect("restore current dir");
 
     for res in [&max_res, &min_res, &density_res, &dsm_res, &hs_res] {
         assert_eq!(res.outputs.get("__wbw_type__"), Some(&json!("raster")));
-        let p = res.outputs.get("path").and_then(|v| v.as_str()).expect("placeholder path");
-        assert!(std::path::Path::new(p).exists(), "placeholder output should exist: {p}");
+        let p = res
+            .outputs
+            .get("path")
+            .and_then(|v| v.as_str())
+            .expect("placeholder path");
+        assert!(
+            std::path::Path::new(p).exists(),
+            "placeholder output should exist: {p}"
+        );
     }
 
     for suffix in ["block_max", "block_min", "density", "dsm", "hillshade"] {
@@ -5759,19 +7429,83 @@ fn lidar_interpolation_batch_mode_without_input_processes_tiles() {
 
     let cloud_a = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 0.0, z: 11.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.0, y: 1.0, z: 12.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 13.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 11.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.0,
+                y: 1.0,
+                z: 12.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 13.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let cloud_b = PointCloud {
         points: vec![
-            PointRecord { x: 2.0, y: 2.0, z: 20.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 2.0, z: 21.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 3.0, z: 22.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 3.0, z: 23.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 2.0,
+                y: 2.0,
+                z: 20.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 2.0,
+                z: 21.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 3.0,
+                z: 22.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 3.0,
+                z: 23.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -5784,32 +7518,57 @@ fn lidar_interpolation_batch_mode_without_input_processes_tiles() {
     let mut nn_args = ToolArgs::new();
     nn_args.insert("resolution".to_string(), json!(1.0));
     nn_args.insert("search_radius".to_string(), json!(2.0));
-    let nn_res = registry.run("lidar_nearest_neighbour_gridding", &nn_args, &context(&caps)).expect("nn batch run");
+    let nn_res = registry
+        .run(
+            "lidar_nearest_neighbour_gridding",
+            &nn_args,
+            &context(&caps),
+        )
+        .expect("nn batch run");
 
     let mut idw_args = ToolArgs::new();
     idw_args.insert("resolution".to_string(), json!(1.0));
     idw_args.insert("search_radius".to_string(), json!(2.0));
-    let idw_res = registry.run("lidar_idw_interpolation", &idw_args, &context(&caps)).expect("idw batch run");
+    let idw_res = registry
+        .run("lidar_idw_interpolation", &idw_args, &context(&caps))
+        .expect("idw batch run");
 
     let mut tin_args = ToolArgs::new();
     tin_args.insert("resolution".to_string(), json!(1.0));
-    let tin_res = registry.run("lidar_tin_gridding", &tin_args, &context(&caps)).expect("tin batch run");
+    let tin_res = registry
+        .run("lidar_tin_gridding", &tin_args, &context(&caps))
+        .expect("tin batch run");
 
     let mut rbf_args = ToolArgs::new();
     rbf_args.insert("resolution".to_string(), json!(1.0));
     rbf_args.insert("num_points".to_string(), json!(4));
-    let rbf_res = registry.run("lidar_radial_basis_function_interpolation", &rbf_args, &context(&caps)).expect("rbf batch run");
+    let rbf_res = registry
+        .run(
+            "lidar_radial_basis_function_interpolation",
+            &rbf_args,
+            &context(&caps),
+        )
+        .expect("rbf batch run");
 
     let mut sib_args = ToolArgs::new();
     sib_args.insert("resolution".to_string(), json!(1.0));
-    let sib_res = registry.run("lidar_sibson_interpolation", &sib_args, &context(&caps)).expect("sibson batch run");
+    let sib_res = registry
+        .run("lidar_sibson_interpolation", &sib_args, &context(&caps))
+        .expect("sibson batch run");
 
     std::env::set_current_dir(&old_cwd).expect("restore current dir");
 
     for res in [&nn_res, &idw_res, &tin_res, &rbf_res, &sib_res] {
         assert_eq!(res.outputs.get("__wbw_type__"), Some(&json!("raster")));
-        let p = res.outputs.get("path").and_then(|v| v.as_str()).expect("placeholder path");
-        assert!(std::path::Path::new(p).exists(), "placeholder output should exist: {p}");
+        let p = res
+            .outputs
+            .get("path")
+            .and_then(|v| v.as_str())
+            .expect("placeholder path");
+        assert!(
+            std::path::Path::new(p).exists(),
+            "placeholder output should exist: {p}"
+        );
     }
 
     for suffix in ["nn", "idw", "tin", "rbf", "sibson"] {
@@ -5836,10 +7595,42 @@ fn lidar_phase2_tools_run_end_to_end() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.0, y: 0.0, z: 12.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 20.0, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 2.0, z: 30.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 12.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 20.0,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 2.0,
+                z: 30.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -5852,7 +7643,10 @@ fn lidar_phase2_tools_run_end_to_end() {
         json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
     );
     filter_args.insert("excluded_classes".to_string(), json!([2]));
-    filter_args.insert("output".to_string(), json!(filtered_out.to_string_lossy().to_string()));
+    filter_args.insert(
+        "output".to_string(),
+        json!(filtered_out.to_string_lossy().to_string()),
+    );
     registry
         .run("filter_lidar_classes", &filter_args, &context(&caps))
         .expect("filter_lidar_classes should run");
@@ -5871,7 +7665,10 @@ fn lidar_phase2_tools_run_end_to_end() {
     shift_args.insert("x_shift".to_string(), json!(1.5));
     shift_args.insert("y_shift".to_string(), json!(-2.0));
     shift_args.insert("z_shift".to_string(), json!(0.25));
-    shift_args.insert("output".to_string(), json!(shifted_out.to_string_lossy().to_string()));
+    shift_args.insert(
+        "output".to_string(),
+        json!(shifted_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_shift", &shift_args, &context(&caps))
         .expect("lidar_shift should run");
@@ -5891,7 +7688,10 @@ fn lidar_phase2_tools_run_end_to_end() {
         json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
     );
     dedup_args.insert("include_z".to_string(), json!(false));
-    dedup_args.insert("output".to_string(), json!(dedup_out.to_string_lossy().to_string()));
+    dedup_args.insert(
+        "output".to_string(),
+        json!(dedup_out.to_string_lossy().to_string()),
+    );
     registry
         .run("remove_duplicates", &dedup_args, &context(&caps))
         .expect("remove_duplicates should run");
@@ -5906,7 +7706,10 @@ fn lidar_phase2_tools_run_end_to_end() {
         json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
     );
     dedup_xyz_args.insert("include_z".to_string(), json!(true));
-    dedup_xyz_args.insert("output".to_string(), json!(dedup_xyz_out.to_string_lossy().to_string()));
+    dedup_xyz_args.insert(
+        "output".to_string(),
+        json!(dedup_xyz_out.to_string_lossy().to_string()),
+    );
     registry
         .run("remove_duplicates", &dedup_xyz_args, &context(&caps))
         .expect("remove_duplicates include_z should run");
@@ -5937,17 +7740,65 @@ fn lidar_phase2_batch_mode_without_input_processes_tiles() {
 
     let cloud_a = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.0, y: 0.0, z: 11.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 12.0, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 11.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 12.0,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let cloud_b = PointCloud {
         points: vec![
-            PointRecord { x: 2.0, y: 2.0, z: 20.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 2.0, z: 21.0, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 3.0, z: 22.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 2.0,
+                y: 2.0,
+                z: 20.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 2.0,
+                z: 21.0,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 3.0,
+                z: 22.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -5981,8 +7832,15 @@ fn lidar_phase2_batch_mode_without_input_processes_tiles() {
 
     for res in [&filter_res, &shift_res, &dedup_res] {
         assert_eq!(res.outputs.get("__wbw_type__"), Some(&json!("lidar")));
-        let p = res.outputs.get("path").and_then(|v| v.as_str()).expect("placeholder path");
-        assert!(std::path::Path::new(p).exists(), "placeholder output should exist: {p}");
+        let p = res
+            .outputs
+            .get("path")
+            .and_then(|v| v.as_str())
+            .expect("placeholder path");
+        assert!(
+            std::path::Path::new(p).exists(),
+            "placeholder output should exist: {p}"
+        );
     }
 
     for suffix in ["filtered_cls", "shifted", "dedup"] {
@@ -6023,32 +7881,50 @@ fn construct_vector_tin_and_vector_hex_binning_run_end_to_end() {
     wbvector::write(&point_layer, &points_in, VectorFormat::GeoJson).expect("write points input");
 
     let mut tin_args = ToolArgs::new();
-    tin_args.insert("input_points".to_string(), json!(points_in.to_string_lossy().to_string()));
+    tin_args.insert(
+        "input_points".to_string(),
+        json!(points_in.to_string_lossy().to_string()),
+    );
     tin_args.insert("field_name".to_string(), json!("FID"));
     tin_args.insert("max_triangle_edge_length".to_string(), json!(-1.0));
-    tin_args.insert("output".to_string(), json!(tin_out.to_string_lossy().to_string()));
+    tin_args.insert(
+        "output".to_string(),
+        json!(tin_out.to_string_lossy().to_string()),
+    );
     registry
         .run("construct_vector_tin", &tin_args, &context(&caps))
         .expect("construct_vector_tin should run");
 
     let tin = wbvector::read(&tin_out).expect("read tin output");
-    assert!(!tin.features.is_empty(), "TIN output should contain triangles");
+    assert!(
+        !tin.features.is_empty(),
+        "TIN output should contain triangles"
+    );
     match tin.features[0].geometry.as_ref().expect("tin geometry") {
         Geometry::Polygon { .. } => {}
         _ => panic!("TIN output should be polygon geometry"),
     }
 
     let mut hex_args = ToolArgs::new();
-    hex_args.insert("vector_points".to_string(), json!(points_in.to_string_lossy().to_string()));
+    hex_args.insert(
+        "vector_points".to_string(),
+        json!(points_in.to_string_lossy().to_string()),
+    );
     hex_args.insert("width".to_string(), json!(0.75));
     hex_args.insert("orientation".to_string(), json!("h"));
-    hex_args.insert("output".to_string(), json!(hex_out.to_string_lossy().to_string()));
+    hex_args.insert(
+        "output".to_string(),
+        json!(hex_out.to_string_lossy().to_string()),
+    );
     registry
         .run("vector_hex_binning", &hex_args, &context(&caps))
         .expect("vector_hex_binning should run");
 
     let hex = wbvector::read(&hex_out).expect("read hex output");
-    assert!(!hex.features.is_empty(), "Hex bin output should contain polygons");
+    assert!(
+        !hex.features.is_empty(),
+        "Hex bin output should contain polygons"
+    );
     match hex.features[0].geometry.as_ref().expect("hex geometry") {
         Geometry::Polygon { .. } => {}
         _ => panic!("hex output should be polygon geometry"),
@@ -6072,8 +7948,11 @@ fn find_patch_edge_cells_runs_end_to_end() {
             .expect("clock ok")
             .as_nanos()
     );
-    let input_path = std::env::temp_dir().join(format!("wbtools_oss_find_patch_edge_cells_in_{unique}.asc"));
-    let output_path = std::env::temp_dir().join(format!("wbtools_oss_find_patch_edge_cells_out_{unique}.asc"));
+    let input_path =
+        std::env::temp_dir().join(format!("wbtools_oss_find_patch_edge_cells_in_{unique}.asc"));
+    let output_path = std::env::temp_dir().join(format!(
+        "wbtools_oss_find_patch_edge_cells_out_{unique}.asc"
+    ));
 
     let mut raster = Raster::new(RasterConfig {
         cols: 3,
@@ -6099,8 +7978,14 @@ fn find_patch_edge_cells_runs_end_to_end() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6188,8 +8073,14 @@ fn abs_tool_runs_end_to_end_with_raster_io() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6246,8 +8137,14 @@ fn fill_pits_raises_single_cell_pit() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6276,7 +8173,8 @@ fn breach_single_cell_pits_carves_adjacent_cell() {
             .as_nanos()
     );
     let input_path = std::env::temp_dir().join(format!("wbtools_oss_breach_pits_in_{unique}.asc"));
-    let output_path = std::env::temp_dir().join(format!("wbtools_oss_breach_pits_out_{unique}.asc"));
+    let output_path =
+        std::env::temp_dir().join(format!("wbtools_oss_breach_pits_out_{unique}.asc"));
 
     let mut raster = Raster::new(RasterConfig {
         cols: 5,
@@ -6304,8 +8202,14 @@ fn breach_single_cell_pits_carves_adjacent_cell() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6360,8 +8264,14 @@ fn d8_pointer_runs_on_simple_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6408,15 +8318,20 @@ fn d8_flow_accum_runs_on_pointer_input() {
     pntr.set(0, 0, 0, 2.0).expect("set");
     pntr.set(0, 0, 1, 2.0).expect("set");
     pntr.set(0, 0, 2, 0.0).expect("set");
-    pntr
-        .write(&input_path, RasterFormat::EsriAscii)
+    pntr.write(&input_path, RasterFormat::EsriAscii)
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("input_is_pointer".to_string(), json!(true));
     args.insert("out_type".to_string(), json!("cells"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6471,8 +8386,14 @@ fn dinf_pointer_runs_on_simple_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6500,7 +8421,8 @@ fn dinf_pointer_runs_on_geographic_dem() {
             .as_nanos()
     );
     let input_path = std::env::temp_dir().join(format!("wbtools_oss_dinf_ptr_geo_in_{unique}.tif"));
-    let output_path = std::env::temp_dir().join(format!("wbtools_oss_dinf_ptr_geo_out_{unique}.tif"));
+    let output_path =
+        std::env::temp_dir().join(format!("wbtools_oss_dinf_ptr_geo_out_{unique}.tif"));
 
     let mut raster = Raster::new(RasterConfig {
         cols: 3,
@@ -6525,8 +8447,14 @@ fn dinf_pointer_runs_on_geographic_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6572,15 +8500,20 @@ fn dinf_flow_accum_runs_on_pointer_input() {
     pntr.set(0, 0, 0, 90.0).expect("set");
     pntr.set(0, 0, 1, 90.0).expect("set");
     pntr.set(0, 0, 2, -1.0).expect("set");
-    pntr
-        .write(&input_path, RasterFormat::EsriAscii)
+    pntr.write(&input_path, RasterFormat::EsriAscii)
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("input_is_pointer".to_string(), json!(true));
     args.insert("out_type".to_string(), json!("cells"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6610,7 +8543,8 @@ fn dinf_flow_accum_scales_geographic_pointer_input() {
             .as_nanos()
     );
     let input_path = std::env::temp_dir().join(format!("wbtools_oss_dinf_acc_geo_in_{unique}.tif"));
-    let output_path = std::env::temp_dir().join(format!("wbtools_oss_dinf_acc_geo_out_{unique}.tif"));
+    let output_path =
+        std::env::temp_dir().join(format!("wbtools_oss_dinf_acc_geo_out_{unique}.tif"));
 
     let mut pntr = Raster::new(RasterConfig {
         cols: 3,
@@ -6632,15 +8566,20 @@ fn dinf_flow_accum_scales_geographic_pointer_input() {
     }
     pntr.set(0, 1, 0, 90.0).expect("set");
     pntr.set(0, 1, 1, 90.0).expect("set");
-    pntr
-        .write(&input_path, RasterFormat::GeoTiff)
+    pntr.write(&input_path, RasterFormat::GeoTiff)
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("input_is_pointer".to_string(), json!(true));
     args.insert("out_type".to_string(), json!("sca"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6698,8 +8637,14 @@ fn fd8_pointer_encodes_multiple_downslope_neighbours() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6750,9 +8695,15 @@ fn fd8_flow_accum_runs_on_simple_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("cells"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6782,7 +8733,8 @@ fn fd8_flow_accum_scales_geographic_dem() {
             .as_nanos()
     );
     let input_path = std::env::temp_dir().join(format!("wbtools_oss_fd8_acc_geo_in_{unique}.tif"));
-    let output_path = std::env::temp_dir().join(format!("wbtools_oss_fd8_acc_geo_out_{unique}.tif"));
+    let output_path =
+        std::env::temp_dir().join(format!("wbtools_oss_fd8_acc_geo_out_{unique}.tif"));
 
     let mut raster = Raster::new(RasterConfig {
         cols: 3,
@@ -6805,9 +8757,15 @@ fn fd8_flow_accum_scales_geographic_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("sca"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6863,8 +8821,14 @@ fn rho8_pointer_runs_on_simple_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6919,9 +8883,15 @@ fn rho8_flow_accum_runs_on_simple_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("cells"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -6953,10 +8923,8 @@ fn mdinf_flow_accum_runs_on_simple_dem() {
             .expect("clock ok")
             .as_nanos()
     );
-    let input_path =
-        std::env::temp_dir().join(format!("wbtools_oss_mdinf_acc_in_{unique}.asc"));
-    let output_path =
-        std::env::temp_dir().join(format!("wbtools_oss_mdinf_acc_out_{unique}.asc"));
+    let input_path = std::env::temp_dir().join(format!("wbtools_oss_mdinf_acc_in_{unique}.asc"));
+    let output_path = std::env::temp_dir().join(format!("wbtools_oss_mdinf_acc_out_{unique}.asc"));
 
     let mut raster = Raster::new(RasterConfig {
         cols: 3,
@@ -6979,9 +8947,15 @@ fn mdinf_flow_accum_runs_on_simple_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("cells"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7036,9 +9010,15 @@ fn qin_flow_accumulation_runs_on_simple_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("cells"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7092,9 +9072,15 @@ fn quinn_flow_accumulation_runs_on_simple_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("cells"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7148,11 +9134,23 @@ fn minimal_dispersion_flow_algorithm_returns_direction_and_accumulation() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("cells"));
-    args.insert("path_corrected_direction_preference".to_string(), json!(1.0));
-    args.insert("flow_dir_output".to_string(), json!(dir_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(accum_path.to_string_lossy().to_string()));
+    args.insert(
+        "path_corrected_direction_preference".to_string(),
+        json!(1.0),
+    );
+    args.insert(
+        "flow_dir_output".to_string(),
+        json!(dir_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(accum_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     let result = registry
@@ -7217,11 +9215,23 @@ fn flow_accum_full_workflow_returns_dem_pointer_and_accum() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("cells"));
-    args.insert("breached_dem_output".to_string(), json!(dem_path.to_string_lossy().to_string()));
-    args.insert("flow_dir_output".to_string(), json!(dir_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(acc_path.to_string_lossy().to_string()));
+    args.insert(
+        "breached_dem_output".to_string(),
+        json!(dem_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "flow_dir_output".to_string(),
+        json!(dir_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(acc_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     let result = registry
@@ -7291,11 +9301,20 @@ fn flow_accum_full_workflow_honours_esri_pointer_encoding() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("cells"));
     args.insert("esri_pntr".to_string(), json!(true));
-    args.insert("flow_dir_output".to_string(), json!(dir_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(acc_path.to_string_lossy().to_string()));
+    args.insert(
+        "flow_dir_output".to_string(),
+        json!(dir_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(acc_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7331,7 +9350,8 @@ fn flow_accum_full_workflow_scales_geographic_dem() {
     let input_path = std::env::temp_dir().join(format!("wbtools_oss_fafw_geo_in_{unique}.tif"));
     let dir_path = std::env::temp_dir().join(format!("wbtools_oss_fafw_geo_dir_{unique}.tif"));
     let acc_path = std::env::temp_dir().join(format!("wbtools_oss_fafw_geo_acc_{unique}.tif"));
-    let expected_acc_path = std::env::temp_dir().join(format!("wbtools_oss_fafw_geo_expected_{unique}.tif"));
+    let expected_acc_path =
+        std::env::temp_dir().join(format!("wbtools_oss_fafw_geo_expected_{unique}.tif"));
 
     let mut raster = Raster::new(RasterConfig {
         cols: 3,
@@ -7354,10 +9374,19 @@ fn flow_accum_full_workflow_scales_geographic_dem() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("sca"));
-    args.insert("flow_dir_output".to_string(), json!(dir_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(acc_path.to_string_lossy().to_string()));
+    args.insert(
+        "flow_dir_output".to_string(),
+        json!(dir_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(acc_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7369,10 +9398,16 @@ fn flow_accum_full_workflow_scales_geographic_dem() {
     assert_eq!(dir.get(0, 0, 1), 2.0);
 
     let mut direct_args = ToolArgs::new();
-    direct_args.insert("input".to_string(), json!(dir_path.to_string_lossy().to_string()));
+    direct_args.insert(
+        "input".to_string(),
+        json!(dir_path.to_string_lossy().to_string()),
+    );
     direct_args.insert("input_is_pointer".to_string(), json!(true));
     direct_args.insert("out_type".to_string(), json!("sca"));
-    direct_args.insert("output".to_string(), json!(expected_acc_path.to_string_lossy().to_string()));
+    direct_args.insert(
+        "output".to_string(),
+        json!(expected_acc_path.to_string_lossy().to_string()),
+    );
     registry
         .run("d8_flow_accum", &direct_args, &context(&caps))
         .expect("direct d8_flow_accum on pointer should run");
@@ -7421,11 +9456,19 @@ fn find_noflow_cells_identifies_terminal_cell() {
     raster.set(0, 0, 0, 30.0).expect("set");
     raster.set(0, 0, 1, 20.0).expect("set");
     raster.set(0, 0, 2, 10.0).expect("set");
-    raster.write(&input_path, RasterFormat::EsriAscii).expect("write input raster");
+    raster
+        .write(&input_path, RasterFormat::EsriAscii)
+        .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7454,8 +9497,10 @@ fn find_noflow_cells_interior_only_excludes_nodata_adjacent_cells() {
             .expect("clock ok")
             .as_nanos()
     );
-    let input_path = std::env::temp_dir().join(format!("wbtools_oss_noflow_interior_in_{unique}.asc"));
-    let output_path = std::env::temp_dir().join(format!("wbtools_oss_noflow_interior_out_{unique}.asc"));
+    let input_path =
+        std::env::temp_dir().join(format!("wbtools_oss_noflow_interior_in_{unique}.asc"));
+    let output_path =
+        std::env::temp_dir().join(format!("wbtools_oss_noflow_interior_out_{unique}.asc"));
 
     let mut raster = Raster::new(RasterConfig {
         cols: 5,
@@ -7487,8 +9532,14 @@ fn find_noflow_cells_interior_only_excludes_nodata_adjacent_cells() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     args.insert("interior_only".to_string(), json!(true));
 
     let caps = OpenOnly;
@@ -7505,7 +9556,10 @@ fn find_noflow_cells_interior_only_excludes_nodata_adjacent_cells() {
             }
         }
     }
-    assert_eq!(count, 1, "only the center cell should remain for interior_only");
+    assert_eq!(
+        count, 1,
+        "only the center cell should remain for interior_only"
+    );
 
     let _ = std::fs::remove_file(input_path);
     let _ = std::fs::remove_file(output_path);
@@ -7543,11 +9597,19 @@ fn num_inflowing_neighbours_counts_upstream_cells() {
     raster.set(0, 0, 0, 30.0).expect("set");
     raster.set(0, 0, 1, 20.0).expect("set");
     raster.set(0, 0, 2, 10.0).expect("set");
-    raster.write(&input_path, RasterFormat::EsriAscii).expect("write input raster");
+    raster
+        .write(&input_path, RasterFormat::EsriAscii)
+        .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7577,7 +9639,8 @@ fn find_parallel_flow_flags_parallel_stream_cells() {
             .as_nanos()
     );
     let pntr_path = std::env::temp_dir().join(format!("wbtools_oss_parallel_pntr_{unique}.asc"));
-    let streams_path = std::env::temp_dir().join(format!("wbtools_oss_parallel_streams_{unique}.asc"));
+    let streams_path =
+        std::env::temp_dir().join(format!("wbtools_oss_parallel_streams_{unique}.asc"));
     let output_path = std::env::temp_dir().join(format!("wbtools_oss_parallel_out_{unique}.asc"));
 
     let mut pntr = Raster::new(RasterConfig {
@@ -7597,7 +9660,8 @@ fn find_parallel_flow_flags_parallel_stream_cells() {
     pntr.set(0, 0, 1, 0.0).expect("set");
     pntr.set(0, 1, 0, 2.0).expect("set");
     pntr.set(0, 1, 1, 0.0).expect("set");
-    pntr.write(&pntr_path, RasterFormat::EsriAscii).expect("write pointer raster");
+    pntr.write(&pntr_path, RasterFormat::EsriAscii)
+        .expect("write pointer raster");
 
     let mut streams = Raster::new(RasterConfig {
         cols: 2,
@@ -7617,12 +9681,23 @@ fn find_parallel_flow_flags_parallel_stream_cells() {
             streams.set(0, r, c, 1.0).expect("set");
         }
     }
-    streams.write(&streams_path, RasterFormat::EsriAscii).expect("write streams raster");
+    streams
+        .write(&streams_path, RasterFormat::EsriAscii)
+        .expect("write streams raster");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("streams".to_string(), json!(streams_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "streams".to_string(),
+        json!(streams_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7670,14 +9745,23 @@ fn basins_assigns_single_edge_basin_on_simple_pointer() {
     pntr.set(0, 0, 0, 2.0).expect("set");
     pntr.set(0, 0, 1, 2.0).expect("set");
     pntr.set(0, 0, 2, 0.0).expect("set");
-    pntr.write(&pntr_path, RasterFormat::EsriAscii).expect("write pointer raster");
+    pntr.write(&pntr_path, RasterFormat::EsriAscii)
+        .expect("write pointer raster");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
-    registry.run("basins", &args, &context(&caps)).expect("basins tool should run");
+    registry
+        .run("basins", &args, &context(&caps))
+        .expect("basins tool should run");
 
     let out = Raster::read(&output_path).expect("read output raster");
     assert_eq!(out.get(0, 0, 0), 1.0);
@@ -7704,7 +9788,8 @@ fn flow_accum_full_workflow_log_transform_matches_direct_d8_accum() {
     let input_path = std::env::temp_dir().join(format!("wbtools_oss_fafw_log_in_{unique}.asc"));
     let dir_path = std::env::temp_dir().join(format!("wbtools_oss_fafw_log_dir_{unique}.asc"));
     let acc_path = std::env::temp_dir().join(format!("wbtools_oss_fafw_log_acc_{unique}.asc"));
-    let expected_acc_path = std::env::temp_dir().join(format!("wbtools_oss_fafw_log_expected_{unique}.asc"));
+    let expected_acc_path =
+        std::env::temp_dir().join(format!("wbtools_oss_fafw_log_expected_{unique}.asc"));
 
     let mut raster = Raster::new(RasterConfig {
         cols: 3,
@@ -7727,11 +9812,20 @@ fn flow_accum_full_workflow_log_transform_matches_direct_d8_accum() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("cells"));
     args.insert("log_transform".to_string(), json!(true));
-    args.insert("flow_dir_output".to_string(), json!(dir_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(acc_path.to_string_lossy().to_string()));
+    args.insert(
+        "flow_dir_output".to_string(),
+        json!(dir_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(acc_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7739,11 +9833,17 @@ fn flow_accum_full_workflow_log_transform_matches_direct_d8_accum() {
         .expect("flow_accum_full_workflow log run should succeed");
 
     let mut direct_args = ToolArgs::new();
-    direct_args.insert("input".to_string(), json!(dir_path.to_string_lossy().to_string()));
+    direct_args.insert(
+        "input".to_string(),
+        json!(dir_path.to_string_lossy().to_string()),
+    );
     direct_args.insert("input_is_pointer".to_string(), json!(true));
     direct_args.insert("out_type".to_string(), json!("cells"));
     direct_args.insert("log_transform".to_string(), json!(true));
-    direct_args.insert("output".to_string(), json!(expected_acc_path.to_string_lossy().to_string()));
+    direct_args.insert(
+        "output".to_string(),
+        json!(expected_acc_path.to_string_lossy().to_string()),
+    );
     registry
         .run("d8_flow_accum", &direct_args, &context(&caps))
         .expect("direct d8_flow_accum log run should succeed");
@@ -7798,12 +9898,24 @@ fn minimal_dispersion_flow_algorithm_log_transform_matches_expected() {
         .expect("write input raster");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("cells"));
-    args.insert("path_corrected_direction_preference".to_string(), json!(1.0));
+    args.insert(
+        "path_corrected_direction_preference".to_string(),
+        json!(1.0),
+    );
     args.insert("log_transform".to_string(), json!(true));
-    args.insert("flow_dir_output".to_string(), json!(dir_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(accum_path.to_string_lossy().to_string()));
+    args.insert(
+        "flow_dir_output".to_string(),
+        json!(dir_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(accum_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7855,7 +9967,8 @@ fn watershed_from_raster_pour_points_labels_all_upstream_cells() {
     pntr.set(0, 0, 0, 2.0).expect("set");
     pntr.set(0, 0, 1, 2.0).expect("set");
     pntr.set(0, 0, 2, 0.0).expect("set");
-    pntr.write(&pntr_path, RasterFormat::EsriAscii).expect("write pointer raster");
+    pntr.write(&pntr_path, RasterFormat::EsriAscii)
+        .expect("write pointer raster");
 
     // Pour points: only cell 2 has ID 7 (non-zero, non-nodata)
     let mut pp = Raster::new(RasterConfig {
@@ -7874,12 +9987,22 @@ fn watershed_from_raster_pour_points_labels_all_upstream_cells() {
     pp.set(0, 0, 0, 0.0).expect("set");
     pp.set(0, 0, 1, 0.0).expect("set");
     pp.set(0, 0, 2, 7.0).expect("set");
-    pp.write(&pp_path, RasterFormat::EsriAscii).expect("write pour-points raster");
+    pp.write(&pp_path, RasterFormat::EsriAscii)
+        .expect("write pour-points raster");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("pour_points".to_string(), json!(pp_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "pour_points".to_string(),
+        json!(pp_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7889,7 +10012,11 @@ fn watershed_from_raster_pour_points_labels_all_upstream_cells() {
     let out = Raster::read(&output_path).expect("read output raster");
     assert_eq!(out.get(0, 0, 0), 7.0, "cell 0 should be watershed 7");
     assert_eq!(out.get(0, 0, 1), 7.0, "cell 1 should be watershed 7");
-    assert_eq!(out.get(0, 0, 2), 7.0, "cell 2 (outlet) should be watershed 7");
+    assert_eq!(
+        out.get(0, 0, 2),
+        7.0,
+        "cell 2 (outlet) should be watershed 7"
+    );
 
     let _ = std::fs::remove_file(pntr_path);
     let _ = std::fs::remove_file(pp_path);
@@ -7933,21 +10060,30 @@ fn watershed_vector_pour_points_labels_all_upstream_cells() {
     pntr.set(0, 0, 0, 2.0).expect("set");
     pntr.set(0, 0, 1, 2.0).expect("set");
     pntr.set(0, 0, 2, 0.0).expect("set");
-    pntr.write(&pntr_path, RasterFormat::EsriAscii).expect("write pointer raster");
+    pntr.write(&pntr_path, RasterFormat::EsriAscii)
+        .expect("write pointer raster");
 
     // Vector pour point at center of col 2, row 0: x=2.5, y=0.5
     // world_to_pixel(2.5, 0.5): col=floor(2.5)=2, row=floor((1-0.5)/1)=0  ✓
-    let mut layer = Layer::new("pour_points")
-        .with_geom_type(wbvector::GeometryType::Point);
+    let mut layer = Layer::new("pour_points").with_geom_type(wbvector::GeometryType::Point);
     layer
         .add_feature(Some(wbvector::Geometry::point(2.5, 0.5)), &[])
         .expect("add feature");
     wbvector::write(&layer, &pp_path, VectorFormat::GeoJson).expect("write vector");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("pour_pts".to_string(), json!(pp_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "pour_pts".to_string(),
+        json!(pp_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -7958,7 +10094,11 @@ fn watershed_vector_pour_points_labels_all_upstream_cells() {
     // All three cells should carry watershed ID 1 (first feature, 1-based)
     assert_eq!(out.get(0, 0, 0), 1.0, "cell 0 should be watershed 1");
     assert_eq!(out.get(0, 0, 1), 1.0, "cell 1 should be watershed 1");
-    assert_eq!(out.get(0, 0, 2), 1.0, "cell 2 (outlet) should be watershed 1");
+    assert_eq!(
+        out.get(0, 0, 2),
+        1.0,
+        "cell 2 (outlet) should be watershed 1"
+    );
 
     let _ = std::fs::remove_file(pntr_path);
     let _ = std::fs::remove_file(pp_path);
@@ -8034,8 +10174,7 @@ fn watershed_vector_pour_points_esri_matches_wbt() {
         .expect("write esri pointer raster");
 
     // Vector pour point at center of outlet cell (1,2): x=2.5, y=0.5
-    let mut layer = Layer::new("pour_points")
-        .with_geom_type(wbvector::GeometryType::Point);
+    let mut layer = Layer::new("pour_points").with_geom_type(wbvector::GeometryType::Point);
     layer
         .add_feature(Some(wbvector::Geometry::point(2.5, 0.5)), &[])
         .expect("add feature");
@@ -8046,15 +10185,24 @@ fn watershed_vector_pour_points_esri_matches_wbt() {
         "d8_pntr".to_string(),
         json!(pntr_wbt_path.to_string_lossy().to_string()),
     );
-    args_wbt.insert("pour_pts".to_string(), json!(pp_path.to_string_lossy().to_string()));
-    args_wbt.insert("output".to_string(), json!(out_wbt_path.to_string_lossy().to_string()));
+    args_wbt.insert(
+        "pour_pts".to_string(),
+        json!(pp_path.to_string_lossy().to_string()),
+    );
+    args_wbt.insert(
+        "output".to_string(),
+        json!(out_wbt_path.to_string_lossy().to_string()),
+    );
 
     let mut args_esri = ToolArgs::new();
     args_esri.insert(
         "d8_pntr".to_string(),
         json!(pntr_esri_path.to_string_lossy().to_string()),
     );
-    args_esri.insert("pour_pts".to_string(), json!(pp_path.to_string_lossy().to_string()));
+    args_esri.insert(
+        "pour_pts".to_string(),
+        json!(pp_path.to_string_lossy().to_string()),
+    );
     args_esri.insert("esri_pntr".to_string(), json!(true));
     args_esri.insert(
         "output".to_string(),
@@ -8181,15 +10329,24 @@ fn watershed_from_raster_pour_points_esri_matches_wbt() {
         "d8_pntr".to_string(),
         json!(pntr_wbt_path.to_string_lossy().to_string()),
     );
-    args_wbt.insert("pour_points".to_string(), json!(pp_path.to_string_lossy().to_string()));
-    args_wbt.insert("output".to_string(), json!(out_wbt_path.to_string_lossy().to_string()));
+    args_wbt.insert(
+        "pour_points".to_string(),
+        json!(pp_path.to_string_lossy().to_string()),
+    );
+    args_wbt.insert(
+        "output".to_string(),
+        json!(out_wbt_path.to_string_lossy().to_string()),
+    );
 
     let mut args_esri = ToolArgs::new();
     args_esri.insert(
         "d8_pntr".to_string(),
         json!(pntr_esri_path.to_string_lossy().to_string()),
     );
-    args_esri.insert("pour_points".to_string(), json!(pp_path.to_string_lossy().to_string()));
+    args_esri.insert(
+        "pour_points".to_string(),
+        json!(pp_path.to_string_lossy().to_string()),
+    );
     args_esri.insert("esri_pntr".to_string(), json!(true));
     args_esri.insert(
         "output".to_string(),
@@ -8198,10 +10355,18 @@ fn watershed_from_raster_pour_points_esri_matches_wbt() {
 
     let caps = OpenOnly;
     registry
-        .run("watershed_from_raster_pour_points", &args_wbt, &context(&caps))
+        .run(
+            "watershed_from_raster_pour_points",
+            &args_wbt,
+            &context(&caps),
+        )
         .expect("watershed_from_raster_pour_points WBT run should succeed");
     registry
-        .run("watershed_from_raster_pour_points", &args_esri, &context(&caps))
+        .run(
+            "watershed_from_raster_pour_points",
+            &args_esri,
+            &context(&caps),
+        )
         .expect("watershed_from_raster_pour_points ESRI run should succeed");
 
     let out_wbt = Raster::read(&out_wbt_path).expect("read wbt output raster");
@@ -8296,9 +10461,18 @@ fn watershed_from_raster_pour_points_handles_multi_outlet_and_nodata_barrier() {
         .expect("write pour points raster");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("pour_points".to_string(), json!(pp_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "pour_points".to_string(),
+        json!(pp_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -8308,15 +10482,31 @@ fn watershed_from_raster_pour_points_handles_multi_outlet_and_nodata_barrier() {
     let out = Raster::read(&output_path).expect("read output raster");
     let out_nodata = out.nodata;
     for r in 0..3isize {
-        assert_eq!(out.get(0, r, 0), 10.0, "left basin col 0 should be 10 at row {r}");
-        assert_eq!(out.get(0, r, 1), 10.0, "left basin col 1 should be 10 at row {r}");
+        assert_eq!(
+            out.get(0, r, 0),
+            10.0,
+            "left basin col 0 should be 10 at row {r}"
+        );
+        assert_eq!(
+            out.get(0, r, 1),
+            10.0,
+            "left basin col 1 should be 10 at row {r}"
+        );
         assert_eq!(
             out.get(0, r, 2),
             out_nodata,
             "NoData barrier col 2 should remain nodata at row {r}"
         );
-        assert_eq!(out.get(0, r, 3), 20.0, "right basin col 3 should be 20 at row {r}");
-        assert_eq!(out.get(0, r, 4), 20.0, "right basin col 4 should be 20 at row {r}");
+        assert_eq!(
+            out.get(0, r, 3),
+            20.0,
+            "right basin col 3 should be 20 at row {r}"
+        );
+        assert_eq!(
+            out.get(0, r, 4),
+            20.0,
+            "right basin col 4 should be 20 at row {r}"
+        );
     }
 
     let _ = std::fs::remove_file(&pntr_path);
@@ -8339,12 +10529,9 @@ fn jenson_snap_pour_points_snaps_to_nearest_stream_cell() {
             .expect("clock ok")
             .as_nanos()
     );
-    let streams_path =
-        std::env::temp_dir().join(format!("wbtools_oss_jsnap_streams_{unique}.asc"));
-    let pp_path =
-        std::env::temp_dir().join(format!("wbtools_oss_jsnap_pp_{unique}.geojson"));
-    let output_path =
-        std::env::temp_dir().join(format!("wbtools_oss_jsnap_out_{unique}.geojson"));
+    let streams_path = std::env::temp_dir().join(format!("wbtools_oss_jsnap_streams_{unique}.asc"));
+    let pp_path = std::env::temp_dir().join(format!("wbtools_oss_jsnap_pp_{unique}.geojson"));
+    let output_path = std::env::temp_dir().join(format!("wbtools_oss_jsnap_out_{unique}.geojson"));
 
     // 3×3 raster, cell_size=1: x in [0,3), y in [0,3)
     // Stream cell at col=1, row=1 (center x=1.5, y=1.5).  All others = 0.
@@ -8373,8 +10560,7 @@ fn jenson_snap_pour_points_snaps_to_nearest_stream_cell() {
 
     // Pour point at col=0, row=0 centre: x=0.5, y=2.5.
     // snap_dist=3.0 covers the whole 3×3 grid; nearest stream cell is (1.5, 1.5).
-    let mut layer = Layer::new("pour_points")
-        .with_geom_type(wbvector::GeometryType::Point);
+    let mut layer = Layer::new("pour_points").with_geom_type(wbvector::GeometryType::Point);
     layer
         .add_feature(Some(wbvector::Geometry::point(0.5, 2.5)), &[])
         .expect("add feature");
@@ -8433,7 +10619,9 @@ fn local_morans_i_lisa_writes_expected_fields_and_summary() {
     let mut points = Layer::new("points")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    points.schema.add_field(FieldDef::new("value", FieldType::Float));
+    points
+        .schema
+        .add_field(FieldDef::new("value", FieldType::Float));
     for (x, y, v) in [
         (0.0, 0.0, 10.0),
         (1.0, 0.0, 11.0),
@@ -8451,7 +10639,10 @@ fn local_morans_i_lisa_writes_expected_fields_and_summary() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write points input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("value"));
     args.insert("weights_mode".to_string(), json!("k_nearest"));
     args.insert("k".to_string(), json!(2));
@@ -8459,7 +10650,10 @@ fn local_morans_i_lisa_writes_expected_fields_and_summary() {
     args.insert("inference".to_string(), json!("asymptotic"));
     args.insert("alpha".to_string(), json!(0.05));
     args.insert("multiple_testing".to_string(), json!("fdr_bh"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     args.insert(
         "output_html".to_string(),
         json!(output_html_path.to_string_lossy().to_string()),
@@ -8474,7 +10668,10 @@ fn local_morans_i_lisa_writes_expected_fields_and_summary() {
         .get("summary")
         .and_then(|v| v.as_object())
         .expect("summary object should be present");
-    assert_eq!(summary.get("tool_id").and_then(|v| v.as_str()), Some("local_morans_i_lisa"));
+    assert_eq!(
+        summary.get("tool_id").and_then(|v| v.as_str()),
+        Some("local_morans_i_lisa")
+    );
     let written_html = result
         .outputs
         .get("output_html")
@@ -8490,8 +10687,14 @@ fn local_morans_i_lisa_writes_expected_fields_and_summary() {
         .get("class_counts")
         .and_then(|v| v.as_object())
         .expect("class_counts should be present");
-    let total_classes = class_counts.values().filter_map(|v| v.as_u64()).sum::<u64>();
-    assert_eq!(total_classes, 5, "class counts should sum to input feature count");
+    let total_classes = class_counts
+        .values()
+        .filter_map(|v| v.as_u64())
+        .sum::<u64>();
+    assert_eq!(
+        total_classes, 5,
+        "class counts should sum to input feature count"
+    );
 
     let out = wbvector::read(&output_path).expect("read LISA output");
     let lisa_i_idx = out.schema.field_index("LISA_I").expect("LISA_I field");
@@ -8587,7 +10790,9 @@ fn getis_ord_gi_star_writes_expected_fields_and_summary() {
     let mut points = Layer::new("points")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    points.schema.add_field(FieldDef::new("value", FieldType::Float));
+    points
+        .schema
+        .add_field(FieldDef::new("value", FieldType::Float));
     for (x, y, v) in [
         (0.0, 0.0, 1.0),
         (1.0, 0.0, 1.2),
@@ -8606,7 +10811,10 @@ fn getis_ord_gi_star_writes_expected_fields_and_summary() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write points input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("value"));
     args.insert("weights_mode".to_string(), json!("k_nearest"));
     args.insert("k".to_string(), json!(2));
@@ -8615,7 +10823,10 @@ fn getis_ord_gi_star_writes_expected_fields_and_summary() {
     args.insert("inference".to_string(), json!("asymptotic"));
     args.insert("alpha".to_string(), json!(0.05));
     args.insert("multiple_testing".to_string(), json!("fdr_bh"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     args.insert(
         "output_html".to_string(),
         json!(output_html_path.to_string_lossy().to_string()),
@@ -8630,8 +10841,14 @@ fn getis_ord_gi_star_writes_expected_fields_and_summary() {
         .get("summary")
         .and_then(|v| v.as_object())
         .expect("summary object should be present");
-    assert_eq!(summary.get("tool_id").and_then(|v| v.as_str()), Some("getis_ord_gi_star"));
-    assert_eq!(summary.get("variant").and_then(|v| v.as_str()), Some("gi_star"));
+    assert_eq!(
+        summary.get("tool_id").and_then(|v| v.as_str()),
+        Some("getis_ord_gi_star")
+    );
+    assert_eq!(
+        summary.get("variant").and_then(|v| v.as_str()),
+        Some("gi_star")
+    );
     let written_html = result
         .outputs
         .get("output_html")
@@ -8647,8 +10864,14 @@ fn getis_ord_gi_star_writes_expected_fields_and_summary() {
         .get("class_counts")
         .and_then(|v| v.as_object())
         .expect("class_counts should be present");
-    let total_classes = class_counts.values().filter_map(|v| v.as_u64()).sum::<u64>();
-    assert_eq!(total_classes, 6, "class counts should sum to input feature count");
+    let total_classes = class_counts
+        .values()
+        .filter_map(|v| v.as_u64())
+        .sum::<u64>();
+    assert_eq!(
+        total_classes, 6,
+        "class counts should sum to input feature count"
+    );
 
     let out = wbvector::read(&output_path).expect("read GI output");
     let gi_z_idx = out.schema.field_index("GI_Z").expect("GI_Z field");
@@ -8732,7 +10955,9 @@ fn spatial_stats_permutation_inference_is_rejected_with_clear_errors() {
     let mut points = Layer::new("points")
         .with_geom_type(GeometryType::Point)
         .with_epsg(4326);
-    points.schema.add_field(FieldDef::new("value", FieldType::Float));
+    points
+        .schema
+        .add_field(FieldDef::new("value", FieldType::Float));
     for (x, y, v) in [
         (0.0, 0.0, 1.0),
         (1.0, 0.0, 2.0),
@@ -8749,7 +10974,10 @@ fn spatial_stats_permutation_inference_is_rejected_with_clear_errors() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write points input");
 
     let mut global_args = ToolArgs::new();
-    global_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    global_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     global_args.insert("field".to_string(), json!("value"));
     global_args.insert("weights_mode".to_string(), json!("k_nearest"));
     global_args.insert("k".to_string(), json!(2));
@@ -8766,12 +10994,18 @@ fn spatial_stats_permutation_inference_is_rejected_with_clear_errors() {
     }
 
     let mut lisa_args = ToolArgs::new();
-    lisa_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    lisa_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     lisa_args.insert("field".to_string(), json!("value"));
     lisa_args.insert("weights_mode".to_string(), json!("k_nearest"));
     lisa_args.insert("k".to_string(), json!(2));
     lisa_args.insert("inference".to_string(), json!("permutation"));
-    lisa_args.insert("output".to_string(), json!(lisa_out.to_string_lossy().to_string()));
+    lisa_args.insert(
+        "output".to_string(),
+        json!(lisa_out.to_string_lossy().to_string()),
+    );
     let lisa_err = registry
         .run("local_morans_i_lisa", &lisa_args, &context(&caps))
         .expect_err("local_morans_i_lisa should reject permutation inference in Phase A");
@@ -8784,13 +11018,19 @@ fn spatial_stats_permutation_inference_is_rejected_with_clear_errors() {
     }
 
     let mut gi_args = ToolArgs::new();
-    gi_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    gi_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     gi_args.insert("field".to_string(), json!("value"));
     gi_args.insert("weights_mode".to_string(), json!("k_nearest"));
     gi_args.insert("k".to_string(), json!(2));
     gi_args.insert("variant".to_string(), json!("gi_star"));
     gi_args.insert("inference".to_string(), json!("permutation"));
-    gi_args.insert("output".to_string(), json!(gi_out.to_string_lossy().to_string()));
+    gi_args.insert(
+        "output".to_string(),
+        json!(gi_out.to_string_lossy().to_string()),
+    );
     let gi_err = registry
         .run("getis_ord_gi_star", &gi_args, &context(&caps))
         .expect_err("getis_ord_gi_star should reject permutation inference in Phase A");
@@ -8815,7 +11055,8 @@ fn spatial_stats_real_world_smoke_if_data_available() {
 
     let yield_points_path =
         "/Users/johnlindsay/Documents/data/Yield/Woodrill/Woodrill Farm Enterprise_Berhens_Berhens_2002_CORN_1.shp";
-    let fallback_points_path = "/Users/johnlindsay/Documents/data/Peterborough/points_of_interest.shp";
+    let fallback_points_path =
+        "/Users/johnlindsay/Documents/data/Peterborough/points_of_interest.shp";
     let wards_polygon_path = "/Users/johnlindsay/Documents/data/Guelph_data/Wards.geojson";
 
     let tag = unique_tag("wbtools_oss_spatial_stats_real_world");
@@ -8847,7 +11088,10 @@ fn spatial_stats_real_world_smoke_if_data_available() {
         lisa_args.insert("weights_mode".to_string(), json!("k_nearest"));
         lisa_args.insert("k".to_string(), json!(4));
         lisa_args.insert("inference".to_string(), json!("asymptotic"));
-        lisa_args.insert("output".to_string(), json!(lisa_out.to_string_lossy().to_string()));
+        lisa_args.insert(
+            "output".to_string(),
+            json!(lisa_out.to_string_lossy().to_string()),
+        );
         lisa_args.insert(
             "output_html".to_string(),
             json!(lisa_html.to_string_lossy().to_string()),
@@ -8875,7 +11119,10 @@ fn spatial_stats_real_world_smoke_if_data_available() {
         gi_args.insert("k".to_string(), json!(4));
         gi_args.insert("variant".to_string(), json!("gi_star"));
         gi_args.insert("inference".to_string(), json!("asymptotic"));
-        gi_args.insert("output".to_string(), json!(gi_out.to_string_lossy().to_string()));
+        gi_args.insert(
+            "output".to_string(),
+            json!(gi_out.to_string_lossy().to_string()),
+        );
         gi_args.insert(
             "output_html".to_string(),
             json!(gi_html.to_string_lossy().to_string()),
@@ -8911,12 +11158,18 @@ fn spatial_stats_real_world_smoke_if_data_available() {
         poly_args.insert("weights_mode".to_string(), json!("k_nearest"));
         poly_args.insert("k".to_string(), json!(4));
         poly_args.insert("inference".to_string(), json!("asymptotic"));
-        poly_args.insert("output_html".to_string(), json!(poly_html.to_string_lossy().to_string()));
+        poly_args.insert(
+            "output_html".to_string(),
+            json!(poly_html.to_string_lossy().to_string()),
+        );
 
         let poly_result = registry
             .run("global_morans_i", &poly_args, &context(&caps))
             .expect("global_morans_i should run on real-world polygon sample");
-        assert!(poly_html.exists(), "expected polygon Moran HTML output to exist");
+        assert!(
+            poly_html.exists(),
+            "expected polygon Moran HTML output to exist"
+        );
         assert!(
             poly_result
                 .outputs
@@ -8943,15 +11196,19 @@ fn spatial_stats_real_world_smoke_if_data_available() {
 
 fn first_numeric_field_name(layer: &Layer) -> Option<String> {
     for (idx, field) in layer.schema.fields().iter().enumerate() {
-        if !matches!(field.field_type, wbvector::FieldType::Integer | wbvector::FieldType::Float) {
+        if !matches!(
+            field.field_type,
+            wbvector::FieldType::Integer | wbvector::FieldType::Float
+        ) {
             continue;
         }
 
-        if layer
-            .features
-            .iter()
-            .any(|f| matches!(f.attributes.get(idx), Some(wbvector::FieldValue::Integer(_) | wbvector::FieldValue::Float(_))))
-        {
+        if layer.features.iter().any(|f| {
+            matches!(
+                f.attributes.get(idx),
+                Some(wbvector::FieldValue::Integer(_) | wbvector::FieldValue::Float(_))
+            )
+        }) {
             return Some(field.name.clone());
         }
     }
@@ -8996,44 +11253,84 @@ fn subbasins_labels_single_link_basin() {
     //   Row 1 cells (stream) point East (value 2), outlet at (1,2) has value 0
     //   Row 2 cells point North (WBT value 128 = N, DX=0 DY=-1) → drain to stream row 1
     let mut pntr = Raster::new(RasterConfig {
-        cols: 3, rows: 3, bands: 1,
-        x_min: 0.0, y_min: 0.0, cell_size: 1.0, cell_size_y: None,
-        nodata: -9999.0, data_type: DataType::F64,
-        crs: Default::default(), metadata: Vec::new(),
+        cols: 3,
+        rows: 3,
+        bands: 1,
+        x_min: 0.0,
+        y_min: 0.0,
+        cell_size: 1.0,
+        cell_size_y: None,
+        nodata: -9999.0,
+        data_type: DataType::F64,
+        crs: Default::default(),
+        metadata: Vec::new(),
     });
-    for c in 0..3isize { pntr.set(0, 0, c, 8.0).expect("set row0 S"); }  // row 0 flows South
+    for c in 0..3isize {
+        pntr.set(0, 0, c, 8.0).expect("set row0 S");
+    } // row 0 flows South
     pntr.set(0, 1, 0, 2.0).expect("set stream E"); // row 1 flows East
     pntr.set(0, 1, 1, 2.0).expect("set stream E");
-    pntr.set(0, 1, 2, 0.0).expect("set outlet");   // row 1 col 2: no-flow outlet
-    for c in 0..3isize { pntr.set(0, 2, c, 128.0).expect("set row2 N"); } // row 2 flows North
-    pntr.write(&pntr_path, RasterFormat::EsriAscii).expect("write pntr");
+    pntr.set(0, 1, 2, 0.0).expect("set outlet"); // row 1 col 2: no-flow outlet
+    for c in 0..3isize {
+        pntr.set(0, 2, c, 128.0).expect("set row2 N");
+    } // row 2 flows North
+    pntr.write(&pntr_path, RasterFormat::EsriAscii)
+        .expect("write pntr");
 
     // Stream on middle row only
     let mut streams = Raster::new(RasterConfig {
-        cols: 3, rows: 3, bands: 1,
-        x_min: 0.0, y_min: 0.0, cell_size: 1.0, cell_size_y: None,
-        nodata: -9999.0, data_type: DataType::F64,
-        crs: Default::default(), metadata: Vec::new(),
+        cols: 3,
+        rows: 3,
+        bands: 1,
+        x_min: 0.0,
+        y_min: 0.0,
+        cell_size: 1.0,
+        cell_size_y: None,
+        nodata: -9999.0,
+        data_type: DataType::F64,
+        crs: Default::default(),
+        metadata: Vec::new(),
     });
-    for r in 0..3isize { for c in 0..3isize { streams.set(0, r, c, 0.0).expect("set"); } }
-    for c in 0..3isize { streams.set(0, 1, c, 1.0).expect("set stream"); }
-    streams.write(&streams_path, RasterFormat::EsriAscii).expect("write streams");
+    for r in 0..3isize {
+        for c in 0..3isize {
+            streams.set(0, r, c, 0.0).expect("set");
+        }
+    }
+    for c in 0..3isize {
+        streams.set(0, 1, c, 1.0).expect("set stream");
+    }
+    streams
+        .write(&streams_path, RasterFormat::EsriAscii)
+        .expect("write streams");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("streams".to_string(), json!(streams_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "streams".to_string(),
+        json!(streams_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
-    registry.run("subbasins", &args, &context(&caps)).expect("subbasins should run");
+    registry
+        .run("subbasins", &args, &context(&caps))
+        .expect("subbasins should run");
 
     let out = Raster::read(&output_path).expect("read output");
     // All valid cells should be in sub-basin 1 (single stream link)
     for r in 0..3isize {
         for c in 0..3isize {
             assert_eq!(
-                out.get(0, r, c), 1.0,
-                "cell ({r},{c}) expected basin 1, got {}", out.get(0, r, c)
+                out.get(0, r, c),
+                1.0,
+                "cell ({r},{c}) expected basin 1, got {}",
+                out.get(0, r, c)
             );
         }
     }
@@ -9104,9 +11401,18 @@ fn subbasins_regression_two_disconnected_links_match_golden() {
         .expect("write streams raster");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("streams".to_string(), json!(streams_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "streams".to_string(),
+        json!(streams_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -9147,35 +11453,73 @@ fn hillslopes_zeroes_stream_cells_and_labels_flanks() {
 
     // Row 0 → South (8), Row 1 stream → East (2), outlet at (1,2)=0, Row 2 → North (128)
     let mut pntr = Raster::new(RasterConfig {
-        cols: 3, rows: 3, bands: 1,
-        x_min: 0.0, y_min: 0.0, cell_size: 1.0, cell_size_y: None,
-        nodata: -9999.0, data_type: DataType::F64,
-        crs: Default::default(), metadata: Vec::new(),
+        cols: 3,
+        rows: 3,
+        bands: 1,
+        x_min: 0.0,
+        y_min: 0.0,
+        cell_size: 1.0,
+        cell_size_y: None,
+        nodata: -9999.0,
+        data_type: DataType::F64,
+        crs: Default::default(),
+        metadata: Vec::new(),
     });
-    for c in 0..3isize { pntr.set(0, 0, c, 8.0).expect("set row0 S"); }
+    for c in 0..3isize {
+        pntr.set(0, 0, c, 8.0).expect("set row0 S");
+    }
     pntr.set(0, 1, 0, 2.0).expect("set");
     pntr.set(0, 1, 1, 2.0).expect("set");
     pntr.set(0, 1, 2, 0.0).expect("set outlet");
-    for c in 0..3isize { pntr.set(0, 2, c, 128.0).expect("set row2 N"); }
-    pntr.write(&pntr_path, RasterFormat::EsriAscii).expect("write pntr");
+    for c in 0..3isize {
+        pntr.set(0, 2, c, 128.0).expect("set row2 N");
+    }
+    pntr.write(&pntr_path, RasterFormat::EsriAscii)
+        .expect("write pntr");
 
     let mut streams = Raster::new(RasterConfig {
-        cols: 3, rows: 3, bands: 1,
-        x_min: 0.0, y_min: 0.0, cell_size: 1.0, cell_size_y: None,
-        nodata: -9999.0, data_type: DataType::F64,
-        crs: Default::default(), metadata: Vec::new(),
+        cols: 3,
+        rows: 3,
+        bands: 1,
+        x_min: 0.0,
+        y_min: 0.0,
+        cell_size: 1.0,
+        cell_size_y: None,
+        nodata: -9999.0,
+        data_type: DataType::F64,
+        crs: Default::default(),
+        metadata: Vec::new(),
     });
-    for r in 0..3isize { for c in 0..3isize { streams.set(0, r, c, 0.0).expect("set"); } }
-    for c in 0..3isize { streams.set(0, 1, c, 1.0).expect("set stream"); }
-    streams.write(&streams_path, RasterFormat::EsriAscii).expect("write streams");
+    for r in 0..3isize {
+        for c in 0..3isize {
+            streams.set(0, r, c, 0.0).expect("set");
+        }
+    }
+    for c in 0..3isize {
+        streams.set(0, 1, c, 1.0).expect("set stream");
+    }
+    streams
+        .write(&streams_path, RasterFormat::EsriAscii)
+        .expect("write streams");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("streams".to_string(), json!(streams_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "streams".to_string(),
+        json!(streams_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
-    registry.run("hillslopes", &args, &context(&caps)).expect("hillslopes should run");
+    registry
+        .run("hillslopes", &args, &context(&caps))
+        .expect("hillslopes should run");
 
     let out = Raster::read(&output_path).expect("read output");
     // Stream cells must be 0
@@ -9184,12 +11528,19 @@ fn hillslopes_zeroes_stream_cells_and_labels_flanks() {
     }
     // Non-stream cells must have a non-zero hillslope ID
     for c in 0..3isize {
-        assert!(out.get(0, 0, c) > 0.0, "top row cell (0,{c}) should have hillslope ID > 0");
-        assert!(out.get(0, 2, c) > 0.0, "bottom row cell (2,{c}) should have hillslope ID > 0");
+        assert!(
+            out.get(0, 0, c) > 0.0,
+            "top row cell (0,{c}) should have hillslope ID > 0"
+        );
+        assert!(
+            out.get(0, 2, c) > 0.0,
+            "bottom row cell (2,{c}) should have hillslope ID > 0"
+        );
     }
     // Top and bottom rows must belong to different hillslopes
     assert_ne!(
-        out.get(0, 0, 0), out.get(0, 2, 0),
+        out.get(0, 0, 0),
+        out.get(0, 2, 0),
         "top and bottom hillslopes should have different IDs"
     );
 
@@ -9228,46 +11579,77 @@ fn strahler_order_basins_assigns_order_2_at_confluence() {
     //   (1,0)→S=8    (1,1)→S=8   (1,2)→S=8
     //   (2,0)→E=2    (2,1)→0     (2,2)→W=32
     let mut pntr = Raster::new(RasterConfig {
-        cols: 3, rows: 3, bands: 1,
-        x_min: 0.0, y_min: 0.0, cell_size: 1.0, cell_size_y: None,
-        nodata: -9999.0, data_type: DataType::F64,
-        crs: Default::default(), metadata: Vec::new(),
+        cols: 3,
+        rows: 3,
+        bands: 1,
+        x_min: 0.0,
+        y_min: 0.0,
+        cell_size: 1.0,
+        cell_size_y: None,
+        nodata: -9999.0,
+        data_type: DataType::F64,
+        crs: Default::default(),
+        metadata: Vec::new(),
     });
     // Row 0
-    pntr.set(0, 0, 0, 4.0).expect("set");   // SE
-    pntr.set(0, 0, 1, 8.0).expect("set");   // S
-    pntr.set(0, 0, 2, 16.0).expect("set");  // SW
-    // Row 1
-    pntr.set(0, 1, 0, 8.0).expect("set");   // S
-    pntr.set(0, 1, 1, 8.0).expect("set");   // S (confluence → outlet)
-    pntr.set(0, 1, 2, 8.0).expect("set");   // S
-    // Row 2
-    pntr.set(0, 2, 0, 2.0).expect("set");   // E
-    pntr.set(0, 2, 1, 0.0).expect("set");   // no-flow (watershed outlet)
-    pntr.set(0, 2, 2, 32.0).expect("set");  // W
-    pntr.write(&pntr_path, RasterFormat::EsriAscii).expect("write pntr");
+    pntr.set(0, 0, 0, 4.0).expect("set"); // SE
+    pntr.set(0, 0, 1, 8.0).expect("set"); // S
+    pntr.set(0, 0, 2, 16.0).expect("set"); // SW
+                                           // Row 1
+    pntr.set(0, 1, 0, 8.0).expect("set"); // S
+    pntr.set(0, 1, 1, 8.0).expect("set"); // S (confluence → outlet)
+    pntr.set(0, 1, 2, 8.0).expect("set"); // S
+                                          // Row 2
+    pntr.set(0, 2, 0, 2.0).expect("set"); // E
+    pntr.set(0, 2, 1, 0.0).expect("set"); // no-flow (watershed outlet)
+    pntr.set(0, 2, 2, 32.0).expect("set"); // W
+    pntr.write(&pntr_path, RasterFormat::EsriAscii)
+        .expect("write pntr");
 
     // Stream cells: (0,0), (0,2), (1,1), (2,1)
     let mut streams = Raster::new(RasterConfig {
-        cols: 3, rows: 3, bands: 1,
-        x_min: 0.0, y_min: 0.0, cell_size: 1.0, cell_size_y: None,
-        nodata: -9999.0, data_type: DataType::F64,
-        crs: Default::default(), metadata: Vec::new(),
+        cols: 3,
+        rows: 3,
+        bands: 1,
+        x_min: 0.0,
+        y_min: 0.0,
+        cell_size: 1.0,
+        cell_size_y: None,
+        nodata: -9999.0,
+        data_type: DataType::F64,
+        crs: Default::default(),
+        metadata: Vec::new(),
     });
-    for r in 0..3isize { for c in 0..3isize { streams.set(0, r, c, 0.0).expect("set"); } }
+    for r in 0..3isize {
+        for c in 0..3isize {
+            streams.set(0, r, c, 0.0).expect("set");
+        }
+    }
     streams.set(0, 0, 0, 1.0).expect("set headwater 1");
     streams.set(0, 0, 2, 1.0).expect("set headwater 2");
     streams.set(0, 1, 1, 1.0).expect("set confluence");
     streams.set(0, 2, 1, 1.0).expect("set outlet");
-    streams.write(&streams_path, RasterFormat::EsriAscii).expect("write streams");
+    streams
+        .write(&streams_path, RasterFormat::EsriAscii)
+        .expect("write streams");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("streams".to_string(), json!(streams_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "streams".to_string(),
+        json!(streams_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
-    registry.run("strahler_order_basins", &args, &context(&caps))
+    registry
+        .run("strahler_order_basins", &args, &context(&caps))
         .expect("strahler_order_basins should run");
 
     let out = Raster::read(&output_path).expect("read output");
@@ -9276,14 +11658,26 @@ fn strahler_order_basins_assigns_order_2_at_confluence() {
     // Headwater stream cells and near-headwater drainage should be order 1
     let v_h1 = out.get(0, 0, 0);
     let v_h2 = out.get(0, 0, 2);
-    assert_eq!(v_h1, 1.0, "headwater 1 cell should be Strahler order 1, got {v_h1}");
-    assert_eq!(v_h2, 1.0, "headwater 2 cell should be Strahler order 1, got {v_h2}");
+    assert_eq!(
+        v_h1, 1.0,
+        "headwater 1 cell should be Strahler order 1, got {v_h1}"
+    );
+    assert_eq!(
+        v_h2, 1.0,
+        "headwater 2 cell should be Strahler order 1, got {v_h2}"
+    );
 
     // Confluence and outlet cells should be order 2
     let v_conf = out.get(0, 1, 1);
-    let v_out  = out.get(0, 2, 1);
-    assert_eq!(v_conf, 2.0, "confluence cell (1,1) should be order 2, got {v_conf}");
-    assert_eq!(v_out,  2.0, "outlet cell (2,1) should be order 2, got {v_out}");
+    let v_out = out.get(0, 2, 1);
+    assert_eq!(
+        v_conf, 2.0,
+        "confluence cell (1,1) should be order 2, got {v_conf}"
+    );
+    assert_eq!(
+        v_out, 2.0,
+        "outlet cell (2,1) should be order 2, got {v_out}"
+    );
 
     // Non-stream cells that drain to the confluence should also be order 2
     let v_21_0 = out.get(0, 2, 0);
@@ -9315,10 +11709,17 @@ fn strahler_stream_order_assigns_headwaters_order_1() {
     // Y-shaped stream network:
     // (0,0) and (0,2) headwaters -> (1,1) confluence -> (2,1) outlet.
     let mut pntr = Raster::new(RasterConfig {
-        cols: 3, rows: 3, bands: 1,
-        x_min: 0.0, y_min: 0.0, cell_size: 1.0, cell_size_y: None,
-        nodata: -9999.0, data_type: DataType::F64,
-        crs: Default::default(), metadata: Vec::new(),
+        cols: 3,
+        rows: 3,
+        bands: 1,
+        x_min: 0.0,
+        y_min: 0.0,
+        cell_size: 1.0,
+        cell_size_y: None,
+        nodata: -9999.0,
+        data_type: DataType::F64,
+        crs: Default::default(),
+        metadata: Vec::new(),
     });
     pntr.set(0, 0, 0, 4.0).expect("set");
     pntr.set(0, 0, 1, 8.0).expect("set");
@@ -9329,13 +11730,21 @@ fn strahler_stream_order_assigns_headwaters_order_1() {
     pntr.set(0, 2, 0, 2.0).expect("set");
     pntr.set(0, 2, 1, 0.0).expect("set");
     pntr.set(0, 2, 2, 32.0).expect("set");
-    pntr.write(&pntr_path, RasterFormat::EsriAscii).expect("write pntr");
+    pntr.write(&pntr_path, RasterFormat::EsriAscii)
+        .expect("write pntr");
 
     let mut streams = Raster::new(RasterConfig {
-        cols: 3, rows: 3, bands: 1,
-        x_min: 0.0, y_min: 0.0, cell_size: 1.0, cell_size_y: None,
-        nodata: -9999.0, data_type: DataType::F64,
-        crs: Default::default(), metadata: Vec::new(),
+        cols: 3,
+        rows: 3,
+        bands: 1,
+        x_min: 0.0,
+        y_min: 0.0,
+        cell_size: 1.0,
+        cell_size_y: None,
+        nodata: -9999.0,
+        data_type: DataType::F64,
+        crs: Default::default(),
+        metadata: Vec::new(),
     });
     for r in 0..3isize {
         for c in 0..3isize {
@@ -9346,12 +11755,23 @@ fn strahler_stream_order_assigns_headwaters_order_1() {
     streams.set(0, 0, 2, 1.0).expect("set");
     streams.set(0, 1, 1, 1.0).expect("set");
     streams.set(0, 2, 1, 1.0).expect("set");
-    streams.write(&streams_path, RasterFormat::EsriAscii).expect("write streams");
+    streams
+        .write(&streams_path, RasterFormat::EsriAscii)
+        .expect("write streams");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("streams".to_string(), json!(streams_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "streams".to_string(),
+        json!(streams_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -9390,10 +11810,17 @@ fn isobasins_produces_valid_basin_ids() {
     let output_path = std::env::temp_dir().join(format!("{tag}_out.asc"));
 
     let mut dem = Raster::new(RasterConfig {
-        cols: 3, rows: 3, bands: 1,
-        x_min: 0.0, y_min: 0.0, cell_size: 1.0, cell_size_y: None,
-        nodata: -9999.0, data_type: DataType::F64,
-        crs: Default::default(), metadata: Vec::new(),
+        cols: 3,
+        rows: 3,
+        bands: 1,
+        x_min: 0.0,
+        y_min: 0.0,
+        cell_size: 1.0,
+        cell_size_y: None,
+        nodata: -9999.0,
+        data_type: DataType::F64,
+        crs: Default::default(),
+        metadata: Vec::new(),
     });
     // Slope East: col 0 = 30, col 1 = 20, col 2 = 10
     for r in 0..3isize {
@@ -9401,15 +11828,24 @@ fn isobasins_produces_valid_basin_ids() {
         dem.set(0, r, 1, 20.0).expect("set");
         dem.set(0, r, 2, 10.0).expect("set");
     }
-    dem.write(&dem_path, RasterFormat::EsriAscii).expect("write dem");
+    dem.write(&dem_path, RasterFormat::EsriAscii)
+        .expect("write dem");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(dem_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(dem_path.to_string_lossy().to_string()),
+    );
     args.insert("target_size".to_string(), json!(3.0_f64)); // ~3-cell basins
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
-    registry.run("isobasins", &args, &context(&caps)).expect("isobasins should run");
+    registry
+        .run("isobasins", &args, &context(&caps))
+        .expect("isobasins should run");
 
     let out = Raster::read(&output_path).expect("read output");
     let nodata = out.nodata;
@@ -9458,7 +11894,8 @@ fn insert_dams_raises_elevation_near_dam_point() {
         }
     }
     dem.set(0, 2, 2, 2.0).expect("set low center");
-    dem.write(&dem_path, RasterFormat::EsriAscii).expect("write dem");
+    dem.write(&dem_path, RasterFormat::EsriAscii)
+        .expect("write dem");
 
     let mut points = Layer::new("dam_points").with_geom_type(wbvector::GeometryType::Point);
     points
@@ -9467,10 +11904,19 @@ fn insert_dams_raises_elevation_near_dam_point() {
     wbvector::write(&points, &points_path, VectorFormat::GeoJson).expect("write points");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(dem_path.to_string_lossy().to_string()));
-    args.insert("dam_points".to_string(), json!(points_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(dem_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "dam_points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
     args.insert("dam_length".to_string(), json!(3.0f64));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -9515,22 +11961,35 @@ fn raise_walls_increments_cells_intersecting_wall_line() {
             dem.set(0, r, c, 10.0).expect("set");
         }
     }
-    dem.write(&dem_path, RasterFormat::EsriAscii).expect("write dem");
+    dem.write(&dem_path, RasterFormat::EsriAscii)
+        .expect("write dem");
 
     let mut walls = Layer::new("walls").with_geom_type(wbvector::GeometryType::LineString);
     walls
         .add_feature(
-            Some(wbvector::Geometry::line_string(vec![Coord::xy(0.5, 2.5), Coord::xy(4.5, 2.5)])),
+            Some(wbvector::Geometry::line_string(vec![
+                Coord::xy(0.5, 2.5),
+                Coord::xy(4.5, 2.5),
+            ])),
             &[],
         )
         .expect("add wall line");
     wbvector::write(&walls, &walls_path, VectorFormat::GeoJson).expect("write walls");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(dem_path.to_string_lossy().to_string()));
-    args.insert("walls".to_string(), json!(walls_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(dem_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "walls".to_string(),
+        json!(walls_path.to_string_lossy().to_string()),
+    );
     args.insert("wall_height".to_string(), json!(5.0f64));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -9583,28 +12042,51 @@ fn topological_breach_burn_returns_four_raster_outputs() {
     });
     for r in 0..5isize {
         for c in 0..5isize {
-            dem.set(0, r, c, 100.0 - (r as f64) * 2.0 - (c as f64)).expect("set");
+            dem.set(0, r, c, 100.0 - (r as f64) * 2.0 - (c as f64))
+                .expect("set");
         }
     }
-    dem.write(&dem_path, RasterFormat::EsriAscii).expect("write dem");
+    dem.write(&dem_path, RasterFormat::EsriAscii)
+        .expect("write dem");
 
     let mut streams = Layer::new("streams").with_geom_type(wbvector::GeometryType::LineString);
     streams
         .add_feature(
-            Some(wbvector::Geometry::line_string(vec![Coord::xy(2.5, 4.5), Coord::xy(2.5, 0.5)])),
+            Some(wbvector::Geometry::line_string(vec![
+                Coord::xy(2.5, 4.5),
+                Coord::xy(2.5, 0.5),
+            ])),
             &[],
         )
         .expect("add stream line");
     wbvector::write(&streams, &streams_path, VectorFormat::GeoJson).expect("write streams");
 
     let mut args = ToolArgs::new();
-    args.insert("streams".to_string(), json!(streams_path.to_string_lossy().to_string()));
-    args.insert("dem".to_string(), json!(dem_path.to_string_lossy().to_string()));
+    args.insert(
+        "streams".to_string(),
+        json!(streams_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "dem".to_string(),
+        json!(dem_path.to_string_lossy().to_string()),
+    );
     args.insert("snap_distance".to_string(), json!(1.0f64));
-    args.insert("out_streams".to_string(), json!(out_streams.to_string_lossy().to_string()));
-    args.insert("out_dem".to_string(), json!(out_dem.to_string_lossy().to_string()));
-    args.insert("out_dir".to_string(), json!(out_dir.to_string_lossy().to_string()));
-    args.insert("out_fa".to_string(), json!(out_fa.to_string_lossy().to_string()));
+    args.insert(
+        "out_streams".to_string(),
+        json!(out_streams.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "out_dem".to_string(),
+        json!(out_dem.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "out_dir".to_string(),
+        json!(out_dir.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "out_fa".to_string(),
+        json!(out_fa.to_string_lossy().to_string()),
+    );
 
     let caps = FullAccess;
     registry
@@ -9623,9 +12105,18 @@ fn topological_breach_burn_returns_four_raster_outputs() {
             }
         }
     }
-    assert!(stream_cells > 0, "expected stream raster to contain non-zero tributary IDs");
-    assert!(dir_out.get(0, 2, 2).is_finite(), "pointer output should contain finite values");
-    assert!(fa_out.get(0, 2, 2).is_finite(), "flow accumulation output should contain finite values");
+    assert!(
+        stream_cells > 0,
+        "expected stream raster to contain non-zero tributary IDs"
+    );
+    assert!(
+        dir_out.get(0, 2, 2).is_finite(),
+        "pointer output should contain finite values"
+    );
+    assert!(
+        fa_out.get(0, 2, 2).is_finite(),
+        "flow accumulation output should contain finite values"
+    );
 
     let _ = std::fs::remove_file(&dem_path);
     let _ = std::fs::remove_file(&streams_path);
@@ -9659,17 +12150,25 @@ fn stochastic_depression_analysis_outputs_probability_range() {
     });
     for r in 0..4isize {
         for c in 0..4isize {
-            dem.set(0, r, c, 100.0 - (r as f64) - (c as f64)).expect("set");
+            dem.set(0, r, c, 100.0 - (r as f64) - (c as f64))
+                .expect("set");
         }
     }
-    dem.write(&dem_path, RasterFormat::EsriAscii).expect("write dem");
+    dem.write(&dem_path, RasterFormat::EsriAscii)
+        .expect("write dem");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(dem_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(dem_path.to_string_lossy().to_string()),
+    );
     args.insert("rmse".to_string(), json!(0.5f64));
     args.insert("range".to_string(), json!(1.0f64));
     args.insert("iterations".to_string(), json!(5u64));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -9681,7 +12180,10 @@ fn stochastic_depression_analysis_outputs_probability_range() {
         for c in 0..4isize {
             let v = out.get(0, r, c);
             if v != out.nodata {
-                assert!(v >= 0.0 && v <= 1.0, "probability out of range at ({r},{c}): {v}");
+                assert!(
+                    v >= 0.0 && v <= 1.0,
+                    "probability out of range at ({r},{c}): {v}"
+                );
             }
         }
     }
@@ -9717,7 +12219,8 @@ fn unnest_basins_returns_nested_raster_tuple() {
     pntr.set(0, 0, 0, 2.0).expect("set");
     pntr.set(0, 0, 1, 2.0).expect("set");
     pntr.set(0, 0, 2, 0.0).expect("set");
-    pntr.write(&pntr_path, RasterFormat::EsriAscii).expect("write pointer");
+    pntr.write(&pntr_path, RasterFormat::EsriAscii)
+        .expect("write pointer");
 
     let mut pour = Layer::new("pour_points").with_geom_type(wbvector::GeometryType::Point);
     pour.add_feature(Some(wbvector::Geometry::point(1.5, 0.5)), &[])
@@ -9727,8 +12230,14 @@ fn unnest_basins_returns_nested_raster_tuple() {
     wbvector::write(&pour, &pour_path, VectorFormat::GeoJson).expect("write pour vector");
 
     let mut args = ToolArgs::new();
-    args.insert("d8_pntr".to_string(), json!(pntr_path.to_string_lossy().to_string()));
-    args.insert("pour_points".to_string(), json!(pour_path.to_string_lossy().to_string()));
+    args.insert(
+        "d8_pntr".to_string(),
+        json!(pntr_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "pour_points".to_string(),
+        json!(pour_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     let result = registry
@@ -9773,11 +12282,18 @@ fn upslope_depression_storage_outputs_nonnegative_values() {
         }
     }
     dem.set(0, 1, 1, 18.0).expect("set sink");
-    dem.write(&dem_path, RasterFormat::EsriAscii).expect("write dem");
+    dem.write(&dem_path, RasterFormat::EsriAscii)
+        .expect("write dem");
 
     let mut args = ToolArgs::new();
-    args.insert("dem".to_string(), json!(dem_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "dem".to_string(),
+        json!(dem_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -9789,7 +12305,10 @@ fn upslope_depression_storage_outputs_nonnegative_values() {
         for c in 0..4isize {
             let v = out.get(0, r, c);
             if v != out.nodata {
-                assert!(v >= 0.0, "value should be nonnegative at ({r},{c}), got {v}");
+                assert!(
+                    v >= 0.0,
+                    "value should be nonnegative at ({r},{c}), got {v}"
+                );
             }
         }
     }
@@ -9825,7 +12344,9 @@ fn average_overlay_computes_mean_of_valid_cells() {
     raster1.set(0, 0, 1, 4.0).expect("set");
     raster1.set(0, 1, 0, raster1.nodata).expect("set");
     raster1.set(0, 1, 1, 8.0).expect("set");
-    raster1.write(&in1_path, RasterFormat::EsriAscii).expect("write raster1");
+    raster1
+        .write(&in1_path, RasterFormat::EsriAscii)
+        .expect("write raster1");
 
     let mut raster2 = Raster::new(RasterConfig {
         cols: 2,
@@ -9844,7 +12365,9 @@ fn average_overlay_computes_mean_of_valid_cells() {
     raster2.set(0, 0, 1, 2.0).expect("set");
     raster2.set(0, 1, 0, 10.0).expect("set");
     raster2.set(0, 1, 1, 12.0).expect("set");
-    raster2.write(&in2_path, RasterFormat::EsriAscii).expect("write raster2");
+    raster2
+        .write(&in2_path, RasterFormat::EsriAscii)
+        .expect("write raster2");
 
     let mut args = ToolArgs::new();
     args.insert(
@@ -9854,7 +12377,10 @@ fn average_overlay_computes_mean_of_valid_cells() {
             in2_path.to_string_lossy().to_string()
         ]),
     );
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -9904,7 +12430,9 @@ fn count_if_counts_matching_values() {
             let col = (index % 2) as isize;
             raster.set(0, row, col, value).expect("set");
         }
-        raster.write(path, RasterFormat::EsriAscii).expect("write raster");
+        raster
+            .write(path, RasterFormat::EsriAscii)
+            .expect("write raster");
     }
 
     let mut args = ToolArgs::new();
@@ -9916,7 +12444,10 @@ fn count_if_counts_matching_values() {
         ]),
     );
     args.insert("comparison_value".to_string(), json!(1.0));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -9967,11 +12498,16 @@ fn highest_and_lowest_position_identify_stack_indices() {
                 .set(0, (index / 2) as isize, (index % 2) as isize, value)
                 .expect("set");
         }
-        raster.write(path, RasterFormat::EsriAscii).expect("write raster");
+        raster
+            .write(path, RasterFormat::EsriAscii)
+            .expect("write raster");
     }
 
     let caps = OpenOnly;
-    for (tool_id, out_path) in [("highest_position", &high_path), ("lowest_position", &low_path)] {
+    for (tool_id, out_path) in [
+        ("highest_position", &high_path),
+        ("lowest_position", &low_path),
+    ] {
         let mut args = ToolArgs::new();
         args.insert(
             "input_rasters".to_string(),
@@ -9980,8 +12516,13 @@ fn highest_and_lowest_position_identify_stack_indices() {
                 in2_path.to_string_lossy().to_string()
             ]),
         );
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
-        registry.run(tool_id, &args, &context(&caps)).expect("position tool should run");
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
+        registry
+            .run(tool_id, &args, &context(&caps))
+            .expect("position tool should run");
     }
 
     let high = Raster::read(&high_path).expect("read highest output");
@@ -10033,7 +12574,9 @@ fn min_max_and_sum_overlay_compute_expected_values() {
                 .set(0, (index / 2) as isize, (index % 2) as isize, value)
                 .expect("set");
         }
-        raster.write(path, RasterFormat::EsriAscii).expect("write raster");
+        raster
+            .write(path, RasterFormat::EsriAscii)
+            .expect("write raster");
     }
 
     let caps = OpenOnly;
@@ -10050,8 +12593,13 @@ fn min_max_and_sum_overlay_compute_expected_values() {
                 in2_path.to_string_lossy().to_string()
             ]),
         );
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
-        registry.run(tool_id, &args, &context(&caps)).expect("overlay tool should run");
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
+        registry
+            .run(tool_id, &args, &context(&caps))
+            .expect("overlay tool should run");
     }
 
     let max_out = Raster::read(&max_path).expect("read max output");
@@ -10106,7 +12654,9 @@ fn multiply_and_absolute_overlay_compute_expected_values() {
                 .set(0, (index / 2) as isize, (index % 2) as isize, value)
                 .expect("set");
         }
-        raster.write(path, RasterFormat::EsriAscii).expect("write raster");
+        raster
+            .write(path, RasterFormat::EsriAscii)
+            .expect("write raster");
     }
 
     let caps = OpenOnly;
@@ -10123,8 +12673,13 @@ fn multiply_and_absolute_overlay_compute_expected_values() {
                 in2_path.to_string_lossy().to_string()
             ]),
         );
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
-        registry.run(tool_id, &args, &context(&caps)).expect("overlay tool should run");
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
+        registry
+            .run(tool_id, &args, &context(&caps))
+            .expect("overlay tool should run");
     }
 
     let mul_out = Raster::read(&mul_path).expect("read multiply output");
@@ -10181,7 +12736,9 @@ fn percent_overlay_tools_compute_expected_fractions() {
                 .set(0, (index / 2) as isize, (index % 2) as isize, value)
                 .expect("set");
         }
-        raster.write(path, RasterFormat::EsriAscii).expect("write raster");
+        raster
+            .write(path, RasterFormat::EsriAscii)
+            .expect("write raster");
     }
 
     let caps = OpenOnly;
@@ -10202,8 +12759,13 @@ fn percent_overlay_tools_compute_expected_fractions() {
             "comparison".to_string(),
             json!(comparison_path.to_string_lossy().to_string()),
         );
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
-        registry.run(tool_id, &args, &context(&caps)).expect("percent tool should run");
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
+        registry
+            .run(tool_id, &args, &context(&caps))
+            .expect("percent tool should run");
     }
 
     let eq_out = Raster::read(&eq_path).expect("read eq output");
@@ -10260,7 +12822,9 @@ fn pick_from_list_selects_values_by_position_raster() {
                 .set(0, (index / 2) as isize, (index % 2) as isize, value)
                 .expect("set");
         }
-        raster.write(path, RasterFormat::EsriAscii).expect("write raster");
+        raster
+            .write(path, RasterFormat::EsriAscii)
+            .expect("write raster");
     }
 
     let mut args = ToolArgs::new();
@@ -10271,8 +12835,14 @@ fn pick_from_list_selects_values_by_position_raster() {
             in2_path.to_string_lossy().to_string()
         ]),
     );
-    args.insert("pos_input".to_string(), json!(pos_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "pos_input".to_string(),
+        json!(pos_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -10326,7 +12896,9 @@ fn weighted_sum_and_weighted_overlay_compute_expected_values() {
                 .set(0, (index / 2) as isize, (index % 2) as isize, value)
                 .expect("set");
         }
-        raster.write(path, RasterFormat::EsriAscii).expect("write raster");
+        raster
+            .write(path, RasterFormat::EsriAscii)
+            .expect("write raster");
     }
 
     let caps = OpenOnly;
@@ -10340,7 +12912,10 @@ fn weighted_sum_and_weighted_overlay_compute_expected_values() {
         ]),
     );
     sum_args.insert("weights".to_string(), json!([1.0, 3.0]));
-    sum_args.insert("output".to_string(), json!(sum_path.to_string_lossy().to_string()));
+    sum_args.insert(
+        "output".to_string(),
+        json!(sum_path.to_string_lossy().to_string()),
+    );
     registry
         .run("weighted_sum", &sum_args, &context(&caps))
         .expect("weighted_sum should run");
@@ -10360,7 +12935,10 @@ fn weighted_sum_and_weighted_overlay_compute_expected_values() {
         json!([constraint_path.to_string_lossy().to_string()]),
     );
     overlay_args.insert("scale_max".to_string(), json!(1.0));
-    overlay_args.insert("output".to_string(), json!(overlay_path.to_string_lossy().to_string()));
+    overlay_args.insert(
+        "output".to_string(),
+        json!(overlay_path.to_string_lossy().to_string()),
+    );
     registry
         .run("weighted_overlay", &overlay_args, &context(&caps))
         .expect("weighted_overlay should run");
@@ -10416,7 +12994,9 @@ fn aggregate_raster_and_block_extrema_compute_expected_values() {
             .set(0, (index / 4) as isize, (index % 4) as isize, value)
             .expect("set");
     }
-    raster.write(&input_path, RasterFormat::EsriAscii).expect("write input raster");
+    raster
+        .write(&input_path, RasterFormat::EsriAscii)
+        .expect("write input raster");
 
     let mut base = Raster::new(RasterConfig {
         cols: 2,
@@ -10436,7 +13016,8 @@ fn aggregate_raster_and_block_extrema_compute_expected_values() {
             base.set(0, r, c, base.nodata).expect("set");
         }
     }
-    base.write(&base_path, RasterFormat::EsriAscii).expect("write base raster");
+    base.write(&base_path, RasterFormat::EsriAscii)
+        .expect("write base raster");
 
     let mut layer = Layer::new("points")
         .with_geom_type(wbvector::GeometryType::Point)
@@ -10458,21 +13039,41 @@ fn aggregate_raster_and_block_extrema_compute_expected_values() {
     let caps = OpenOnly;
 
     let mut aggregate_args = ToolArgs::new();
-    aggregate_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    aggregate_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     aggregate_args.insert("aggregation_factor".to_string(), json!(2));
     aggregate_args.insert("aggregation_type".to_string(), json!("mean"));
-    aggregate_args.insert("output".to_string(), json!(aggregate_path.to_string_lossy().to_string()));
+    aggregate_args.insert(
+        "output".to_string(),
+        json!(aggregate_path.to_string_lossy().to_string()),
+    );
     registry
         .run("aggregate_raster", &aggregate_args, &context(&caps))
         .expect("aggregate_raster should run");
 
-    for (tool_id, out_path) in [("block_minimum", &block_min_path), ("block_maximum", &block_max_path)] {
+    for (tool_id, out_path) in [
+        ("block_minimum", &block_min_path),
+        ("block_maximum", &block_max_path),
+    ] {
         let mut args = ToolArgs::new();
-        args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points_path.to_string_lossy().to_string()),
+        );
         args.insert("use_z".to_string(), json!(true));
-        args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
-        registry.run(tool_id, &args, &context(&caps)).expect("block tool should run");
+        args.insert(
+            "base_raster".to_string(),
+            json!(base_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
+        registry
+            .run(tool_id, &args, &context(&caps))
+            .expect("block tool should run");
     }
 
     let aggregate_out = Raster::read(&aggregate_path).expect("read aggregate output");
@@ -10528,7 +13129,9 @@ fn standard_deviation_overlay_computes_expected_values() {
                 .set(0, (index / 2) as isize, (index % 2) as isize, value)
                 .expect("set");
         }
-        raster.write(path, RasterFormat::EsriAscii).expect("write raster");
+        raster
+            .write(path, RasterFormat::EsriAscii)
+            .expect("write raster");
     }
 
     let mut args = ToolArgs::new();
@@ -10539,7 +13142,10 @@ fn standard_deviation_overlay_computes_expected_values() {
             in2_path.to_string_lossy().to_string()
         ]),
     );
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -10616,55 +13222,117 @@ fn interpolation_tools_run_end_to_end_and_preserve_point_crs() {
     let caps = OpenOnly;
 
     let mut idw_args = ToolArgs::new();
-    idw_args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+    idw_args.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
     idw_args.insert("field_name".to_string(), json!("VALUE"));
-    idw_args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
-    idw_args.insert("output".to_string(), json!(idw_path.to_string_lossy().to_string()));
+    idw_args.insert(
+        "base_raster".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    idw_args.insert(
+        "output".to_string(),
+        json!(idw_path.to_string_lossy().to_string()),
+    );
     registry
         .run("idw_interpolation", &idw_args, &context(&caps))
         .expect("idw_interpolation should run");
 
     let mut nn_args = ToolArgs::new();
-    nn_args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+    nn_args.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
     nn_args.insert("field_name".to_string(), json!("VALUE"));
-    nn_args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
-    nn_args.insert("output".to_string(), json!(nn_path.to_string_lossy().to_string()));
+    nn_args.insert(
+        "base_raster".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    nn_args.insert(
+        "output".to_string(),
+        json!(nn_path.to_string_lossy().to_string()),
+    );
     registry
         .run("nearest_neighbour_interpolation", &nn_args, &context(&caps))
         .expect("nearest_neighbour_interpolation should run");
 
     let mut nat_args = ToolArgs::new();
-    nat_args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+    nat_args.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
     nat_args.insert("field_name".to_string(), json!("VALUE"));
-    nat_args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
-    nat_args.insert("output".to_string(), json!(nat_path.to_string_lossy().to_string()));
+    nat_args.insert(
+        "base_raster".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    nat_args.insert(
+        "output".to_string(),
+        json!(nat_path.to_string_lossy().to_string()),
+    );
     registry
-        .run("natural_neighbour_interpolation", &nat_args, &context(&caps))
+        .run(
+            "natural_neighbour_interpolation",
+            &nat_args,
+            &context(&caps),
+        )
         .expect("natural_neighbour_interpolation should run");
 
     let mut ms_args = ToolArgs::new();
-    ms_args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+    ms_args.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
     ms_args.insert("field_name".to_string(), json!("VALUE"));
-    ms_args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
-    ms_args.insert("output".to_string(), json!(ms_path.to_string_lossy().to_string()));
+    ms_args.insert(
+        "base_raster".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    ms_args.insert(
+        "output".to_string(),
+        json!(ms_path.to_string_lossy().to_string()),
+    );
     registry
         .run("modified_shepard_interpolation", &ms_args, &context(&caps))
         .expect("modified_shepard_interpolation should run");
 
     let mut rbf_args = ToolArgs::new();
-    rbf_args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+    rbf_args.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
     rbf_args.insert("field_name".to_string(), json!("VALUE"));
-    rbf_args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
-    rbf_args.insert("output".to_string(), json!(rbf_path.to_string_lossy().to_string()));
+    rbf_args.insert(
+        "base_raster".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    rbf_args.insert(
+        "output".to_string(),
+        json!(rbf_path.to_string_lossy().to_string()),
+    );
     registry
-        .run("radial_basis_function_interpolation", &rbf_args, &context(&caps))
+        .run(
+            "radial_basis_function_interpolation",
+            &rbf_args,
+            &context(&caps),
+        )
         .expect("radial_basis_function_interpolation should run");
 
     let mut tin_args = ToolArgs::new();
-    tin_args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+    tin_args.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
     tin_args.insert("field_name".to_string(), json!("VALUE"));
-    tin_args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
-    tin_args.insert("output".to_string(), json!(tin_path.to_string_lossy().to_string()));
+    tin_args.insert(
+        "base_raster".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    tin_args.insert(
+        "output".to_string(),
+        json!(tin_path.to_string_lossy().to_string()),
+    );
     registry
         .run("tin_interpolation", &tin_args, &context(&caps))
         .expect("tin_interpolation should run");
@@ -10688,25 +13356,67 @@ fn interpolation_tools_run_end_to_end_and_preserve_point_crs() {
     assert_eq!(rbf_out.cols, 2);
     assert_eq!(tin_out.rows, 2);
     assert_eq!(tin_out.cols, 2);
-    assert_eq!(idw_out.crs.epsg, Some(4326), "idw output should preserve interpolation input CRS");
-    assert_eq!(nn_out.crs.epsg, Some(4326), "nearest-neighbour output should preserve interpolation input CRS");
-    assert_eq!(nat_out.crs.epsg, Some(4326), "natural-neighbour output should preserve interpolation input CRS");
-    assert_eq!(ms_out.crs.epsg, Some(4326), "modified shepard output should preserve interpolation input CRS");
-    assert_eq!(rbf_out.crs.epsg, Some(4326), "rbf output should preserve interpolation input CRS");
-    assert_eq!(tin_out.crs.epsg, Some(4326), "tin output should preserve interpolation input CRS");
+    assert_eq!(
+        idw_out.crs.epsg,
+        Some(4326),
+        "idw output should preserve interpolation input CRS"
+    );
+    assert_eq!(
+        nn_out.crs.epsg,
+        Some(4326),
+        "nearest-neighbour output should preserve interpolation input CRS"
+    );
+    assert_eq!(
+        nat_out.crs.epsg,
+        Some(4326),
+        "natural-neighbour output should preserve interpolation input CRS"
+    );
+    assert_eq!(
+        ms_out.crs.epsg,
+        Some(4326),
+        "modified shepard output should preserve interpolation input CRS"
+    );
+    assert_eq!(
+        rbf_out.crs.epsg,
+        Some(4326),
+        "rbf output should preserve interpolation input CRS"
+    );
+    assert_eq!(
+        tin_out.crs.epsg,
+        Some(4326),
+        "tin output should preserve interpolation input CRS"
+    );
 
     let idw_center = idw_out.get(0, 0, 0);
-    assert!(idw_center.is_finite(), "idw output should contain interpolated values");
+    assert!(
+        idw_center.is_finite(),
+        "idw output should contain interpolated values"
+    );
     let nn_center = nn_out.get(0, 0, 0);
-    assert!(nn_center.is_finite(), "nearest-neighbour output should contain interpolated values");
+    assert!(
+        nn_center.is_finite(),
+        "nearest-neighbour output should contain interpolated values"
+    );
     let nat_center = nat_out.get(0, 0, 0);
-    assert!(nat_center.is_finite(), "natural-neighbour output should contain interpolated values");
+    assert!(
+        nat_center.is_finite(),
+        "natural-neighbour output should contain interpolated values"
+    );
     let ms_center = ms_out.get(0, 0, 0);
-    assert!(ms_center.is_finite(), "modified shepard output should contain interpolated values");
+    assert!(
+        ms_center.is_finite(),
+        "modified shepard output should contain interpolated values"
+    );
     let rbf_center = rbf_out.get(0, 0, 0);
-    assert!(rbf_center.is_finite(), "rbf output should contain interpolated values");
+    assert!(
+        rbf_center.is_finite(),
+        "rbf output should contain interpolated values"
+    );
     let tin_center = tin_out.get(0, 0, 0);
-    assert!(tin_center.is_finite(), "tin output should contain interpolated values");
+    assert!(
+        tin_center.is_finite(),
+        "tin output should contain interpolated values"
+    );
 
     let _ = std::fs::remove_file(&points_path);
     let _ = std::fs::remove_file(&base_path);
@@ -10766,10 +13476,19 @@ fn tin_interpolation_matches_triangle_plane_values() {
         .expect("write base raster");
 
     let mut args = ToolArgs::new();
-    args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+    args.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
     args.insert("field_name".to_string(), json!("VALUE"));
-    args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "base_raster".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -10834,11 +13553,20 @@ fn tin_interpolation_max_edge_length_filters_long_triangles() {
         .expect("write base raster");
 
     let mut args = ToolArgs::new();
-    args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+    args.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
     args.insert("field_name".to_string(), json!("VALUE"));
-    args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
+    args.insert(
+        "base_raster".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
     args.insert("max_triangle_edge_length".to_string(), json!(1.0));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -10848,7 +13576,11 @@ fn tin_interpolation_max_edge_length_filters_long_triangles() {
     let out = Raster::read(&out_path).expect("read output");
     for r in 0..2isize {
         for c in 0..2isize {
-            assert_eq!(out.get(0, r, c), out.nodata, "all cells should remain NoData after filtering long triangles");
+            assert_eq!(
+                out.get(0, r, c),
+                out.nodata,
+                "all cells should remain NoData after filtering long triangles"
+            );
         }
     }
 
@@ -10874,16 +13606,28 @@ fn interpolation_tools_match_exact_sample_values_at_point_cells() {
     let mut points = Layer::new("points").with_geom_type(wbvector::GeometryType::Point);
     points.add_field(FieldDef::new("VALUE", FieldType::Float));
     points
-        .add_feature(Some(Geometry::point(0.5, 2.5)), &[("VALUE", 10.0f64.into())])
+        .add_feature(
+            Some(Geometry::point(0.5, 2.5)),
+            &[("VALUE", 10.0f64.into())],
+        )
         .expect("add point 1");
     points
-        .add_feature(Some(Geometry::point(2.5, 2.5)), &[("VALUE", 20.0f64.into())])
+        .add_feature(
+            Some(Geometry::point(2.5, 2.5)),
+            &[("VALUE", 20.0f64.into())],
+        )
         .expect("add point 2");
     points
-        .add_feature(Some(Geometry::point(0.5, 0.5)), &[("VALUE", 30.0f64.into())])
+        .add_feature(
+            Some(Geometry::point(0.5, 0.5)),
+            &[("VALUE", 30.0f64.into())],
+        )
         .expect("add point 3");
     points
-        .add_feature(Some(Geometry::point(1.5, 1.5)), &[("VALUE", 40.0f64.into())])
+        .add_feature(
+            Some(Geometry::point(1.5, 1.5)),
+            &[("VALUE", 40.0f64.into())],
+        )
         .expect("add point 4");
     wbvector::write(&points, &points_path, VectorFormat::GeoJson).expect("write points");
 
@@ -10905,7 +13649,8 @@ fn interpolation_tools_match_exact_sample_values_at_point_cells() {
             base.set(0, r, c, base.nodata).expect("set base nodata");
         }
     }
-    base.write(&base_path, RasterFormat::GeoTiff).expect("write base raster");
+    base.write(&base_path, RasterFormat::GeoTiff)
+        .expect("write base raster");
 
     let caps = OpenOnly;
     for (tool_id, out_path) in [
@@ -10914,11 +13659,22 @@ fn interpolation_tools_match_exact_sample_values_at_point_cells() {
         ("radial_basis_function_interpolation", &rbf_path),
     ] {
         let mut args = ToolArgs::new();
-        args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+        args.insert(
+            "points".to_string(),
+            json!(points_path.to_string_lossy().to_string()),
+        );
         args.insert("field_name".to_string(), json!("VALUE"));
-        args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
-        registry.run(tool_id, &args, &context(&caps)).expect("tool should run");
+        args.insert(
+            "base_raster".to_string(),
+            json!(base_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(out_path.to_string_lossy().to_string()),
+        );
+        registry
+            .run(tool_id, &args, &context(&caps))
+            .expect("tool should run");
     }
 
     let nat = Raster::read(&nat_path).expect("read nat");
@@ -10928,7 +13684,8 @@ fn interpolation_tools_match_exact_sample_values_at_point_cells() {
     for raster in [&nat, &ms, &rbf] {
         assert!((raster.get(0, 1, 1) - 40.0).abs() < 1e-9);
     }
-    for (raster, expected_corner_values) in [(&nat, [10.0, 20.0, 30.0]), (&ms, [10.0, 20.0, 30.0])] {
+    for (raster, expected_corner_values) in [(&nat, [10.0, 20.0, 30.0]), (&ms, [10.0, 20.0, 30.0])]
+    {
         assert!((raster.get(0, 0, 0) - expected_corner_values[0]).abs() < 1e-9);
         assert!((raster.get(0, 0, 2) - expected_corner_values[1]).abs() < 1e-9);
         assert!((raster.get(0, 2, 0) - expected_corner_values[2]).abs() < 1e-9);
@@ -10976,7 +13733,10 @@ fn modified_shepard_quadratic_basis_changes_output_surface() {
     let caps = OpenOnly;
 
     let mut args_false = ToolArgs::new();
-    args_false.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
+    args_false.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
     args_false.insert("field_name".to_string(), json!("VALUE"));
     args_false.insert("weight".to_string(), json!(2.0));
     args_false.insert("radius".to_string(), json!(0.0));
@@ -10984,16 +13744,30 @@ fn modified_shepard_quadratic_basis_changes_output_surface() {
     args_false.insert("cell_size".to_string(), json!(0.5));
     args_false.insert("use_data_hull".to_string(), json!(false));
     args_false.insert("use_quadratic_basis".to_string(), json!(false));
-    args_false.insert("output".to_string(), json!(false_path.to_string_lossy().to_string()));
+    args_false.insert(
+        "output".to_string(),
+        json!(false_path.to_string_lossy().to_string()),
+    );
     registry
-        .run("modified_shepard_interpolation", &args_false, &context(&caps))
+        .run(
+            "modified_shepard_interpolation",
+            &args_false,
+            &context(&caps),
+        )
         .expect("modified_shepard_interpolation (quadratic=false) should run");
 
     let mut args_true = args_false.clone();
     args_true.insert("use_quadratic_basis".to_string(), json!(true));
-    args_true.insert("output".to_string(), json!(true_path.to_string_lossy().to_string()));
+    args_true.insert(
+        "output".to_string(),
+        json!(true_path.to_string_lossy().to_string()),
+    );
     registry
-        .run("modified_shepard_interpolation", &args_true, &context(&caps))
+        .run(
+            "modified_shepard_interpolation",
+            &args_true,
+            &context(&caps),
+        )
         .expect("modified_shepard_interpolation (quadratic=true) should run");
 
     let out_false = Raster::read(&false_path).expect("read quadratic=false output");
@@ -11053,10 +13827,17 @@ fn gis_utility_tools_run_end_to_end() {
         .with_crs_epsg(4326);
     weighted_points.add_field(FieldDef::new("WEIGHT", FieldType::Float));
     weighted_points
-        .add_feature(Some(Geometry::point(0.5, 0.5)), &[("WEIGHT", 2.0f64.into())])
+        .add_feature(
+            Some(Geometry::point(0.5, 0.5)),
+            &[("WEIGHT", 2.0f64.into())],
+        )
         .expect("add weighted point");
-    wbvector::write(&weighted_points, &weighted_points_path, VectorFormat::GeoJson)
-        .expect("write weighted points");
+    wbvector::write(
+        &weighted_points,
+        &weighted_points_path,
+        VectorFormat::GeoJson,
+    )
+    .expect("write weighted points");
 
     let mut base = Raster::new(RasterConfig {
         cols: 2,
@@ -11076,7 +13857,8 @@ fn gis_utility_tools_run_end_to_end() {
             base.set(0, r, c, base.nodata).expect("set base nodata");
         }
     }
-    base.write(&base_path, RasterFormat::GeoTiff).expect("write base");
+    base.write(&base_path, RasterFormat::GeoTiff)
+        .expect("write base");
 
     let mut raster1 = Raster::new(RasterConfig {
         cols: 2,
@@ -11095,7 +13877,9 @@ fn gis_utility_tools_run_end_to_end() {
     raster1.set(0, 0, 1, 6.0).expect("set");
     raster1.set(0, 1, 0, 7.0).expect("set");
     raster1.set(0, 1, 1, 8.0).expect("set");
-    raster1.write(&raster1_path, RasterFormat::GeoTiff).expect("write r1");
+    raster1
+        .write(&raster1_path, RasterFormat::GeoTiff)
+        .expect("write r1");
 
     let mut raster2 = Raster::new(RasterConfig {
         cols: 2,
@@ -11114,21 +13898,40 @@ fn gis_utility_tools_run_end_to_end() {
     raster2.set(0, 0, 1, 16.0).expect("set");
     raster2.set(0, 1, 0, 17.0).expect("set");
     raster2.set(0, 1, 1, 18.0).expect("set");
-    raster2.write(&raster2_path, RasterFormat::GeoTiff).expect("write r2");
+    raster2
+        .write(&raster2_path, RasterFormat::GeoTiff)
+        .expect("write r2");
 
     let mut heat_args = ToolArgs::new();
-    heat_args.insert("points".to_string(), json!(weighted_points_path.to_string_lossy().to_string()));
+    heat_args.insert(
+        "points".to_string(),
+        json!(weighted_points_path.to_string_lossy().to_string()),
+    );
     heat_args.insert("field_name".to_string(), json!("WEIGHT"));
     heat_args.insert("bandwidth".to_string(), json!(1.0));
     heat_args.insert("kernel_function".to_string(), json!("uniform"));
-    heat_args.insert("base_raster".to_string(), json!(base_path.to_string_lossy().to_string()));
-    heat_args.insert("output".to_string(), json!(heat_path.to_string_lossy().to_string()));
-    registry.run("heat_map", &heat_args, &context(&caps)).expect("heat_map should run");
+    heat_args.insert(
+        "base_raster".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    heat_args.insert(
+        "output".to_string(),
+        json!(heat_path.to_string_lossy().to_string()),
+    );
+    registry
+        .run("heat_map", &heat_args, &context(&caps))
+        .expect("heat_map should run");
 
     let mut assign_args = ToolArgs::new();
-    assign_args.insert("input".to_string(), json!(base_path.to_string_lossy().to_string()));
+    assign_args.insert(
+        "input".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
     assign_args.insert("what_to_assign".to_string(), json!("column"));
-    assign_args.insert("output".to_string(), json!(assign_path.to_string_lossy().to_string()));
+    assign_args.insert(
+        "output".to_string(),
+        json!(assign_path.to_string_lossy().to_string()),
+    );
     registry
         .run("raster_cell_assignment", &assign_args, &context(&caps))
         .expect("raster_cell_assignment should run");
@@ -11141,14 +13944,27 @@ fn gis_utility_tools_run_end_to_end() {
             raster2_path.to_string_lossy().to_string()
         ]),
     );
-    sample_args.insert("points".to_string(), json!(points_path.to_string_lossy().to_string()));
-    sample_args.insert("output".to_string(), json!(sampled_path.to_string_lossy().to_string()));
+    sample_args.insert(
+        "points".to_string(),
+        json!(points_path.to_string_lossy().to_string()),
+    );
+    sample_args.insert(
+        "output".to_string(),
+        json!(sampled_path.to_string_lossy().to_string()),
+    );
     let sample_result = registry
-        .run("extract_raster_values_at_points", &sample_args, &context(&caps))
+        .run(
+            "extract_raster_values_at_points",
+            &sample_args,
+            &context(&caps),
+        )
         .expect("extract_raster_values_at_points should run");
 
     let heat = Raster::read(&heat_path).expect("read heat");
-    assert!((heat.get(0, 1, 0) - 1.0).abs() < 1e-9, "uniform kernel with weight 2 at d=0 should equal 1.0");
+    assert!(
+        (heat.get(0, 1, 0) - 1.0).abs() < 1e-9,
+        "uniform kernel with weight 2 at d=0 should equal 1.0"
+    );
     assert_eq!(heat.crs.epsg, Some(4326));
 
     let assign = Raster::read(&assign_path).expect("read assignment");
@@ -11162,7 +13978,11 @@ fn gis_utility_tools_run_end_to_end() {
     assert_eq!(attrs[0].as_f64(), Some(5.0));
     assert_eq!(attrs[1].as_f64(), Some(15.0));
 
-    let report = sample_result.outputs.get("report").and_then(|v| v.as_str()).expect("report string");
+    let report = sample_result
+        .outputs
+        .get("report")
+        .and_then(|v| v.as_str())
+        .expect("report string");
     assert!(report.contains("Point 1 values"));
     assert!(report.contains("5.0"));
     assert!(report.contains("15.0"));
@@ -11187,9 +14007,11 @@ fn gis_footprint_and_map_features_tools_run_end_to_end() {
 
     let tag = unique_tag("wbtools_oss_gis_footprints");
     let raster_path = std::env::temp_dir().join(format!("{tag}_input.tif"));
-    let raster_footprint_path = std::env::temp_dir().join(format!("{tag}_raster_footprint.geojson"));
+    let raster_footprint_path =
+        std::env::temp_dir().join(format!("{tag}_raster_footprint.geojson"));
     let vector_path = std::env::temp_dir().join(format!("{tag}_input.geojson"));
-    let vector_footprint_path = std::env::temp_dir().join(format!("{tag}_vector_footprint.geojson"));
+    let vector_footprint_path =
+        std::env::temp_dir().join(format!("{tag}_vector_footprint.geojson"));
     let features_path = std::env::temp_dir().join(format!("{tag}_features.tif"));
 
     let mut raster = Raster::new(RasterConfig {
@@ -11205,17 +14027,15 @@ fn gis_footprint_and_map_features_tools_run_end_to_end() {
         crs: CrsInfo::from_epsg(4326),
         metadata: Vec::new(),
     });
-    let feature_values = [
-        1.0, 1.0, 1.0, 1.0,
-        1.0, 9.0, 1.0, 8.0,
-        1.0, 1.0, 1.0, 1.0,
-    ];
+    let feature_values = [1.0, 1.0, 1.0, 1.0, 1.0, 9.0, 1.0, 8.0, 1.0, 1.0, 1.0, 1.0];
     for (index, value) in feature_values.into_iter().enumerate() {
         let row = (index / 4) as isize;
         let col = (index % 4) as isize;
         raster.set(0, row, col, value).expect("set raster value");
     }
-    raster.write(&raster_path, RasterFormat::GeoTiff).expect("write raster");
+    raster
+        .write(&raster_path, RasterFormat::GeoTiff)
+        .expect("write raster");
 
     let mut vector = Layer::new("input_lines")
         .with_geom_type(wbvector::GeometryType::LineString)
@@ -11233,31 +14053,53 @@ fn gis_footprint_and_map_features_tools_run_end_to_end() {
     wbvector::write(&vector, &vector_path, VectorFormat::GeoJson).expect("write vector");
 
     let mut raster_fp_args = ToolArgs::new();
-    raster_fp_args.insert("input".to_string(), json!(raster_path.to_string_lossy().to_string()));
-    raster_fp_args.insert("output".to_string(), json!(raster_footprint_path.to_string_lossy().to_string()));
+    raster_fp_args.insert(
+        "input".to_string(),
+        json!(raster_path.to_string_lossy().to_string()),
+    );
+    raster_fp_args.insert(
+        "output".to_string(),
+        json!(raster_footprint_path.to_string_lossy().to_string()),
+    );
     registry
         .run("layer_footprint_raster", &raster_fp_args, &context(&caps))
         .expect("layer_footprint_raster should run");
 
     let mut vector_fp_args = ToolArgs::new();
-    vector_fp_args.insert("input".to_string(), json!(vector_path.to_string_lossy().to_string()));
-    vector_fp_args.insert("output".to_string(), json!(vector_footprint_path.to_string_lossy().to_string()));
+    vector_fp_args.insert(
+        "input".to_string(),
+        json!(vector_path.to_string_lossy().to_string()),
+    );
+    vector_fp_args.insert(
+        "output".to_string(),
+        json!(vector_footprint_path.to_string_lossy().to_string()),
+    );
     registry
         .run("layer_footprint_vector", &vector_fp_args, &context(&caps))
         .expect("layer_footprint_vector should run");
 
     let mut map_args = ToolArgs::new();
-    map_args.insert("input".to_string(), json!(raster_path.to_string_lossy().to_string()));
+    map_args.insert(
+        "input".to_string(),
+        json!(raster_path.to_string_lossy().to_string()),
+    );
     map_args.insert("min_feature_height".to_string(), json!(2.0));
     map_args.insert("min_feature_size".to_string(), json!(1));
-    map_args.insert("output".to_string(), json!(features_path.to_string_lossy().to_string()));
+    map_args.insert(
+        "output".to_string(),
+        json!(features_path.to_string_lossy().to_string()),
+    );
     registry
         .run("map_features", &map_args, &context(&caps))
         .expect("map_features should run");
 
     let raster_footprint = wbvector::read(&raster_footprint_path).expect("read raster footprint");
     assert_eq!(raster_footprint.features.len(), 1);
-    match raster_footprint.features[0].geometry.as_ref().expect("raster footprint geometry") {
+    match raster_footprint.features[0]
+        .geometry
+        .as_ref()
+        .expect("raster footprint geometry")
+    {
         Geometry::Polygon { exterior, .. } => {
             let xs: Vec<_> = exterior.coords().iter().map(|coord| coord.x).collect();
             let ys: Vec<_> = exterior.coords().iter().map(|coord| coord.y).collect();
@@ -11271,7 +14113,11 @@ fn gis_footprint_and_map_features_tools_run_end_to_end() {
 
     let vector_footprint = wbvector::read(&vector_footprint_path).expect("read vector footprint");
     assert_eq!(vector_footprint.features.len(), 1);
-    match vector_footprint.features[0].geometry.as_ref().expect("vector footprint geometry") {
+    match vector_footprint.features[0]
+        .geometry
+        .as_ref()
+        .expect("vector footprint geometry")
+    {
         Geometry::Polygon { exterior, .. } => {
             let xs: Vec<_> = exterior.coords().iter().map(|coord| coord.x).collect();
             let ys: Vec<_> = exterior.coords().iter().map(|coord| coord.y).collect();
@@ -11332,14 +14178,21 @@ fn gis_create_plane_centroid_raster_and_medoid_run_end_to_end() {
             base.set(0, row, col, 0.0).expect("set base");
         }
     }
-    base.write(&base_path, RasterFormat::GeoTiff).expect("write base raster");
+    base.write(&base_path, RasterFormat::GeoTiff)
+        .expect("write base raster");
 
     let mut create_args = ToolArgs::new();
-    create_args.insert("base".to_string(), json!(base_path.to_string_lossy().to_string()));
+    create_args.insert(
+        "base".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
     create_args.insert("gradient".to_string(), json!(0.0));
     create_args.insert("aspect".to_string(), json!(90.0));
     create_args.insert("constant".to_string(), json!(7.0));
-    create_args.insert("output".to_string(), json!(plane_path.to_string_lossy().to_string()));
+    create_args.insert(
+        "output".to_string(),
+        json!(plane_path.to_string_lossy().to_string()),
+    );
     registry
         .run("create_plane", &create_args, &context(&caps))
         .expect("create_plane should run");
@@ -11372,11 +14225,19 @@ fn gis_create_plane_centroid_raster_and_medoid_run_end_to_end() {
     patches.set(0, 1, 0, 1.0).expect("set patch");
     patches.set(0, 2, 2, 2.0).expect("set patch");
     patches.set(0, 1, 2, 2.0).expect("set patch");
-    patches.write(&patches_path, RasterFormat::GeoTiff).expect("write patches raster");
+    patches
+        .write(&patches_path, RasterFormat::GeoTiff)
+        .expect("write patches raster");
 
     let mut centroid_args = ToolArgs::new();
-    centroid_args.insert("input".to_string(), json!(patches_path.to_string_lossy().to_string()));
-    centroid_args.insert("output".to_string(), json!(centroid_path.to_string_lossy().to_string()));
+    centroid_args.insert(
+        "input".to_string(),
+        json!(patches_path.to_string_lossy().to_string()),
+    );
+    centroid_args.insert(
+        "output".to_string(),
+        json!(centroid_path.to_string_lossy().to_string()),
+    );
     let centroid_result = registry
         .run("centroid_raster", &centroid_args, &context(&caps))
         .expect("centroid_raster should run");
@@ -11384,7 +14245,11 @@ fn gis_create_plane_centroid_raster_and_medoid_run_end_to_end() {
     let centroid = Raster::read(&centroid_path).expect("read centroid raster");
     assert_eq!(centroid.get(0, 0, 0), 1.0);
     assert_eq!(centroid.get(0, 1, 2), 2.0);
-    let report = centroid_result.outputs.get("report").and_then(|v| v.as_str()).expect("report output");
+    let report = centroid_result
+        .outputs
+        .get("report")
+        .and_then(|v| v.as_str())
+        .expect("report output");
     assert!(report.contains("Patch Centroid"));
 
     let mut lines = Layer::new("lines").with_geom_type(wbvector::GeometryType::LineString);
@@ -11401,15 +14266,25 @@ fn gis_create_plane_centroid_raster_and_medoid_run_end_to_end() {
     wbvector::write(&lines, &lines_path, VectorFormat::GeoJson).expect("write line input");
 
     let mut medoid_args = ToolArgs::new();
-    medoid_args.insert("input".to_string(), json!(lines_path.to_string_lossy().to_string()));
-    medoid_args.insert("output".to_string(), json!(medoid_path.to_string_lossy().to_string()));
+    medoid_args.insert(
+        "input".to_string(),
+        json!(lines_path.to_string_lossy().to_string()),
+    );
+    medoid_args.insert(
+        "output".to_string(),
+        json!(medoid_path.to_string_lossy().to_string()),
+    );
     registry
         .run("medoid", &medoid_args, &context(&caps))
         .expect("medoid should run");
 
     let medoid_layer = wbvector::read(&medoid_path).expect("read medoid output");
     assert_eq!(medoid_layer.features.len(), 1);
-    match medoid_layer.features[0].geometry.as_ref().expect("medoid geometry") {
+    match medoid_layer.features[0]
+        .geometry
+        .as_ref()
+        .expect("medoid geometry")
+    {
         Geometry::Point(coord) => {
             assert!((coord.x - 2.0).abs() < 1e-9);
             assert!((coord.y - 0.0).abs() < 1e-9);
@@ -11450,22 +14325,26 @@ fn find_lowest_or_highest_points_runs_end_to_end() {
         crs: Default::default(),
         metadata: Vec::new(),
     });
-    let values = [
-        2.0, 3.0, 9.0,
-        4.0, 5.0, 6.0,
-        -5.0, 7.0, 8.0,
-    ];
+    let values = [2.0, 3.0, 9.0, 4.0, 5.0, 6.0, -5.0, 7.0, 8.0];
     for (index, value) in values.into_iter().enumerate() {
         let row = (index / 3) as isize;
         let col = (index % 3) as isize;
         raster.set(0, row, col, value).expect("set raster value");
     }
-    raster.write(&raster_path, RasterFormat::GeoTiff).expect("write raster");
+    raster
+        .write(&raster_path, RasterFormat::GeoTiff)
+        .expect("write raster");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(raster_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(raster_path.to_string_lossy().to_string()),
+    );
     args.insert("out_type".to_string(), json!("both"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("find_lowest_or_highest_points", &args, &context(&caps))
         .expect("find_lowest_or_highest_points should run");
@@ -11525,9 +14404,15 @@ fn eliminate_coincident_points_runs_end_to_end() {
     wbvector::write(&points, &input_path, VectorFormat::GeoJson).expect("write point input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("tolerance_dist".to_string(), json!(0.001));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("eliminate_coincident_points", &args, &context(&caps))
         .expect("eliminate_coincident_points should run");
@@ -11580,17 +14465,26 @@ fn extend_vector_lines_runs_end_to_end() {
     let input_layer = wbvector::read(&input_path).expect("read line input");
     assert!(
         matches!(
-            input_layer.features.first().and_then(|f| f.geometry.as_ref()),
+            input_layer
+                .features
+                .first()
+                .and_then(|f| f.geometry.as_ref()),
             Some(Geometry::LineString(_))
         ),
         "line input should contain a linestring feature"
     );
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("distance".to_string(), json!(1.0));
     args.insert("extend_direction".to_string(), json!("both"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("extend_vector_lines", &args, &context(&caps))
         .expect("extend_vector_lines should run");
@@ -11640,9 +14534,15 @@ fn smooth_vectors_runs_end_to_end() {
     wbvector::write(&lines, &input_path, VectorFormat::GeoJson).expect("write line input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("filter_size".to_string(), json!(3));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("smooth_vectors", &args, &context(&caps))
         .expect("smooth_vectors should run");
@@ -11685,7 +14585,8 @@ fn split_vector_lines_produces_correct_segments() {
     let output_path = std::env::temp_dir().join(format!("{tag}_out.geojson"));
 
     // Build a single-line input layer with no custom attributes.
-    let mut layer = wbvector::Layer::new("lines").with_geom_type(wbvector::GeometryType::LineString);
+    let mut layer =
+        wbvector::Layer::new("lines").with_geom_type(wbvector::GeometryType::LineString);
     layer
         .add_feature(
             Some(Geometry::line_string(vec![
@@ -11699,9 +14600,15 @@ fn split_vector_lines_produces_correct_segments() {
     wbvector::write(&layer, &input_path, VectorFormat::GeoJson).expect("write input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("segment_length".to_string(), json!(2.0));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("split_vector_lines", &args, &context(&caps))
@@ -11804,30 +14711,66 @@ fn rectangular_grid_tools_run_end_to_end() {
     wbvector::write(&base_layer, &vector_in, VectorFormat::GeoJson).expect("write base vector");
 
     let mut raster_args = ToolArgs::new();
-    raster_args.insert("base".to_string(), json!(raster_in.to_string_lossy().to_string()));
+    raster_args.insert(
+        "base".to_string(),
+        json!(raster_in.to_string_lossy().to_string()),
+    );
     raster_args.insert("width".to_string(), json!(1.0));
     raster_args.insert("height".to_string(), json!(1.0));
-    raster_args.insert("output".to_string(), json!(raster_out.to_string_lossy().to_string()));
+    raster_args.insert(
+        "output".to_string(),
+        json!(raster_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("rectangular_grid_from_raster_base", &raster_args, &context(&caps))
+        .run(
+            "rectangular_grid_from_raster_base",
+            &raster_args,
+            &context(&caps),
+        )
         .expect("rectangular_grid_from_raster_base should run");
 
     let mut vector_args = ToolArgs::new();
-    vector_args.insert("base".to_string(), json!(vector_in.to_string_lossy().to_string()));
+    vector_args.insert(
+        "base".to_string(),
+        json!(vector_in.to_string_lossy().to_string()),
+    );
     vector_args.insert("width".to_string(), json!(1.0));
     vector_args.insert("height".to_string(), json!(1.0));
-    vector_args.insert("output".to_string(), json!(vector_out.to_string_lossy().to_string()));
+    vector_args.insert(
+        "output".to_string(),
+        json!(vector_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("rectangular_grid_from_vector_base", &vector_args, &context(&caps))
+        .run(
+            "rectangular_grid_from_vector_base",
+            &vector_args,
+            &context(&caps),
+        )
         .expect("rectangular_grid_from_vector_base should run");
 
     let out_from_raster = wbvector::read(&raster_out).expect("read raster-grid output");
     let out_from_vector = wbvector::read(&vector_out).expect("read vector-grid output");
 
-    assert_eq!(out_from_raster.features.len(), 4, "expected 2x2 grid from raster");
-    assert_eq!(out_from_vector.features.len(), 4, "expected 2x2 grid from vector");
-    assert_eq!(out_from_raster.features[0].attributes.len(), 3, "FID/ROW/COLUMN expected");
-    assert_eq!(out_from_vector.features[0].attributes.len(), 3, "FID/ROW/COLUMN expected");
+    assert_eq!(
+        out_from_raster.features.len(),
+        4,
+        "expected 2x2 grid from raster"
+    );
+    assert_eq!(
+        out_from_vector.features.len(),
+        4,
+        "expected 2x2 grid from vector"
+    );
+    assert_eq!(
+        out_from_raster.features[0].attributes.len(),
+        3,
+        "FID/ROW/COLUMN expected"
+    );
+    assert_eq!(
+        out_from_vector.features[0].attributes.len(),
+        3,
+        "FID/ROW/COLUMN expected"
+    );
 
     let _ = std::fs::remove_file(&raster_in);
     let _ = std::fs::remove_file(&vector_in);
@@ -11889,30 +14832,64 @@ fn hexagonal_grid_tools_run_end_to_end() {
     wbvector::write(&base_layer, &vector_in, VectorFormat::GeoJson).expect("write base vector");
 
     let mut raster_args = ToolArgs::new();
-    raster_args.insert("base".to_string(), json!(raster_in.to_string_lossy().to_string()));
+    raster_args.insert(
+        "base".to_string(),
+        json!(raster_in.to_string_lossy().to_string()),
+    );
     raster_args.insert("width".to_string(), json!(1.0));
     raster_args.insert("orientation".to_string(), json!("h"));
-    raster_args.insert("output".to_string(), json!(raster_out.to_string_lossy().to_string()));
+    raster_args.insert(
+        "output".to_string(),
+        json!(raster_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("hexagonal_grid_from_raster_base", &raster_args, &context(&caps))
+        .run(
+            "hexagonal_grid_from_raster_base",
+            &raster_args,
+            &context(&caps),
+        )
         .expect("hexagonal_grid_from_raster_base should run");
 
     let mut vector_args = ToolArgs::new();
-    vector_args.insert("base".to_string(), json!(vector_in.to_string_lossy().to_string()));
+    vector_args.insert(
+        "base".to_string(),
+        json!(vector_in.to_string_lossy().to_string()),
+    );
     vector_args.insert("width".to_string(), json!(1.0));
     vector_args.insert("orientation".to_string(), json!("v"));
-    vector_args.insert("output".to_string(), json!(vector_out.to_string_lossy().to_string()));
+    vector_args.insert(
+        "output".to_string(),
+        json!(vector_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("hexagonal_grid_from_vector_base", &vector_args, &context(&caps))
+        .run(
+            "hexagonal_grid_from_vector_base",
+            &vector_args,
+            &context(&caps),
+        )
         .expect("hexagonal_grid_from_vector_base should run");
 
     let out_from_raster = wbvector::read(&raster_out).expect("read raster-hex output");
     let out_from_vector = wbvector::read(&vector_out).expect("read vector-hex output");
 
-    assert!(out_from_raster.features.len() > 0, "expected non-empty raster-based hex grid");
-    assert!(out_from_vector.features.len() > 0, "expected non-empty vector-based hex grid");
-    assert_eq!(out_from_raster.features[0].attributes.len(), 3, "FID/ROW/COLUMN expected");
-    assert_eq!(out_from_vector.features[0].attributes.len(), 3, "FID/ROW/COLUMN expected");
+    assert!(
+        out_from_raster.features.len() > 0,
+        "expected non-empty raster-based hex grid"
+    );
+    assert!(
+        out_from_vector.features.len() > 0,
+        "expected non-empty vector-based hex grid"
+    );
+    assert_eq!(
+        out_from_raster.features[0].attributes.len(),
+        3,
+        "FID/ROW/COLUMN expected"
+    );
+    assert_eq!(
+        out_from_vector.features[0].attributes.len(),
+        3,
+        "FID/ROW/COLUMN expected"
+    );
 
     let _ = std::fs::remove_file(&raster_in);
     let _ = std::fs::remove_file(&vector_in);
@@ -11956,24 +14933,41 @@ fn snap_endnodes_and_voronoi_diagram_run_end_to_end() {
     wbvector::write(&line_layer, &lines_in, VectorFormat::GeoJson).expect("write line input");
 
     let mut snap_args = ToolArgs::new();
-    snap_args.insert("input".to_string(), json!(lines_in.to_string_lossy().to_string()));
+    snap_args.insert(
+        "input".to_string(),
+        json!(lines_in.to_string_lossy().to_string()),
+    );
     snap_args.insert("snap_tolerance".to_string(), json!(0.05));
-    snap_args.insert("output".to_string(), json!(lines_out.to_string_lossy().to_string()));
+    snap_args.insert(
+        "output".to_string(),
+        json!(lines_out.to_string_lossy().to_string()),
+    );
     registry
         .run("snap_endnodes", &snap_args, &context(&caps))
         .expect("snap_endnodes should run");
 
     let snapped = wbvector::read(&lines_out).expect("read snapped output");
     assert_eq!(snapped.features.len(), 2);
-    let end_x = match snapped.features[0].geometry.as_ref().expect("line 1 geometry") {
+    let end_x = match snapped.features[0]
+        .geometry
+        .as_ref()
+        .expect("line 1 geometry")
+    {
         Geometry::LineString(cs) => cs.last().expect("line1 end").x,
         _ => panic!("expected LineString"),
     };
-    let start_x = match snapped.features[1].geometry.as_ref().expect("line 2 geometry") {
+    let start_x = match snapped.features[1]
+        .geometry
+        .as_ref()
+        .expect("line 2 geometry")
+    {
         Geometry::LineString(cs) => cs.first().expect("line2 start").x,
         _ => panic!("expected LineString"),
     };
-    assert!((end_x - start_x).abs() < 1e-9, "snapped endpoints should coincide");
+    assert!(
+        (end_x - start_x).abs() < 1e-9,
+        "snapped endpoints should coincide"
+    );
 
     let mut point_layer = Layer::new("points").with_geom_type(wbvector::GeometryType::Point);
     point_layer
@@ -11988,15 +14982,28 @@ fn snap_endnodes_and_voronoi_diagram_run_end_to_end() {
     wbvector::write(&point_layer, &points_in, VectorFormat::GeoJson).expect("write points input");
 
     let mut voronoi_args = ToolArgs::new();
-    voronoi_args.insert("input_points".to_string(), json!(points_in.to_string_lossy().to_string()));
-    voronoi_args.insert("output".to_string(), json!(voronoi_out.to_string_lossy().to_string()));
+    voronoi_args.insert(
+        "input_points".to_string(),
+        json!(points_in.to_string_lossy().to_string()),
+    );
+    voronoi_args.insert(
+        "output".to_string(),
+        json!(voronoi_out.to_string_lossy().to_string()),
+    );
     registry
         .run("voronoi_diagram", &voronoi_args, &context(&caps))
         .expect("voronoi_diagram should run");
 
     let voronoi = wbvector::read(&voronoi_out).expect("read voronoi output");
-    assert!(voronoi.features.len() >= 3, "expected at least one cell per input point");
-    match voronoi.features[0].geometry.as_ref().expect("voronoi geometry") {
+    assert!(
+        voronoi.features.len() >= 3,
+        "expected at least one cell per input point"
+    );
+    match voronoi.features[0]
+        .geometry
+        .as_ref()
+        .expect("voronoi geometry")
+    {
         Geometry::Polygon { .. } => {}
         _ => panic!("voronoi output should be polygon geometry"),
     }
@@ -12036,16 +15043,26 @@ fn travelling_salesman_problem_run_end_to_end() {
     wbvector::write(&point_layer, &points_in, VectorFormat::GeoJson).expect("write points input");
 
     let mut tsp_args = ToolArgs::new();
-    tsp_args.insert("input".to_string(), json!(points_in.to_string_lossy().to_string()));
+    tsp_args.insert(
+        "input".to_string(),
+        json!(points_in.to_string_lossy().to_string()),
+    );
     tsp_args.insert("duration".to_string(), json!(5));
-    tsp_args.insert("output".to_string(), json!(tour_out.to_string_lossy().to_string()));
+    tsp_args.insert(
+        "output".to_string(),
+        json!(tour_out.to_string_lossy().to_string()),
+    );
     registry
         .run("travelling_salesman_problem", &tsp_args, &context(&caps))
         .expect("travelling_salesman_problem should run");
 
     let tour = wbvector::read(&tour_out).expect("read tour output");
-    assert_eq!(tour.features.len(), 1, "expected exactly one feature (the tour)");
-    
+    assert_eq!(
+        tour.features.len(),
+        1,
+        "expected exactly one feature (the tour)"
+    );
+
     // Verify the feature is a line string
     match tour.features[0].geometry.as_ref().expect("tour geometry") {
         Geometry::LineString(coords) => {
@@ -12100,13 +15117,24 @@ fn update_nodata_cells_replaces_only_missing_values() {
                 .set(0, (index / 2) as isize, (index % 2) as isize, value)
                 .expect("set");
         }
-        raster.write(path, RasterFormat::EsriAscii).expect("write raster");
+        raster
+            .write(path, RasterFormat::EsriAscii)
+            .expect("write raster");
     }
 
     let mut args = ToolArgs::new();
-    args.insert("input1".to_string(), json!(in1_path.to_string_lossy().to_string()));
-    args.insert("input2".to_string(), json!(in2_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "input1".to_string(),
+        json!(in1_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "input2".to_string(),
+        json!(in2_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -12152,13 +15180,21 @@ fn buffer_raster_creates_expected_binary_buffer() {
         }
     }
     raster.set(0, 2, 2, 1.0).expect("set center target");
-    raster.write(&input_path, RasterFormat::EsriAscii).expect("write input");
+    raster
+        .write(&input_path, RasterFormat::EsriAscii)
+        .expect("write input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("buffer_size".to_string(), json!(1.0));
     args.insert("grid_cell_units".to_string(), json!(true));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -12199,23 +15235,27 @@ fn clump_assigns_patch_ids_with_zero_background() {
         crs: Default::default(),
         metadata: Vec::new(),
     });
-    let values = [
-        1.0, 1.0, 0.0,
-        1.0, 2.0, 2.0,
-        0.0, 2.0, 2.0,
-    ];
+    let values = [1.0, 1.0, 0.0, 1.0, 2.0, 2.0, 0.0, 2.0, 2.0];
     for (i, v) in values.into_iter().enumerate() {
         raster
             .set(0, (i / 3) as isize, (i % 3) as isize, v)
             .expect("set");
     }
-    raster.write(&input_path, RasterFormat::EsriAscii).expect("write input");
+    raster
+        .write(&input_path, RasterFormat::EsriAscii)
+        .expect("write input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("diag".to_string(), json!(false));
     args.insert("zero_background".to_string(), json!(true));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -12265,20 +15305,34 @@ fn euclidean_distance_and_allocation_compute_expected_outputs() {
         }
     }
     raster.set(0, 1, 1, 5.0).expect("set target");
-    raster.write(&input_path, RasterFormat::EsriAscii).expect("write input");
+    raster
+        .write(&input_path, RasterFormat::EsriAscii)
+        .expect("write input");
 
     let caps = OpenOnly;
 
     let mut dist_args = ToolArgs::new();
-    dist_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    dist_args.insert("output".to_string(), json!(dist_path.to_string_lossy().to_string()));
+    dist_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    dist_args.insert(
+        "output".to_string(),
+        json!(dist_path.to_string_lossy().to_string()),
+    );
     registry
         .run("euclidean_distance", &dist_args, &context(&caps))
         .expect("euclidean_distance should run");
 
     let mut alloc_args = ToolArgs::new();
-    alloc_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    alloc_args.insert("output".to_string(), json!(alloc_path.to_string_lossy().to_string()));
+    alloc_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    alloc_args.insert(
+        "output".to_string(),
+        json!(alloc_path.to_string_lossy().to_string()),
+    );
     registry
         .run("euclidean_allocation", &alloc_args, &context(&caps))
         .expect("euclidean_allocation should run");
@@ -12333,7 +15387,9 @@ fn cost_distance_allocation_and_pathway_compute_expected_outputs() {
         }
     }
     source.set(0, 1, 1, 1.0).expect("set source");
-    source.write(&source_path, RasterFormat::EsriAscii).expect("write source");
+    source
+        .write(&source_path, RasterFormat::EsriAscii)
+        .expect("write source");
 
     let mut cost = Raster::new(RasterConfig {
         cols: 3,
@@ -12353,15 +15409,28 @@ fn cost_distance_allocation_and_pathway_compute_expected_outputs() {
             cost.set(0, r, c, 1.0).expect("set");
         }
     }
-    cost.write(&cost_path, RasterFormat::EsriAscii).expect("write cost");
+    cost.write(&cost_path, RasterFormat::EsriAscii)
+        .expect("write cost");
 
     let caps = OpenOnly;
 
     let mut dist_args = ToolArgs::new();
-    dist_args.insert("source".to_string(), json!(source_path.to_string_lossy().to_string()));
-    dist_args.insert("cost".to_string(), json!(cost_path.to_string_lossy().to_string()));
-    dist_args.insert("output".to_string(), json!(accum_path.to_string_lossy().to_string()));
-    dist_args.insert("backlink_output".to_string(), json!(backlink_path.to_string_lossy().to_string()));
+    dist_args.insert(
+        "source".to_string(),
+        json!(source_path.to_string_lossy().to_string()),
+    );
+    dist_args.insert(
+        "cost".to_string(),
+        json!(cost_path.to_string_lossy().to_string()),
+    );
+    dist_args.insert(
+        "output".to_string(),
+        json!(accum_path.to_string_lossy().to_string()),
+    );
+    dist_args.insert(
+        "backlink_output".to_string(),
+        json!(backlink_path.to_string_lossy().to_string()),
+    );
     registry
         .run("cost_distance", &dist_args, &context(&caps))
         .expect("cost_distance should run");
@@ -12372,9 +15441,18 @@ fn cost_distance_allocation_and_pathway_compute_expected_outputs() {
     assert!((accum_out.get(0, 0, 0) - 2f64.sqrt()).abs() < 1e-6);
 
     let mut alloc_args = ToolArgs::new();
-    alloc_args.insert("source".to_string(), json!(source_path.to_string_lossy().to_string()));
-    alloc_args.insert("backlink".to_string(), json!(backlink_path.to_string_lossy().to_string()));
-    alloc_args.insert("output".to_string(), json!(alloc_path.to_string_lossy().to_string()));
+    alloc_args.insert(
+        "source".to_string(),
+        json!(source_path.to_string_lossy().to_string()),
+    );
+    alloc_args.insert(
+        "backlink".to_string(),
+        json!(backlink_path.to_string_lossy().to_string()),
+    );
+    alloc_args.insert(
+        "output".to_string(),
+        json!(alloc_path.to_string_lossy().to_string()),
+    );
     registry
         .run("cost_allocation", &alloc_args, &context(&caps))
         .expect("cost_allocation should run");
@@ -12415,9 +15493,15 @@ fn cost_distance_allocation_and_pathway_compute_expected_outputs() {
         "destination".to_string(),
         json!(destination_path.to_string_lossy().to_string()),
     );
-    path_args.insert("backlink".to_string(), json!(backlink_path.to_string_lossy().to_string()));
+    path_args.insert(
+        "backlink".to_string(),
+        json!(backlink_path.to_string_lossy().to_string()),
+    );
     path_args.insert("zero_background".to_string(), json!(true));
-    path_args.insert("output".to_string(), json!(pathway_path.to_string_lossy().to_string()));
+    path_args.insert(
+        "output".to_string(),
+        json!(pathway_path.to_string_lossy().to_string()),
+    );
     registry
         .run("cost_pathway", &path_args, &context(&caps))
         .expect("cost_pathway should run");
@@ -12460,13 +15544,19 @@ fn buffer_vector_creates_polygon_output_from_line_input() {
     wbvector::write(&layer, &input_path, VectorFormat::GeoJson).expect("write input line vector");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("distance".to_string(), json!(1.0));
     args.insert("quadrant_segments".to_string(), json!(8));
     args.insert("cap_style".to_string(), json!("round"));
     args.insert("join_style".to_string(), json!("round"));
     args.insert("mitre_limit".to_string(), json!(5.0));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
 
     let caps = OpenOnly;
     registry
@@ -12538,76 +15628,146 @@ fn vector_overlay_tools_run_end_to_end_and_merge_attributes() {
             &[("B", FieldValue::Integer(2))],
         )
         .expect("add overlay polygon");
-    wbvector::write(&overlay, &overlay_path, VectorFormat::GeoJson).expect("write overlay polygons");
+    wbvector::write(&overlay, &overlay_path, VectorFormat::GeoJson)
+        .expect("write overlay polygons");
 
     let mut base_args = ToolArgs::new();
-    base_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    base_args.insert("overlay".to_string(), json!(overlay_path.to_string_lossy().to_string()));
+    base_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    base_args.insert(
+        "overlay".to_string(),
+        json!(overlay_path.to_string_lossy().to_string()),
+    );
 
     let mut clip_args = base_args.clone();
-    clip_args.insert("output".to_string(), json!(clip_path.to_string_lossy().to_string()));
+    clip_args.insert(
+        "output".to_string(),
+        json!(clip_path.to_string_lossy().to_string()),
+    );
     registry
         .run("clip", &clip_args, &context(&caps))
         .expect("clip should run");
 
     let mut difference_args = base_args.clone();
-    difference_args.insert("output".to_string(), json!(difference_path.to_string_lossy().to_string()));
+    difference_args.insert(
+        "output".to_string(),
+        json!(difference_path.to_string_lossy().to_string()),
+    );
     registry
         .run("difference", &difference_args, &context(&caps))
         .expect("difference should run");
 
     let mut erase_args = base_args.clone();
-    erase_args.insert("output".to_string(), json!(erase_path.to_string_lossy().to_string()));
+    erase_args.insert(
+        "output".to_string(),
+        json!(erase_path.to_string_lossy().to_string()),
+    );
     registry
         .run("erase", &erase_args, &context(&caps))
         .expect("erase should run");
 
     let mut intersect_args = base_args.clone();
-    intersect_args.insert("output".to_string(), json!(intersect_path.to_string_lossy().to_string()));
+    intersect_args.insert(
+        "output".to_string(),
+        json!(intersect_path.to_string_lossy().to_string()),
+    );
     registry
         .run("intersect", &intersect_args, &context(&caps))
         .expect("intersect should run");
 
     let mut symdiff_args = base_args.clone();
-    symdiff_args.insert("output".to_string(), json!(symdiff_path.to_string_lossy().to_string()));
+    symdiff_args.insert(
+        "output".to_string(),
+        json!(symdiff_path.to_string_lossy().to_string()),
+    );
     registry
         .run("symmetrical_difference", &symdiff_args, &context(&caps))
         .expect("symmetrical_difference should run");
 
     let mut union_args = base_args;
-    union_args.insert("output".to_string(), json!(union_path.to_string_lossy().to_string()));
+    union_args.insert(
+        "output".to_string(),
+        json!(union_path.to_string_lossy().to_string()),
+    );
     registry
         .run("union", &union_args, &context(&caps))
         .expect("union should run");
 
     let clip_out = wbvector::read(&clip_path).expect("read clip output");
-    assert!(!clip_out.features.is_empty(), "clip should produce at least one feature");
-    assert!(clip_out.schema.field_index("A").is_some(), "clip should preserve input field A");
-    assert!(clip_out.schema.field_index("B").is_none(), "clip should not add overlay-only field B");
+    assert!(
+        !clip_out.features.is_empty(),
+        "clip should produce at least one feature"
+    );
+    assert!(
+        clip_out.schema.field_index("A").is_some(),
+        "clip should preserve input field A"
+    );
+    assert!(
+        clip_out.schema.field_index("B").is_none(),
+        "clip should not add overlay-only field B"
+    );
 
     let diff_out = wbvector::read(&difference_path).expect("read difference output");
-    assert!(!diff_out.features.is_empty(), "difference should produce at least one feature");
-    assert!(diff_out.schema.field_index("A").is_some(), "difference should preserve input field A");
-    assert!(diff_out.schema.field_index("B").is_none(), "difference should not add overlay-only field B");
+    assert!(
+        !diff_out.features.is_empty(),
+        "difference should produce at least one feature"
+    );
+    assert!(
+        diff_out.schema.field_index("A").is_some(),
+        "difference should preserve input field A"
+    );
+    assert!(
+        diff_out.schema.field_index("B").is_none(),
+        "difference should not add overlay-only field B"
+    );
 
     let erase_out = wbvector::read(&erase_path).expect("read erase output");
-    assert!(!erase_out.features.is_empty(), "erase should produce at least one feature");
-    assert!(erase_out.schema.field_index("A").is_some(), "erase should preserve input field A");
-    assert!(erase_out.schema.field_index("B").is_none(), "erase should not add overlay-only field B");
+    assert!(
+        !erase_out.features.is_empty(),
+        "erase should produce at least one feature"
+    );
+    assert!(
+        erase_out.schema.field_index("A").is_some(),
+        "erase should preserve input field A"
+    );
+    assert!(
+        erase_out.schema.field_index("B").is_none(),
+        "erase should not add overlay-only field B"
+    );
 
     let intersect_out = wbvector::read(&intersect_path).expect("read intersect output");
-    assert!(!intersect_out.features.is_empty(), "intersect should produce overlap features");
-    let ia = intersect_out.schema.field_index("A").expect("intersect field A");
-    let ib = intersect_out.schema.field_index("B").expect("intersect field B");
+    assert!(
+        !intersect_out.features.is_empty(),
+        "intersect should produce overlap features"
+    );
+    let ia = intersect_out
+        .schema
+        .field_index("A")
+        .expect("intersect field A");
+    let ib = intersect_out
+        .schema
+        .field_index("B")
+        .expect("intersect field B");
     assert!(intersect_out.features.iter().any(|f| {
         matches!(f.attributes.get(ia), Some(FieldValue::Integer(1)))
             && matches!(f.attributes.get(ib), Some(FieldValue::Integer(2)))
     }));
 
     let symdiff_out = wbvector::read(&symdiff_path).expect("read symdiff output");
-    assert!(!symdiff_out.features.is_empty(), "symmetrical_difference should produce non-overlap features");
-    let sa = symdiff_out.schema.field_index("A").expect("symdiff field A");
-    let sb = symdiff_out.schema.field_index("B").expect("symdiff field B");
+    assert!(
+        !symdiff_out.features.is_empty(),
+        "symmetrical_difference should produce non-overlap features"
+    );
+    let sa = symdiff_out
+        .schema
+        .field_index("A")
+        .expect("symdiff field A");
+    let sb = symdiff_out
+        .schema
+        .field_index("B")
+        .expect("symdiff field B");
     assert!(symdiff_out.features.iter().any(|f| {
         matches!(f.attributes.get(sa), Some(FieldValue::Integer(1)))
             && matches!(f.attributes.get(sb), Some(FieldValue::Null))
@@ -12618,7 +15778,10 @@ fn vector_overlay_tools_run_end_to_end_and_merge_attributes() {
     }));
 
     let union_out = wbvector::read(&union_path).expect("read union output");
-    assert!(!union_out.features.is_empty(), "union should produce at least one feature");
+    assert!(
+        !union_out.features.is_empty(),
+        "union should produce at least one feature"
+    );
     let ua = union_out.schema.field_index("A").expect("union field A");
     let ub = union_out.schema.field_index("B").expect("union field B");
     assert!(union_out.features.iter().any(|f| {
@@ -12694,26 +15857,42 @@ fn vector_overlay_same_name_field_collision_prefers_overlay_on_overlap() {
             ],
         )
         .expect("add overlay polygon");
-    wbvector::write(&overlay, &overlay_path, VectorFormat::GeoJson).expect("write overlay polygons");
+    wbvector::write(&overlay, &overlay_path, VectorFormat::GeoJson)
+        .expect("write overlay polygons");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("overlay".to_string(), json!(overlay_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "overlay".to_string(),
+        json!(overlay_path.to_string_lossy().to_string()),
+    );
 
     let mut intersect_args = args.clone();
-    intersect_args.insert("output".to_string(), json!(intersect_path.to_string_lossy().to_string()));
+    intersect_args.insert(
+        "output".to_string(),
+        json!(intersect_path.to_string_lossy().to_string()),
+    );
     registry
         .run("intersect", &intersect_args, &context(&caps))
         .expect("intersect should run");
 
     let mut union_args = args;
-    union_args.insert("output".to_string(), json!(union_path.to_string_lossy().to_string()));
+    union_args.insert(
+        "output".to_string(),
+        json!(union_path.to_string_lossy().to_string()),
+    );
     registry
         .run("union", &union_args, &context(&caps))
         .expect("union should run");
 
     let intersect_out = wbvector::read(&intersect_path).expect("read intersect output");
-    assert!(!intersect_out.features.is_empty(), "intersect should produce overlap features");
+    assert!(
+        !intersect_out.features.is_empty(),
+        "intersect should produce overlap features"
+    );
 
     let id_count = intersect_out
         .schema
@@ -12721,26 +15900,47 @@ fn vector_overlay_same_name_field_collision_prefers_overlay_on_overlap() {
         .iter()
         .filter(|f| f.name == "ID")
         .count();
-    assert_eq!(id_count, 1, "merged schema should only contain one ID field");
+    assert_eq!(
+        id_count, 1,
+        "merged schema should only contain one ID field"
+    );
 
     let id_idx = intersect_out.schema.field_index("ID").expect("ID field");
-    let in_only_idx = intersect_out.schema.field_index("IN_ONLY").expect("IN_ONLY field");
-    let ov_only_idx = intersect_out.schema.field_index("OV_ONLY").expect("OV_ONLY field");
-    assert!(intersect_out.features.iter().any(|f| {
-        matches!(f.attributes.get(id_idx), Some(FieldValue::Integer(22)))
-            && matches!(f.attributes.get(in_only_idx), Some(FieldValue::Integer(5)))
-            && matches!(f.attributes.get(ov_only_idx), Some(FieldValue::Integer(9)))
-    }), "on overlap, ID should take overlay value while source-specific fields are preserved");
+    let in_only_idx = intersect_out
+        .schema
+        .field_index("IN_ONLY")
+        .expect("IN_ONLY field");
+    let ov_only_idx = intersect_out
+        .schema
+        .field_index("OV_ONLY")
+        .expect("OV_ONLY field");
+    assert!(
+        intersect_out.features.iter().any(|f| {
+            matches!(f.attributes.get(id_idx), Some(FieldValue::Integer(22)))
+                && matches!(f.attributes.get(in_only_idx), Some(FieldValue::Integer(5)))
+                && matches!(f.attributes.get(ov_only_idx), Some(FieldValue::Integer(9)))
+        }),
+        "on overlap, ID should take overlay value while source-specific fields are preserved"
+    );
 
     let union_out = wbvector::read(&union_path).expect("read union output");
     let uid_idx = union_out.schema.field_index("ID").expect("ID field");
-    let uin_only_idx = union_out.schema.field_index("IN_ONLY").expect("IN_ONLY field");
-    let uov_only_idx = union_out.schema.field_index("OV_ONLY").expect("OV_ONLY field");
-    assert!(union_out.features.iter().any(|f| {
-        matches!(f.attributes.get(uid_idx), Some(FieldValue::Integer(22)))
-            && matches!(f.attributes.get(uin_only_idx), Some(FieldValue::Integer(5)))
-            && matches!(f.attributes.get(uov_only_idx), Some(FieldValue::Integer(9)))
-    }), "union overlap feature should prefer overlay value for shared field names");
+    let uin_only_idx = union_out
+        .schema
+        .field_index("IN_ONLY")
+        .expect("IN_ONLY field");
+    let uov_only_idx = union_out
+        .schema
+        .field_index("OV_ONLY")
+        .expect("OV_ONLY field");
+    assert!(
+        union_out.features.iter().any(|f| {
+            matches!(f.attributes.get(uid_idx), Some(FieldValue::Integer(22)))
+                && matches!(f.attributes.get(uin_only_idx), Some(FieldValue::Integer(5)))
+                && matches!(f.attributes.get(uov_only_idx), Some(FieldValue::Integer(9)))
+        }),
+        "union overlap feature should prefer overlay value for shared field names"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&overlay_path);
@@ -12787,8 +15987,7 @@ fn clip_raster_to_polygon_and_erase_polygon_from_raster_run_end_to_end() {
         .write(&input_path, RasterFormat::EsriAscii)
         .expect("write input raster");
 
-    let mut polygons = Layer::new("polygons")
-        .with_geom_type(wbvector::GeometryType::Polygon);
+    let mut polygons = Layer::new("polygons").with_geom_type(wbvector::GeometryType::Polygon);
     polygons
         .add_feature(
             Some(Geometry::polygon(
@@ -12804,31 +16003,57 @@ fn clip_raster_to_polygon_and_erase_polygon_from_raster_run_end_to_end() {
             &[],
         )
         .expect("add polygon");
-    wbvector::write(&polygons, &polygons_path, VectorFormat::GeoJson)
-        .expect("write polygons");
+    wbvector::write(&polygons, &polygons_path, VectorFormat::GeoJson).expect("write polygons");
 
     let mut clip_keep_args = ToolArgs::new();
-    clip_keep_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    clip_keep_args.insert("polygons".to_string(), json!(polygons_path.to_string_lossy().to_string()));
+    clip_keep_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    clip_keep_args.insert(
+        "polygons".to_string(),
+        json!(polygons_path.to_string_lossy().to_string()),
+    );
     clip_keep_args.insert("maintain_dimensions".to_string(), json!(true));
-    clip_keep_args.insert("output".to_string(), json!(clip_keep_dims_path.to_string_lossy().to_string()));
+    clip_keep_args.insert(
+        "output".to_string(),
+        json!(clip_keep_dims_path.to_string_lossy().to_string()),
+    );
     registry
         .run("clip_raster_to_polygon", &clip_keep_args, &context(&caps))
         .expect("clip_raster_to_polygon keep-dimensions should run");
 
     let mut clip_crop_args = ToolArgs::new();
-    clip_crop_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    clip_crop_args.insert("polygons".to_string(), json!(polygons_path.to_string_lossy().to_string()));
+    clip_crop_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    clip_crop_args.insert(
+        "polygons".to_string(),
+        json!(polygons_path.to_string_lossy().to_string()),
+    );
     clip_crop_args.insert("maintain_dimensions".to_string(), json!(false));
-    clip_crop_args.insert("output".to_string(), json!(clip_crop_path.to_string_lossy().to_string()));
+    clip_crop_args.insert(
+        "output".to_string(),
+        json!(clip_crop_path.to_string_lossy().to_string()),
+    );
     registry
         .run("clip_raster_to_polygon", &clip_crop_args, &context(&caps))
         .expect("clip_raster_to_polygon cropped should run");
 
     let mut erase_args = ToolArgs::new();
-    erase_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    erase_args.insert("polygons".to_string(), json!(polygons_path.to_string_lossy().to_string()));
-    erase_args.insert("output".to_string(), json!(erase_path.to_string_lossy().to_string()));
+    erase_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    erase_args.insert(
+        "polygons".to_string(),
+        json!(polygons_path.to_string_lossy().to_string()),
+    );
+    erase_args.insert(
+        "output".to_string(),
+        json!(erase_path.to_string_lossy().to_string()),
+    );
     registry
         .run("erase_polygon_from_raster", &erase_args, &context(&caps))
         .expect("erase_polygon_from_raster should run");
@@ -12919,18 +16144,36 @@ fn clip_and_erase_polygon_tools_reproject_vector_to_raster_crs() {
         .expect("write polygons gpkg");
 
     let mut clip_args = ToolArgs::new();
-    clip_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    clip_args.insert("polygons".to_string(), json!(polygons_path.to_string_lossy().to_string()));
+    clip_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    clip_args.insert(
+        "polygons".to_string(),
+        json!(polygons_path.to_string_lossy().to_string()),
+    );
     clip_args.insert("maintain_dimensions".to_string(), json!(true));
-    clip_args.insert("output".to_string(), json!(clip_path.to_string_lossy().to_string()));
+    clip_args.insert(
+        "output".to_string(),
+        json!(clip_path.to_string_lossy().to_string()),
+    );
     registry
         .run("clip_raster_to_polygon", &clip_args, &context(&caps))
         .expect("clip_raster_to_polygon should run with CRS reprojection");
 
     let mut erase_args = ToolArgs::new();
-    erase_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    erase_args.insert("polygons".to_string(), json!(polygons_path.to_string_lossy().to_string()));
-    erase_args.insert("output".to_string(), json!(erase_path.to_string_lossy().to_string()));
+    erase_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    erase_args.insert(
+        "polygons".to_string(),
+        json!(polygons_path.to_string_lossy().to_string()),
+    );
+    erase_args.insert(
+        "output".to_string(),
+        json!(erase_path.to_string_lossy().to_string()),
+    );
     registry
         .run("erase_polygon_from_raster", &erase_args, &context(&caps))
         .expect("erase_polygon_from_raster should run with CRS reprojection");
@@ -12990,8 +16233,7 @@ fn vector_overlay_tools_reproject_mismatched_crs_layers() {
             &[("A", FieldValue::Integer(1))],
         )
         .expect("add input polygon");
-    wbvector::write(&input, &input_path, VectorFormat::GeoPackage)
-        .expect("write input gpkg");
+    wbvector::write(&input, &input_path, VectorFormat::GeoPackage).expect("write input gpkg");
 
     // Overlay layer in EPSG:3857 that corresponds roughly to 1..3 degrees in EPSG:4326.
     let mut overlay = Layer::new("overlay")
@@ -13013,43 +16255,68 @@ fn vector_overlay_tools_reproject_mismatched_crs_layers() {
             &[("B", FieldValue::Integer(2))],
         )
         .expect("add overlay polygon");
-    wbvector::write(&overlay, &overlay_path, VectorFormat::GeoPackage)
-        .expect("write overlay gpkg");
+    wbvector::write(&overlay, &overlay_path, VectorFormat::GeoPackage).expect("write overlay gpkg");
 
     let mut base_args = ToolArgs::new();
-    base_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    base_args.insert("overlay".to_string(), json!(overlay_path.to_string_lossy().to_string()));
+    base_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    base_args.insert(
+        "overlay".to_string(),
+        json!(overlay_path.to_string_lossy().to_string()),
+    );
 
     let mut clip_args = base_args.clone();
-    clip_args.insert("output".to_string(), json!(clip_path.to_string_lossy().to_string()));
-    registry.run("clip", &clip_args, &context(&caps)).expect("clip should run with reprojection");
+    clip_args.insert(
+        "output".to_string(),
+        json!(clip_path.to_string_lossy().to_string()),
+    );
+    registry
+        .run("clip", &clip_args, &context(&caps))
+        .expect("clip should run with reprojection");
 
     let mut diff_args = base_args.clone();
-    diff_args.insert("output".to_string(), json!(diff_path.to_string_lossy().to_string()));
+    diff_args.insert(
+        "output".to_string(),
+        json!(diff_path.to_string_lossy().to_string()),
+    );
     registry
         .run("difference", &diff_args, &context(&caps))
         .expect("difference should run with reprojection");
 
     let mut erase_args = base_args.clone();
-    erase_args.insert("output".to_string(), json!(erase_path.to_string_lossy().to_string()));
+    erase_args.insert(
+        "output".to_string(),
+        json!(erase_path.to_string_lossy().to_string()),
+    );
     registry
         .run("erase", &erase_args, &context(&caps))
         .expect("erase should run with reprojection");
 
     let mut intersect_args = base_args.clone();
-    intersect_args.insert("output".to_string(), json!(intersect_path.to_string_lossy().to_string()));
+    intersect_args.insert(
+        "output".to_string(),
+        json!(intersect_path.to_string_lossy().to_string()),
+    );
     registry
         .run("intersect", &intersect_args, &context(&caps))
         .expect("intersect should run with reprojection");
 
     let mut symdiff_args = base_args.clone();
-    symdiff_args.insert("output".to_string(), json!(symdiff_path.to_string_lossy().to_string()));
+    symdiff_args.insert(
+        "output".to_string(),
+        json!(symdiff_path.to_string_lossy().to_string()),
+    );
     registry
         .run("symmetrical_difference", &symdiff_args, &context(&caps))
         .expect("symmetrical_difference should run with reprojection");
 
     let mut union_args = base_args;
-    union_args.insert("output".to_string(), json!(union_path.to_string_lossy().to_string()));
+    union_args.insert(
+        "output".to_string(),
+        json!(union_path.to_string_lossy().to_string()),
+    );
     registry
         .run("union", &union_args, &context(&caps))
         .expect("union should run with reprojection");
@@ -13086,7 +16353,8 @@ fn linework_tools_run_and_two_input_tools_reproject_mismatched_crs() {
     let tag = unique_tag("wbtools_oss_linework_tools");
     let input_path = std::env::temp_dir().join(format!("{tag}_input.gpkg"));
     let split_path = std::env::temp_dir().join(format!("{tag}_split.gpkg"));
-    let line_intersections_path = std::env::temp_dir().join(format!("{tag}_line_intersections.gpkg"));
+    let line_intersections_path =
+        std::env::temp_dir().join(format!("{tag}_line_intersections.gpkg"));
     let split_out_path = std::env::temp_dir().join(format!("{tag}_split_out.gpkg"));
     let merge_input_path = std::env::temp_dir().join(format!("{tag}_merge_input.geojson"));
     let merge_out_path = std::env::temp_dir().join(format!("{tag}_merge_out.geojson"));
@@ -13099,12 +16367,14 @@ fn linework_tools_run_and_two_input_tools_reproject_mismatched_crs() {
         .with_epsg(4326);
     input
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add input line");
-    wbvector::write(&input, &input_path, VectorFormat::GeoPackage)
-        .expect("write input gpkg");
+    wbvector::write(&input, &input_path, VectorFormat::GeoPackage).expect("write input gpkg");
 
     // Split/overlay line in EPSG:3857 crossing x ~= 1 degree after reprojection.
     let mut split = Layer::new("split")
@@ -13119,29 +16389,52 @@ fn linework_tools_run_and_two_input_tools_reproject_mismatched_crs() {
             &[],
         )
         .expect("add split line");
-    wbvector::write(&split, &split_path, VectorFormat::GeoPackage)
-        .expect("write split gpkg");
+    wbvector::write(&split, &split_path, VectorFormat::GeoPackage).expect("write split gpkg");
 
     let mut li_args = ToolArgs::new();
-    li_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    li_args.insert("overlay".to_string(), json!(split_path.to_string_lossy().to_string()));
-    li_args.insert("output".to_string(), json!(line_intersections_path.to_string_lossy().to_string()));
+    li_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    li_args.insert(
+        "overlay".to_string(),
+        json!(split_path.to_string_lossy().to_string()),
+    );
+    li_args.insert(
+        "output".to_string(),
+        json!(line_intersections_path.to_string_lossy().to_string()),
+    );
     registry
         .run("line_intersections", &li_args, &context(&caps))
         .expect("line_intersections should run with reprojection");
 
     let mut split_args = ToolArgs::new();
-    split_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    split_args.insert("split".to_string(), json!(split_path.to_string_lossy().to_string()));
-    split_args.insert("output".to_string(), json!(split_out_path.to_string_lossy().to_string()));
+    split_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    split_args.insert(
+        "split".to_string(),
+        json!(split_path.to_string_lossy().to_string()),
+    );
+    split_args.insert(
+        "output".to_string(),
+        json!(split_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("split_with_lines", &split_args, &context(&caps))
         .expect("split_with_lines should run with reprojection");
 
     let li_out = wbvector::read(&line_intersections_path).expect("read line intersections output");
     let split_out = wbvector::read(&split_out_path).expect("read split_with_lines output");
-    assert!(!li_out.features.is_empty(), "line_intersections should produce at least one point");
-    assert!(split_out.features.len() >= 2, "split_with_lines should split the input line into at least two pieces");
+    assert!(
+        !li_out.features.is_empty(),
+        "line_intersections should produce at least one point"
+    );
+    assert!(
+        split_out.features.len() >= 2,
+        "split_with_lines should split the input line into at least two pieces"
+    );
 
     // Merge connected segments.
     let mut merge_in = Layer::new("merge_in")
@@ -13149,13 +16442,19 @@ fn linework_tools_run_and_two_input_tools_reproject_mismatched_crs() {
         .with_epsg(4326);
     merge_in
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add merge line 1");
     merge_in
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add merge line 2");
@@ -13163,14 +16462,24 @@ fn linework_tools_run_and_two_input_tools_reproject_mismatched_crs() {
         .expect("write merge input");
 
     let mut merge_args = ToolArgs::new();
-    merge_args.insert("input".to_string(), json!(merge_input_path.to_string_lossy().to_string()));
-    merge_args.insert("output".to_string(), json!(merge_out_path.to_string_lossy().to_string()));
+    merge_args.insert(
+        "input".to_string(),
+        json!(merge_input_path.to_string_lossy().to_string()),
+    );
+    merge_args.insert(
+        "output".to_string(),
+        json!(merge_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("merge_line_segments", &merge_args, &context(&caps))
         .expect("merge_line_segments should run");
 
     let merge_out = wbvector::read(&merge_out_path).expect("read merge output");
-    assert_eq!(merge_out.features.len(), 1, "merge_line_segments should merge two connected segments");
+    assert_eq!(
+        merge_out.features.len(),
+        1,
+        "merge_line_segments should merge two connected segments"
+    );
 
     // Polygonize a closed ring.
     let mut polygonize_in = Layer::new("polygonize_in")
@@ -13188,18 +16497,32 @@ fn linework_tools_run_and_two_input_tools_reproject_mismatched_crs() {
             &[],
         )
         .expect("add polygonize ring");
-    wbvector::write(&polygonize_in, &polygonize_input_path, VectorFormat::GeoJson)
-        .expect("write polygonize input");
+    wbvector::write(
+        &polygonize_in,
+        &polygonize_input_path,
+        VectorFormat::GeoJson,
+    )
+    .expect("write polygonize input");
 
     let mut polygonize_args = ToolArgs::new();
-    polygonize_args.insert("input".to_string(), json!(polygonize_input_path.to_string_lossy().to_string()));
-    polygonize_args.insert("output".to_string(), json!(polygonize_out_path.to_string_lossy().to_string()));
+    polygonize_args.insert(
+        "input".to_string(),
+        json!(polygonize_input_path.to_string_lossy().to_string()),
+    );
+    polygonize_args.insert(
+        "output".to_string(),
+        json!(polygonize_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("polygonize", &polygonize_args, &context(&caps))
         .expect("polygonize should run");
 
     let polygonize_out = wbvector::read(&polygonize_out_path).expect("read polygonize output");
-    assert_eq!(polygonize_out.features.len(), 1, "polygonize should produce one polygon from a closed ring");
+    assert_eq!(
+        polygonize_out.features.len(),
+        1,
+        "polygonize should produce one polygon from a closed ring"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&split_path);
@@ -13242,38 +16565,61 @@ fn phase1_tools_run_end_to_end() {
     layer
         .add_feature(Some(Geometry::point(1.0, 1.5)), &[])
         .expect("add p3");
-    wbvector::write(&layer, &vector_path, VectorFormat::GeoPackage)
-        .expect("write vector input");
+    wbvector::write(&layer, &vector_path, VectorFormat::GeoPackage).expect("write vector input");
 
     let mut hull_args = ToolArgs::new();
-    hull_args.insert("input".to_string(), json!(vector_path.to_string_lossy().to_string()));
+    hull_args.insert(
+        "input".to_string(),
+        json!(vector_path.to_string_lossy().to_string()),
+    );
     hull_args.insert("individual_feature_hulls".to_string(), json!(false));
-    hull_args.insert("output".to_string(), json!(hull_path.to_string_lossy().to_string()));
+    hull_args.insert(
+        "output".to_string(),
+        json!(hull_path.to_string_lossy().to_string()),
+    );
     registry
         .run("minimum_convex_hull", &hull_args, &context(&caps))
         .expect("minimum_convex_hull should run");
 
     let mut mbb_args = ToolArgs::new();
-    mbb_args.insert("input".to_string(), json!(vector_path.to_string_lossy().to_string()));
+    mbb_args.insert(
+        "input".to_string(),
+        json!(vector_path.to_string_lossy().to_string()),
+    );
     mbb_args.insert("individual_feature_hulls".to_string(), json!(false));
     mbb_args.insert("min_criteria".to_string(), json!("area"));
-    mbb_args.insert("output".to_string(), json!(mbb_path.to_string_lossy().to_string()));
+    mbb_args.insert(
+        "output".to_string(),
+        json!(mbb_path.to_string_lossy().to_string()),
+    );
     registry
         .run("minimum_bounding_box", &mbb_args, &context(&caps))
         .expect("minimum_bounding_box should run");
 
     let mut mbc_args = ToolArgs::new();
-    mbc_args.insert("input".to_string(), json!(vector_path.to_string_lossy().to_string()));
+    mbc_args.insert(
+        "input".to_string(),
+        json!(vector_path.to_string_lossy().to_string()),
+    );
     mbc_args.insert("individual_feature_hulls".to_string(), json!(false));
-    mbc_args.insert("output".to_string(), json!(mbc_path.to_string_lossy().to_string()));
+    mbc_args.insert(
+        "output".to_string(),
+        json!(mbc_path.to_string_lossy().to_string()),
+    );
     registry
         .run("minimum_bounding_circle", &mbc_args, &context(&caps))
         .expect("minimum_bounding_circle should run");
 
     let mut mbe_args = ToolArgs::new();
-    mbe_args.insert("input".to_string(), json!(vector_path.to_string_lossy().to_string()));
+    mbe_args.insert(
+        "input".to_string(),
+        json!(vector_path.to_string_lossy().to_string()),
+    );
     mbe_args.insert("individual_feature_hulls".to_string(), json!(false));
-    mbe_args.insert("output".to_string(), json!(mbe_path.to_string_lossy().to_string()));
+    mbe_args.insert(
+        "output".to_string(),
+        json!(mbe_path.to_string_lossy().to_string()),
+    );
     registry
         .run("minimum_bounding_envelope", &mbe_args, &context(&caps))
         .expect("minimum_bounding_envelope should run");
@@ -13282,10 +16628,26 @@ fn phase1_tools_run_end_to_end() {
     let mbb_out = wbvector::read(&mbb_path).expect("read mbb output");
     let mbc_out = wbvector::read(&mbc_path).expect("read mbc output");
     let mbe_out = wbvector::read(&mbe_path).expect("read mbe output");
-    assert_eq!(hull_out.features.len(), 1, "minimum_convex_hull should output one feature for full-layer mode");
-    assert_eq!(mbb_out.features.len(), 1, "minimum_bounding_box should output one feature for full-layer mode");
-    assert_eq!(mbc_out.features.len(), 1, "minimum_bounding_circle should output one feature for full-layer mode");
-    assert_eq!(mbe_out.features.len(), 1, "minimum_bounding_envelope should output one feature for full-layer mode");
+    assert_eq!(
+        hull_out.features.len(),
+        1,
+        "minimum_convex_hull should output one feature for full-layer mode"
+    );
+    assert_eq!(
+        mbb_out.features.len(),
+        1,
+        "minimum_bounding_box should output one feature for full-layer mode"
+    );
+    assert_eq!(
+        mbc_out.features.len(),
+        1,
+        "minimum_bounding_circle should output one feature for full-layer mode"
+    );
+    assert_eq!(
+        mbe_out.features.len(),
+        1,
+        "minimum_bounding_envelope should output one feature for full-layer mode"
+    );
 
     let mut raster = Raster::new(RasterConfig {
         cols: 2,
@@ -13309,30 +16671,55 @@ fn phase1_tools_run_end_to_end() {
         .expect("write raster input");
 
     let mut reclass_args = ToolArgs::new();
-    reclass_args.insert("input".to_string(), json!(raster_path.to_string_lossy().to_string()));
-    reclass_args.insert("reclass_values".to_string(), json!([[10.0, 0.0, 2.5], [20.0, 2.5, 5.0]]));
-    reclass_args.insert("output".to_string(), json!(reclass_path.to_string_lossy().to_string()));
+    reclass_args.insert(
+        "input".to_string(),
+        json!(raster_path.to_string_lossy().to_string()),
+    );
+    reclass_args.insert(
+        "reclass_values".to_string(),
+        json!([[10.0, 0.0, 2.5], [20.0, 2.5, 5.0]]),
+    );
+    reclass_args.insert(
+        "output".to_string(),
+        json!(reclass_path.to_string_lossy().to_string()),
+    );
     registry
         .run("reclass", &reclass_args, &context(&caps))
         .expect("reclass should run");
 
     let mut rei_args = ToolArgs::new();
-    rei_args.insert("input".to_string(), json!(raster_path.to_string_lossy().to_string()));
+    rei_args.insert(
+        "input".to_string(),
+        json!(raster_path.to_string_lossy().to_string()),
+    );
     rei_args.insert("interval_size".to_string(), json!(2.0));
     rei_args.insert("start_value".to_string(), json!(0.0));
     rei_args.insert("end_value".to_string(), json!(5.0));
-    rei_args.insert("output".to_string(), json!(rei_path.to_string_lossy().to_string()));
+    rei_args.insert(
+        "output".to_string(),
+        json!(rei_path.to_string_lossy().to_string()),
+    );
     registry
         .run("reclass_equal_interval", &rei_args, &context(&caps))
         .expect("reclass_equal_interval should run");
 
     let mut frfa_args = ToolArgs::new();
-    frfa_args.insert("input".to_string(), json!(raster_path.to_string_lossy().to_string()));
+    frfa_args.insert(
+        "input".to_string(),
+        json!(raster_path.to_string_lossy().to_string()),
+    );
     frfa_args.insert("threshold".to_string(), json!(2));
     frfa_args.insert("zero_background".to_string(), json!(true));
-    frfa_args.insert("output".to_string(), json!(frfa_path.to_string_lossy().to_string()));
+    frfa_args.insert(
+        "output".to_string(),
+        json!(frfa_path.to_string_lossy().to_string()),
+    );
     registry
-        .run("filter_raster_features_by_area", &frfa_args, &context(&caps))
+        .run(
+            "filter_raster_features_by_area",
+            &frfa_args,
+            &context(&caps),
+        )
         .expect("filter_raster_features_by_area should run");
 
     let reclass_out = Raster::read(&reclass_path).expect("read reclass output");
@@ -13405,15 +16792,25 @@ fn filter_vector_features_by_area_runs_end_to_end() {
     wbvector::write(&layer, &input_path, VectorFormat::GeoJson).expect("write input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("threshold".to_string(), json!(2.0));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("filter_vector_features_by_area", &args, &context(&caps))
         .expect("filter_vector_features_by_area should run");
 
     let output = wbvector::read(&output_path).expect("read output");
-    assert_eq!(output.features.len(), 1, "only the large polygon should remain");
+    assert_eq!(
+        output.features.len(),
+        1,
+        "only the large polygon should remain"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&output_path);
@@ -13448,14 +16845,24 @@ fn extract_nodes_runs_end_to_end() {
     wbvector::write(&layer, &input_path, VectorFormat::GeoJson).expect("write input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("extract_nodes", &args, &context(&caps))
         .expect("extract_nodes should run");
 
     let output = wbvector::read(&output_path).expect("read output");
-    assert_eq!(output.features.len(), 3, "line with three vertices should yield three points");
+    assert_eq!(
+        output.features.len(),
+        3,
+        "line with three vertices should yield three points"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&output_path);
@@ -13476,7 +16883,10 @@ fn extract_by_attribute_runs_end_to_end() {
     let mut layer = Layer::new("pts")
         .with_geom_type(wbvector::GeometryType::Point)
         .with_epsg(4326);
-    layer.add_field(wbvector::FieldDef::new("VALUE", wbvector::FieldType::Integer));
+    layer.add_field(wbvector::FieldDef::new(
+        "VALUE",
+        wbvector::FieldType::Integer,
+    ));
     layer
         .add_feature(Some(Geometry::point(0.0, 0.0)), &[("VALUE", 5i64.into())])
         .expect("add point 1");
@@ -13490,15 +16900,25 @@ fn extract_by_attribute_runs_end_to_end() {
     wbvector::write(&layer, &input_path, VectorFormat::GeoJson).expect("write input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("statement".to_string(), json!("VALUE >= 10"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("extract_by_attribute", &args, &context(&caps))
         .expect("extract_by_attribute should run");
 
     let output = wbvector::read(&output_path).expect("read output");
-    assert_eq!(output.features.len(), 2, "two features should satisfy VALUE >= 10");
+    assert_eq!(
+        output.features.len(),
+        2,
+        "two features should satisfy VALUE >= 10"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&output_path);
@@ -13570,15 +16990,25 @@ fn dissolve_runs_end_to_end() {
     wbvector::write(&layer, &input_path, VectorFormat::GeoJson).expect("write input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("dissolve_field".to_string(), json!("GROUP"));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("dissolve", &args, &context(&caps))
         .expect("dissolve should run");
 
     let output = wbvector::read(&output_path).expect("read output");
-    assert_eq!(output.features.len(), 2, "A polygons should dissolve into one feature");
+    assert_eq!(
+        output.features.len(),
+        2,
+        "A polygons should dissolve into one feature"
+    );
 
     let group_idx = output
         .schema
@@ -13587,7 +17017,13 @@ fn dissolve_runs_end_to_end() {
     let mut groups = output
         .features
         .iter()
-        .map(|feature| feature.attributes.get(group_idx).cloned().unwrap_or(FieldValue::Null))
+        .map(|feature| {
+            feature
+                .attributes
+                .get(group_idx)
+                .cloned()
+                .unwrap_or(FieldValue::Null)
+        })
         .collect::<Vec<_>>();
     groups.sort_by(|a, b| a.to_string().cmp(&b.to_string()));
 
@@ -13633,8 +17069,14 @@ fn polygon_area_runs_end_to_end() {
     wbvector::write(&layer, &input_path, VectorFormat::GeoJson).expect("write input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("polygon_area", &args, &context(&caps))
         .expect("polygon_area should run");
@@ -13649,7 +17091,10 @@ fn polygon_area_runs_end_to_end() {
         .get(area_idx)
         .and_then(|v| v.as_f64())
         .expect("AREA value should be numeric");
-    assert!((area - 1.0).abs() < 1.0e-9, "unit square area should be 1.0");
+    assert!(
+        (area - 1.0).abs() < 1.0e-9,
+        "unit square area should be 1.0"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&output_path);
@@ -13689,8 +17134,14 @@ fn polygon_perimeter_runs_end_to_end() {
     wbvector::write(&layer, &input_path, VectorFormat::GeoJson).expect("write input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("polygon_perimeter", &args, &context(&caps))
         .expect("polygon_perimeter should run");
@@ -13705,7 +17156,10 @@ fn polygon_perimeter_runs_end_to_end() {
         .get(perimeter_idx)
         .and_then(|v| v.as_f64())
         .expect("PERIMETER value should be numeric");
-    assert!((perimeter - 4.0).abs() < 1.0e-9, "unit square perimeter should be 4.0");
+    assert!(
+        (perimeter - 4.0).abs() < 1.0e-9,
+        "unit square perimeter should be 4.0"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&output_path);
@@ -13746,15 +17200,27 @@ fn polygon_axes_run_end_to_end() {
     wbvector::write(&layer, &input_path, VectorFormat::GeoJson).expect("write input");
 
     let mut short_args = ToolArgs::new();
-    short_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    short_args.insert("output".to_string(), json!(short_path.to_string_lossy().to_string()));
+    short_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    short_args.insert(
+        "output".to_string(),
+        json!(short_path.to_string_lossy().to_string()),
+    );
     registry
         .run("polygon_short_axis", &short_args, &context(&caps))
         .expect("polygon_short_axis should run");
 
     let mut long_args = ToolArgs::new();
-    long_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    long_args.insert("output".to_string(), json!(long_path.to_string_lossy().to_string()));
+    long_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    long_args.insert(
+        "output".to_string(),
+        json!(long_path.to_string_lossy().to_string()),
+    );
     registry
         .run("polygon_long_axis", &long_args, &context(&caps))
         .expect("polygon_long_axis should run");
@@ -13783,8 +17249,14 @@ fn polygon_axes_run_end_to_end() {
     assert!(long_len > 0.0, "long axis length should be positive");
     let min_axis = short_len.min(long_len);
     let max_axis = short_len.max(long_len);
-    assert!((min_axis - 2.0).abs() < 1.0e-9, "one polygon axis should equal rectangle short side");
-    assert!((max_axis - 4.0).abs() < 1.0e-9, "one polygon axis should equal rectangle long side");
+    assert!(
+        (min_axis - 2.0).abs() < 1.0e-9,
+        "one polygon axis should equal rectangle short side"
+    );
+    assert!(
+        (max_axis - 4.0).abs() < 1.0e-9,
+        "one polygon axis should equal rectangle long side"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&short_path);
@@ -13826,14 +17298,24 @@ fn centroid_vector_runs_end_to_end() {
     wbvector::write(&polys, &poly_input_path, VectorFormat::GeoJson).expect("write polygon input");
 
     let mut poly_args = ToolArgs::new();
-    poly_args.insert("input".to_string(), json!(poly_input_path.to_string_lossy().to_string()));
-    poly_args.insert("output".to_string(), json!(poly_output_path.to_string_lossy().to_string()));
+    poly_args.insert(
+        "input".to_string(),
+        json!(poly_input_path.to_string_lossy().to_string()),
+    );
+    poly_args.insert(
+        "output".to_string(),
+        json!(poly_output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("centroid_vector", &poly_args, &context(&caps))
         .expect("centroid_vector should run on polygon input");
 
     let poly_output = wbvector::read(&poly_output_path).expect("read polygon centroid output");
-    assert_eq!(poly_output.features.len(), 1, "polygon input should produce one centroid feature");
+    assert_eq!(
+        poly_output.features.len(),
+        1,
+        "polygon input should produce one centroid feature"
+    );
     match poly_output.features[0].geometry.as_ref() {
         Some(wbvector::Geometry::Point(coord)) => {
             assert!((coord.x - 0.8).abs() < 1.0e-9);
@@ -13854,14 +17336,24 @@ fn centroid_vector_runs_end_to_end() {
     wbvector::write(&points, &point_input_path, VectorFormat::GeoJson).expect("write point input");
 
     let mut point_args = ToolArgs::new();
-    point_args.insert("input".to_string(), json!(point_input_path.to_string_lossy().to_string()));
-    point_args.insert("output".to_string(), json!(point_output_path.to_string_lossy().to_string()));
+    point_args.insert(
+        "input".to_string(),
+        json!(point_input_path.to_string_lossy().to_string()),
+    );
+    point_args.insert(
+        "output".to_string(),
+        json!(point_output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("centroid_vector", &point_args, &context(&caps))
         .expect("centroid_vector should run on point input");
 
     let point_output = wbvector::read(&point_output_path).expect("read point centroid output");
-    assert_eq!(point_output.features.len(), 1, "point input should produce one centroid feature");
+    assert_eq!(
+        point_output.features.len(),
+        1,
+        "point input should produce one centroid feature"
+    );
     match point_output.features[0].geometry.as_ref() {
         Some(wbvector::Geometry::Point(coord)) => {
             assert!((coord.x - 1.0).abs() < 1.0e-9);
@@ -13905,35 +17397,63 @@ fn raster_area_and_perimeter_compute_expected_class_totals() {
         }
     }
     raster.set(0, 1, 1, 1.0).expect("set center class");
-    raster.write(&input_path, RasterFormat::EsriAscii).expect("write input raster");
+    raster
+        .write(&input_path, RasterFormat::EsriAscii)
+        .expect("write input raster");
 
     let caps = OpenOnly;
 
     let mut area_args = ToolArgs::new();
-    area_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    area_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     area_args.insert("units".to_string(), json!("map units"));
     area_args.insert("zero_background".to_string(), json!(true));
-    area_args.insert("output".to_string(), json!(area_path.to_string_lossy().to_string()));
+    area_args.insert(
+        "output".to_string(),
+        json!(area_path.to_string_lossy().to_string()),
+    );
     registry
         .run("raster_area", &area_args, &context(&caps))
         .expect("raster_area should run");
 
     let mut perim_args = ToolArgs::new();
-    perim_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    perim_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     perim_args.insert("units".to_string(), json!("grid cells"));
     perim_args.insert("zero_background".to_string(), json!(true));
-    perim_args.insert("output".to_string(), json!(perim_path.to_string_lossy().to_string()));
+    perim_args.insert(
+        "output".to_string(),
+        json!(perim_path.to_string_lossy().to_string()),
+    );
     registry
         .run("raster_perimeter", &perim_args, &context(&caps))
         .expect("raster_perimeter should run");
 
     let area = Raster::read(&area_path).expect("read area output");
-    assert!((area.get(0, 1, 1) - 4.0).abs() < 1e-9, "single cell area should be cell_size^2");
-    assert_eq!(area.get(0, 0, 0), area.nodata, "background should remain nodata when zero_background=true");
+    assert!(
+        (area.get(0, 1, 1) - 4.0).abs() < 1e-9,
+        "single cell area should be cell_size^2"
+    );
+    assert_eq!(
+        area.get(0, 0, 0),
+        area.nodata,
+        "background should remain nodata when zero_background=true"
+    );
 
     let perim = Raster::read(&perim_path).expect("read perimeter output");
-    assert!((perim.get(0, 1, 1) - 4.0).abs() < 1e-9, "single cell perimeter in grid cells should be 4");
-    assert_eq!(perim.get(0, 0, 0), perim.nodata, "background should remain nodata when zero_background=true");
+    assert!(
+        (perim.get(0, 1, 1) - 4.0).abs() < 1e-9,
+        "single cell perimeter in grid cells should be 4"
+    );
+    assert_eq!(
+        perim.get(0, 0, 0),
+        perim.nodata,
+        "background should remain nodata when zero_background=true"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&area_path);
@@ -14008,14 +17528,20 @@ fn lidar_phase2_batch2_tools_run_end_to_end() {
         json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
     );
     scan_args.insert("threshold".to_string(), json!(150));
-    scan_args.insert("output".to_string(), json!(scan_out.to_string_lossy().to_string()));
+    scan_args.insert(
+        "output".to_string(),
+        json!(scan_out.to_string_lossy().to_string()),
+    );
     registry
         .run("filter_lidar_scan_angles", &scan_args, &context(&caps))
         .expect("filter_lidar_scan_angles should run");
 
     let scan_filtered = PointCloud::read(&scan_out).expect("read scan output");
     assert_eq!(scan_filtered.points.len(), 2);
-    assert!(scan_filtered.points.iter().all(|p| p.scan_angle.abs() <= 150));
+    assert!(scan_filtered
+        .points
+        .iter()
+        .all(|p| p.scan_angle.abs() <= 150));
     assert_eq!(scan_filtered.crs.as_ref().and_then(|c| c.epsg), Some(4326));
 
     let mut noise_args = ToolArgs::new();
@@ -14023,7 +17549,10 @@ fn lidar_phase2_batch2_tools_run_end_to_end() {
         "input".to_string(),
         json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
     );
-    noise_args.insert("output".to_string(), json!(noise_out.to_string_lossy().to_string()));
+    noise_args.insert(
+        "output".to_string(),
+        json!(noise_out.to_string_lossy().to_string()),
+    );
     registry
         .run("filter_lidar_noise", &noise_args, &context(&caps))
         .expect("filter_lidar_noise should run");
@@ -14043,8 +17572,14 @@ fn lidar_phase2_batch2_tools_run_end_to_end() {
     thin_args.insert("resolution".to_string(), json!(1.0));
     thin_args.insert("method".to_string(), json!("highest"));
     thin_args.insert("save_filtered".to_string(), json!(true));
-    thin_args.insert("output".to_string(), json!(thin_out.to_string_lossy().to_string()));
-    thin_args.insert("filtered_output".to_string(), json!(thin_filtered_out.to_string_lossy().to_string()));
+    thin_args.insert(
+        "output".to_string(),
+        json!(thin_out.to_string_lossy().to_string()),
+    );
+    thin_args.insert(
+        "filtered_output".to_string(),
+        json!(thin_filtered_out.to_string_lossy().to_string()),
+    );
     let thin_res = registry
         .run("lidar_thin", &thin_args, &context(&caps))
         .expect("lidar_thin should run");
@@ -14059,8 +17594,12 @@ fn lidar_phase2_batch2_tools_run_end_to_end() {
         .and_then(|v| v.as_str())
         .expect("filtered_path output expected when save_filtered=true");
     assert_eq!(filtered_path, thin_filtered_out.to_string_lossy().as_ref());
-    let thinned_filtered = PointCloud::read(&thin_filtered_out).expect("read thinned filtered output");
-    assert_eq!(thinned.points.len() + thinned_filtered.points.len(), cloud.points.len());
+    let thinned_filtered =
+        PointCloud::read(&thin_filtered_out).expect("read thinned filtered output");
+    assert_eq!(
+        thinned.points.len() + thinned_filtered.points.len(),
+        cloud.points.len()
+    );
 
     let mut elev_filter_args = ToolArgs::new();
     elev_filter_args.insert(
@@ -14069,14 +17608,20 @@ fn lidar_phase2_batch2_tools_run_end_to_end() {
     );
     elev_filter_args.insert("minz".to_string(), json!(10.5));
     elev_filter_args.insert("maxz".to_string(), json!(25.0));
-    elev_filter_args.insert("output".to_string(), json!(elev_filter_out.to_string_lossy().to_string()));
+    elev_filter_args.insert(
+        "output".to_string(),
+        json!(elev_filter_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_elevation_slice", &elev_filter_args, &context(&caps))
         .expect("lidar_elevation_slice filter should run");
 
     let elev_filtered = PointCloud::read(&elev_filter_out).expect("read elev filter output");
     assert_eq!(elev_filtered.points.len(), 2);
-    assert!(elev_filtered.points.iter().all(|p| p.z >= 10.5 && p.z <= 25.0));
+    assert!(elev_filtered
+        .points
+        .iter()
+        .all(|p| p.z >= 10.5 && p.z <= 25.0));
 
     let mut elev_class_args = ToolArgs::new();
     elev_class_args.insert(
@@ -14088,7 +17633,10 @@ fn lidar_phase2_batch2_tools_run_end_to_end() {
     elev_class_args.insert("classify".to_string(), json!(true));
     elev_class_args.insert("in_class_value".to_string(), json!(9));
     elev_class_args.insert("out_class_value".to_string(), json!(3));
-    elev_class_args.insert("output".to_string(), json!(elev_class_out.to_string_lossy().to_string()));
+    elev_class_args.insert(
+        "output".to_string(),
+        json!(elev_class_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_elevation_slice", &elev_class_args, &context(&caps))
         .expect("lidar_elevation_slice classify should run");
@@ -14123,17 +17671,71 @@ fn lidar_phase2_batch2_batch_mode_without_input_processes_tiles() {
 
     let cloud_a = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, scan_angle: 50, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.2, y: 0.2, z: 11.0, classification: 7, scan_angle: 250, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 12.0, classification: 2, scan_angle: 25, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                scan_angle: 50,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.2,
+                y: 0.2,
+                z: 11.0,
+                classification: 7,
+                scan_angle: 250,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 12.0,
+                classification: 2,
+                scan_angle: 25,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let cloud_b = PointCloud {
         points: vec![
-            PointRecord { x: 2.0, y: 2.0, z: 20.0, classification: 1, scan_angle: 40, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 2.1, y: 2.1, z: 21.0, classification: 18, scan_angle: -260, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 3.0, z: 22.0, classification: 2, scan_angle: 30, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 2.0,
+                y: 2.0,
+                z: 20.0,
+                classification: 1,
+                scan_angle: 40,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.1,
+                y: 2.1,
+                z: 21.0,
+                classification: 18,
+                scan_angle: -260,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 3.0,
+                z: 22.0,
+                classification: 2,
+                scan_angle: 30,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -14172,8 +17774,15 @@ fn lidar_phase2_batch2_batch_mode_without_input_processes_tiles() {
 
     for res in [&scan_res, &noise_res, &thin_res, &elev_res] {
         assert_eq!(res.outputs.get("__wbw_type__"), Some(&json!("lidar")));
-        let p = res.outputs.get("path").and_then(|v| v.as_str()).expect("placeholder path");
-        assert!(std::path::Path::new(p).exists(), "placeholder output should exist: {p}");
+        let p = res
+            .outputs
+            .get("path")
+            .and_then(|v| v.as_str())
+            .expect("placeholder path");
+        assert!(
+            std::path::Path::new(p).exists(),
+            "placeholder output should exist: {p}"
+        );
     }
 
     for suffix in ["scan_filtered", "denoised", "thinned", "elev_slice"] {
@@ -14203,14 +17812,49 @@ fn lidar_phase2_batch_b_tools_run_end_to_end() {
     let cloud = PointCloud {
         points: vec![
             // same thinning cell: two points, z=5.0 and z=1.0; scan_angle=5 → kept by threshold 10; lowest is z=1.0
-            PointRecord { x: 0.0, y: 0.1, z: 5.0, classification: 1, scan_angle: 5, ..PointRecord::default() },
-            PointRecord { x: 0.1, y: 0.1, z: 1.0, classification: 1, scan_angle: 5, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.1,
+                z: 5.0,
+                classification: 1,
+                scan_angle: 5,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.1,
+                y: 0.1,
+                z: 1.0,
+                classification: 1,
+                scan_angle: 5,
+                ..PointRecord::default()
+            },
             // cell (1,0): scan_angle=20 → filtered by threshold 10; classification=7 (low noise)
-            PointRecord { x: 1.0, y: 0.0, z: 15.0, classification: 7, scan_angle: 20, ..PointRecord::default() },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 15.0,
+                classification: 7,
+                scan_angle: 20,
+                ..PointRecord::default()
+            },
             // cell (0,1): z=25.0 outside elevation slice 0..20
-            PointRecord { x: 0.0, y: 1.0, z: 25.0, classification: 18, scan_angle: 3, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 1.0,
+                z: 25.0,
+                classification: 18,
+                scan_angle: 3,
+                ..PointRecord::default()
+            },
             // cell (1,1): z=10.0 inside elevation slice; scan_angle=8 ≤ 10
-            PointRecord { x: 1.0, y: 1.0, z: 10.0, classification: 2, scan_angle: 8, ..PointRecord::default() },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 10.0,
+                classification: 2,
+                scan_angle: 8,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -14223,13 +17867,20 @@ fn lidar_phase2_batch_b_tools_run_end_to_end() {
         json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
     );
     scan_args.insert("threshold".to_string(), json!(10));
-    scan_args.insert("output".to_string(), json!(scan_out.to_string_lossy().to_string()));
+    scan_args.insert(
+        "output".to_string(),
+        json!(scan_out.to_string_lossy().to_string()),
+    );
     registry
         .run("filter_lidar_scan_angles", &scan_args, &context(&caps))
         .expect("filter_lidar_scan_angles should run");
 
     let scan_result = PointCloud::read(&scan_out).expect("read scan_filtered output");
-    assert_eq!(scan_result.points.len(), 4, "one point with scan_angle=20 should be removed");
+    assert_eq!(
+        scan_result.points.len(),
+        4,
+        "one point with scan_angle=20 should be removed"
+    );
     assert!(scan_result.points.iter().all(|p| p.scan_angle.abs() <= 10));
     assert_eq!(scan_result.crs.as_ref().and_then(|c| c.epsg), Some(4326));
 
@@ -14239,14 +17890,24 @@ fn lidar_phase2_batch_b_tools_run_end_to_end() {
         "input".to_string(),
         json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
     );
-    noise_args.insert("output".to_string(), json!(noise_out.to_string_lossy().to_string()));
+    noise_args.insert(
+        "output".to_string(),
+        json!(noise_out.to_string_lossy().to_string()),
+    );
     registry
         .run("filter_lidar_noise", &noise_args, &context(&caps))
         .expect("filter_lidar_noise should run");
 
     let noise_result = PointCloud::read(&noise_out).expect("read denoised output");
-    assert_eq!(noise_result.points.len(), 3, "class 7 and class 18 points should be removed");
-    assert!(noise_result.points.iter().all(|p| p.classification != 7 && p.classification != 18));
+    assert_eq!(
+        noise_result.points.len(),
+        3,
+        "class 7 and class 18 points should be removed"
+    );
+    assert!(noise_result
+        .points
+        .iter()
+        .all(|p| p.classification != 7 && p.classification != 18));
     assert_eq!(noise_result.crs.as_ref().and_then(|c| c.epsg), Some(4326));
 
     // --- lidar_thin (first): resolution=1.0, method=first → one point per 1m cell ---
@@ -14257,14 +17918,20 @@ fn lidar_phase2_batch_b_tools_run_end_to_end() {
     );
     thin_args.insert("resolution".to_string(), json!(1.0));
     thin_args.insert("method".to_string(), json!("first"));
-    thin_args.insert("output".to_string(), json!(thin_out.to_string_lossy().to_string()));
+    thin_args.insert(
+        "output".to_string(),
+        json!(thin_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_thin", &thin_args, &context(&caps))
         .expect("lidar_thin first should run");
 
     let thin_result = PointCloud::read(&thin_out).expect("read thinned output");
     // 5 points spanning 4 grid cells (with 1m resolution) → at most 4 points after thinning
-    assert!(thin_result.points.len() <= 4, "thinning should reduce to at most 1 point per cell");
+    assert!(
+        thin_result.points.len() <= 4,
+        "thinning should reduce to at most 1 point per cell"
+    );
     assert!(thin_result.points.len() >= 1);
     assert_eq!(thin_result.crs.as_ref().and_then(|c| c.epsg), Some(4326));
 
@@ -14276,17 +17943,30 @@ fn lidar_phase2_batch_b_tools_run_end_to_end() {
     );
     thin_low_args.insert("resolution".to_string(), json!(1.0));
     thin_low_args.insert("method".to_string(), json!("lowest"));
-    thin_low_args.insert("output".to_string(), json!(thin_low_out.to_string_lossy().to_string()));
+    thin_low_args.insert(
+        "output".to_string(),
+        json!(thin_low_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_thin", &thin_low_args, &context(&caps))
         .expect("lidar_thin lowest should run");
 
     let thin_low_result = PointCloud::read(&thin_low_out).expect("read thinned_low output");
     // the shared thinning cell has z=5.0 and z=1.0 → lowest keeps z=1.0
-    assert!(thin_low_result.points.iter().any(|p| (p.z - 1.0).abs() < 1e-9),
-        "lowest method should keep z=1.0 in cell containing (0.0,0.1) and (0.1,0.1)");
-    assert!(!thin_low_result.points.iter().any(|p| (p.z - 5.0).abs() < 1e-9),
-        "lowest method should not keep z=5.0 when z=1.0 is in the same cell");
+    assert!(
+        thin_low_result
+            .points
+            .iter()
+            .any(|p| (p.z - 1.0).abs() < 1e-9),
+        "lowest method should keep z=1.0 in cell containing (0.0,0.1) and (0.1,0.1)"
+    );
+    assert!(
+        !thin_low_result
+            .points
+            .iter()
+            .any(|p| (p.z - 5.0).abs() < 1e-9),
+        "lowest method should not keep z=5.0 when z=1.0 is in the same cell"
+    );
 
     // --- lidar_elevation_slice (filter mode): minz=0, maxz=20 → removes z=25.0 ---
     let mut elev_filter_args = ToolArgs::new();
@@ -14297,15 +17977,28 @@ fn lidar_phase2_batch_b_tools_run_end_to_end() {
     elev_filter_args.insert("minz".to_string(), json!(0.0));
     elev_filter_args.insert("maxz".to_string(), json!(20.0));
     elev_filter_args.insert("classify".to_string(), json!(false));
-    elev_filter_args.insert("output".to_string(), json!(elev_filter_out.to_string_lossy().to_string()));
+    elev_filter_args.insert(
+        "output".to_string(),
+        json!(elev_filter_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_elevation_slice", &elev_filter_args, &context(&caps))
         .expect("lidar_elevation_slice filter should run");
 
     let elev_filter_result = PointCloud::read(&elev_filter_out).expect("read elev_filter output");
-    assert_eq!(elev_filter_result.points.len(), 4, "point at z=25 should be removed");
-    assert!(elev_filter_result.points.iter().all(|p| p.z >= 0.0 && p.z <= 20.0));
-    assert_eq!(elev_filter_result.crs.as_ref().and_then(|c| c.epsg), Some(4326));
+    assert_eq!(
+        elev_filter_result.points.len(),
+        4,
+        "point at z=25 should be removed"
+    );
+    assert!(elev_filter_result
+        .points
+        .iter()
+        .all(|p| p.z >= 0.0 && p.z <= 20.0));
+    assert_eq!(
+        elev_filter_result.crs.as_ref().and_then(|c| c.epsg),
+        Some(4326)
+    );
 
     // --- lidar_elevation_slice (classify mode): minz=0, maxz=20 → reassigns classification ---
     let mut elev_cls_args = ToolArgs::new();
@@ -14318,19 +18011,40 @@ fn lidar_phase2_batch_b_tools_run_end_to_end() {
     elev_cls_args.insert("classify".to_string(), json!(true));
     elev_cls_args.insert("in_class_value".to_string(), json!(2));
     elev_cls_args.insert("out_class_value".to_string(), json!(1));
-    elev_cls_args.insert("output".to_string(), json!(elev_classify_out.to_string_lossy().to_string()));
+    elev_cls_args.insert(
+        "output".to_string(),
+        json!(elev_classify_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_elevation_slice", &elev_cls_args, &context(&caps))
         .expect("lidar_elevation_slice classify should run");
 
     let elev_cls_result = PointCloud::read(&elev_classify_out).expect("read elev_classify output");
-    assert_eq!(elev_cls_result.points.len(), 5, "classify mode keeps all points");
+    assert_eq!(
+        elev_cls_result.points.len(),
+        5,
+        "classify mode keeps all points"
+    );
     // z=25.0 is outside slice → classification should be out_class_value=1
-    let outside_pts: Vec<_> = elev_cls_result.points.iter().filter(|p| p.z > 20.0).collect();
-    assert!(outside_pts.iter().all(|p| p.classification == 1), "outside points should have class=1");
+    let outside_pts: Vec<_> = elev_cls_result
+        .points
+        .iter()
+        .filter(|p| p.z > 20.0)
+        .collect();
+    assert!(
+        outside_pts.iter().all(|p| p.classification == 1),
+        "outside points should have class=1"
+    );
     // points inside slice → classification should be in_class_value=2
-    let inside_pts: Vec<_> = elev_cls_result.points.iter().filter(|p| p.z >= 0.0 && p.z <= 20.0).collect();
-    assert!(inside_pts.iter().all(|p| p.classification == 2), "inside points should have class=2");
+    let inside_pts: Vec<_> = elev_cls_result
+        .points
+        .iter()
+        .filter(|p| p.z >= 0.0 && p.z <= 20.0)
+        .collect();
+    assert!(
+        inside_pts.iter().all(|p| p.classification == 2),
+        "inside points should have class=2"
+    );
 
     let _ = std::fs::remove_file(&lidar_path);
     let _ = std::fs::remove_file(&scan_out);
@@ -14360,16 +18074,56 @@ fn lidar_phase2_batch3_tools_run_end_to_end() {
 
     let cloud_a = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.1, y: 0.1, z: 11.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.1, y: 1.1, z: 15.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.1,
+                y: 0.1,
+                z: 11.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.1,
+                y: 1.1,
+                z: 15.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let cloud_b = PointCloud {
         points: vec![
-            PointRecord { x: 2.0, y: 2.0, z: 20.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 3.0, z: 30.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 2.0,
+                y: 2.0,
+                z: 20.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 3.0,
+                z: 30.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -14385,7 +18139,10 @@ fn lidar_phase2_batch3_tools_run_end_to_end() {
             tile_b.to_string_lossy().to_string()
         ]),
     );
-    join_args.insert("output".to_string(), json!(joined_out.to_string_lossy().to_string()));
+    join_args.insert(
+        "output".to_string(),
+        json!(joined_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_join", &join_args, &context(&caps))
         .expect("lidar_join should run");
@@ -14399,7 +18156,10 @@ fn lidar_phase2_batch3_tools_run_end_to_end() {
         json!({"__wbw_type__":"lidar","path": joined_out.to_string_lossy().to_string()}),
     );
     sort_args.insert("sort_criteria".to_string(), json!("x"));
-    sort_args.insert("output".to_string(), json!(sorted_out.to_string_lossy().to_string()));
+    sort_args.insert(
+        "output".to_string(),
+        json!(sorted_out.to_string_lossy().to_string()),
+    );
     registry
         .run("sort_lidar", &sort_args, &context(&caps))
         .expect("sort_lidar should run");
@@ -14417,7 +18177,10 @@ fn lidar_phase2_batch3_tools_run_end_to_end() {
     thin_hd_args.insert("density".to_string(), json!(0.5));
     thin_hd_args.insert("resolution".to_string(), json!(1.0));
     thin_hd_args.insert("save_filtered".to_string(), json!(true));
-    thin_hd_args.insert("output".to_string(), json!(thin_hd_out.to_string_lossy().to_string()));
+    thin_hd_args.insert(
+        "output".to_string(),
+        json!(thin_hd_out.to_string_lossy().to_string()),
+    );
     thin_hd_args.insert(
         "filtered_output".to_string(),
         json!(thin_hd_filtered_out.to_string_lossy().to_string()),
@@ -14426,9 +18189,17 @@ fn lidar_phase2_batch3_tools_run_end_to_end() {
         .run("lidar_thin_high_density", &thin_hd_args, &context(&caps))
         .expect("lidar_thin_high_density should run");
     let thin_hd = PointCloud::read(&thin_hd_out).expect("read thin_hd output");
-    let thin_hd_filtered = PointCloud::read(&thin_hd_filtered_out).expect("read thin_hd filtered output");
-    assert_eq!(thin_hd.points.len() + thin_hd_filtered.points.len(), cloud_a.points.len());
-    assert!(thin_hd_res.outputs.get("filtered_path").and_then(|v| v.as_str()).is_some());
+    let thin_hd_filtered =
+        PointCloud::read(&thin_hd_filtered_out).expect("read thin_hd filtered output");
+    assert_eq!(
+        thin_hd.points.len() + thin_hd_filtered.points.len(),
+        cloud_a.points.len()
+    );
+    assert!(thin_hd_res
+        .outputs
+        .get("filtered_path")
+        .and_then(|v| v.as_str())
+        .is_some());
 
     // filter_lidar_by_percentile
     let mut pct_args = ToolArgs::new();
@@ -14438,7 +18209,10 @@ fn lidar_phase2_batch3_tools_run_end_to_end() {
     );
     pct_args.insert("percentile".to_string(), json!(100.0));
     pct_args.insert("block_size".to_string(), json!(1.0));
-    pct_args.insert("output".to_string(), json!(percentile_out.to_string_lossy().to_string()));
+    pct_args.insert(
+        "output".to_string(),
+        json!(percentile_out.to_string_lossy().to_string()),
+    );
     registry
         .run("filter_lidar_by_percentile", &pct_args, &context(&caps))
         .expect("filter_lidar_by_percentile should run");
@@ -14458,13 +18232,27 @@ fn lidar_phase2_batch3_tools_run_end_to_end() {
     tile_args.insert("origin_y".to_string(), json!(0.0));
     tile_args.insert("min_points_in_tile".to_string(), json!(1));
     tile_args.insert("output_laz_format".to_string(), json!(false));
-    tile_args.insert("output_directory".to_string(), json!(tile_out_dir.to_string_lossy().to_string()));
+    tile_args.insert(
+        "output_directory".to_string(),
+        json!(tile_out_dir.to_string_lossy().to_string()),
+    );
     let tile_res = registry
         .run("lidar_tile", &tile_args, &context(&caps))
         .expect("lidar_tile should run");
     assert_eq!(tile_res.outputs.get("__wbw_type__"), Some(&json!("lidar")));
-    assert!(tile_res.outputs.get("tile_count").and_then(|v| v.as_u64()).unwrap_or(0) > 0);
-    let tile_placeholder = tile_res.outputs.get("path").and_then(|v| v.as_str()).expect("tile placeholder path");
+    assert!(
+        tile_res
+            .outputs
+            .get("tile_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            > 0
+    );
+    let tile_placeholder = tile_res
+        .outputs
+        .get("path")
+        .and_then(|v| v.as_str())
+        .expect("tile placeholder path");
     assert!(std::path::Path::new(tile_placeholder).exists());
 
     let _ = std::fs::remove_file(&tile_a);
@@ -14493,17 +18281,65 @@ fn lidar_phase2_batch3_batch_mode_without_input_processes_tiles() {
 
     let cloud_a = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.2, y: 0.2, z: 11.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 12.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.2,
+                y: 0.2,
+                z: 11.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 12.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let cloud_b = PointCloud {
         points: vec![
-            PointRecord { x: 2.0, y: 2.0, z: 20.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 2.1, y: 2.1, z: 21.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 3.0, z: 22.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 2.0,
+                y: 2.0,
+                z: 20.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.1,
+                y: 2.1,
+                z: 21.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 3.0,
+                z: 22.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -14537,8 +18373,15 @@ fn lidar_phase2_batch3_batch_mode_without_input_processes_tiles() {
 
     for res in [&sort_res, &thin_hd_res, &pct_res] {
         assert_eq!(res.outputs.get("__wbw_type__"), Some(&json!("lidar")));
-        let p = res.outputs.get("path").and_then(|v| v.as_str()).expect("placeholder path");
-        assert!(std::path::Path::new(p).exists(), "placeholder output should exist: {p}");
+        let p = res
+            .outputs
+            .get("path")
+            .and_then(|v| v.as_str())
+            .expect("placeholder path");
+        assert!(
+            std::path::Path::new(p).exists(),
+            "placeholder output should exist: {p}"
+        );
     }
 
     for suffix in ["sorted", "thinned_hd", "percentile"] {
@@ -14566,16 +18409,51 @@ fn lidar_phase2_batch_b_batch_mode_without_input_processes_tiles() {
 
     let cloud_a = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 5.0, classification: 1, scan_angle: 5, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 0.0, z: 8.0, classification: 7, scan_angle: 25, ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 2.0, z: 30.0, classification: 18, scan_angle: 3, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 5.0,
+                classification: 1,
+                scan_angle: 5,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 8.0,
+                classification: 7,
+                scan_angle: 25,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 2.0,
+                z: 30.0,
+                classification: 18,
+                scan_angle: 3,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let cloud_b = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 2.0, classification: 2, scan_angle: 2, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 4.0, classification: 1, scan_angle: 15, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 2.0,
+                classification: 2,
+                scan_angle: 2,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 4.0,
+                classification: 1,
+                scan_angle: 15,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -14617,8 +18495,15 @@ fn lidar_phase2_batch_b_batch_mode_without_input_processes_tiles() {
 
     for res in [&scan_res, &noise_res, &thin_res, &elev_res] {
         assert_eq!(res.outputs.get("__wbw_type__"), Some(&json!("lidar")));
-        let p = res.outputs.get("path").and_then(|v| v.as_str()).expect("placeholder path");
-        assert!(std::path::Path::new(p).exists(), "placeholder output should exist: {p}");
+        let p = res
+            .outputs
+            .get("path")
+            .and_then(|v| v.as_str())
+            .expect("placeholder path");
+        assert!(
+            std::path::Path::new(p).exists(),
+            "placeholder output should exist: {p}"
+        );
     }
 
     let _ = std::fs::remove_dir_all(&batch_dir);
@@ -14639,11 +18524,41 @@ fn lidar_phase2_batch4_split_and_remove_outliers_run_end_to_end() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 0.0, z: 11.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 0.0, z: 12.0, classification: 2, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 0.0, z: 100.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 4.0, y: 0.0, z: 13.0, classification: 2, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 11.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 0.0,
+                z: 12.0,
+                classification: 2,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 0.0,
+                z: 100.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 4.0,
+                y: 0.0,
+                z: 13.0,
+                classification: 2,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -14658,12 +18573,16 @@ fn lidar_phase2_batch4_split_and_remove_outliers_run_end_to_end() {
     outlier_args.insert("search_radius".to_string(), json!(5.0));
     outlier_args.insert("elev_diff".to_string(), json!(20.0));
     outlier_args.insert("classify".to_string(), json!(false));
-    outlier_args.insert("output".to_string(), json!(outlier_filtered_out.to_string_lossy().to_string()));
+    outlier_args.insert(
+        "output".to_string(),
+        json!(outlier_filtered_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_remove_outliers", &outlier_args, &context(&caps))
         .expect("lidar_remove_outliers filter should run");
 
-    let outlier_filtered = PointCloud::read(&outlier_filtered_out).expect("read outlier filtered output");
+    let outlier_filtered =
+        PointCloud::read(&outlier_filtered_out).expect("read outlier filtered output");
     assert!(outlier_filtered.points.len() < cloud.points.len());
 
     // lidar_remove_outliers (classify mode)
@@ -14675,14 +18594,21 @@ fn lidar_phase2_batch4_split_and_remove_outliers_run_end_to_end() {
     class_args.insert("search_radius".to_string(), json!(5.0));
     class_args.insert("elev_diff".to_string(), json!(20.0));
     class_args.insert("classify".to_string(), json!(true));
-    class_args.insert("output".to_string(), json!(outlier_class_out.to_string_lossy().to_string()));
+    class_args.insert(
+        "output".to_string(),
+        json!(outlier_class_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_remove_outliers", &class_args, &context(&caps))
         .expect("lidar_remove_outliers classify should run");
 
-    let outlier_classed = PointCloud::read(&outlier_class_out).expect("read outlier classify output");
+    let outlier_classed =
+        PointCloud::read(&outlier_class_out).expect("read outlier classify output");
     assert_eq!(outlier_classed.points.len(), cloud.points.len());
-    assert!(outlier_classed.points.iter().any(|p| p.classification == 18));
+    assert!(outlier_classed
+        .points
+        .iter()
+        .any(|p| p.classification == 18));
 
     // split_lidar (single input)
     let mut split_args = ToolArgs::new();
@@ -14693,14 +18619,28 @@ fn lidar_phase2_batch4_split_and_remove_outliers_run_end_to_end() {
     split_args.insert("split_criterion".to_string(), json!("class"));
     split_args.insert("interval".to_string(), json!(5.0));
     split_args.insert("min_pts".to_string(), json!(0));
-    split_args.insert("output_directory".to_string(), json!(split_dir.to_string_lossy().to_string()));
+    split_args.insert(
+        "output_directory".to_string(),
+        json!(split_dir.to_string_lossy().to_string()),
+    );
     let split_res = registry
         .run("split_lidar", &split_args, &context(&caps))
         .expect("split_lidar should run");
     assert_eq!(split_res.outputs.get("__wbw_type__"), Some(&json!("lidar")));
-    let split_placeholder = split_res.outputs.get("path").and_then(|v| v.as_str()).expect("split placeholder path");
+    let split_placeholder = split_res
+        .outputs
+        .get("path")
+        .and_then(|v| v.as_str())
+        .expect("split placeholder path");
     assert!(std::path::Path::new(split_placeholder).exists());
-    assert!(split_res.outputs.get("output_count").and_then(|v| v.as_u64()).unwrap_or(0) >= 2);
+    assert!(
+        split_res
+            .outputs
+            .get("output_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            >= 2
+    );
 
     let _ = std::fs::remove_file(&lidar_path);
     let _ = std::fs::remove_file(&outlier_filtered_out);
@@ -14724,17 +18664,53 @@ fn lidar_phase2_batch4_batch_mode_without_input_processes_tiles() {
 
     let cloud_a = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 0.0, z: 11.0, classification: 2, ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 0.0, z: 99.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 11.0,
+                classification: 2,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 0.0,
+                z: 99.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let cloud_b = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 1.0, z: 12.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 13.0, classification: 2, ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 1.0, z: 98.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 1.0,
+                z: 12.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 13.0,
+                classification: 2,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 1.0,
+                z: 98.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -14763,8 +18739,15 @@ fn lidar_phase2_batch4_batch_mode_without_input_processes_tiles() {
 
     for res in [&split_res, &outlier_res] {
         assert_eq!(res.outputs.get("__wbw_type__"), Some(&json!("lidar")));
-        let p = res.outputs.get("path").and_then(|v| v.as_str()).expect("placeholder path");
-        assert!(std::path::Path::new(p).exists(), "placeholder output should exist: {p}");
+        let p = res
+            .outputs
+            .get("path")
+            .and_then(|v| v.as_str())
+            .expect("placeholder path");
+        assert!(
+            std::path::Path::new(p).exists(),
+            "placeholder output should exist: {p}"
+        );
     }
 
     let _ = std::fs::remove_dir_all(&batch_dir);
@@ -14784,10 +18767,34 @@ fn lidar_phase2_batch5_normalize_and_height_above_ground_run_end_to_end() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.5, y: 2.5, z: 100.0, classification: 2, ..PointRecord::default() },
-            PointRecord { x: 1.5, y: 2.5, z: 102.0, classification: 2, ..PointRecord::default() },
-            PointRecord { x: 0.5, y: 1.5, z: 105.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.5, y: 1.5, z: 108.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.5,
+                y: 2.5,
+                z: 100.0,
+                classification: 2,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.5,
+                y: 2.5,
+                z: 102.0,
+                classification: 2,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.5,
+                y: 1.5,
+                z: 105.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.5,
+                y: 1.5,
+                z: 108.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -14808,10 +18815,12 @@ fn lidar_phase2_batch5_normalize_and_height_above_ground_run_end_to_end() {
     });
     for r in 0..3isize {
         for c in 0..3isize {
-            dtm.set(0, r, c, 100.0 + (2 - r) as f64 + c as f64).expect("set dtm value");
+            dtm.set(0, r, c, 100.0 + (2 - r) as f64 + c as f64)
+                .expect("set dtm value");
         }
     }
-    dtm.write(&dtm_path, RasterFormat::GeoTiff).expect("write dtm raster");
+    dtm.write(&dtm_path, RasterFormat::GeoTiff)
+        .expect("write dtm raster");
 
     let mut norm_args = ToolArgs::new();
     norm_args.insert(
@@ -14823,7 +18832,10 @@ fn lidar_phase2_batch5_normalize_and_height_above_ground_run_end_to_end() {
         json!({"__wbw_type__":"raster","path": dtm_path.to_string_lossy().to_string()}),
     );
     norm_args.insert("no_negatives".to_string(), json!(true));
-    norm_args.insert("output".to_string(), json!(norm_out.to_string_lossy().to_string()));
+    norm_args.insert(
+        "output".to_string(),
+        json!(norm_out.to_string_lossy().to_string()),
+    );
     registry
         .run("normalize_lidar", &norm_args, &context(&caps))
         .expect("normalize_lidar should run");
@@ -14831,22 +18843,34 @@ fn lidar_phase2_batch5_normalize_and_height_above_ground_run_end_to_end() {
     let normalized = PointCloud::read(&norm_out).expect("read normalized output");
     assert_eq!(normalized.points.len(), cloud.points.len());
     assert!(normalized.points.iter().all(|p| p.z >= 0.0));
-    assert!(normalized.points.iter().any(|p| p.classification == 1 && p.z > 0.0));
+    assert!(normalized
+        .points
+        .iter()
+        .any(|p| p.classification == 1 && p.z > 0.0));
 
     let mut hag_args = ToolArgs::new();
     hag_args.insert(
         "input".to_string(),
         json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
     );
-    hag_args.insert("output".to_string(), json!(hag_out.to_string_lossy().to_string()));
+    hag_args.insert(
+        "output".to_string(),
+        json!(hag_out.to_string_lossy().to_string()),
+    );
     registry
         .run("height_above_ground", &hag_args, &context(&caps))
         .expect("height_above_ground should run");
 
     let hag_cloud = PointCloud::read(&hag_out).expect("read height_above_ground output");
     assert_eq!(hag_cloud.points.len(), cloud.points.len());
-    assert!(hag_cloud.points.iter().any(|p| p.classification == 2 && p.z.abs() < 1e-9));
-    assert!(hag_cloud.points.iter().any(|p| p.classification != 2 && p.z > 0.0));
+    assert!(hag_cloud
+        .points
+        .iter()
+        .any(|p| p.classification == 2 && p.z.abs() < 1e-9));
+    assert!(hag_cloud
+        .points
+        .iter()
+        .any(|p| p.classification != 2 && p.z > 0.0));
 
     let _ = std::fs::remove_file(&lidar_path);
     let _ = std::fs::remove_file(&dtm_path);
@@ -14868,11 +18892,51 @@ fn lidar_phase2_batch6_ground_filter_and_filter_lidar_run_end_to_end() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 0.0, z: 10.2, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 0.0, z: 10.1, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 18.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 1.0, z: 19.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 10.2,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 0.0,
+                z: 10.1,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 18.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 1.0,
+                z: 19.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -14887,7 +18951,10 @@ fn lidar_phase2_batch6_ground_filter_and_filter_lidar_run_end_to_end() {
     gf_args.insert("slope_threshold".to_string(), json!(30.0));
     gf_args.insert("height_threshold".to_string(), json!(1.0));
     gf_args.insert("classify".to_string(), json!(false));
-    gf_args.insert("output".to_string(), json!(ground_filtered_out.to_string_lossy().to_string()));
+    gf_args.insert(
+        "output".to_string(),
+        json!(ground_filtered_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_ground_point_filter", &gf_args, &context(&caps))
         .expect("lidar_ground_point_filter should run in filter mode");
@@ -14903,7 +18970,10 @@ fn lidar_phase2_batch6_ground_filter_and_filter_lidar_run_end_to_end() {
     class_args.insert("slope_threshold".to_string(), json!(30.0));
     class_args.insert("height_threshold".to_string(), json!(1.0));
     class_args.insert("classify".to_string(), json!(true));
-    class_args.insert("output".to_string(), json!(classed_out.to_string_lossy().to_string()));
+    class_args.insert(
+        "output".to_string(),
+        json!(classed_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_ground_point_filter", &class_args, &context(&caps))
         .expect("lidar_ground_point_filter should run in classify mode");
@@ -14918,13 +18988,19 @@ fn lidar_phase2_batch6_ground_filter_and_filter_lidar_run_end_to_end() {
         json!({"__wbw_type__":"lidar","path": lidar_path.to_string_lossy().to_string()}),
     );
     expr_args.insert("statement".to_string(), json!("class == 2 && z <= 10.5"));
-    expr_args.insert("output".to_string(), json!(expression_out.to_string_lossy().to_string()));
+    expr_args.insert(
+        "output".to_string(),
+        json!(expression_out.to_string_lossy().to_string()),
+    );
     registry
         .run("filter_lidar", &expr_args, &context(&caps))
         .expect("filter_lidar should run");
     let expr_cloud = PointCloud::read(&expression_out).expect("read expression output");
     assert!(expr_cloud.points.len() >= 2);
-    assert!(expr_cloud.points.iter().all(|p| p.classification == 2 && p.z <= 10.5));
+    assert!(expr_cloud
+        .points
+        .iter()
+        .all(|p| p.classification == 2 && p.z <= 10.5));
 
     let _ = std::fs::remove_file(&lidar_path);
     let _ = std::fs::remove_file(&ground_filtered_out);
@@ -14945,8 +19021,20 @@ fn lidar_phase2_batch6_hardening_edge_cases() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.5, y: 0.5, z: 5.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.5, y: 0.5, z: 6.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.5,
+                y: 0.5,
+                z: 5.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.5,
+                y: 0.5,
+                z: 6.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -14967,13 +19055,23 @@ fn lidar_phase2_batch6_hardening_edge_cases() {
     });
     dtm.set(0, 0, 0, 10.0).expect("set dtm");
     dtm.set(0, 0, 1, 10.0).expect("set dtm");
-    dtm.write(&dtm_path, RasterFormat::GeoTiff).expect("write dtm");
+    dtm.write(&dtm_path, RasterFormat::GeoTiff)
+        .expect("write dtm");
 
     let mut norm_args = ToolArgs::new();
-    norm_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
-    norm_args.insert("dtm".to_string(), json!(dtm_path.to_string_lossy().to_string()));
+    norm_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
+    norm_args.insert(
+        "dtm".to_string(),
+        json!(dtm_path.to_string_lossy().to_string()),
+    );
     norm_args.insert("no_negatives".to_string(), json!(true));
-    norm_args.insert("output".to_string(), json!(norm_out.to_string_lossy().to_string()));
+    norm_args.insert(
+        "output".to_string(),
+        json!(norm_out.to_string_lossy().to_string()),
+    );
     registry
         .run("normalize_lidar", &norm_args, &context(&caps))
         .expect("normalize_lidar should run");
@@ -14981,12 +19079,21 @@ fn lidar_phase2_batch6_hardening_edge_cases() {
     assert!(norm_cloud.points.iter().all(|p| p.z >= 0.0));
 
     let mut hag_args = ToolArgs::new();
-    hag_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
+    hag_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
     let hag_err = registry.run("height_above_ground", &hag_args, &context(&caps));
-    assert!(hag_err.is_err(), "height_above_ground should fail when no ground points exist");
+    assert!(
+        hag_err.is_err(),
+        "height_above_ground should fail when no ground points exist"
+    );
 
     let mut expr_args = ToolArgs::new();
-    expr_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
+    expr_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
     expr_args.insert("statement".to_string(), json!("class == 1 && z > 0"));
     registry
         .run("filter_lidar", &expr_args, &context(&caps))
@@ -15011,10 +19118,34 @@ fn lidar_phase2_batch7_reference_surface_and_classify_run_end_to_end() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.5, y: 1.5, z: 10.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.5, y: 1.5, z: 10.1, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 0.5, y: 0.5, z: 12.5, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.5, y: 0.5, z: 15.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.5,
+                y: 1.5,
+                z: 10.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.5,
+                y: 1.5,
+                z: 10.1,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.5,
+                y: 0.5,
+                z: 12.5,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.5,
+                y: 0.5,
+                z: 15.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -15037,33 +19168,57 @@ fn lidar_phase2_batch7_reference_surface_and_classify_run_end_to_end() {
     surface.set(0, 0, 1, 10.0).expect("set surface");
     surface.set(0, 1, 0, 10.0).expect("set surface");
     surface.set(0, 1, 1, 10.0).expect("set surface");
-    surface.write(&surface_path, RasterFormat::GeoTiff).expect("write surface");
+    surface
+        .write(&surface_path, RasterFormat::GeoTiff)
+        .expect("write surface");
 
     let mut ref_args = ToolArgs::new();
-    ref_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
-    ref_args.insert("ref_surface".to_string(), json!(surface_path.to_string_lossy().to_string()));
+    ref_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
+    ref_args.insert(
+        "ref_surface".to_string(),
+        json!(surface_path.to_string_lossy().to_string()),
+    );
     ref_args.insert("query".to_string(), json!("within"));
     ref_args.insert("threshold".to_string(), json!(0.2));
-    ref_args.insert("output".to_string(), json!(ref_out.to_string_lossy().to_string()));
+    ref_args.insert(
+        "output".to_string(),
+        json!(ref_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("filter_lidar_by_reference_surface", &ref_args, &context(&caps))
+        .run(
+            "filter_lidar_by_reference_surface",
+            &ref_args,
+            &context(&caps),
+        )
         .expect("filter_lidar_by_reference_surface should run");
     let ref_cloud = PointCloud::read(&ref_out).expect("read ref-surface output");
     assert!(ref_cloud.points.len() >= 2 && ref_cloud.points.len() < cloud.points.len());
 
     let mut class_args = ToolArgs::new();
-    class_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
+    class_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
     class_args.insert("search_radius".to_string(), json!(2.0));
     class_args.insert("grd_threshold".to_string(), json!(0.2));
     class_args.insert("oto_threshold".to_string(), json!(1.0));
-    class_args.insert("output".to_string(), json!(classed_out.to_string_lossy().to_string()));
+    class_args.insert(
+        "output".to_string(),
+        json!(classed_out.to_string_lossy().to_string()),
+    );
     registry
         .run("classify_lidar", &class_args, &context(&caps))
         .expect("classify_lidar should run");
     let classed = PointCloud::read(&classed_out).expect("read classify output");
     assert_eq!(classed.points.len(), cloud.points.len());
     assert!(classed.points.iter().any(|p| p.classification == 2));
-    assert!(classed.points.iter().any(|p| p.classification == 5 || p.classification == 6));
+    assert!(classed
+        .points
+        .iter()
+        .any(|p| p.classification == 5 || p.classification == 6));
 
     let _ = std::fs::remove_file(&lidar_path);
     let _ = std::fs::remove_file(&surface_path);
@@ -15086,11 +19241,51 @@ fn lidar_phase2_partial_batch_hardening_sort_percentile_outliers() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, return_number: 2, number_of_returns: 2, ..PointRecord::default() },
-            PointRecord { x: 0.1, y: 0.0, z: 11.0, classification: 1, return_number: 1, number_of_returns: 2, ..PointRecord::default() },
-            PointRecord { x: 0.2, y: 0.0, z: 100.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.3, y: 0.0, z: -40.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.4, y: 0.0, z: 10.5, classification: 7, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                return_number: 2,
+                number_of_returns: 2,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.1,
+                y: 0.0,
+                z: 11.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 2,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.2,
+                y: 0.0,
+                z: 100.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.3,
+                y: 0.0,
+                z: -40.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.4,
+                y: 0.0,
+                z: 10.5,
+                classification: 7,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -15098,9 +19293,15 @@ fn lidar_phase2_partial_batch_hardening_sort_percentile_outliers() {
 
     // sort_lidar should accept legacy alias return_number and sort by it.
     let mut sort_args = ToolArgs::new();
-    sort_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
+    sort_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
     sort_args.insert("sort_criteria".to_string(), json!("return_number, z"));
-    sort_args.insert("output".to_string(), json!(sort_out.to_string_lossy().to_string()));
+    sort_args.insert(
+        "output".to_string(),
+        json!(sort_out.to_string_lossy().to_string()),
+    );
     registry
         .run("sort_lidar", &sort_args, &context(&caps))
         .expect("sort_lidar should run with return_number alias");
@@ -15114,10 +19315,16 @@ fn lidar_phase2_partial_batch_hardening_sort_percentile_outliers() {
 
     // percentile extremes should choose low/high from the same block.
     let mut pct_lo_args = ToolArgs::new();
-    pct_lo_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
+    pct_lo_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
     pct_lo_args.insert("percentile".to_string(), json!(0.0));
     pct_lo_args.insert("block_size".to_string(), json!(100.0));
-    pct_lo_args.insert("output".to_string(), json!(pct_lo_out.to_string_lossy().to_string()));
+    pct_lo_args.insert(
+        "output".to_string(),
+        json!(pct_lo_out.to_string_lossy().to_string()),
+    );
     registry
         .run("filter_lidar_by_percentile", &pct_lo_args, &context(&caps))
         .expect("filter_lidar_by_percentile low percentile should run");
@@ -15126,10 +19333,16 @@ fn lidar_phase2_partial_batch_hardening_sort_percentile_outliers() {
     assert!((pct_lo.points[0].z + 40.0).abs() < 1e-9);
 
     let mut pct_hi_args = ToolArgs::new();
-    pct_hi_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
+    pct_hi_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
     pct_hi_args.insert("percentile".to_string(), json!(100.0));
     pct_hi_args.insert("block_size".to_string(), json!(100.0));
-    pct_hi_args.insert("output".to_string(), json!(pct_hi_out.to_string_lossy().to_string()));
+    pct_hi_args.insert(
+        "output".to_string(),
+        json!(pct_hi_out.to_string_lossy().to_string()),
+    );
     registry
         .run("filter_lidar_by_percentile", &pct_hi_args, &context(&caps))
         .expect("filter_lidar_by_percentile high percentile should run");
@@ -15139,11 +19352,17 @@ fn lidar_phase2_partial_batch_hardening_sort_percentile_outliers() {
 
     // outlier classify mode should assign both low/high noise classes where applicable.
     let mut outlier_args = ToolArgs::new();
-    outlier_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
+    outlier_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
     outlier_args.insert("search_radius".to_string(), json!(5.0));
     outlier_args.insert("elev_diff".to_string(), json!(20.0));
     outlier_args.insert("classify".to_string(), json!(true));
-    outlier_args.insert("output".to_string(), json!(outlier_class_out.to_string_lossy().to_string()));
+    outlier_args.insert(
+        "output".to_string(),
+        json!(outlier_class_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_remove_outliers", &outlier_args, &context(&caps))
         .expect("lidar_remove_outliers classify mode should run");
@@ -15177,15 +19396,39 @@ fn lidar_phase2_partial_batch_hardening_join_tile_thin_hd() {
 
     let cloud_a = PointCloud {
         points: vec![
-            PointRecord { x: 10.0, y: 0.0, z: 1.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 11.0, y: 0.0, z: 2.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 10.0,
+                y: 0.0,
+                z: 1.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 11.0,
+                y: 0.0,
+                z: 2.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let cloud_b = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 3.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 0.0, z: 4.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 3.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 4.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -15195,9 +19438,15 @@ fn lidar_phase2_partial_batch_hardening_join_tile_thin_hd() {
     let mut join_args = ToolArgs::new();
     join_args.insert(
         "inputs".to_string(),
-        json!([join_a.to_string_lossy().to_string(), join_b.to_string_lossy().to_string()]),
+        json!([
+            join_a.to_string_lossy().to_string(),
+            join_b.to_string_lossy().to_string()
+        ]),
     );
-    join_args.insert("output".to_string(), json!(joined_out.to_string_lossy().to_string()));
+    join_args.insert(
+        "output".to_string(),
+        json!(joined_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_join", &join_args, &context(&caps))
         .expect("lidar_join hardening run");
@@ -15210,11 +19459,41 @@ fn lidar_phase2_partial_batch_hardening_join_tile_thin_hd() {
     // tile hardening: strict min_points_in_tile behavior (> threshold) should keep only tile with 3 points.
     let tile_cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.1, y: 0.1, z: 1.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 0.2, y: 0.1, z: 1.1, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 0.3, y: 0.1, z: 1.2, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.1, y: 0.1, z: 2.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.2, y: 0.1, z: 2.1, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.1,
+                y: 0.1,
+                z: 1.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.2,
+                y: 0.1,
+                z: 1.1,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.3,
+                y: 0.1,
+                z: 1.2,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.1,
+                y: 0.1,
+                z: 2.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.2,
+                y: 0.1,
+                z: 2.1,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -15222,37 +19501,76 @@ fn lidar_phase2_partial_batch_hardening_join_tile_thin_hd() {
     std::fs::create_dir_all(&tile_out_dir).expect("create tile output dir");
 
     let mut tile_args = ToolArgs::new();
-    tile_args.insert("input".to_string(), json!(tile_in.to_string_lossy().to_string()));
+    tile_args.insert(
+        "input".to_string(),
+        json!(tile_in.to_string_lossy().to_string()),
+    );
     tile_args.insert("tile_width".to_string(), json!(1.0));
     tile_args.insert("tile_height".to_string(), json!(1.0));
     tile_args.insert("origin_x".to_string(), json!(0.0));
     tile_args.insert("origin_y".to_string(), json!(0.0));
     tile_args.insert("min_points_in_tile".to_string(), json!(2));
     tile_args.insert("output_laz_format".to_string(), json!(false));
-    tile_args.insert("output_directory".to_string(), json!(tile_out_dir.to_string_lossy().to_string()));
+    tile_args.insert(
+        "output_directory".to_string(),
+        json!(tile_out_dir.to_string_lossy().to_string()),
+    );
     let tile_res = registry
         .run("lidar_tile", &tile_args, &context(&caps))
         .expect("lidar_tile hardening run");
-    assert_eq!(tile_res.outputs.get("tile_count").and_then(|v| v.as_u64()), Some(1));
+    assert_eq!(
+        tile_res.outputs.get("tile_count").and_then(|v| v.as_u64()),
+        Some(1)
+    );
 
     // thin-high-density hardening: when save_filtered=false, no filtered_path should be returned.
     let thin_cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 1.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 0.05, y: 0.0, z: 1.1, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 0.1, y: 0.0, z: 1.2, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 0.15, y: 0.0, z: 1.3, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 1.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.05,
+                y: 0.0,
+                z: 1.1,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.1,
+                y: 0.0,
+                z: 1.2,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.15,
+                y: 0.0,
+                z: 1.3,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     thin_cloud.write(&thin_in).expect("write thin input");
 
     let mut thin_args = ToolArgs::new();
-    thin_args.insert("input".to_string(), json!(thin_in.to_string_lossy().to_string()));
+    thin_args.insert(
+        "input".to_string(),
+        json!(thin_in.to_string_lossy().to_string()),
+    );
     thin_args.insert("density".to_string(), json!(0.1));
     thin_args.insert("resolution".to_string(), json!(1.0));
     thin_args.insert("save_filtered".to_string(), json!(false));
-    thin_args.insert("output".to_string(), json!(thin_out.to_string_lossy().to_string()));
+    thin_args.insert(
+        "output".to_string(),
+        json!(thin_out.to_string_lossy().to_string()),
+    );
     let thin_res = registry
         .run("lidar_thin_high_density", &thin_args, &context(&caps))
         .expect("lidar_thin_high_density hardening run");
@@ -15283,9 +19601,33 @@ fn lidar_phase2_partial_batch_hardening_reference_split_classify() {
     let classify_out = std::env::temp_dir().join(format!("{tag}_classify.las"));
 
     let mut points = vec![
-        PointRecord { x: 0.5, y: 1.5, z: 10.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-        PointRecord { x: 1.5, y: 1.5, z: 12.0, classification: 6, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-        PointRecord { x: 0.5, y: 0.5, z: 9.5, classification: 7, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+        PointRecord {
+            x: 0.5,
+            y: 1.5,
+            z: 10.0,
+            classification: 1,
+            return_number: 1,
+            number_of_returns: 1,
+            ..PointRecord::default()
+        },
+        PointRecord {
+            x: 1.5,
+            y: 1.5,
+            z: 12.0,
+            classification: 6,
+            return_number: 1,
+            number_of_returns: 1,
+            ..PointRecord::default()
+        },
+        PointRecord {
+            x: 0.5,
+            y: 0.5,
+            z: 9.5,
+            classification: 7,
+            return_number: 1,
+            number_of_returns: 1,
+            ..PointRecord::default()
+        },
     ];
     for i in 0..250 {
         points.push(PointRecord {
@@ -15321,42 +19663,79 @@ fn lidar_phase2_partial_batch_hardening_reference_split_classify() {
     surface.set(0, 0, 1, 10.0).expect("set surface");
     surface.set(0, 1, 0, 10.0).expect("set surface");
     surface.set(0, 1, 1, 10.0).expect("set surface");
-    surface.write(&surface_path, RasterFormat::GeoTiff).expect("write surface");
+    surface
+        .write(&surface_path, RasterFormat::GeoTiff)
+        .expect("write surface");
 
     // filter_lidar_by_reference_surface classify hardening: >= query + preserve_classes.
     let mut ref_args = ToolArgs::new();
-    ref_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
-    ref_args.insert("ref_surface".to_string(), json!(surface_path.to_string_lossy().to_string()));
+    ref_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
+    ref_args.insert(
+        "ref_surface".to_string(),
+        json!(surface_path.to_string_lossy().to_string()),
+    );
     ref_args.insert("query".to_string(), json!(">="));
     ref_args.insert("classify".to_string(), json!(true));
     ref_args.insert("true_class_value".to_string(), json!(2));
     ref_args.insert("false_class_value".to_string(), json!(9));
     ref_args.insert("preserve_classes".to_string(), json!(true));
-    ref_args.insert("output".to_string(), json!(ref_classify_out.to_string_lossy().to_string()));
+    ref_args.insert(
+        "output".to_string(),
+        json!(ref_classify_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("filter_lidar_by_reference_surface", &ref_args, &context(&caps))
+        .run(
+            "filter_lidar_by_reference_surface",
+            &ref_args,
+            &context(&caps),
+        )
         .expect("filter_lidar_by_reference_surface classify hardening run");
     let ref_cloud = PointCloud::read(&ref_classify_out).expect("read ref classify output");
     assert_eq!(ref_cloud.points.len(), cloud.points.len());
-    assert!(ref_cloud.points.iter().filter(|p| p.classification == 2).count() >= 2);
+    assert!(
+        ref_cloud
+            .points
+            .iter()
+            .filter(|p| p.classification == 2)
+            .count()
+            >= 2
+    );
     assert!(ref_cloud.points.iter().any(|p| p.classification == 7));
 
     // split_lidar hardening: num_pts mode with interval>=100 and explicit output_count.
     std::fs::create_dir_all(&split_dir).expect("create split dir");
     let mut split_args = ToolArgs::new();
-    split_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
+    split_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
     split_args.insert("split_criterion".to_string(), json!("num_pts"));
     split_args.insert("interval".to_string(), json!(100.0));
     split_args.insert("min_pts".to_string(), json!(0));
-    split_args.insert("output_directory".to_string(), json!(split_dir.to_string_lossy().to_string()));
+    split_args.insert(
+        "output_directory".to_string(),
+        json!(split_dir.to_string_lossy().to_string()),
+    );
     let split_res = registry
         .run("split_lidar", &split_args, &context(&caps))
         .expect("split_lidar num_pts hardening run");
-    assert_eq!(split_res.outputs.get("output_count").and_then(|v| v.as_u64()), Some(3));
+    assert_eq!(
+        split_res
+            .outputs
+            .get("output_count")
+            .and_then(|v| v.as_u64()),
+        Some(3)
+    );
 
     // classify_lidar hardening: advanced params accepted + output classes include ground and off-terrain.
     let mut class_args = ToolArgs::new();
-    class_args.insert("input".to_string(), json!(lidar_path.to_string_lossy().to_string()));
+    class_args.insert(
+        "input".to_string(),
+        json!(lidar_path.to_string_lossy().to_string()),
+    );
     class_args.insert("search_radius".to_string(), json!(1.5));
     class_args.insert("grd_threshold".to_string(), json!(0.2));
     class_args.insert("oto_threshold".to_string(), json!(1.0));
@@ -15364,14 +19743,20 @@ fn lidar_phase2_partial_batch_hardening_reference_split_classify() {
     class_args.insert("planarity_threshold".to_string(), json!(0.8));
     class_args.insert("num_iter".to_string(), json!(20));
     class_args.insert("facade_threshold".to_string(), json!(0.5));
-    class_args.insert("output".to_string(), json!(classify_out.to_string_lossy().to_string()));
+    class_args.insert(
+        "output".to_string(),
+        json!(classify_out.to_string_lossy().to_string()),
+    );
     registry
         .run("classify_lidar", &class_args, &context(&caps))
         .expect("classify_lidar hardening run");
     let classed = PointCloud::read(&classify_out).expect("read classify output");
     assert_eq!(classed.points.len(), cloud.points.len());
     assert!(classed.points.iter().any(|p| p.classification == 2));
-    assert!(classed.points.iter().any(|p| p.classification == 5 || p.classification == 6));
+    assert!(classed
+        .points
+        .iter()
+        .any(|p| p.classification == 5 || p.classification == 6));
 
     let _ = std::fs::remove_file(&lidar_path);
     let _ = std::fs::remove_file(&surface_path);
@@ -15396,17 +19781,53 @@ fn classify_lidar_batch_mode_without_input_processes_tiles() {
 
     let cloud_a = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 0.5, y: 0.0, z: 10.1, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 0.0, y: 0.5, z: 12.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.5,
+                y: 0.0,
+                z: 10.1,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.0,
+                y: 0.5,
+                z: 12.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let cloud_b = PointCloud {
         points: vec![
-            PointRecord { x: 2.0, y: 2.0, z: 20.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 2.5, y: 2.0, z: 20.2, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 2.5, z: 22.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 2.0,
+                y: 2.0,
+                z: 20.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.5,
+                y: 2.0,
+                z: 20.2,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 2.5,
+                z: 22.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -15427,7 +19848,11 @@ fn classify_lidar_batch_mode_without_input_processes_tiles() {
     std::env::set_current_dir(&old_cwd).expect("restore current dir");
 
     assert_eq!(res.outputs.get("__wbw_type__"), Some(&json!("lidar")));
-    let p = res.outputs.get("path").and_then(|v| v.as_str()).expect("placeholder path");
+    let p = res
+        .outputs
+        .get("path")
+        .and_then(|v| v.as_str())
+        .expect("placeholder path");
     assert!(std::path::Path::new(p).exists());
 
     let _ = std::fs::remove_dir_all(&batch_dir);
@@ -15449,16 +19874,38 @@ fn lidar_phase2_next_batch_subset_clip_erase_end_to_end() {
 
     let base = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 10.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 12.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 5.0, y: 5.0, z: 15.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 10.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 12.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 5.0,
+                y: 5.0,
+                z: 15.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     let subset = PointCloud {
-        points: vec![
-            PointRecord { x: 1.0, y: 1.0, z: 12.0, classification: 1, ..PointRecord::default() },
-        ],
+        points: vec![PointRecord {
+            x: 1.0,
+            y: 1.0,
+            z: 12.0,
+            classification: 1,
+            ..PointRecord::default()
+        }],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     base.write(&base_path).expect("write base cloud");
@@ -15479,23 +19926,48 @@ fn lidar_phase2_next_batch_subset_clip_erase_end_to_end() {
     wbvector::write(&layer, &poly_path, VectorFormat::GeoJson).expect("write polygon vector");
 
     let mut subset_args = ToolArgs::new();
-    subset_args.insert("base".to_string(), json!(base_path.to_string_lossy().to_string()));
-    subset_args.insert("subset".to_string(), json!(subset_path.to_string_lossy().to_string()));
+    subset_args.insert(
+        "base".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    subset_args.insert(
+        "subset".to_string(),
+        json!(subset_path.to_string_lossy().to_string()),
+    );
     subset_args.insert("subset_class_value".to_string(), json!(6));
     subset_args.insert("nonsubset_class_value".to_string(), json!(1));
     subset_args.insert("tolerance".to_string(), json!(0.001));
-    subset_args.insert("output".to_string(), json!(subset_out.to_string_lossy().to_string()));
+    subset_args.insert(
+        "output".to_string(),
+        json!(subset_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_classify_subset", &subset_args, &context(&caps))
         .expect("lidar_classify_subset run");
     let subset_result = PointCloud::read(&subset_out).expect("read subset output");
     assert_eq!(subset_result.points.len(), 3);
-    assert_eq!(subset_result.points.iter().filter(|p| p.classification == 6).count(), 1);
+    assert_eq!(
+        subset_result
+            .points
+            .iter()
+            .filter(|p| p.classification == 6)
+            .count(),
+        1
+    );
 
     let mut clip_args = ToolArgs::new();
-    clip_args.insert("input".to_string(), json!(base_path.to_string_lossy().to_string()));
-    clip_args.insert("polygons".to_string(), json!(poly_path.to_string_lossy().to_string()));
-    clip_args.insert("output".to_string(), json!(clip_out.to_string_lossy().to_string()));
+    clip_args.insert(
+        "input".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    clip_args.insert(
+        "polygons".to_string(),
+        json!(poly_path.to_string_lossy().to_string()),
+    );
+    clip_args.insert(
+        "output".to_string(),
+        json!(clip_out.to_string_lossy().to_string()),
+    );
     registry
         .run("clip_lidar_to_polygon", &clip_args, &context(&caps))
         .expect("clip_lidar_to_polygon run");
@@ -15504,9 +19976,18 @@ fn lidar_phase2_next_batch_subset_clip_erase_end_to_end() {
     assert!(clipped.points.iter().all(|p| p.x <= 2.0 && p.y <= 2.0));
 
     let mut erase_args = ToolArgs::new();
-    erase_args.insert("input".to_string(), json!(base_path.to_string_lossy().to_string()));
-    erase_args.insert("polygons".to_string(), json!(poly_path.to_string_lossy().to_string()));
-    erase_args.insert("output".to_string(), json!(erase_out.to_string_lossy().to_string()));
+    erase_args.insert(
+        "input".to_string(),
+        json!(base_path.to_string_lossy().to_string()),
+    );
+    erase_args.insert(
+        "polygons".to_string(),
+        json!(poly_path.to_string_lossy().to_string()),
+    );
+    erase_args.insert(
+        "output".to_string(),
+        json!(erase_out.to_string_lossy().to_string()),
+    );
     registry
         .run("erase_polygon_from_lidar", &erase_args, &context(&caps))
         .expect("erase_polygon_from_lidar run");
@@ -15537,21 +20018,66 @@ fn lidar_phase2_next_batch_overlap_segmentation_tools_end_to_end() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.1, y: 0.1, z: 10.0, classification: 1, point_source_id: 1, scan_angle: 5, gps_time: Some(GpsTime(1.0)), ..PointRecord::default() },
-            PointRecord { x: 0.2, y: 0.1, z: 10.1, classification: 1, point_source_id: 2, scan_angle: 18, gps_time: Some(GpsTime(2.0)), ..PointRecord::default() },
-            PointRecord { x: 2.0, y: 2.0, z: 11.0, classification: 1, point_source_id: 1, scan_angle: 2, gps_time: Some(GpsTime(3.0)), ..PointRecord::default() },
-            PointRecord { x: 2.2, y: 2.1, z: 11.2, classification: 1, point_source_id: 1, scan_angle: 1, gps_time: Some(GpsTime(4.0)), ..PointRecord::default() },
+            PointRecord {
+                x: 0.1,
+                y: 0.1,
+                z: 10.0,
+                classification: 1,
+                point_source_id: 1,
+                scan_angle: 5,
+                gps_time: Some(GpsTime(1.0)),
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.2,
+                y: 0.1,
+                z: 10.1,
+                classification: 1,
+                point_source_id: 2,
+                scan_angle: 18,
+                gps_time: Some(GpsTime(2.0)),
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.0,
+                y: 2.0,
+                z: 11.0,
+                classification: 1,
+                point_source_id: 1,
+                scan_angle: 2,
+                gps_time: Some(GpsTime(3.0)),
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.2,
+                y: 2.1,
+                z: 11.2,
+                classification: 1,
+                point_source_id: 1,
+                scan_angle: 1,
+                gps_time: Some(GpsTime(4.0)),
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
     cloud.write(&input_path).expect("write input cloud");
 
     let mut overlap_args = ToolArgs::new();
-    overlap_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    overlap_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     overlap_args.insert("resolution".to_string(), json!(1.0));
-    overlap_args.insert("overlap_criterion".to_string(), json!("multiple point source IDs"));
+    overlap_args.insert(
+        "overlap_criterion".to_string(),
+        json!("multiple point source IDs"),
+    );
     overlap_args.insert("filter".to_string(), json!(false));
-    overlap_args.insert("output".to_string(), json!(overlap_out.to_string_lossy().to_string()));
+    overlap_args.insert(
+        "output".to_string(),
+        json!(overlap_out.to_string_lossy().to_string()),
+    );
     registry
         .run("classify_overlap_points", &overlap_args, &context(&caps))
         .expect("classify_overlap_points classify run");
@@ -15559,23 +20085,43 @@ fn lidar_phase2_next_batch_overlap_segmentation_tools_end_to_end() {
     assert!(overlap_cloud.points.iter().any(|p| p.classification == 12));
 
     let mut overlap_filter_args = ToolArgs::new();
-    overlap_filter_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    overlap_filter_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     overlap_filter_args.insert("resolution".to_string(), json!(1.0));
-    overlap_filter_args.insert("overlap_criterion".to_string(), json!("multiple point source IDs"));
+    overlap_filter_args.insert(
+        "overlap_criterion".to_string(),
+        json!("multiple point source IDs"),
+    );
     overlap_filter_args.insert("filter".to_string(), json!(true));
-    overlap_filter_args.insert("output".to_string(), json!(overlap_filtered_out.to_string_lossy().to_string()));
+    overlap_filter_args.insert(
+        "output".to_string(),
+        json!(overlap_filtered_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("classify_overlap_points", &overlap_filter_args, &context(&caps))
+        .run(
+            "classify_overlap_points",
+            &overlap_filter_args,
+            &context(&caps),
+        )
         .expect("classify_overlap_points filter run");
-    let overlap_filtered_cloud = PointCloud::read(&overlap_filtered_out).expect("read overlap filtered output");
+    let overlap_filtered_cloud =
+        PointCloud::read(&overlap_filtered_out).expect("read overlap filtered output");
     assert!(overlap_filtered_cloud.points.len() < cloud.points.len());
 
     let mut seg_args = ToolArgs::new();
-    seg_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    seg_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     seg_args.insert("search_radius".to_string(), json!(0.5));
     seg_args.insert("max_z_diff".to_string(), json!(0.5));
     seg_args.insert("ground".to_string(), json!(true));
-    seg_args.insert("output".to_string(), json!(seg_out.to_string_lossy().to_string()));
+    seg_args.insert(
+        "output".to_string(),
+        json!(seg_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_segmentation", &seg_args, &context(&caps))
         .expect("lidar_segmentation run");
@@ -15585,13 +20131,23 @@ fn lidar_phase2_next_batch_overlap_segmentation_tools_end_to_end() {
     assert!(seg_cloud.points.iter().any(|p| p.classification == 2));
 
     let mut seg_filter_args = ToolArgs::new();
-    seg_filter_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    seg_filter_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     seg_filter_args.insert("search_radius".to_string(), json!(0.6));
     seg_filter_args.insert("max_z_diff".to_string(), json!(0.3));
     seg_filter_args.insert("classify_points".to_string(), json!(false));
-    seg_filter_args.insert("output".to_string(), json!(seg_filter_out.to_string_lossy().to_string()));
+    seg_filter_args.insert(
+        "output".to_string(),
+        json!(seg_filter_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("lidar_segmentation_based_filter", &seg_filter_args, &context(&caps))
+        .run(
+            "lidar_segmentation_based_filter",
+            &seg_filter_args,
+            &context(&caps),
+        )
         .expect("lidar_segmentation_based_filter run");
     let seg_filter_cloud = PointCloud::read(&seg_filter_out).expect("read seg filter output");
     assert!(seg_filter_cloud.points.len() <= cloud.points.len());
@@ -15654,12 +20210,18 @@ fn lidar_phase2_modify_and_segmentation_hardening_end_to_end() {
     cloud.write(&input_path).expect("write input cloud");
 
     let mut modify_args = ToolArgs::new();
-    modify_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    modify_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     modify_args.insert(
         "statement".to_string(),
         json!("z = z + 1.0; class = if(z > 12.0, 6, class); rgb = (100,200,300)"),
     );
-    modify_args.insert("output".to_string(), json!(modify_out.to_string_lossy().to_string()));
+    modify_args.insert(
+        "output".to_string(),
+        json!(modify_out.to_string_lossy().to_string()),
+    );
     registry
         .run("modify_lidar", &modify_args, &context(&caps))
         .expect("modify_lidar run");
@@ -15671,12 +20233,18 @@ fn lidar_phase2_modify_and_segmentation_hardening_end_to_end() {
     assert_eq!((clr.red, clr.green, clr.blue), (100, 200, 300));
 
     let mut seg_args = ToolArgs::new();
-    seg_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    seg_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     seg_args.insert("search_radius".to_string(), json!(0.5));
     seg_args.insert("max_z_diff".to_string(), json!(0.3));
     seg_args.insert("classes".to_string(), json!(true));
     seg_args.insert("ground".to_string(), json!(true));
-    seg_args.insert("output".to_string(), json!(seg_out.to_string_lossy().to_string()));
+    seg_args.insert(
+        "output".to_string(),
+        json!(seg_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_segmentation", &seg_args, &context(&caps))
         .expect("lidar_segmentation hardening run");
@@ -15686,7 +20254,10 @@ fn lidar_phase2_modify_and_segmentation_hardening_end_to_end() {
     assert!(seg_cloud.points.iter().all(|p| p.color.is_some()));
 
     let mut seg_filter_class_args = ToolArgs::new();
-    seg_filter_class_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    seg_filter_class_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     seg_filter_class_args.insert("search_radius".to_string(), json!(0.6));
     seg_filter_class_args.insert("max_z_diff".to_string(), json!(0.5));
     seg_filter_class_args.insert("classify_points".to_string(), json!(true));
@@ -15704,12 +20275,10 @@ fn lidar_phase2_modify_and_segmentation_hardening_end_to_end() {
     let seg_filter_class_cloud =
         PointCloud::read(&seg_filter_class_out).expect("read seg filter classify output");
     assert_eq!(seg_filter_class_cloud.points.len(), cloud.points.len());
-    assert!(
-        seg_filter_class_cloud
-            .points
-            .iter()
-            .all(|p| p.classification == 1 || p.classification == 2)
-    );
+    assert!(seg_filter_class_cloud
+        .points
+        .iter()
+        .all(|p| p.classification == 1 || p.classification == 2));
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&modify_out);
@@ -15752,18 +20321,32 @@ fn individual_tree_segmentation_is_deterministic_with_fixed_seed() {
         });
     }
     // Non-vegetation points should be ignored by default.
-    points.push(PointRecord { x: 4.0, y: 4.0, z: 0.6, classification: 2, ..PointRecord::default() });
+    points.push(PointRecord {
+        x: 4.0,
+        y: 4.0,
+        z: 0.6,
+        classification: 2,
+        ..PointRecord::default()
+    });
 
     let cloud = PointCloud {
         points,
         crs: Some(LidarCrs::from_epsg(4326)),
     };
-    cloud.write(&input_path).expect("write deterministic input cloud");
+    cloud
+        .write(&input_path)
+        .expect("write deterministic input cloud");
 
     let run_once = |output_path: &std::path::Path| {
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-        args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "output".to_string(),
+            json!(output_path.to_string_lossy().to_string()),
+        );
         args.insert("only_use_veg".to_string(), json!(true));
         args.insert("min_height".to_string(), json!(2.0));
         args.insert("bandwidth_min".to_string(), json!(0.8));
@@ -15793,9 +20376,18 @@ fn individual_tree_segmentation_is_deterministic_with_fixed_seed() {
     for i in 0..first.points.len() {
         let p1 = first.points[i];
         let p2 = second.points[i];
-        assert_eq!(p1.point_source_id, p2.point_source_id, "point_source_id mismatch at index {i}");
-        assert_eq!(p1.user_data, p2.user_data, "user_data mismatch at index {i}");
-        assert_eq!(p1.classification, p2.classification, "classification mismatch at index {i}");
+        assert_eq!(
+            p1.point_source_id, p2.point_source_id,
+            "point_source_id mismatch at index {i}"
+        );
+        assert_eq!(
+            p1.user_data, p2.user_data,
+            "user_data mismatch at index {i}"
+        );
+        assert_eq!(
+            p1.classification, p2.classification,
+            "classification mismatch at index {i}"
+        );
         assert_eq!(p1.color, p2.color, "color mismatch at index {i}");
     }
 
@@ -15847,8 +20439,14 @@ fn individual_tree_segmentation_prunes_tiny_far_cluster() {
     cloud.write(&input_path).expect("write pruning input cloud");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     args.insert("only_use_veg".to_string(), json!(true));
     args.insert("min_height".to_string(), json!(2.0));
     args.insert("bandwidth_min".to_string(), json!(0.8));
@@ -15887,7 +20485,10 @@ fn individual_tree_segmentation_prunes_tiny_far_cluster() {
         }
     }
 
-    assert!(near_assigned >= 40, "expected retained near cluster points to stay assigned");
+    assert!(
+        near_assigned >= 40,
+        "expected retained near cluster points to stay assigned"
+    );
     assert_eq!(far_total, 5, "expected five far tiny-cluster points");
     assert_eq!(
         far_unassigned, far_total,
@@ -15936,11 +20537,19 @@ fn individual_tree_segmentation_tiled_grid_refine_runs_end_to_end() {
         points,
         crs: Some(LidarCrs::from_epsg(4326)),
     };
-    cloud.write(&input_path).expect("write tiled-refine input cloud");
+    cloud
+        .write(&input_path)
+        .expect("write tiled-refine input cloud");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     args.insert("only_use_veg".to_string(), json!(true));
     args.insert("min_height".to_string(), json!(2.0));
     args.insert("bandwidth_min".to_string(), json!(0.8));
@@ -15991,9 +20600,36 @@ fn lidar_phase2_next_batch_colourize_tools_end_to_end() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.5, y: 0.5, z: 10.0, intensity: 10000, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.5, y: 0.5, z: 11.0, intensity: 30000, classification: 6, return_number: 1, number_of_returns: 2, ..PointRecord::default() },
-            PointRecord { x: 2.5, y: 0.5, z: 12.0, intensity: 40000, classification: 5, return_number: 2, number_of_returns: 2, ..PointRecord::default() },
+            PointRecord {
+                x: 0.5,
+                y: 0.5,
+                z: 10.0,
+                intensity: 10000,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.5,
+                y: 0.5,
+                z: 11.0,
+                intensity: 30000,
+                classification: 6,
+                return_number: 1,
+                number_of_returns: 2,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 2.5,
+                y: 0.5,
+                z: 12.0,
+                intensity: 40000,
+                classification: 5,
+                return_number: 2,
+                number_of_returns: 2,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -16012,15 +20648,32 @@ fn lidar_phase2_next_batch_colourize_tools_end_to_end() {
         crs: CrsInfo::from_epsg(4326),
         metadata: Vec::new(),
     });
-    image.set(0, 0, 0, 0x000000FFu32 as f64).expect("set pixel 0"); // red
-    image.set(0, 0, 1, 0x0000FF00u32 as f64).expect("set pixel 1"); // green
-    image.set(0, 0, 2, 0x00FF0000u32 as f64).expect("set pixel 2"); // blue
-    image.write(&image_path, RasterFormat::GeoTiff).expect("write image");
+    image
+        .set(0, 0, 0, 0x000000FFu32 as f64)
+        .expect("set pixel 0"); // red
+    image
+        .set(0, 0, 1, 0x0000FF00u32 as f64)
+        .expect("set pixel 1"); // green
+    image
+        .set(0, 0, 2, 0x00FF0000u32 as f64)
+        .expect("set pixel 2"); // blue
+    image
+        .write(&image_path, RasterFormat::GeoTiff)
+        .expect("write image");
 
     let mut lidar_colourize_args = ToolArgs::new();
-    lidar_colourize_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    lidar_colourize_args.insert("image".to_string(), json!(image_path.to_string_lossy().to_string()));
-    lidar_colourize_args.insert("output".to_string(), json!(lidar_colourize_out.to_string_lossy().to_string()));
+    lidar_colourize_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    lidar_colourize_args.insert(
+        "image".to_string(),
+        json!(image_path.to_string_lossy().to_string()),
+    );
+    lidar_colourize_args.insert(
+        "output".to_string(),
+        json!(lidar_colourize_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_colourize", &lidar_colourize_args, &context(&caps))
         .expect("lidar_colourize run");
@@ -16028,14 +20681,25 @@ fn lidar_phase2_next_batch_colourize_tools_end_to_end() {
     assert!(coloured.points.iter().all(|p| p.color.is_some()));
 
     let mut class_colourize_args = ToolArgs::new();
-    class_colourize_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    class_colourize_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     class_colourize_args.insert("intensity_blending_amount".to_string(), json!(0.0));
     class_colourize_args.insert("clr_str".to_string(), json!("2:(10,20,30);6:#ff0000"));
-    class_colourize_args.insert("output".to_string(), json!(class_colourize_out.to_string_lossy().to_string()));
+    class_colourize_args.insert(
+        "output".to_string(),
+        json!(class_colourize_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("colourize_based_on_class", &class_colourize_args, &context(&caps))
+        .run(
+            "colourize_based_on_class",
+            &class_colourize_args,
+            &context(&caps),
+        )
         .expect("colourize_based_on_class run");
-    let class_coloured = PointCloud::read(&class_colourize_out).expect("read class colourized output");
+    let class_coloured =
+        PointCloud::read(&class_colourize_out).expect("read class colourized output");
     assert!(class_coloured.points.iter().all(|p| p.color.is_some()));
     let c0 = class_coloured.points[0].color.expect("point 0 colour");
     assert_eq!(c0.red / 257, 10);
@@ -16043,24 +20707,50 @@ fn lidar_phase2_next_batch_colourize_tools_end_to_end() {
     assert_eq!(c0.blue / 257, 30);
 
     let mut returns_colourize_args = ToolArgs::new();
-    returns_colourize_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    returns_colourize_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     returns_colourize_args.insert("intensity_blending_amount".to_string(), json!(0.0));
     returns_colourize_args.insert("only_ret_colour".to_string(), json!("(1,2,3)"));
     returns_colourize_args.insert("first_ret_colour".to_string(), json!("(4,5,6)"));
     returns_colourize_args.insert("intermediate_ret_colour".to_string(), json!("(7,8,9)"));
     returns_colourize_args.insert("last_ret_colour".to_string(), json!("(11,12,13)"));
-    returns_colourize_args.insert("output".to_string(), json!(returns_colourize_out.to_string_lossy().to_string()));
+    returns_colourize_args.insert(
+        "output".to_string(),
+        json!(returns_colourize_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("colourize_based_on_point_returns", &returns_colourize_args, &context(&caps))
+        .run(
+            "colourize_based_on_point_returns",
+            &returns_colourize_args,
+            &context(&caps),
+        )
         .expect("colourize_based_on_point_returns run");
-    let returns_coloured = PointCloud::read(&returns_colourize_out).expect("read returns colourized output");
+    let returns_coloured =
+        PointCloud::read(&returns_colourize_out).expect("read returns colourized output");
     assert!(returns_coloured.points.iter().all(|p| p.color.is_some()));
-    let only = returns_coloured.points[0].color.expect("only return colour");
-    let first = returns_coloured.points[1].color.expect("first return colour");
-    let last = returns_coloured.points[2].color.expect("last return colour");
-    assert_eq!((only.red / 257, only.green / 257, only.blue / 257), (1, 2, 3));
-    assert_eq!((first.red / 257, first.green / 257, first.blue / 257), (4, 5, 6));
-    assert_eq!((last.red / 257, last.green / 257, last.blue / 257), (11, 12, 13));
+    let only = returns_coloured.points[0]
+        .color
+        .expect("only return colour");
+    let first = returns_coloured.points[1]
+        .color
+        .expect("first return colour");
+    let last = returns_coloured.points[2]
+        .color
+        .expect("last return colour");
+    assert_eq!(
+        (only.red / 257, only.green / 257, only.blue / 257),
+        (1, 2, 3)
+    );
+    assert_eq!(
+        (first.red / 257, first.green / 257, first.blue / 257),
+        (4, 5, 6)
+    );
+    assert_eq!(
+        (last.red / 257, last.green / 257, last.blue / 257),
+        (11, 12, 13)
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&image_path);
@@ -16087,8 +20777,20 @@ fn lidar_phase2_next_batch_building_and_ascii_tools_end_to_end() {
 
     let cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.5, y: 0.5, z: 10.0, classification: 1, ..PointRecord::default() },
-            PointRecord { x: 3.0, y: 3.0, z: 11.0, classification: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.5,
+                y: 0.5,
+                z: 10.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 3.0,
+                y: 3.0,
+                z: 11.0,
+                classification: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -16109,11 +20811,24 @@ fn lidar_phase2_next_batch_building_and_ascii_tools_end_to_end() {
     wbvector::write(&layer, &poly_path, VectorFormat::GeoJson).expect("write building polygons");
 
     let mut classify_args = ToolArgs::new();
-    classify_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    classify_args.insert("buildings".to_string(), json!(poly_path.to_string_lossy().to_string()));
-    classify_args.insert("output".to_string(), json!(classify_out.to_string_lossy().to_string()));
+    classify_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    classify_args.insert(
+        "buildings".to_string(),
+        json!(poly_path.to_string_lossy().to_string()),
+    );
+    classify_args.insert(
+        "output".to_string(),
+        json!(classify_out.to_string_lossy().to_string()),
+    );
     registry
-        .run("classify_buildings_in_lidar", &classify_args, &context(&caps))
+        .run(
+            "classify_buildings_in_lidar",
+            &classify_args,
+            &context(&caps),
+        )
         .expect("classify_buildings_in_lidar run");
     let classified = PointCloud::read(&classify_out).expect("read classify output");
     assert_eq!(classified.points.len(), 2);
@@ -16132,7 +20847,10 @@ fn lidar_phase2_next_batch_building_and_ascii_tools_end_to_end() {
         "inputs".to_string(),
         json!([ascii_in.to_string_lossy().to_string()]),
     );
-    ascii_to_las_args.insert("pattern".to_string(), json!("x,y,z,i,c,rn,nr,sa,time,r,g,b"));
+    ascii_to_las_args.insert(
+        "pattern".to_string(),
+        json!("x,y,z,i,c,rn,nr,sa,time,r,g,b"),
+    );
     ascii_to_las_args.insert("epsg_code".to_string(), json!(4326));
     ascii_to_las_args.insert(
         "output_directory".to_string(),
@@ -16149,8 +20867,14 @@ fn lidar_phase2_next_batch_building_and_ascii_tools_end_to_end() {
     assert!(ascii_las_cloud.points[0].color.is_some());
 
     let mut las_to_ascii_args = ToolArgs::new();
-    las_to_ascii_args.insert("input".to_string(), json!(las_from_ascii.to_string_lossy().to_string()));
-    las_to_ascii_args.insert("output".to_string(), json!(las_to_ascii_out.to_string_lossy().to_string()));
+    las_to_ascii_args.insert(
+        "input".to_string(),
+        json!(las_from_ascii.to_string_lossy().to_string()),
+    );
+    las_to_ascii_args.insert(
+        "output".to_string(),
+        json!(las_to_ascii_out.to_string_lossy().to_string()),
+    );
     let las_to_ascii_result = registry
         .run("las_to_ascii", &las_to_ascii_args, &context(&caps))
         .expect("las_to_ascii run");
@@ -16161,7 +20885,11 @@ fn lidar_phase2_next_batch_building_and_ascii_tools_end_to_end() {
         .expect("las_to_ascii output string");
     assert_eq!(output_csv, las_to_ascii_out.to_string_lossy().to_string());
     let csv_text = std::fs::read_to_string(&las_to_ascii_out).expect("read las_to_ascii output");
-    assert!(csv_text.lines().next().unwrap_or_default().contains("X,Y,Z"));
+    assert!(csv_text
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .contains("X,Y,Z"));
     assert!(csv_text.lines().count() >= 3);
 
     let _ = std::fs::remove_file(&input_path);
@@ -16189,8 +20917,18 @@ fn lidar_phase2_next_batch_select_tiles_by_polygon_end_to_end() {
 
     let inside_cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.1, y: 0.1, z: 10.0, ..PointRecord::default() },
-            PointRecord { x: 0.4, y: 0.4, z: 11.0, ..PointRecord::default() },
+            PointRecord {
+                x: 0.1,
+                y: 0.1,
+                z: 10.0,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.4,
+                y: 0.4,
+                z: 11.0,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
@@ -16198,12 +20936,24 @@ fn lidar_phase2_next_batch_select_tiles_by_polygon_end_to_end() {
 
     let outside_cloud = PointCloud {
         points: vec![
-            PointRecord { x: 10.0, y: 10.0, z: 10.0, ..PointRecord::default() },
-            PointRecord { x: 10.5, y: 10.5, z: 11.0, ..PointRecord::default() },
+            PointRecord {
+                x: 10.0,
+                y: 10.0,
+                z: 10.0,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 10.5,
+                y: 10.5,
+                z: 11.0,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
-    outside_cloud.write(&tile_outside).expect("write outside tile");
+    outside_cloud
+        .write(&tile_outside)
+        .expect("write outside tile");
 
     let mut layer = Layer::new("poly").with_geom_type(GeometryType::Polygon);
     let mut feature = Feature::new();
@@ -16228,7 +20978,10 @@ fn lidar_phase2_next_batch_select_tiles_by_polygon_end_to_end() {
         "output_directory".to_string(),
         json!(out_dir.to_string_lossy().to_string()),
     );
-    args.insert("polygons".to_string(), json!(poly_path.to_string_lossy().to_string()));
+    args.insert(
+        "polygons".to_string(),
+        json!(poly_path.to_string_lossy().to_string()),
+    );
 
     let res = registry
         .run("select_tiles_by_polygon", &args, &context(&caps))
@@ -16308,8 +21061,14 @@ fn lidar_phase3_info_histogram_point_stats_end_to_end() {
     cloud.write(&input_path).expect("write input cloud");
 
     let mut info_args = ToolArgs::new();
-    info_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    info_args.insert("output".to_string(), json!(info_out.to_string_lossy().to_string()));
+    info_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    info_args.insert(
+        "output".to_string(),
+        json!(info_out.to_string_lossy().to_string()),
+    );
     let info_res = registry
         .run("lidar_info", &info_args, &context(&caps))
         .expect("lidar_info run");
@@ -16322,8 +21081,14 @@ fn lidar_phase3_info_histogram_point_stats_end_to_end() {
     assert!(info_out.exists());
 
     let mut hist_args = ToolArgs::new();
-    hist_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    hist_args.insert("output".to_string(), json!(hist_out.to_string_lossy().to_string()));
+    hist_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    hist_args.insert(
+        "output".to_string(),
+        json!(hist_out.to_string_lossy().to_string()),
+    );
     hist_args.insert("parameter".to_string(), json!("intensity"));
     hist_args.insert("clip_percent".to_string(), json!(1.0));
     let hist_res = registry
@@ -16339,7 +21104,10 @@ fn lidar_phase3_info_histogram_point_stats_end_to_end() {
 
     std::fs::create_dir_all(&stats_out_dir).expect("create stats output dir");
     let mut stats_args = ToolArgs::new();
-    stats_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    stats_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     stats_args.insert("resolution".to_string(), json!(1.0));
     stats_args.insert("num_points".to_string(), json!(true));
     stats_args.insert("z_range".to_string(), json!(true));
@@ -16437,8 +21205,14 @@ fn lidar_phase3_vector_tools_end_to_end() {
     cloud.write(&input_path).expect("write input cloud");
 
     let mut contour_args = ToolArgs::new();
-    contour_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    contour_args.insert("output".to_string(), json!(contour_out.to_string_lossy().to_string()));
+    contour_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    contour_args.insert(
+        "output".to_string(),
+        json!(contour_out.to_string_lossy().to_string()),
+    );
     contour_args.insert("interval".to_string(), json!(2.0));
     contour_args.insert("base_contour".to_string(), json!(0.0));
     let contour_res = registry
@@ -16455,8 +21229,14 @@ fn lidar_phase3_vector_tools_end_to_end() {
     assert!(!contour_layer.features.is_empty());
 
     let mut footprint_args = ToolArgs::new();
-    footprint_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    footprint_args.insert("output".to_string(), json!(footprint_out.to_string_lossy().to_string()));
+    footprint_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    footprint_args.insert(
+        "output".to_string(),
+        json!(footprint_out.to_string_lossy().to_string()),
+    );
     footprint_args.insert("output_hulls".to_string(), json!(true));
     let footprint_res = registry
         .run("lidar_tile_footprint", &footprint_args, &context(&caps))
@@ -16472,8 +21252,14 @@ fn lidar_phase3_vector_tools_end_to_end() {
     assert_eq!(footprint_layer.features.len(), 1);
 
     let mut points_args = ToolArgs::new();
-    points_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    points_args.insert("output".to_string(), json!(points_out.to_string_lossy().to_string()));
+    points_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    points_args.insert(
+        "output".to_string(),
+        json!(points_out.to_string_lossy().to_string()),
+    );
     points_args.insert("output_multipoint".to_string(), json!(false));
     let points_res = registry
         .run("las_to_shapefile", &points_args, &context(&caps))
@@ -16570,8 +21356,14 @@ fn lidar_phase3_construct_hex_return_analysis_end_to_end() {
     cloud.write(&input_path).expect("write input cloud");
 
     let mut tin_args = ToolArgs::new();
-    tin_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    tin_args.insert("output".to_string(), json!(tin_out.to_string_lossy().to_string()));
+    tin_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    tin_args.insert(
+        "output".to_string(),
+        json!(tin_out.to_string_lossy().to_string()),
+    );
     tin_args.insert("returns".to_string(), json!("all"));
     let tin_res = registry
         .run("lidar_construct_vector_tin", &tin_args, &context(&caps))
@@ -16585,8 +21377,14 @@ fn lidar_phase3_construct_hex_return_analysis_end_to_end() {
     assert!(tin_out.exists());
 
     let mut hex_args = ToolArgs::new();
-    hex_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    hex_args.insert("output".to_string(), json!(hex_out.to_string_lossy().to_string()));
+    hex_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    hex_args.insert(
+        "output".to_string(),
+        json!(hex_out.to_string_lossy().to_string()),
+    );
     hex_args.insert("width".to_string(), json!(1.0));
     hex_args.insert("orientation".to_string(), json!("h"));
     let hex_res = registry
@@ -16601,10 +21399,19 @@ fn lidar_phase3_construct_hex_return_analysis_end_to_end() {
     assert!(hex_out.exists());
 
     let mut ra_args = ToolArgs::new();
-    ra_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    ra_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     ra_args.insert("create_output".to_string(), json!(true));
-    ra_args.insert("output".to_string(), json!(qc_out.to_string_lossy().to_string()));
-    ra_args.insert("report".to_string(), json!(report_out.to_string_lossy().to_string()));
+    ra_args.insert(
+        "output".to_string(),
+        json!(qc_out.to_string_lossy().to_string()),
+    );
+    ra_args.insert(
+        "report".to_string(),
+        json!(report_out.to_string_lossy().to_string()),
+    );
     let ra_res = registry
         .run("lidar_point_return_analysis", &ra_args, &context(&caps))
         .expect("lidar_point_return_analysis run");
@@ -16686,9 +21493,15 @@ fn lidar_phase3_flightline_tools_end_to_end() {
     cloud.write(&input_path).expect("write input cloud");
 
     let mut overlap_args = ToolArgs::new();
-    overlap_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    overlap_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     overlap_args.insert("resolution".to_string(), json!(1.0));
-    overlap_args.insert("output".to_string(), json!(overlap_out.to_string_lossy().to_string()));
+    overlap_args.insert(
+        "output".to_string(),
+        json!(overlap_out.to_string_lossy().to_string()),
+    );
     let overlap_res = registry
         .run("flightline_overlap", &overlap_args, &context(&caps))
         .expect("flightline_overlap run");
@@ -16709,12 +21522,18 @@ fn lidar_phase3_flightline_tools_end_to_end() {
     assert_eq!(overlap_max, 2.0);
 
     let mut recover_args = ToolArgs::new();
-    recover_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    recover_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     recover_args.insert("max_time_diff".to_string(), json!(5.0));
     recover_args.insert("pt_src_id".to_string(), json!(true));
     recover_args.insert("user_data".to_string(), json!(true));
     recover_args.insert("rgb".to_string(), json!(true));
-    recover_args.insert("output".to_string(), json!(recover_out.to_string_lossy().to_string()));
+    recover_args.insert(
+        "output".to_string(),
+        json!(recover_out.to_string_lossy().to_string()),
+    );
     let recover_res = registry
         .run("recover_flightline_info", &recover_args, &context(&caps))
         .expect("recover_flightline_info run");
@@ -16734,8 +21553,14 @@ fn lidar_phase3_flightline_tools_end_to_end() {
     assert_eq!(recovered.points[2].user_data, 1);
 
     let mut edge_args = ToolArgs::new();
-    edge_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    edge_args.insert("output".to_string(), json!(edge_out.to_string_lossy().to_string()));
+    edge_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    edge_args.insert(
+        "output".to_string(),
+        json!(edge_out.to_string_lossy().to_string()),
+    );
     let edge_res = registry
         .run("find_flightline_edge_points", &edge_args, &context(&caps))
         .expect("find_flightline_edge_points run");
@@ -16802,7 +21627,9 @@ fn lidar_phase3_analysis_tools_end_to_end() {
         points: analysis_points,
         crs: Some(LidarCrs::from_epsg(4326)),
     };
-    analysis_cloud.write(&analysis_in).expect("write analysis cloud");
+    analysis_cloud
+        .write(&analysis_in)
+        .expect("write analysis cloud");
     let rooftop_cloud = PointCloud {
         points: (0..4)
             .flat_map(|row| {
@@ -16819,28 +21646,98 @@ fn lidar_phase3_analysis_tools_end_to_end() {
             .collect(),
         crs: Some(LidarCrs::from_epsg(4326)),
     };
-    rooftop_cloud.write(&rooftop_in).expect("write rooftop cloud");
+    rooftop_cloud
+        .write(&rooftop_in)
+        .expect("write rooftop cloud");
 
     let class_cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 0.0, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 0.0, z: 0.0, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.0, y: 1.0, z: 0.0, classification: 6, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 0.0, classification: 6, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+                classification: 6,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 0.0,
+                classification: 6,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
-    class_cloud.write(&class_in).expect("write classified cloud");
+    class_cloud
+        .write(&class_in)
+        .expect("write classified cloud");
     let reference_cloud = PointCloud {
         points: vec![
-            PointRecord { x: 0.0, y: 0.0, z: 0.0, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 0.0, z: 0.0, classification: 2, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 0.0, y: 1.0, z: 0.0, classification: 6, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
-            PointRecord { x: 1.0, y: 1.0, z: 0.0, classification: 1, return_number: 1, number_of_returns: 1, ..PointRecord::default() },
+            PointRecord {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+                classification: 2,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+                classification: 6,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
+            PointRecord {
+                x: 1.0,
+                y: 1.0,
+                z: 0.0,
+                classification: 1,
+                return_number: 1,
+                number_of_returns: 1,
+                ..PointRecord::default()
+            },
         ],
         crs: Some(LidarCrs::from_epsg(4326)),
     };
-    reference_cloud.write(&reference_in).expect("write reference cloud");
+    reference_cloud
+        .write(&reference_in)
+        .expect("write reference cloud");
 
     let mut buildings = Layer::new("buildings")
         .with_geom_type(GeometryType::Polygon)
@@ -16863,20 +21760,36 @@ fn lidar_phase3_analysis_tools_end_to_end() {
     wbvector::write(&buildings, &buildings_path, VectorFormat::GeoJson).expect("write buildings");
 
     let mut tophat_args = ToolArgs::new();
-    tophat_args.insert("input".to_string(), json!(analysis_in.to_string_lossy().to_string()));
+    tophat_args.insert(
+        "input".to_string(),
+        json!(analysis_in.to_string_lossy().to_string()),
+    );
     tophat_args.insert("search_radius".to_string(), json!(1.6));
-    tophat_args.insert("output".to_string(), json!(top_hat_out.to_string_lossy().to_string()));
+    tophat_args.insert(
+        "output".to_string(),
+        json!(top_hat_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_tophat_transform", &tophat_args, &context(&caps))
         .expect("lidar_tophat_transform run");
     let tophat_cloud = PointCloud::read(&top_hat_out).expect("read tophat output");
-    let max_tophat = tophat_cloud.points.iter().map(|p| p.z).fold(f64::NEG_INFINITY, f64::max);
+    let max_tophat = tophat_cloud
+        .points
+        .iter()
+        .map(|p| p.z)
+        .fold(f64::NEG_INFINITY, f64::max);
     assert!(max_tophat > 1.0);
 
     let mut normal_args = ToolArgs::new();
-    normal_args.insert("input".to_string(), json!(analysis_in.to_string_lossy().to_string()));
+    normal_args.insert(
+        "input".to_string(),
+        json!(analysis_in.to_string_lossy().to_string()),
+    );
     normal_args.insert("search_radius".to_string(), json!(1.6));
-    normal_args.insert("output".to_string(), json!(normals_out.to_string_lossy().to_string()));
+    normal_args.insert(
+        "output".to_string(),
+        json!(normals_out.to_string_lossy().to_string()),
+    );
     registry
         .run("normal_vectors", &normal_args, &context(&caps))
         .expect("normal_vectors run");
@@ -16884,10 +21797,16 @@ fn lidar_phase3_analysis_tools_end_to_end() {
     assert!(normals_cloud.points.iter().any(|p| p.color.is_some()));
 
     let mut eigen_args = ToolArgs::new();
-    eigen_args.insert("input".to_string(), json!(analysis_in.to_string_lossy().to_string()));
+    eigen_args.insert(
+        "input".to_string(),
+        json!(analysis_in.to_string_lossy().to_string()),
+    );
     eigen_args.insert("num_neighbours".to_string(), json!(7));
     eigen_args.insert("search_radius".to_string(), json!(2.0));
-    eigen_args.insert("output".to_string(), json!(eigen_out.to_string_lossy().to_string()));
+    eigen_args.insert(
+        "output".to_string(),
+        json!(eigen_out.to_string_lossy().to_string()),
+    );
     let eigen_res = registry
         .run("lidar_eigenvalue_features", &eigen_args, &context(&caps))
         .expect("lidar_eigenvalue_features run");
@@ -16901,27 +21820,52 @@ fn lidar_phase3_analysis_tools_end_to_end() {
     assert!(std::path::PathBuf::from(format!("{}.json", eigen_out.to_string_lossy())).exists());
 
     let mut ransac_args = ToolArgs::new();
-    ransac_args.insert("input".to_string(), json!(analysis_in.to_string_lossy().to_string()));
+    ransac_args.insert(
+        "input".to_string(),
+        json!(analysis_in.to_string_lossy().to_string()),
+    );
     ransac_args.insert("search_radius".to_string(), json!(1.6));
     ransac_args.insert("num_iterations".to_string(), json!(25));
     ransac_args.insert("num_samples".to_string(), json!(3));
     ransac_args.insert("inlier_threshold".to_string(), json!(0.2));
     ransac_args.insert("acceptable_model_size".to_string(), json!(5));
     ransac_args.insert("classify".to_string(), json!(true));
-    ransac_args.insert("output".to_string(), json!(ransac_out.to_string_lossy().to_string()));
+    ransac_args.insert(
+        "output".to_string(),
+        json!(ransac_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_ransac_planes", &ransac_args, &context(&caps))
         .expect("lidar_ransac_planes run");
     let ransac_cloud = PointCloud::read(&ransac_out).expect("read ransac output");
     assert_eq!(ransac_cloud.points.len(), 17);
-    assert!(ransac_cloud.points.iter().filter(|p| p.classification == 0).count() >= 8);
+    assert!(
+        ransac_cloud
+            .points
+            .iter()
+            .filter(|p| p.classification == 0)
+            .count()
+            >= 8
+    );
 
     let mut kappa_args = ToolArgs::new();
-    kappa_args.insert("input1".to_string(), json!(class_in.to_string_lossy().to_string()));
-    kappa_args.insert("input2".to_string(), json!(reference_in.to_string_lossy().to_string()));
-    kappa_args.insert("report".to_string(), json!(kappa_report.to_string_lossy().to_string()));
+    kappa_args.insert(
+        "input1".to_string(),
+        json!(class_in.to_string_lossy().to_string()),
+    );
+    kappa_args.insert(
+        "input2".to_string(),
+        json!(reference_in.to_string_lossy().to_string()),
+    );
+    kappa_args.insert(
+        "report".to_string(),
+        json!(kappa_report.to_string_lossy().to_string()),
+    );
     kappa_args.insert("resolution".to_string(), json!(1.0));
-    kappa_args.insert("output".to_string(), json!(kappa_out.to_string_lossy().to_string()));
+    kappa_args.insert(
+        "output".to_string(),
+        json!(kappa_out.to_string_lossy().to_string()),
+    );
     registry
         .run("lidar_kappa", &kappa_args, &context(&caps))
         .expect("lidar_kappa run");
@@ -16931,15 +21875,24 @@ fn lidar_phase3_analysis_tools_end_to_end() {
     assert!(report_html.contains("Kappa"));
 
     let mut rooftop_args = ToolArgs::new();
-    rooftop_args.insert("inputs".to_string(), json!([rooftop_in.to_string_lossy().to_string()]));
-    rooftop_args.insert("building_footprints".to_string(), json!(buildings_path.to_string_lossy().to_string()));
+    rooftop_args.insert(
+        "inputs".to_string(),
+        json!([rooftop_in.to_string_lossy().to_string()]),
+    );
+    rooftop_args.insert(
+        "building_footprints".to_string(),
+        json!(buildings_path.to_string_lossy().to_string()),
+    );
     rooftop_args.insert("search_radius".to_string(), json!(3.0));
     rooftop_args.insert("num_iterations".to_string(), json!(25));
     rooftop_args.insert("num_samples".to_string(), json!(3));
     rooftop_args.insert("inlier_threshold".to_string(), json!(0.2));
     rooftop_args.insert("acceptable_model_size".to_string(), json!(5));
     rooftop_args.insert("norm_diff_threshold".to_string(), json!(15.0));
-    rooftop_args.insert("output".to_string(), json!(rooftops_out.to_string_lossy().to_string()));
+    rooftop_args.insert(
+        "output".to_string(),
+        json!(rooftops_out.to_string_lossy().to_string()),
+    );
     let rooftop_res = registry
         .run("lidar_rooftop_analysis", &rooftop_args, &context(&caps))
         .expect("lidar_rooftop_analysis run");
@@ -16951,7 +21904,11 @@ fn lidar_phase3_analysis_tools_end_to_end() {
     assert_eq!(rooftop_path, rooftops_out.to_string_lossy().to_string());
     let rooftops = wbvector::read(&rooftops_out).expect("read rooftop output");
     assert!(!rooftops.features.is_empty());
-    match rooftops.features[0].geometry.as_ref().expect("rooftop geometry") {
+    match rooftops.features[0]
+        .geometry
+        .as_ref()
+        .expect("rooftop geometry")
+    {
         Geometry::Polygon { .. } => {}
         _ => panic!("rooftop output should be polygon geometry"),
     }
@@ -16987,7 +21944,9 @@ fn spatial_join_supports_aggregate_strategies() {
     let out_min_path = std::env::temp_dir().join(format!("{tag}_min.geojson"));
     let out_max_path = std::env::temp_dir().join(format!("{tag}_max.geojson"));
 
-    let mut target = Layer::new("target").with_geom_type(GeometryType::Point).with_epsg(4326);
+    let mut target = Layer::new("target")
+        .with_geom_type(GeometryType::Point)
+        .with_epsg(4326);
     target.add_field(FieldDef::new("ID", FieldType::Integer));
     target
         .add_feature(
@@ -16997,63 +21956,105 @@ fn spatial_join_supports_aggregate_strategies() {
         .expect("add target point");
     wbvector::write(&target, &target_path, VectorFormat::GeoJson).expect("write target");
 
-    let mut join = Layer::new("join").with_geom_type(GeometryType::Point).with_epsg(4326);
+    let mut join = Layer::new("join")
+        .with_geom_type(GeometryType::Point)
+        .with_epsg(4326);
     join.add_field(FieldDef::new("VAL", FieldType::Float));
     join.add_field(FieldDef::new("NAME", FieldType::Text));
-    join
-        .add_feature(
-            Some(Geometry::Point(Coord::xy(0.0, 0.0))),
-            &[("VAL", FieldValue::Float(2.0)), ("NAME", FieldValue::Text("a".to_string()))],
-        )
-        .expect("add join point 1");
-    join
-        .add_feature(
-            Some(Geometry::Point(Coord::xy(0.0, 0.0))),
-            &[("VAL", FieldValue::Float(4.0)), ("NAME", FieldValue::Text("b".to_string()))],
-        )
-        .expect("add join point 2");
+    join.add_feature(
+        Some(Geometry::Point(Coord::xy(0.0, 0.0))),
+        &[
+            ("VAL", FieldValue::Float(2.0)),
+            ("NAME", FieldValue::Text("a".to_string())),
+        ],
+    )
+    .expect("add join point 1");
+    join.add_feature(
+        Some(Geometry::Point(Coord::xy(0.0, 0.0))),
+        &[
+            ("VAL", FieldValue::Float(4.0)),
+            ("NAME", FieldValue::Text("b".to_string())),
+        ],
+    )
+    .expect("add join point 2");
     wbvector::write(&join, &join_path, VectorFormat::GeoJson).expect("write join");
 
     let mut sum_args = ToolArgs::new();
-    sum_args.insert("target".to_string(), json!(target_path.to_string_lossy().to_string()));
-    sum_args.insert("join".to_string(), json!(join_path.to_string_lossy().to_string()));
+    sum_args.insert(
+        "target".to_string(),
+        json!(target_path.to_string_lossy().to_string()),
+    );
+    sum_args.insert(
+        "join".to_string(),
+        json!(join_path.to_string_lossy().to_string()),
+    );
     sum_args.insert("predicate".to_string(), json!("intersects"));
     sum_args.insert("strategy".to_string(), json!("sum"));
     sum_args.insert("prefix".to_string(), json!("J_"));
-    sum_args.insert("output".to_string(), json!(out_sum_path.to_string_lossy().to_string()));
+    sum_args.insert(
+        "output".to_string(),
+        json!(out_sum_path.to_string_lossy().to_string()),
+    );
     registry
         .run("spatial_join", &sum_args, &context(&caps))
         .expect("spatial_join sum strategy run");
 
     let mut mean_args = ToolArgs::new();
-    mean_args.insert("target".to_string(), json!(target_path.to_string_lossy().to_string()));
-    mean_args.insert("join".to_string(), json!(join_path.to_string_lossy().to_string()));
+    mean_args.insert(
+        "target".to_string(),
+        json!(target_path.to_string_lossy().to_string()),
+    );
+    mean_args.insert(
+        "join".to_string(),
+        json!(join_path.to_string_lossy().to_string()),
+    );
     mean_args.insert("predicate".to_string(), json!("intersects"));
     mean_args.insert("strategy".to_string(), json!("mean"));
     mean_args.insert("prefix".to_string(), json!("J_"));
-    mean_args.insert("output".to_string(), json!(out_mean_path.to_string_lossy().to_string()));
+    mean_args.insert(
+        "output".to_string(),
+        json!(out_mean_path.to_string_lossy().to_string()),
+    );
     registry
         .run("spatial_join", &mean_args, &context(&caps))
         .expect("spatial_join mean strategy run");
 
     let mut min_args = ToolArgs::new();
-    min_args.insert("target".to_string(), json!(target_path.to_string_lossy().to_string()));
-    min_args.insert("join".to_string(), json!(join_path.to_string_lossy().to_string()));
+    min_args.insert(
+        "target".to_string(),
+        json!(target_path.to_string_lossy().to_string()),
+    );
+    min_args.insert(
+        "join".to_string(),
+        json!(join_path.to_string_lossy().to_string()),
+    );
     min_args.insert("predicate".to_string(), json!("intersects"));
     min_args.insert("strategy".to_string(), json!("min"));
     min_args.insert("prefix".to_string(), json!("J_"));
-    min_args.insert("output".to_string(), json!(out_min_path.to_string_lossy().to_string()));
+    min_args.insert(
+        "output".to_string(),
+        json!(out_min_path.to_string_lossy().to_string()),
+    );
     registry
         .run("spatial_join", &min_args, &context(&caps))
         .expect("spatial_join min strategy run");
 
     let mut max_args = ToolArgs::new();
-    max_args.insert("target".to_string(), json!(target_path.to_string_lossy().to_string()));
-    max_args.insert("join".to_string(), json!(join_path.to_string_lossy().to_string()));
+    max_args.insert(
+        "target".to_string(),
+        json!(target_path.to_string_lossy().to_string()),
+    );
+    max_args.insert(
+        "join".to_string(),
+        json!(join_path.to_string_lossy().to_string()),
+    );
     max_args.insert("predicate".to_string(), json!("intersects"));
     max_args.insert("strategy".to_string(), json!("max"));
     max_args.insert("prefix".to_string(), json!("J_"));
-    max_args.insert("output".to_string(), json!(out_max_path.to_string_lossy().to_string()));
+    max_args.insert(
+        "output".to_string(),
+        json!(out_max_path.to_string_lossy().to_string()),
+    );
     registry
         .run("spatial_join", &max_args, &context(&caps))
         .expect("spatial_join max strategy run");
@@ -17071,11 +22072,21 @@ fn spatial_join_supports_aggregate_strategies() {
     let mean_schema = &mean_out.schema;
     let min_schema = &min_out.schema;
     let max_schema = &max_out.schema;
-    let j_val_sum_idx = sum_schema.field_index("J_VAL").expect("J_VAL field in sum output");
-    let j_val_mean_idx = mean_schema.field_index("J_VAL").expect("J_VAL field in mean output");
-    let j_val_min_idx = min_schema.field_index("J_VAL").expect("J_VAL field in min output");
-    let j_val_max_idx = max_schema.field_index("J_VAL").expect("J_VAL field in max output");
-    let join_count_sum_idx = sum_schema.field_index("JOIN_COUNT").expect("JOIN_COUNT in sum output");
+    let j_val_sum_idx = sum_schema
+        .field_index("J_VAL")
+        .expect("J_VAL field in sum output");
+    let j_val_mean_idx = mean_schema
+        .field_index("J_VAL")
+        .expect("J_VAL field in mean output");
+    let j_val_min_idx = min_schema
+        .field_index("J_VAL")
+        .expect("J_VAL field in min output");
+    let j_val_max_idx = max_schema
+        .field_index("J_VAL")
+        .expect("J_VAL field in max output");
+    let join_count_sum_idx = sum_schema
+        .field_index("JOIN_COUNT")
+        .expect("JOIN_COUNT in sum output");
 
     let sum_attrs = &sum_out.features[0].attributes;
     let mean_attrs = &mean_out.features[0].attributes;
@@ -17132,7 +22143,10 @@ fn line_polygon_clip_outputs_clipped_segments_not_whole_features() {
         .with_epsg(4326);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(-1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(-1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add line feature");
@@ -17141,29 +22155,37 @@ fn line_polygon_clip_outputs_clipped_segments_not_whole_features() {
     let mut clip = Layer::new("clip")
         .with_geom_type(GeometryType::Polygon)
         .with_epsg(4326);
-    clip
-        .add_feature(
-            Some(Geometry::polygon(
-                vec![
-                    Coord::xy(0.0, -1.0),
-                    Coord::xy(1.0, -1.0),
-                    Coord::xy(1.0, 1.0),
-                    Coord::xy(0.0, 1.0),
-                    Coord::xy(0.0, -1.0),
-                ],
-                vec![],
-            )),
-            &[],
-        )
-        .expect("add clip polygon");
+    clip.add_feature(
+        Some(Geometry::polygon(
+            vec![
+                Coord::xy(0.0, -1.0),
+                Coord::xy(1.0, -1.0),
+                Coord::xy(1.0, 1.0),
+                Coord::xy(0.0, 1.0),
+                Coord::xy(0.0, -1.0),
+            ],
+            vec![],
+        )),
+        &[],
+    )
+    .expect("add clip polygon");
     wbvector::write(&clip, &clip_path, VectorFormat::GeoPackage).expect("write clip input");
     let clip_layer = wbvector::read(&clip_path).expect("read clip input");
     assert_eq!(clip_layer.geom_type, Some(GeometryType::Polygon));
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("clip".to_string(), json!(clip_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "clip".to_string(),
+        json!(clip_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("line_polygon_clip", &args, &context(&caps))
         .expect("line_polygon_clip run");
@@ -17179,7 +22201,10 @@ fn line_polygon_clip_outputs_clipped_segments_not_whole_features() {
         Geometry::LineString(coords) => coords,
         other => panic!("expected line geometry, got {:?}", other),
     };
-    assert!(coords.len() >= 2, "clipped segment should contain at least 2 points");
+    assert!(
+        coords.len() >= 2,
+        "clipped segment should contain at least 2 points"
+    );
     let first = &coords[0];
     let last = &coords[coords.len() - 1];
     assert!(
@@ -17207,7 +22232,9 @@ fn near_writes_nearest_feature_id_and_distance() {
     let near_path = std::env::temp_dir().join(format!("{tag}_near.geojson"));
     let out_path = std::env::temp_dir().join(format!("{tag}_out.geojson"));
 
-    let mut input = Layer::new("input").with_geom_type(GeometryType::Point).with_epsg(4326);
+    let mut input = Layer::new("input")
+        .with_geom_type(GeometryType::Point)
+        .with_epsg(4326);
     input
         .add_feature(Some(Geometry::Point(Coord::xy(0.0, 0.0))), &[])
         .expect("add input point 1");
@@ -17216,7 +22243,9 @@ fn near_writes_nearest_feature_id_and_distance() {
         .expect("add input point 2");
     wbvector::write(&input, &input_path, VectorFormat::GeoJson).expect("write input");
 
-    let mut near_layer = Layer::new("near").with_geom_type(GeometryType::Point).with_epsg(4326);
+    let mut near_layer = Layer::new("near")
+        .with_geom_type(GeometryType::Point)
+        .with_epsg(4326);
     near_layer
         .add_feature(Some(Geometry::Point(Coord::xy(1.0, 0.0))), &[])
         .expect("add near point 1");
@@ -17226,16 +22255,33 @@ fn near_writes_nearest_feature_id_and_distance() {
     wbvector::write(&near_layer, &near_path, VectorFormat::GeoJson).expect("write near");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("near".to_string(), json!(near_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
-    registry.run("near", &args, &context(&caps)).expect("near run");
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "near".to_string(),
+        json!(near_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
+    registry
+        .run("near", &args, &context(&caps))
+        .expect("near run");
 
     let out = wbvector::read(&out_path).expect("read near output");
     assert_eq!(out.features.len(), 2);
     let near_fid_idx = out.schema.field_index("NEAR_FID").expect("NEAR_FID field");
-    let near_dist_idx = out.schema.field_index("NEAR_DIST").expect("NEAR_DIST field");
-    assert_eq!(out.schema.fields()[near_fid_idx].field_type, FieldType::Integer);
+    let near_dist_idx = out
+        .schema
+        .field_index("NEAR_DIST")
+        .expect("NEAR_DIST field");
+    assert_eq!(
+        out.schema.fields()[near_fid_idx].field_type,
+        FieldType::Integer
+    );
     assert!(
         matches!(
             out.schema.fields()[near_dist_idx].field_type,
@@ -17273,7 +22319,9 @@ fn select_by_location_within_distance_filters_expected_targets() {
     let query_path = std::env::temp_dir().join(format!("{tag}_query.geojson"));
     let out_path = std::env::temp_dir().join(format!("{tag}_out.geojson"));
 
-    let mut target = Layer::new("target").with_geom_type(GeometryType::Point).with_epsg(4326);
+    let mut target = Layer::new("target")
+        .with_geom_type(GeometryType::Point)
+        .with_epsg(4326);
     target
         .add_feature(Some(Geometry::Point(Coord::xy(0.0, 0.0))), &[])
         .expect("add target point 1");
@@ -17282,26 +22330,45 @@ fn select_by_location_within_distance_filters_expected_targets() {
         .expect("add target point 2");
     wbvector::write(&target, &target_path, VectorFormat::GeoJson).expect("write target");
 
-    let mut query = Layer::new("query").with_geom_type(GeometryType::Point).with_epsg(4326);
+    let mut query = Layer::new("query")
+        .with_geom_type(GeometryType::Point)
+        .with_epsg(4326);
     query
         .add_feature(Some(Geometry::Point(Coord::xy(0.2, 0.0))), &[])
         .expect("add query point");
     wbvector::write(&query, &query_path, VectorFormat::GeoJson).expect("write query");
 
     let mut args = ToolArgs::new();
-    args.insert("target".to_string(), json!(target_path.to_string_lossy().to_string()));
-    args.insert("query".to_string(), json!(query_path.to_string_lossy().to_string()));
+    args.insert(
+        "target".to_string(),
+        json!(target_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "query".to_string(),
+        json!(query_path.to_string_lossy().to_string()),
+    );
     args.insert("predicate".to_string(), json!("within_distance"));
     args.insert("distance".to_string(), json!(1.0));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("select_by_location", &args, &context(&caps))
         .expect("select_by_location run");
 
     let out = wbvector::read(&out_path).expect("read selected output");
-    assert_eq!(out.features.len(), 1, "expected only one nearby target feature");
+    assert_eq!(
+        out.features.len(),
+        1,
+        "expected only one nearby target feature"
+    );
 
-    let coord = match out.features[0].geometry.as_ref().expect("selected geometry") {
+    let coord = match out.features[0]
+        .geometry
+        .as_ref()
+        .expect("selected geometry")
+    {
         Geometry::Point(c) => c,
         other => panic!("expected point geometry, got {:?}", other),
     };
@@ -17346,13 +22413,19 @@ fn add_geometry_attributes_adds_expected_area_and_centroid() {
     wbvector::write(&polygons, &input_path, VectorFormat::GeoPackage).expect("write polygon input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("area".to_string(), json!(true));
     args.insert("length".to_string(), json!(false));
     args.insert("perimeter".to_string(), json!(false));
     args.insert("centroid".to_string(), json!(true));
     args.insert("measurement_mode".to_string(), json!("planar"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("add_geometry_attributes", &args, &context(&caps))
         .expect("add_geometry_attributes run");
@@ -17364,8 +22437,14 @@ fn add_geometry_attributes_adds_expected_area_and_centroid() {
         .schema
         .field_index("AREA_MAP2")
         .expect("AREA_MAP2 field exists");
-    let cx_idx = out.schema.field_index("CENTROID_X").expect("CENTROID_X field exists");
-    let cy_idx = out.schema.field_index("CENTROID_Y").expect("CENTROID_Y field exists");
+    let cx_idx = out
+        .schema
+        .field_index("CENTROID_X")
+        .expect("CENTROID_X field exists");
+    let cy_idx = out
+        .schema
+        .field_index("CENTROID_Y")
+        .expect("CENTROID_Y field exists");
     let attrs = &out.features[0].attributes;
 
     match &attrs[area_idx] {
@@ -17374,11 +22453,19 @@ fn add_geometry_attributes_adds_expected_area_and_centroid() {
         other => panic!("expected numeric AREA_MAP2, got {:?}", other),
     }
     match &attrs[cx_idx] {
-        FieldValue::Float(v) => assert!((*v - 0.5).abs() < 1.0e-9, "expected centroid x 0.5, got {}", v),
+        FieldValue::Float(v) => assert!(
+            (*v - 0.5).abs() < 1.0e-9,
+            "expected centroid x 0.5, got {}",
+            v
+        ),
         other => panic!("expected float CENTROID_X, got {:?}", other),
     }
     match &attrs[cy_idx] {
-        FieldValue::Float(v) => assert!((*v - 0.5).abs() < 1.0e-9, "expected centroid y 0.5, got {}", v),
+        FieldValue::Float(v) => assert!(
+            (*v - 0.5).abs() < 1.0e-9,
+            "expected centroid y 0.5, got {}",
+            v
+        ),
         other => panic!("expected float CENTROID_Y, got {:?}", other),
     }
 
@@ -17419,12 +22506,18 @@ fn add_geometry_attributes_preserves_decimal_area_in_shapefile_output() {
     wbvector::write(&polygons, &input_path, VectorFormat::GeoPackage).expect("write polygon input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("area".to_string(), json!(true));
     args.insert("length".to_string(), json!(false));
     args.insert("perimeter".to_string(), json!(false));
     args.insert("centroid".to_string(), json!(false));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("add_geometry_attributes", &args, &context(&caps))
         .expect("add_geometry_attributes run");
@@ -17492,13 +22585,19 @@ fn add_geometry_attributes_replaces_existing_integer_area_field_with_float_value
     wbvector::write(&polygons, &input_path, VectorFormat::GeoPackage).expect("write polygon input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("area".to_string(), json!(true));
     args.insert("length".to_string(), json!(false));
     args.insert("perimeter".to_string(), json!(false));
     args.insert("centroid".to_string(), json!(false));
     args.insert("measurement_mode".to_string(), json!("planar"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("add_geometry_attributes", &args, &context(&caps))
         .expect("add_geometry_attributes run");
@@ -17506,8 +22605,15 @@ fn add_geometry_attributes_replaces_existing_integer_area_field_with_float_value
     let out = wbvector::read(&out_path).expect("read output shapefile");
     assert_eq!(out.features.len(), 1);
 
-    let area_field = out.schema.field("AREA_MAP2").expect("AREA_MAP2 field exists");
-    assert_eq!(area_field.field_type, FieldType::Float, "AREA_MAP2 should be stored as Float");
+    let area_field = out
+        .schema
+        .field("AREA_MAP2")
+        .expect("AREA_MAP2 field exists");
+    assert_eq!(
+        area_field.field_type,
+        FieldType::Float,
+        "AREA_MAP2 should be stored as Float"
+    );
     assert!(
         area_field.precision > 0,
         "AREA_MAP2 precision should preserve decimal values"
@@ -17520,7 +22626,10 @@ fn add_geometry_attributes_replaces_existing_integer_area_field_with_float_value
     let area_value = out.features[0].attributes[area_idx]
         .as_f64()
         .expect("AREA_MAP2 value should be numeric");
-    assert!(area_value > 0.0, "AREA_MAP2 should not remain zero after recomputation");
+    assert!(
+        area_value > 0.0,
+        "AREA_MAP2 should not remain zero after recomputation"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     for ext in ["shp", "shx", "dbf", "prj"] {
@@ -17553,12 +22662,18 @@ fn field_calculator_writes_expression_result_to_output_field() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write point input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("SCORE"));
     args.insert("field_type".to_string(), json!("integer"));
     args.insert("expression".to_string(), json!("VAL * 2"));
     args.insert("overwrite".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("field_calculator", &args, &context(&caps))
         .expect("field_calculator run");
@@ -17570,7 +22685,9 @@ fn field_calculator_writes_expression_result_to_output_field() {
     let attrs = &out.features[0].attributes;
     match &attrs[score_idx] {
         FieldValue::Integer(v) => assert_eq!(*v, 10),
-        FieldValue::Float(v) => assert!((*v - 10.0).abs() < 1.0e-9, "expected score 10.0, got {}", v),
+        FieldValue::Float(v) => {
+            assert!((*v - 10.0).abs() < 1.0e-9, "expected score 10.0, got {}", v)
+        }
         other => panic!("expected numeric SCORE, got {:?}", other),
     }
 
@@ -17609,7 +22726,10 @@ fn field_calculator_supports_case_when_expression() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write point input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("SPEED"));
     args.insert("field_type".to_string(), json!("integer"));
     args.insert(
@@ -17619,7 +22739,10 @@ fn field_calculator_supports_case_when_expression() {
         ),
     );
     args.insert("overwrite".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("field_calculator", &args, &context(&caps))
         .expect("field_calculator run");
@@ -17668,17 +22791,21 @@ fn field_calculator_supports_update_set_expression_wrapper() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write point input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("SPEED"));
     args.insert("field_type".to_string(), json!("integer"));
     args.insert(
         "expression".to_string(),
-        json!(
-            "UPDATE roads SET SPEED = CASE WHEN TYPE == \"collector\" THEN 60 ELSE 35 END;"
-        ),
+        json!("UPDATE roads SET SPEED = CASE WHEN TYPE == \"collector\" THEN 60 ELSE 35 END;"),
     );
     args.insert("overwrite".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("field_calculator", &args, &context(&caps))
         .expect("field_calculator run");
@@ -17734,7 +22861,10 @@ fn field_calculator_supports_update_set_where_wrapper() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write point input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("SPEED"));
     args.insert("field_type".to_string(), json!("integer"));
     args.insert(
@@ -17744,7 +22874,10 @@ fn field_calculator_supports_update_set_where_wrapper() {
         ),
     );
     args.insert("overwrite".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("field_calculator", &args, &context(&caps))
         .expect("field_calculator run");
@@ -17800,7 +22933,10 @@ fn field_calculator_supports_simple_case_form() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write point input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("SPEED"));
     args.insert("field_type".to_string(), json!("integer"));
     args.insert(
@@ -17808,7 +22944,10 @@ fn field_calculator_supports_simple_case_form() {
         json!("CASE TYPE WHEN 'motorway' THEN 100 WHEN 'residential' THEN 40 ELSE 60 END"),
     );
     args.insert("overwrite".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("field_calculator", &args, &context(&caps))
         .expect("field_calculator run");
@@ -17816,8 +22955,14 @@ fn field_calculator_supports_simple_case_form() {
     let out = wbvector::read(&out_path).expect("read field calculator output");
     let speed_idx = out.schema.field_index("SPEED").expect("SPEED field exists");
     assert_eq!(out.features.len(), 2);
-    assert!(matches!(out.features[0].attributes[speed_idx], FieldValue::Integer(100)));
-    assert!(matches!(out.features[1].attributes[speed_idx], FieldValue::Integer(40)));
+    assert!(matches!(
+        out.features[0].attributes[speed_idx],
+        FieldValue::Integer(100)
+    ));
+    assert!(matches!(
+        out.features[1].attributes[speed_idx],
+        FieldValue::Integer(40)
+    ));
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&out_path);
@@ -17874,7 +23019,10 @@ fn field_calculator_supports_sql_operators_and_null_semantics() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write point input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("SPEED"));
     args.insert("field_type".to_string(), json!("integer"));
     args.insert(
@@ -17884,16 +23032,28 @@ fn field_calculator_supports_sql_operators_and_null_semantics() {
         ),
     );
     args.insert("overwrite".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("field_calculator", &args, &context(&caps))
         .expect("field_calculator run");
 
     let out = wbvector::read(&out_path).expect("read field calculator output");
     let speed_idx = out.schema.field_index("SPEED").expect("SPEED field exists");
-    assert!(matches!(out.features[0].attributes[speed_idx], FieldValue::Integer(99)));
-    assert!(matches!(out.features[1].attributes[speed_idx], FieldValue::Integer(20)));
-    assert!(matches!(out.features[2].attributes[speed_idx], FieldValue::Integer(30)));
+    assert!(matches!(
+        out.features[0].attributes[speed_idx],
+        FieldValue::Integer(99)
+    ));
+    assert!(matches!(
+        out.features[1].attributes[speed_idx],
+        FieldValue::Integer(20)
+    ));
+    assert!(matches!(
+        out.features[2].attributes[speed_idx],
+        FieldValue::Integer(30)
+    ));
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&out_path);
@@ -17924,19 +23084,31 @@ fn field_calculator_supports_cast_functionality() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write point input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("SPEED"));
     args.insert("field_type".to_string(), json!("integer"));
-    args.insert("expression".to_string(), json!("CAST(SPD_TXT AS INTEGER) + 5"));
+    args.insert(
+        "expression".to_string(),
+        json!("CAST(SPD_TXT AS INTEGER) + 5"),
+    );
     args.insert("overwrite".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("field_calculator", &args, &context(&caps))
         .expect("field_calculator run");
 
     let out = wbvector::read(&out_path).expect("read field calculator output");
     let speed_idx = out.schema.field_index("SPEED").expect("SPEED field exists");
-    assert!(matches!(out.features[0].attributes[speed_idx], FieldValue::Integer(60)));
+    assert!(matches!(
+        out.features[0].attributes[speed_idx],
+        FieldValue::Integer(60)
+    ));
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&out_path);
@@ -17972,7 +23144,10 @@ fn field_calculator_preview_only_returns_preview_rows() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write point input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("SPEED"));
     args.insert("field_type".to_string(), json!("integer"));
     args.insert(
@@ -17985,15 +23160,24 @@ fn field_calculator_preview_only_returns_preview_rows() {
         .run("field_calculator", &args, &context(&caps))
         .expect("field_calculator preview run");
 
-    assert!(!result.outputs.contains_key("path"), "preview-only run should not write output path");
+    assert!(
+        !result.outputs.contains_key("path"),
+        "preview-only run should not write output path"
+    );
     let preview = result
         .outputs
         .get("preview")
         .and_then(|v| v.as_array())
         .expect("preview array present");
     assert_eq!(preview.len(), 2);
-    assert_eq!(preview[0].get("result_value").and_then(|v| v.as_i64()), Some(100));
-    assert_eq!(preview[1].get("result_value").and_then(|v| v.as_i64()), Some(60));
+    assert_eq!(
+        preview[0].get("result_value").and_then(|v| v.as_i64()),
+        Some(100)
+    );
+    assert_eq!(
+        preview[1].get("result_value").and_then(|v| v.as_i64()),
+        Some(60)
+    );
 
     let _ = std::fs::remove_file(&input_path);
 }
@@ -18015,16 +23199,25 @@ fn reproject_vector_reprojects_coordinates_and_sets_target_epsg() {
         .with_epsg(3857);
     points
         .add_feature(
-            Some(Geometry::Point(Coord::xy(111_319.490_793_273_57, 111_325.142_866_385_1))),
+            Some(Geometry::Point(Coord::xy(
+                111_319.490_793_273_57,
+                111_325.142_866_385_1,
+            ))),
             &[],
         )
         .expect("add projected point");
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write input points");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("epsg".to_string(), json!(4326));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("reproject_vector", &args, &context(&caps))
         .expect("reproject_vector run");
@@ -18037,8 +23230,16 @@ fn reproject_vector_reprojects_coordinates_and_sets_target_epsg() {
         Geometry::Point(c) => c,
         other => panic!("expected point geometry, got {:?}", other),
     };
-    assert!((coord.x - 1.0).abs() < 1.0e-3, "expected lon near 1.0, got {}", coord.x);
-    assert!((coord.y - 1.0).abs() < 1.0e-3, "expected lat near 1.0, got {}", coord.y);
+    assert!(
+        (coord.x - 1.0).abs() < 1.0e-3,
+        "expected lon near 1.0, got {}",
+        coord.x
+    );
+    assert!(
+        (coord.y - 1.0).abs() < 1.0e-3,
+        "expected lat near 1.0, got {}",
+        coord.y
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&out_path);
@@ -18073,9 +23274,15 @@ fn simplify_features_reduces_vertices_with_tolerance() {
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write line input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("tolerance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("simplify_features", &args, &context(&caps))
         .expect("simplify_features run");
@@ -18128,12 +23335,19 @@ fn concave_hull_builds_polygon_output_from_points() {
             .add_feature(Some(Geometry::Point(coord)), &[])
             .expect("add input point");
     }
-    wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write concave hull input");
+    wbvector::write(&points, &input_path, VectorFormat::GeoPackage)
+        .expect("write concave hull input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("max_edge_length".to_string(), json!(3.0));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("concave_hull", &args, &context(&caps))
         .expect("concave_hull run");
@@ -18142,13 +23356,22 @@ fn concave_hull_builds_polygon_output_from_points() {
     assert_eq!(out.features.len(), 1);
     assert_eq!(out.geom_type, Some(GeometryType::Polygon));
 
-    let geom = out.features[0].geometry.as_ref().expect("concave hull geometry");
+    let geom = out.features[0]
+        .geometry
+        .as_ref()
+        .expect("concave hull geometry");
     match geom {
         Geometry::Polygon { exterior, .. } => {
-            assert!(exterior.coords().len() >= 4, "polygon should have ring coordinates");
+            assert!(
+                exterior.coords().len() >= 4,
+                "polygon should have ring coordinates"
+            );
         }
         Geometry::MultiPolygon(parts) => {
-            assert!(!parts.is_empty(), "multipolygon hull should have at least one part");
+            assert!(
+                !parts.is_empty(),
+                "multipolygon hull should have at least one part"
+            );
         }
         other => panic!("expected polygon output geometry, got {:?}", other),
     }
@@ -18179,15 +23402,25 @@ fn densify_features_increases_linestring_vertex_count() {
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write densify input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("spacing".to_string(), json!(1.0));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("densify_features", &args, &context(&caps))
         .expect("densify_features run");
 
     let out = wbvector::read(&out_path).expect("read densified output");
-    let coords = match out.features[0].geometry.as_ref().expect("densified geometry") {
+    let coords = match out.features[0]
+        .geometry
+        .as_ref()
+        .expect("densified geometry")
+    {
         Geometry::LineString(coords) => coords,
         other => panic!("expected line geometry, got {:?}", other),
     };
@@ -18219,17 +23452,27 @@ fn points_along_lines_generates_expected_spacing_points() {
         .with_epsg(4326);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(4.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(4.0, 0.0),
+            ])),
             &[],
         )
         .expect("add source line");
-    wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write points-along-lines input");
+    wbvector::write(&lines, &input_path, VectorFormat::GeoPackage)
+        .expect("write points-along-lines input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("spacing".to_string(), json!(2.0));
     args.insert("include_end".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("points_along_lines", &args, &context(&caps))
         .expect("points_along_lines run");
@@ -18238,11 +23481,19 @@ fn points_along_lines_generates_expected_spacing_points() {
     assert_eq!(out.geom_type, Some(GeometryType::Point));
     assert_eq!(out.features.len(), 2, "expected points at x=2,4");
 
-    let p0 = match out.features[0].geometry.as_ref().expect("first output point") {
+    let p0 = match out.features[0]
+        .geometry
+        .as_ref()
+        .expect("first output point")
+    {
         Geometry::Point(c) => c,
         other => panic!("expected point geometry, got {:?}", other),
     };
-    let p1 = match out.features[1].geometry.as_ref().expect("second output point") {
+    let p1 = match out.features[1]
+        .geometry
+        .as_ref()
+        .expect("second output point")
+    {
         Geometry::Point(c) => c,
         other => panic!("expected point geometry, got {:?}", other),
     };
@@ -18255,7 +23506,10 @@ fn points_along_lines_generates_expected_spacing_points() {
         match &feature.attributes[src_fid_idx] {
             FieldValue::Integer(v) => {
                 if let Some(expected) = seen_src_fid {
-                    assert_eq!(*v, expected, "SRC_FID should be consistent for one source line");
+                    assert_eq!(
+                        *v, expected,
+                        "SRC_FID should be consistent for one source line"
+                    );
                 } else {
                     seen_src_fid = Some(*v);
                 }
@@ -18301,10 +23555,16 @@ fn random_points_in_polygon_generates_requested_count_within_extent() {
     wbvector::write(&polygons, &input_path, VectorFormat::GeoPackage).expect("write polygon input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("num_points".to_string(), json!(10));
     args.insert("seed".to_string(), json!(42));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("random_points_in_polygon", &args, &context(&caps))
         .expect("random_points_in_polygon run");
@@ -18317,8 +23577,16 @@ fn random_points_in_polygon_generates_requested_count_within_extent() {
             Geometry::Point(c) => c,
             other => panic!("expected point geometry, got {:?}", other),
         };
-        assert!(coord.x >= 0.0 && coord.x <= 2.0, "x out of expected extent: {}", coord.x);
-        assert!(coord.y >= 0.0 && coord.y <= 2.0, "y out of expected extent: {}", coord.y);
+        assert!(
+            coord.x >= 0.0 && coord.x <= 2.0,
+            "x out of expected extent: {}",
+            coord.x
+        );
+        assert!(
+            coord.y >= 0.0 && coord.y <= 2.0,
+            "y out of expected extent: {}",
+            coord.y
+        );
     }
 
     let _ = std::fs::remove_file(&input_path);
@@ -18345,36 +23613,59 @@ fn vector_summary_statistics_writes_expected_group_rows() {
     points
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
-            &[("CLASS", FieldValue::Text("A".to_string())), ("VALUE", FieldValue::Float(1.0))],
+            &[
+                ("CLASS", FieldValue::Text("A".to_string())),
+                ("VALUE", FieldValue::Float(1.0)),
+            ],
         )
         .expect("add point 1");
     points
         .add_feature(
             Some(Geometry::Point(Coord::xy(1.0, 0.0))),
-            &[("CLASS", FieldValue::Text("A".to_string())), ("VALUE", FieldValue::Float(3.0))],
+            &[
+                ("CLASS", FieldValue::Text("A".to_string())),
+                ("VALUE", FieldValue::Float(3.0)),
+            ],
         )
         .expect("add point 2");
     points
         .add_feature(
             Some(Geometry::Point(Coord::xy(2.0, 0.0))),
-            &[("CLASS", FieldValue::Text("B".to_string())), ("VALUE", FieldValue::Float(2.0))],
+            &[
+                ("CLASS", FieldValue::Text("B".to_string())),
+                ("VALUE", FieldValue::Float(2.0)),
+            ],
         )
         .expect("add point 3");
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write summary input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("group_field".to_string(), json!("CLASS"));
     args.insert("value_field".to_string(), json!("VALUE"));
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("vector_summary_statistics", &args, &context(&caps))
         .expect("vector_summary_statistics run");
 
     let csv = std::fs::read_to_string(&out_csv).expect("read summary csv");
     assert!(csv.contains("group,count,sum,mean,min,max"));
-    assert!(csv.contains("\"A\",2,4,2,1,3"), "missing A summary row: {}", csv);
-    assert!(csv.contains("\"B\",1,2,2,2,2"), "missing B summary row: {}", csv);
+    assert!(
+        csv.contains("\"A\",2,4,2,1,3"),
+        "missing A summary row: {}",
+        csv
+    );
+    assert!(
+        csv.contains("\"B\",1,2,2,2,2"),
+        "missing B summary row: {}",
+        csv
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&out_csv);
@@ -18405,12 +23696,20 @@ fn add_field_appends_default_values_and_schema() {
     wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write add-field input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("field".to_string(), json!("SCORE"));
     args.insert("field_type".to_string(), json!("integer"));
     args.insert("default".to_string(), json!(7));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
-    registry.run("add_field", &args, &context(&caps)).expect("add_field run");
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
+    registry
+        .run("add_field", &args, &context(&caps))
+        .expect("add_field run");
 
     let out = wbvector::read(&out_path).expect("read add-field output");
     let score_idx = out.schema.field_index("SCORE").expect("SCORE field exists");
@@ -18444,16 +23743,26 @@ fn rename_and_delete_field_update_schema_as_expected() {
     points
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
-            &[("VAL", FieldValue::Integer(1)), ("TMP", FieldValue::Integer(99))],
+            &[
+                ("VAL", FieldValue::Integer(1)),
+                ("TMP", FieldValue::Integer(99)),
+            ],
         )
         .expect("add point");
-    wbvector::write(&points, &input_path, VectorFormat::GeoPackage).expect("write rename/delete input");
+    wbvector::write(&points, &input_path, VectorFormat::GeoPackage)
+        .expect("write rename/delete input");
 
     let mut rename_args = ToolArgs::new();
-    rename_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    rename_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     rename_args.insert("field".to_string(), json!("VAL"));
     rename_args.insert("new_field".to_string(), json!("VALUE"));
-    rename_args.insert("output".to_string(), json!(renamed_path.to_string_lossy().to_string()));
+    rename_args.insert(
+        "output".to_string(),
+        json!(renamed_path.to_string_lossy().to_string()),
+    );
     registry
         .run("rename_field", &rename_args, &context(&caps))
         .expect("rename_field run");
@@ -18463,9 +23772,15 @@ fn rename_and_delete_field_update_schema_as_expected() {
     assert!(renamed.schema.field_index("VAL").is_none());
 
     let mut delete_args = ToolArgs::new();
-    delete_args.insert("input".to_string(), json!(renamed_path.to_string_lossy().to_string()));
+    delete_args.insert(
+        "input".to_string(),
+        json!(renamed_path.to_string_lossy().to_string()),
+    );
     delete_args.insert("fields".to_string(), json!("TMP"));
-    delete_args.insert("output".to_string(), json!(deleted_path.to_string_lossy().to_string()));
+    delete_args.insert(
+        "output".to_string(),
+        json!(deleted_path.to_string_lossy().to_string()),
+    );
     registry
         .run("delete_field", &delete_args, &context(&caps))
         .expect("delete_field run");
@@ -18496,26 +23811,38 @@ fn shortest_path_network_finds_connected_route() {
         .with_epsg(4326);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.1));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(1.9));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("max_snap_distance".to_string(), json!(1.0));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("shortest_path_network", &args, &context(&caps))
         .expect("shortest_path_network run");
@@ -18559,26 +23886,38 @@ fn shortest_path_network_geographic_crs_uses_geodesic_segment_lengths() {
         .with_epsg(4326);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(2.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("shortest_path_network", &args, &context(&caps))
         .expect("shortest_path_network run");
@@ -18619,18 +23958,26 @@ fn multimodal_shortest_path_transfer_penalty_changes_route() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("MODE", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("MODE", FieldType::Text));
 
     // Two-mode short corridor: A(0,0)->B(1,0) walk, B->C(2,0) transit.
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add walk edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("transit".to_string()))],
         )
         .expect("add transit edge");
@@ -18638,37 +23985,56 @@ fn multimodal_shortest_path_transfer_penalty_changes_route() {
     // Single-mode detour: A->D->E->C, all walk.
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add detour edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(2.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(2.0, 1.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add detour edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add detour edge 3");
 
-    wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write multimodal network input");
+    wbvector::write(&lines, &input_path, VectorFormat::GeoPackage)
+        .expect("write multimodal network input");
 
     let mut relaxed_args = ToolArgs::new();
-    relaxed_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    relaxed_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     relaxed_args.insert("start_x".to_string(), json!(0.0));
     relaxed_args.insert("start_y".to_string(), json!(0.0));
     relaxed_args.insert("end_x".to_string(), json!(2.0));
     relaxed_args.insert("end_y".to_string(), json!(0.0));
     relaxed_args.insert("mode_field".to_string(), json!("MODE"));
     relaxed_args.insert("default_mode_speed".to_string(), json!(1.0));
-    relaxed_args.insert("mode_speed_overrides".to_string(), json!("walk:1.0,transit:4.0"));
+    relaxed_args.insert(
+        "mode_speed_overrides".to_string(),
+        json!("walk:1.0,transit:4.0"),
+    );
     relaxed_args.insert("transfer_penalty".to_string(), json!(0.0));
     relaxed_args.insert("max_snap_distance".to_string(), json!(0.25));
-    relaxed_args.insert("output".to_string(), json!(relaxed_out.to_string_lossy().to_string()));
+    relaxed_args.insert(
+        "output".to_string(),
+        json!(relaxed_out.to_string_lossy().to_string()),
+    );
 
     let relaxed = registry
         .run("multimodal_shortest_path", &relaxed_args, &context(&caps))
@@ -18687,7 +24053,10 @@ fn multimodal_shortest_path_transfer_penalty_changes_route() {
 
     let mut strict_args = relaxed_args.clone();
     strict_args.insert("transfer_penalty".to_string(), json!(5.0));
-    strict_args.insert("output".to_string(), json!(strict_out.to_string_lossy().to_string()));
+    strict_args.insert(
+        "output".to_string(),
+        json!(strict_out.to_string_lossy().to_string()),
+    );
 
     let strict = registry
         .run("multimodal_shortest_path", &strict_args, &context(&caps))
@@ -18704,9 +24073,18 @@ fn multimodal_shortest_path_transfer_penalty_changes_route() {
         .and_then(|v| v.as_i64())
         .expect("strict mode_changes output");
 
-    assert!(relaxed_mode_changes >= 1, "expected relaxed run to use at least one transfer");
-    assert_eq!(strict_mode_changes, 0, "expected strict run to avoid transfers");
-    assert!(strict_cost > relaxed_cost, "expected transfer penalty to increase route cost");
+    assert!(
+        relaxed_mode_changes >= 1,
+        "expected relaxed run to use at least one transfer"
+    );
+    assert_eq!(
+        strict_mode_changes, 0,
+        "expected strict run to avoid transfers"
+    );
+    assert!(
+        strict_cost > relaxed_cost,
+        "expected transfer penalty to increase route cost"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&relaxed_out);
@@ -18728,34 +24106,52 @@ fn multimodal_shortest_path_walk_drive_pattern() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("MODE", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("MODE", FieldType::Text));
 
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add walk segment");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(4.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(4.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("drive".to_string()))],
         )
         .expect("add drive segment");
-    wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write multimodal network input");
+    wbvector::write(&lines, &input_path, VectorFormat::GeoPackage)
+        .expect("write multimodal network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(4.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("mode_field".to_string(), json!("MODE"));
     args.insert("allowed_modes".to_string(), json!("walk,drive"));
-    args.insert("mode_speed_overrides".to_string(), json!("walk:1.0,drive:3.0"));
+    args.insert(
+        "mode_speed_overrides".to_string(),
+        json!("walk:1.0,drive:3.0"),
+    );
     args.insert("transfer_penalty".to_string(), json!(0.5));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("multimodal_shortest_path", &args, &context(&caps))
@@ -18766,7 +24162,10 @@ fn multimodal_shortest_path_walk_drive_pattern() {
         .get("mode_changes")
         .and_then(|v| v.as_i64())
         .expect("mode_changes output");
-    assert_eq!(mode_changes, 1, "walk-drive pattern should include one transfer");
+    assert_eq!(
+        mode_changes, 1,
+        "walk-drive pattern should include one transfer"
+    );
 
     let out = wbvector::read(&out_path).expect("read multimodal output");
     let seq_idx = out.schema.field_index("MODE_SEQ").expect("MODE_SEQ field");
@@ -18795,34 +24194,52 @@ fn multimodal_shortest_path_walk_transit_pattern() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("MODE", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("MODE", FieldType::Text));
 
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add walk segment");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(5.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(5.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("transit".to_string()))],
         )
         .expect("add transit segment");
-    wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write multimodal network input");
+    wbvector::write(&lines, &input_path, VectorFormat::GeoPackage)
+        .expect("write multimodal network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(5.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("mode_field".to_string(), json!("MODE"));
     args.insert("allowed_modes".to_string(), json!("walk,transit"));
-    args.insert("mode_speed_overrides".to_string(), json!("walk:1.0,transit:4.0"));
+    args.insert(
+        "mode_speed_overrides".to_string(),
+        json!("walk:1.0,transit:4.0"),
+    );
     args.insert("transfer_penalty".to_string(), json!(0.25));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("multimodal_shortest_path", &args, &context(&caps))
@@ -18833,7 +24250,10 @@ fn multimodal_shortest_path_walk_transit_pattern() {
         .get("mode_changes")
         .and_then(|v| v.as_i64())
         .expect("mode_changes output");
-    assert_eq!(mode_changes, 1, "walk-transit pattern should include one transfer");
+    assert_eq!(
+        mode_changes, 1,
+        "walk-transit pattern should include one transfer"
+    );
 
     let out = wbvector::read(&out_path).expect("read multimodal output");
     let seq_idx = out.schema.field_index("MODE_SEQ").expect("MODE_SEQ field");
@@ -18864,22 +24284,33 @@ fn multimodal_od_cost_matrix_writes_expected_batch_rows() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("MODE", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("MODE", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add walk edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("transit".to_string()))],
         )
         .expect("add transit edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("transit".to_string()))],
         )
         .expect("add transit edge 2");
@@ -18909,13 +24340,28 @@ fn multimodal_od_cost_matrix_writes_expected_batch_rows() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("mode_field".to_string(), json!("MODE"));
-    args.insert("mode_speed_overrides".to_string(), json!("walk:1.0,transit:2.0"));
+    args.insert(
+        "mode_speed_overrides".to_string(),
+        json!("walk:1.0,transit:2.0"),
+    );
     args.insert("transfer_penalty".to_string(), json!(0.5));
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("multimodal_od_cost_matrix", &args, &context(&caps))
@@ -18926,7 +24372,10 @@ fn multimodal_od_cost_matrix_writes_expected_batch_rows() {
         .get("reachable_pair_count")
         .and_then(|v| v.as_u64())
         .expect("reachable_pair_count output");
-    assert_eq!(reachable_pair_count, 4, "expected all OD pairs to be reachable");
+    assert_eq!(
+        reachable_pair_count, 4,
+        "expected all OD pairs to be reachable"
+    );
 
     let csv = std::fs::read_to_string(&out_csv).expect("read multimodal od csv");
     let lines: Vec<&str> = csv.lines().collect();
@@ -18935,12 +24384,23 @@ fn multimodal_od_cost_matrix_writes_expected_batch_rows() {
     assert_eq!(first_parts.len(), 8);
     assert_eq!(first_parts[3], "true");
     let first_cost: f64 = first_parts[2].parse().expect("parse first cost");
-    assert!((first_cost - 2.0).abs() < 1.0e-9, "expected 2.0 cost from origin A to destination C, got {}", first_cost);
+    assert!(
+        (first_cost - 2.0).abs() < 1.0e-9,
+        "expected 2.0 cost from origin A to destination C, got {}",
+        first_cost
+    );
 
     let last_parts: Vec<&str> = lines[4].split(',').collect();
     let last_cost: f64 = last_parts[2].parse().expect("parse last cost");
-    assert!((last_cost - 1.0).abs() < 1.0e-9, "expected 1.0 cost from origin B to destination D, got {}", last_cost);
-    assert_eq!(last_parts[4], "0", "expected no mode changes for pure transit route");
+    assert!(
+        (last_cost - 1.0).abs() < 1.0e-9,
+        "expected 1.0 cost from origin B to destination D, got {}",
+        last_cost
+    );
+    assert_eq!(
+        last_parts[4], "0",
+        "expected no mode changes for pure transit route"
+    );
     assert!(last_parts[5].contains("transit"));
 
     let _ = std::fs::remove_file(&network_path);
@@ -18966,16 +24426,24 @@ fn multimodal_routes_from_od_outputs_route_geometry_and_modes() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("MODE", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("MODE", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add walk edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("drive".to_string()))],
         )
         .expect("add drive edge");
@@ -18999,14 +24467,29 @@ fn multimodal_routes_from_od_outputs_route_geometry_and_modes() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("mode_field".to_string(), json!("MODE"));
     args.insert("allowed_modes".to_string(), json!("walk,drive"));
-    args.insert("mode_speed_overrides".to_string(), json!("walk:1.0,drive:2.0"));
+    args.insert(
+        "mode_speed_overrides".to_string(),
+        json!("walk:1.0,drive:2.0"),
+    );
     args.insert("transfer_penalty".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("multimodal_routes_from_od", &args, &context(&caps))
@@ -19030,7 +24513,11 @@ fn multimodal_routes_from_od_outputs_route_geometry_and_modes() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((cost - 2.25).abs() < 1.0e-9, "expected walk+drive cost 2.25, got {}", cost);
+    assert!(
+        (cost - 2.25).abs() < 1.0e-9,
+        "expected walk+drive cost 2.25, got {}",
+        cost
+    );
 
     let mode_changes = match &out.features[0].attributes[mode_changes_idx] {
         FieldValue::Integer(v) => *v,
@@ -19077,11 +24564,18 @@ fn multimodal_od_cost_matrix_applies_temporal_cost_profile() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("MODE", FieldType::Text));
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("MODE", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[
                 ("MODE", FieldValue::Text("walk".to_string())),
                 ("EDGE_ID", FieldValue::Text("w1".to_string())),
@@ -19090,7 +24584,10 @@ fn multimodal_od_cost_matrix_applies_temporal_cost_profile() {
         .expect("add walk edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[
                 ("MODE", FieldValue::Text("transit".to_string())),
                 ("EDGE_ID", FieldValue::Text("t1".to_string())),
@@ -19099,7 +24596,10 @@ fn multimodal_od_cost_matrix_applies_temporal_cost_profile() {
         .expect("add transit edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[
                 ("MODE", FieldValue::Text("transit".to_string())),
                 ("EDGE_ID", FieldValue::Text("t2".to_string())),
@@ -19132,16 +24632,34 @@ fn multimodal_od_cost_matrix_applies_temporal_cost_profile() {
     .expect("write temporal profile");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("mode_field".to_string(), json!("MODE"));
-    args.insert("mode_speed_overrides".to_string(), json!("walk:1.0,transit:2.0"));
+    args.insert(
+        "mode_speed_overrides".to_string(),
+        json!("walk:1.0,transit:2.0"),
+    );
     args.insert("transfer_penalty".to_string(), json!(0.5));
-    args.insert("temporal_cost_profile".to_string(), json!(profile_path.to_string_lossy().to_string()));
+    args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_path.to_string_lossy().to_string()),
+    );
     args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
     args.insert("temporal_mode".to_string(), json!("multiplier"));
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("multimodal_od_cost_matrix", &args, &context(&caps))
@@ -19159,7 +24677,11 @@ fn multimodal_od_cost_matrix_applies_temporal_cost_profile() {
     assert_eq!(lines.len(), 2, "expected header + one OD row");
     let row: Vec<&str> = lines[1].split(',').collect();
     let cost: f64 = row[2].parse().expect("parse temporal cost");
-    assert!((cost - 11.5).abs() < 1.0e-9, "expected temporal multiplier cost 11.5, got {}", cost);
+    assert!(
+        (cost - 11.5).abs() < 1.0e-9,
+        "expected temporal multiplier cost 11.5, got {}",
+        cost
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -19188,11 +24710,18 @@ fn multimodal_routes_from_od_writes_scenario_bundle_outputs() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("MODE", FieldType::Text));
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("MODE", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[
                 ("MODE", FieldValue::Text("walk".to_string())),
                 ("EDGE_ID", FieldValue::Text("w1".to_string())),
@@ -19201,7 +24730,10 @@ fn multimodal_routes_from_od_writes_scenario_bundle_outputs() {
         .expect("add walk edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[
                 ("MODE", FieldValue::Text("drive".to_string())),
                 ("EDGE_ID", FieldValue::Text("d1".to_string())),
@@ -19248,15 +24780,33 @@ fn multimodal_routes_from_od_writes_scenario_bundle_outputs() {
     .expect("write scenario bundle");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("mode_field".to_string(), json!("MODE"));
     args.insert("allowed_modes".to_string(), json!("walk,drive"));
-    args.insert("mode_speed_overrides".to_string(), json!("walk:1.0,drive:2.0"));
+    args.insert(
+        "mode_speed_overrides".to_string(),
+        json!("walk:1.0,drive:2.0"),
+    );
     args.insert("transfer_penalty".to_string(), json!(0.25));
-    args.insert("scenario_bundle_csv".to_string(), json!(scenario_bundle_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "scenario_bundle_csv".to_string(),
+        json!(scenario_bundle_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let result = registry
         .run("multimodal_routes_from_od", &args, &context(&caps))
@@ -19295,8 +24845,16 @@ fn multimodal_routes_from_od_writes_scenario_bundle_outputs() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((baseline_cost - 2.25).abs() < 1.0e-9, "expected baseline cost 2.25, got {}", baseline_cost);
-    assert!((peak_cost - 5.25).abs() < 1.0e-9, "expected peak cost 5.25, got {}", peak_cost);
+    assert!(
+        (baseline_cost - 2.25).abs() < 1.0e-9,
+        "expected baseline cost 2.25, got {}",
+        baseline_cost
+    );
+    assert!(
+        (peak_cost - 5.25).abs() < 1.0e-9,
+        "expected peak cost 5.25, got {}",
+        peak_cost
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -19330,11 +24888,18 @@ fn stream_c_temporal_routing_benchmark_fixture_switches_modes_across_scenarios()
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("MODE", FieldType::Text));
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("MODE", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[
                 ("MODE", FieldValue::Text("walk".to_string())),
                 ("EDGE_ID", FieldValue::Text("w1".to_string())),
@@ -19343,7 +24908,10 @@ fn stream_c_temporal_routing_benchmark_fixture_switches_modes_across_scenarios()
         .expect("add walk edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[
                 ("MODE", FieldValue::Text("drive".to_string())),
                 ("EDGE_ID", FieldValue::Text("d1".to_string())),
@@ -19352,7 +24920,10 @@ fn stream_c_temporal_routing_benchmark_fixture_switches_modes_across_scenarios()
         .expect("add drive edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[
                 ("MODE", FieldValue::Text("walk".to_string())),
                 ("EDGE_ID", FieldValue::Text("w2".to_string())),
@@ -19399,15 +24970,33 @@ fn stream_c_temporal_routing_benchmark_fixture_switches_modes_across_scenarios()
     .expect("write scenario bundle");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("mode_field".to_string(), json!("MODE"));
     args.insert("allowed_modes".to_string(), json!("walk,drive"));
-    args.insert("mode_speed_overrides".to_string(), json!("walk:1.0,drive:4.0"));
+    args.insert(
+        "mode_speed_overrides".to_string(),
+        json!("walk:1.0,drive:4.0"),
+    );
     args.insert("transfer_penalty".to_string(), json!(0.25));
-    args.insert("scenario_bundle_csv".to_string(), json!(scenario_bundle_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "scenario_bundle_csv".to_string(),
+        json!(scenario_bundle_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     let result = registry
         .run("multimodal_routes_from_od", &args, &context(&caps))
         .expect("multimodal_routes_from_od stream_c temporal benchmark run");
@@ -19460,9 +25049,20 @@ fn stream_c_temporal_routing_benchmark_fixture_switches_modes_across_scenarios()
     let peak_cost = peak_cost.expect("peak scenario row");
     let peak_modes = peak_modes.expect("peak mode sequence");
 
-    assert!(baseline_cost < peak_cost, "expected higher peak cost, baseline={} peak={}", baseline_cost, peak_cost);
-    assert!(baseline_modes.contains("drive"), "expected baseline route to include drive mode");
-    assert!(!peak_modes.contains("drive"), "expected peak route to avoid drive mode due to temporal penalty");
+    assert!(
+        baseline_cost < peak_cost,
+        "expected higher peak cost, baseline={} peak={}",
+        baseline_cost,
+        peak_cost
+    );
+    assert!(
+        baseline_modes.contains("drive"),
+        "expected baseline route to include drive mode"
+    );
+    assert!(
+        !peak_modes.contains("drive"),
+        "expected peak route to avoid drive mode due to temporal penalty"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -19491,13 +25091,18 @@ fn stream_c_uncertainty_benchmark_fixture_wider_disturbance_increases_variance()
     let mut network = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    network.schema.add_field(FieldDef::new("cost", FieldType::Float));
+    network
+        .schema
+        .add_field(FieldDef::new("cost", FieldType::Float));
     for i in 0..6 {
         let x1 = i as f64;
         let x2 = (i + 1) as f64;
         network
             .add_feature(
-                Some(Geometry::LineString(vec![Coord::xy(x1, 0.0), Coord::xy(x2, 0.0)])),
+                Some(Geometry::LineString(vec![
+                    Coord::xy(x1, 0.0),
+                    Coord::xy(x2, 0.0),
+                ])),
                 &[("cost", FieldValue::Float(1.0))],
             )
             .expect("add network segment");
@@ -19522,25 +25127,55 @@ fn stream_c_uncertainty_benchmark_fixture_wider_disturbance_increases_variance()
         .expect("write destinations");
 
     let mut narrow_args = ToolArgs::new();
-    narrow_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    narrow_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    narrow_args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    narrow_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    narrow_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    narrow_args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     narrow_args.insert("edge_cost_field".to_string(), json!("cost"));
-    narrow_args.insert("impedance_disturbance_range".to_string(), json!("0.99,1.01"));
+    narrow_args.insert(
+        "impedance_disturbance_range".to_string(),
+        json!("0.99,1.01"),
+    );
     narrow_args.insert("monte_carlo_samples".to_string(), json!(40));
-    narrow_args.insert("output".to_string(), json!(narrow_out.to_string_lossy().to_string()));
+    narrow_args.insert(
+        "output".to_string(),
+        json!(narrow_out.to_string_lossy().to_string()),
+    );
     registry
         .run("od_sensitivity_analysis", &narrow_args, &context(&caps))
         .expect("run narrow disturbance sensitivity");
 
     let mut wide_args = ToolArgs::new();
-    wide_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    wide_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    wide_args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    wide_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    wide_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    wide_args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     wide_args.insert("edge_cost_field".to_string(), json!("cost"));
-    wide_args.insert("impedance_disturbance_range".to_string(), json!("0.50,1.50"));
+    wide_args.insert(
+        "impedance_disturbance_range".to_string(),
+        json!("0.50,1.50"),
+    );
     wide_args.insert("monte_carlo_samples".to_string(), json!(40));
-    wide_args.insert("output".to_string(), json!(wide_out.to_string_lossy().to_string()));
+    wide_args.insert(
+        "output".to_string(),
+        json!(wide_out.to_string_lossy().to_string()),
+    );
     registry
         .run("od_sensitivity_analysis", &wide_args, &context(&caps))
         .expect("run wide disturbance sensitivity");
@@ -19585,54 +25220,80 @@ fn shortest_path_network_uses_edge_cost_field_multiplier() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("IMP", FieldType::Float));
+    lines
+        .schema
+        .add_field(FieldDef::new("IMP", FieldType::Float));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(10.0))],
         )
         .expect("add expensive edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(10.0))],
         )
         .expect("add expensive edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add cheap edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add cheap edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 1.0), Coord::xy(2.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 1.0),
+                Coord::xy(2.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add cheap edge 3");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add cheap edge 4");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(2.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("edge_cost_field".to_string(), json!("IMP"));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("shortest_path_network", &args, &context(&caps))
         .expect("shortest_path_network run");
@@ -19645,7 +25306,11 @@ fn shortest_path_network_uses_edge_cost_field_multiplier() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((cost - 4.0).abs() < 1.0e-9, "expected weighted path cost 4.0, got {}", cost);
+    assert!(
+        (cost - 4.0).abs() < 1.0e-9,
+        "expected weighted path cost 4.0, got {}",
+        cost
+    );
 
     let coords = match out.features[0].geometry.as_ref().expect("path geometry") {
         Geometry::LineString(coords) => coords,
@@ -19674,21 +25339,33 @@ fn network_centrality_metrics_identifies_middle_node_as_most_central() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add segment 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add segment 2");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_centrality_metrics", &args, &context(&caps))
         .expect("network_centrality_metrics run");
@@ -19697,8 +25374,14 @@ fn network_centrality_metrics_identifies_middle_node_as_most_central() {
     assert_eq!(out.features.len(), 3, "expected three graph nodes");
 
     let node_idx = out.schema.field_index("NODE_ID").expect("NODE_ID field");
-    let close_idx = out.schema.field_index("CLOSENESS").expect("CLOSENESS field");
-    let betw_idx = out.schema.field_index("BETWEENNESS").expect("BETWEENNESS field");
+    let close_idx = out
+        .schema
+        .field_index("CLOSENESS")
+        .expect("CLOSENESS field");
+    let betw_idx = out
+        .schema
+        .field_index("BETWEENNESS")
+        .expect("BETWEENNESS field");
 
     let mut closeness_by_node = std::collections::HashMap::<i64, f64>::new();
     let mut betweenness_by_node = std::collections::HashMap::<i64, f64>::new();
@@ -19727,7 +25410,9 @@ fn network_centrality_metrics_identifies_middle_node_as_most_central() {
     assert!(middle_closeness > end1_closeness);
     assert!(middle_closeness > end2_closeness);
 
-    let middle_betweenness = *betweenness_by_node.get(&2).expect("middle node betweenness");
+    let middle_betweenness = *betweenness_by_node
+        .get(&2)
+        .expect("middle node betweenness");
     let end1_betweenness = *betweenness_by_node.get(&1).expect("end node 1 betweenness");
     let end2_betweenness = *betweenness_by_node.get(&3).expect("end node 2 betweenness");
     assert!(middle_betweenness > end1_betweenness);
@@ -19757,13 +25442,19 @@ fn network_accessibility_metrics_computes_weighted_accessibility_by_cutoff_and_d
         .with_epsg(3857);
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add segment 1");
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add segment 2");
@@ -19775,39 +25466,41 @@ fn network_accessibility_metrics_computes_weighted_accessibility_by_cutoff_and_d
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
     origins
-        .add_feature(
-            Some(Geometry::Point(Coord::xy(0.0, 0.0))),
-            &[],
-        )
+        .add_feature(Some(Geometry::Point(Coord::xy(0.0, 0.0))), &[])
         .expect("add origin");
-    wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage)
-        .expect("write origins");
+    wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     // Two destinations at B and C (x=1 and x=2)
     let mut destinations = Layer::new("destinations")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
     destinations
-        .add_feature(
-            Some(Geometry::Point(Coord::xy(1.0, 0.0))),
-            &[],
-        )
+        .add_feature(Some(Geometry::Point(Coord::xy(1.0, 0.0))), &[])
         .expect("add destination 1");
     destinations
-        .add_feature(
-            Some(Geometry::Point(Coord::xy(2.0, 0.0))),
-            &[],
-        )
+        .add_feature(Some(Geometry::Point(Coord::xy(2.0, 0.0))), &[])
         .expect("add destination 2");
     wbvector::write(&destinations, &destinations_path, VectorFormat::GeoPackage)
         .expect("write destinations");
 
     // Test 1: No cutoff or decay (count all reachable)
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_accessibility_metrics", &args, &context(&caps))
         .expect("network_accessibility_metrics run");
@@ -19815,22 +25508,40 @@ fn network_accessibility_metrics_computes_weighted_accessibility_by_cutoff_and_d
     let out = wbvector::read(&output_path).expect("read accessibility output");
     assert_eq!(out.features.len(), 1, "expected one origin feature");
 
-    let access_idx = out.schema.field_index("ACCESSIBILITY").expect("ACCESSIBILITY field");
+    let access_idx = out
+        .schema
+        .field_index("ACCESSIBILITY")
+        .expect("ACCESSIBILITY field");
     let accessibility = match &out.features[0].attributes[access_idx] {
         wbvector::FieldValue::Float(v) => *v,
         wbvector::FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric ACCESSIBILITY, got {:?}", other),
     };
-    assert_eq!(accessibility, 2.0, "expected accessibility count of 2 destinations");
+    assert_eq!(
+        accessibility, 2.0,
+        "expected accessibility count of 2 destinations"
+    );
 
     // Test 2: With impedance cutoff (only first destination reachable)
     let output_path2 = std::env::temp_dir().join(format!("{tag}_out2.gpkg"));
     let mut args2 = ToolArgs::new();
-    args2.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args2.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args2.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args2.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args2.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args2.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args2.insert("impedance_cutoff".to_string(), json!(1.2));
-    args2.insert("output".to_string(), json!(output_path2.to_string_lossy().to_string()));
+    args2.insert(
+        "output".to_string(),
+        json!(output_path2.to_string_lossy().to_string()),
+    );
     registry
         .run("network_accessibility_metrics", &args2, &context(&caps))
         .expect("network_accessibility_metrics run with cutoff");
@@ -19841,7 +25552,10 @@ fn network_accessibility_metrics_computes_weighted_accessibility_by_cutoff_and_d
         wbvector::FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric ACCESSIBILITY, got {:?}", other),
     };
-    assert_eq!(accessibility2, 1.0, "expected accessibility count of 1 destination with cutoff");
+    assert_eq!(
+        accessibility2, 1.0,
+        "expected accessibility count of 1 destination with cutoff"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -19868,33 +25582,47 @@ fn network_accessibility_metrics_respects_ft_tf_b_one_way_values() {
     let mut network = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    network.schema.add_field(FieldDef::new("DIR", FieldType::Text));
+    network
+        .schema
+        .add_field(FieldDef::new("DIR", FieldType::Text));
 
     // A->B is FT, so B cannot traverse to A.
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("FT".to_string()))],
         )
         .expect("add FT edge");
     // B->C is FT, so B can traverse to C.
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("FT".to_string()))],
         )
         .expect("add forward FT edge");
     // D->B is TF, so traversal B->D is allowed (reverse direction).
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 1.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 1.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("TF".to_string()))],
         )
         .expect("add TF edge");
     // B<->E is bidirectional.
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, -1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, -1.0),
+            ])),
             &[("DIR", FieldValue::Text("B".to_string()))],
         )
         .expect("add B edge");
@@ -19927,15 +25655,24 @@ fn network_accessibility_metrics_respects_ft_tf_b_one_way_values() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert(
         "destinations".to_string(),
         json!(destinations_path.to_string_lossy().to_string()),
     );
     args.insert("one_way_field".to_string(), json!("DIR"));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_accessibility_metrics", &args, &context(&caps))
         .expect("network_accessibility_metrics with FT/TF/B run");
@@ -19943,7 +25680,10 @@ fn network_accessibility_metrics_respects_ft_tf_b_one_way_values() {
     let out = wbvector::read(&output_path).expect("read accessibility output");
     assert_eq!(out.features.len(), 1, "expected one origin feature");
 
-    let acc_idx = out.schema.field_index("ACCESSIBILITY").expect("ACCESSIBILITY field");
+    let acc_idx = out
+        .schema
+        .field_index("ACCESSIBILITY")
+        .expect("ACCESSIBILITY field");
     let accessibility = match &out.features[0].attributes[acc_idx] {
         wbvector::FieldValue::Float(v) => *v,
         wbvector::FieldValue::Integer(v) => *v as f64,
@@ -19951,7 +25691,10 @@ fn network_accessibility_metrics_respects_ft_tf_b_one_way_values() {
     };
 
     // Reachable: C (FT from B), D (TF reverse), E (B). Unreachable: A.
-    assert_eq!(accessibility, 3.0, "expected exactly 3 reachable destinations");
+    assert_eq!(
+        accessibility, 3.0,
+        "expected exactly 3 reachable destinations"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -19977,75 +25720,92 @@ fn od_sensitivity_analysis_computes_perturbed_od_costs_with_variance() {
     let mut network = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    network.schema.add_field(wbvector::FieldDef::new("cost", wbvector::FieldType::Float));
+    network
+        .schema
+        .add_field(wbvector::FieldDef::new("cost", wbvector::FieldType::Float));
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("cost", wbvector::FieldValue::Float(1.0))],
         )
         .expect("add segment 1");
     network
         .add_feature(
-            Some(Geometry::LineString(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::LineString(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("cost", wbvector::FieldValue::Float(1.0))],
         )
         .expect("add segment 2");
-    wbvector::write(&network, &network_path, VectorFormat::GeoPackage)
-        .expect("write network");
+    wbvector::write(&network, &network_path, VectorFormat::GeoPackage).expect("write network");
 
     // Single origin at x=0
     let mut origins = Layer::new("origins")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
     origins
-        .add_feature(
-            Some(Geometry::Point(Coord::xy(0.0, 0.0))),
-            &[],
-        )
+        .add_feature(Some(Geometry::Point(Coord::xy(0.0, 0.0))), &[])
         .expect("add origin");
-    wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage)
-        .expect("write origins");
+    wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     // Single destination at x=2
     let mut destinations = Layer::new("destinations")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
     destinations
-        .add_feature(
-            Some(Geometry::Point(Coord::xy(2.0, 0.0))),
-            &[],
-        )
+        .add_feature(Some(Geometry::Point(Coord::xy(2.0, 0.0))), &[])
         .expect("add destination");
     wbvector::write(&destinations, &destinations_path, VectorFormat::GeoPackage)
         .expect("write destinations");
 
     // Run with Monte Carlo samples to get variance
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("edge_cost_field".to_string(), json!("cost"));
     args.insert("impedance_disturbance_range".to_string(), json!("0.9,1.1"));
     args.insert("monte_carlo_samples".to_string(), json!(5));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("od_sensitivity_analysis", &args, &context(&caps))
         .expect("od_sensitivity_analysis run");
 
     // Parse output CSV and verify
-    let csv_content = std::fs::read_to_string(&output_path)
-        .expect("read sensitivity output");
+    let csv_content = std::fs::read_to_string(&output_path).expect("read sensitivity output");
     let lines: Vec<&str> = csv_content.lines().collect();
-    assert!(lines.len() > 1, "expected output CSV with header and data rows");
-    
+    assert!(
+        lines.len() > 1,
+        "expected output CSV with header and data rows"
+    );
+
     // Verify header
-    assert_eq!(lines[0], "origin_id,destination_id,baseline_cost,mean_cost,stdev_cost,min_cost,max_cost");
+    assert_eq!(
+        lines[0],
+        "origin_id,destination_id,baseline_cost,mean_cost,stdev_cost,min_cost,max_cost"
+    );
 
     // Verify data row format
     if lines.len() > 1 {
         let fields: Vec<&str> = lines[1].split(',').collect();
         assert_eq!(fields.len(), 7, "expected 7 CSV fields");
-        
+
         // Parse fields to verify numeric values
         let baseline: f64 = fields[2].parse().expect("baseline_cost numeric");
         let mean: f64 = fields[3].parse().expect("mean_cost numeric");
@@ -20083,7 +25843,7 @@ fn stream_d_centrality_metrics_benchmark_validates_correctness_across_network_to
     let mut network = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    
+
     // Horizontal edges
     for row in 0..4 {
         for col in 0..3 {
@@ -20093,7 +25853,10 @@ fn stream_d_centrality_metrics_benchmark_validates_correctness_across_network_to
             let y2 = row as f64;
             network
                 .add_feature(
-                    Some(Geometry::LineString(vec![Coord::xy(x1, y1), Coord::xy(x2, y2)])),
+                    Some(Geometry::LineString(vec![
+                        Coord::xy(x1, y1),
+                        Coord::xy(x2, y2),
+                    ])),
                     &[],
                 )
                 .expect("add horizontal edge");
@@ -20108,19 +25871,27 @@ fn stream_d_centrality_metrics_benchmark_validates_correctness_across_network_to
             let y2 = (row + 1) as f64;
             network
                 .add_feature(
-                    Some(Geometry::LineString(vec![Coord::xy(x1, y1), Coord::xy(x2, y2)])),
+                    Some(Geometry::LineString(vec![
+                        Coord::xy(x1, y1),
+                        Coord::xy(x2, y2),
+                    ])),
                     &[],
                 )
                 .expect("add vertical edge");
         }
     }
-    wbvector::write(&network, &network_path, VectorFormat::GeoPackage)
-        .expect("write network");
+    wbvector::write(&network, &network_path, VectorFormat::GeoPackage).expect("write network");
 
     // Run centrality metrics on grid network
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(output_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_centrality_metrics", &args, &context(&caps))
         .expect("network_centrality_metrics run");
@@ -20128,20 +25899,22 @@ fn stream_d_centrality_metrics_benchmark_validates_correctness_across_network_to
     // Parse output and validate
     let output = wbvector::read(&output_path).expect("read centrality output");
     assert_eq!(output.features.len(), 16, "expected 16 nodes in 4x4 grid");
-    
+
     // Verify corner nodes have degree 2, edge nodes have degree 3, inner nodes have degree 4
     let degree_idx = output.schema.field_index("DEGREE").expect("DEGREE field");
-    let degrees: Vec<i32> = output.features.iter().map(|f| {
-        match &f.attributes[degree_idx] {
+    let degrees: Vec<i32> = output
+        .features
+        .iter()
+        .map(|f| match &f.attributes[degree_idx] {
             wbvector::FieldValue::Integer(d) => *d as i32,
             _ => panic!("expected integer DEGREE"),
-        }
-    }).collect();
-    
+        })
+        .collect();
+
     let corner_degrees: i32 = degrees.iter().filter(|&&d| d == 2).count() as i32;
     let edge_degrees: i32 = degrees.iter().filter(|&&d| d == 3).count() as i32;
     let inner_degrees: i32 = degrees.iter().filter(|&&d| d == 4).count() as i32;
-    
+
     assert_eq!(corner_degrees, 4, "expected 4 corner nodes with degree 2");
     assert_eq!(edge_degrees, 8, "expected 8 edge nodes with degree 3");
     assert_eq!(inner_degrees, 4, "expected 4 inner nodes with degree 4");
@@ -20176,26 +25949,24 @@ fn stream_d_accessibility_metrics_benchmark_validates_impedance_cutoff_and_decay
         let y = 5.0 + 3.0 * angle.sin();
         network
             .add_feature(
-                Some(Geometry::LineString(vec![Coord::xy(5.0, 5.0), Coord::xy(x, y)])),
+                Some(Geometry::LineString(vec![
+                    Coord::xy(5.0, 5.0),
+                    Coord::xy(x, y),
+                ])),
                 &[],
             )
             .expect("add spoke");
     }
-    wbvector::write(&network, &network_path, VectorFormat::GeoPackage)
-        .expect("write network");
+    wbvector::write(&network, &network_path, VectorFormat::GeoPackage).expect("write network");
 
     // Single origin at center
     let mut origins = Layer::new("origins")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
     origins
-        .add_feature(
-            Some(Geometry::Point(Coord::xy(5.0, 5.0))),
-            &[],
-        )
+        .add_feature(Some(Geometry::Point(Coord::xy(5.0, 5.0))), &[])
         .expect("add origin");
-    wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage)
-        .expect("write origins");
+    wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     // 8 destinations at ends of spokes
     let mut destinations = Layer::new("destinations")
@@ -20206,10 +25977,7 @@ fn stream_d_accessibility_metrics_benchmark_validates_impedance_cutoff_and_decay
         let x = 5.0 + 3.0 * angle.cos();
         let y = 5.0 + 3.0 * angle.sin();
         destinations
-            .add_feature(
-                Some(Geometry::Point(Coord::xy(x, y))),
-                &[],
-            )
+            .add_feature(Some(Geometry::Point(Coord::xy(x, y))), &[])
             .expect("add destination");
     }
     wbvector::write(&destinations, &destinations_path, VectorFormat::GeoPackage)
@@ -20217,63 +25985,111 @@ fn stream_d_accessibility_metrics_benchmark_validates_impedance_cutoff_and_decay
 
     // Test 1: No decay (simple counting)
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("impedance_cutoff".to_string(), json!(10.0));
     args.insert("decay_function".to_string(), json!("none"));
-    args.insert("output".to_string(), json!(output_no_decay.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_no_decay.to_string_lossy().to_string()),
+    );
     registry
         .run("network_accessibility_metrics", &args, &context(&caps))
         .expect("accessibility with no decay");
-    
+
     let out_no_decay = wbvector::read(&output_no_decay).expect("read no decay output");
-    let acc_idx = out_no_decay.schema.field_index("ACCESSIBILITY").expect("ACCESSIBILITY field");
+    let acc_idx = out_no_decay
+        .schema
+        .field_index("ACCESSIBILITY")
+        .expect("ACCESSIBILITY field");
     let acc_no_decay = match &out_no_decay.features[0].attributes[acc_idx] {
         wbvector::FieldValue::Float(v) => *v,
         _ => panic!("expected float ACCESSIBILITY"),
     };
-    assert_eq!(acc_no_decay, 8.0, "expected all 8 destinations reachable with no decay");
+    assert_eq!(
+        acc_no_decay, 8.0,
+        "expected all 8 destinations reachable with no decay"
+    );
 
     // Test 2: Linear decay
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("impedance_cutoff".to_string(), json!(10.0));
     args.insert("decay_function".to_string(), json!("linear"));
     args.insert("decay_parameter".to_string(), json!(0.5));
-    args.insert("output".to_string(), json!(output_linear_decay.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_linear_decay.to_string_lossy().to_string()),
+    );
     registry
         .run("network_accessibility_metrics", &args, &context(&caps))
         .expect("accessibility with linear decay");
-    
+
     let out_linear = wbvector::read(&output_linear_decay).expect("read linear output");
     let acc_linear = match &out_linear.features[0].attributes[acc_idx] {
         wbvector::FieldValue::Float(v) => *v,
         _ => panic!("expected float ACCESSIBILITY"),
     };
-    assert!(acc_linear < acc_no_decay, "linear decay should reduce accessibility score");
+    assert!(
+        acc_linear < acc_no_decay,
+        "linear decay should reduce accessibility score"
+    );
 
     // Test 3: Exponential decay
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("impedance_cutoff".to_string(), json!(10.0));
     args.insert("decay_function".to_string(), json!("exponential"));
     args.insert("decay_parameter".to_string(), json!(0.5));
-    args.insert("output".to_string(), json!(output_exp_decay.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(output_exp_decay.to_string_lossy().to_string()),
+    );
     registry
         .run("network_accessibility_metrics", &args, &context(&caps))
         .expect("accessibility with exponential decay");
-    
+
     let out_exp = wbvector::read(&output_exp_decay).expect("read exponential output");
     let acc_exp = match &out_exp.features[0].attributes[acc_idx] {
         wbvector::FieldValue::Float(v) => *v,
         _ => panic!("expected float ACCESSIBILITY"),
     };
-    assert!(acc_exp < acc_linear, "exponential decay (lambda=0.5) should reduce accessibility more than linear");
+    assert!(
+        acc_exp < acc_linear,
+        "exponential decay (lambda=0.5) should reduce accessibility more than linear"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -20292,45 +26108,46 @@ fn stream_d_od_sensitivity_analysis_benchmark_validates_scaling_with_network_and
     let caps = OpenOnly;
 
     let tag = unique_tag("wbtools_oss_od_sensitivity_scaling_benchmark");
-    
+
     // Test with increasing network sizes: linear network with 5, 10, and 15 segments
     for num_segments in &[5, 10, 15] {
         let network_path = std::env::temp_dir().join(format!("{tag}_{}_net.gpkg", num_segments));
         let origins_path = std::env::temp_dir().join(format!("{tag}_{}_ori.gpkg", num_segments));
-        let destinations_path = std::env::temp_dir().join(format!("{tag}_{}_dst.gpkg", num_segments));
+        let destinations_path =
+            std::env::temp_dir().join(format!("{tag}_{}_dst.gpkg", num_segments));
         let output_path = std::env::temp_dir().join(format!("{tag}_{}_out.csv", num_segments));
 
         // Create linear network
         let mut network = Layer::new("network")
             .with_geom_type(GeometryType::LineString)
             .with_epsg(3857);
-        network.schema.add_field(wbvector::FieldDef::new("cost", wbvector::FieldType::Float));
+        network
+            .schema
+            .add_field(wbvector::FieldDef::new("cost", wbvector::FieldType::Float));
 
         for i in 0..*num_segments {
             let x1 = i as f64;
             let x2 = (i + 1) as f64;
             network
                 .add_feature(
-                    Some(Geometry::LineString(vec![Coord::xy(x1, 0.0), Coord::xy(x2, 0.0)])),
+                    Some(Geometry::LineString(vec![
+                        Coord::xy(x1, 0.0),
+                        Coord::xy(x2, 0.0),
+                    ])),
                     &[("cost", wbvector::FieldValue::Float(1.0))],
                 )
                 .expect("add segment");
         }
-        wbvector::write(&network, &network_path, VectorFormat::GeoPackage)
-            .expect("write network");
+        wbvector::write(&network, &network_path, VectorFormat::GeoPackage).expect("write network");
 
         // Single origin and destination at ends
         let mut origins = Layer::new("origins")
             .with_geom_type(GeometryType::Point)
             .with_epsg(3857);
         origins
-            .add_feature(
-                Some(Geometry::Point(Coord::xy(0.0, 0.0))),
-                &[],
-            )
+            .add_feature(Some(Geometry::Point(Coord::xy(0.0, 0.0))), &[])
             .expect("add origin");
-        wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage)
-            .expect("write origins");
+        wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
         let mut destinations = Layer::new("destinations")
             .with_geom_type(GeometryType::Point)
@@ -20346,28 +26163,46 @@ fn stream_d_od_sensitivity_analysis_benchmark_validates_scaling_with_network_and
 
         // Run sensitivity analysis
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-        args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-        args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(network_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "origins".to_string(),
+            json!(origins_path.to_string_lossy().to_string()),
+        );
+        args.insert(
+            "destinations".to_string(),
+            json!(destinations_path.to_string_lossy().to_string()),
+        );
         args.insert("edge_cost_field".to_string(), json!("cost"));
         args.insert("impedance_disturbance_range".to_string(), json!("0.9,1.1"));
         args.insert("monte_carlo_samples".to_string(), json!(10));
-        args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(output_path.to_string_lossy().to_string()),
+        );
         registry
             .run("od_sensitivity_analysis", &args, &context(&caps))
             .expect("od_sensitivity_analysis run");
 
         // Verify output
-        let csv_content = std::fs::read_to_string(&output_path)
-            .expect("read sensitivity output");
+        let csv_content = std::fs::read_to_string(&output_path).expect("read sensitivity output");
         let lines: Vec<&str> = csv_content.lines().collect();
-        assert!(lines.len() > 1, "expected output CSV for network with {} segments", num_segments);
-        
+        assert!(
+            lines.len() > 1,
+            "expected output CSV for network with {} segments",
+            num_segments
+        );
+
         // Validate expected baseline cost
         if lines.len() > 1 {
             let fields: Vec<&str> = lines[1].split(',').collect();
             let baseline: f64 = fields[2].parse().expect("baseline_cost numeric");
-            assert_eq!(baseline, *num_segments as f64, "expected baseline cost matching segment count");
+            assert_eq!(
+                baseline, *num_segments as f64,
+                "expected baseline cost matching segment count"
+            );
         }
 
         let _ = std::fs::remove_file(&network_path);
@@ -20394,41 +26229,61 @@ fn shortest_path_network_temporal_profile_changes_route_by_departure_time() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
 
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add direct edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add direct edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_D".to_string()))],
         )
         .expect("add detour edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("D_E".to_string()))],
         )
         .expect("add detour edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 1.0), Coord::xy(2.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 1.0),
+                Coord::xy(2.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("E_F".to_string()))],
         )
         .expect("add detour edge 3");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("F_C".to_string()))],
         )
         .expect("add detour edge 4");
@@ -20441,15 +26296,24 @@ fn shortest_path_network_temporal_profile_changes_route_by_departure_time() {
     .expect("write temporal profile csv");
 
     let mut rush_args = ToolArgs::new();
-    rush_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     rush_args.insert("start_x".to_string(), json!(0.0));
     rush_args.insert("start_y".to_string(), json!(0.0));
     rush_args.insert("end_x".to_string(), json!(2.0));
     rush_args.insert("end_y".to_string(), json!(0.0));
     rush_args.insert("max_snap_distance".to_string(), json!(0.25));
-    rush_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    rush_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     rush_args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
-    rush_args.insert("output".to_string(), json!(out_rush_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "output".to_string(),
+        json!(out_rush_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("shortest_path_network", &rush_args, &context(&caps))
@@ -20463,18 +26327,31 @@ fn shortest_path_network_temporal_profile_changes_route_by_departure_time() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((rush_cost - 4.0).abs() < 1.0e-9, "expected detour cost 4.0 during rush hour, got {}", rush_cost);
+    assert!(
+        (rush_cost - 4.0).abs() < 1.0e-9,
+        "expected detour cost 4.0 during rush hour, got {}",
+        rush_cost
+    );
 
     let mut offpeak_args = ToolArgs::new();
-    offpeak_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("start_x".to_string(), json!(0.0));
     offpeak_args.insert("start_y".to_string(), json!(0.0));
     offpeak_args.insert("end_x".to_string(), json!(2.0));
     offpeak_args.insert("end_y".to_string(), json!(0.0));
     offpeak_args.insert("max_snap_distance".to_string(), json!(0.25));
-    offpeak_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("departure_time".to_string(), json!("2026-04-13T11:00:00Z"));
-    offpeak_args.insert("output".to_string(), json!(out_offpeak_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "output".to_string(),
+        json!(out_offpeak_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("shortest_path_network", &offpeak_args, &context(&caps))
@@ -20488,7 +26365,11 @@ fn shortest_path_network_temporal_profile_changes_route_by_departure_time() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((offpeak_cost - 2.0).abs() < 1.0e-9, "expected direct cost 2.0 offpeak, got {}", offpeak_cost);
+    assert!(
+        (offpeak_cost - 2.0).abs() < 1.0e-9,
+        "expected direct cost 2.0 offpeak, got {}",
+        offpeak_cost
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&profile_csv);
@@ -20512,16 +26393,24 @@ fn shortest_path_network_temporal_profile_error_fallback_requires_coverage() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add edge 2");
@@ -20534,16 +26423,25 @@ fn shortest_path_network_temporal_profile_error_fallback_requires_coverage() {
     .expect("write temporal profile csv");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(2.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
     args.insert("temporal_fallback".to_string(), json!("error"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let err = registry
         .run("shortest_path_network", &args, &context(&caps))
@@ -20577,22 +26475,33 @@ fn shortest_path_network_temporal_profile_report_emits_diagnostics() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("C_D".to_string()))],
         )
         .expect("add edge 3");
@@ -20605,33 +26514,52 @@ fn shortest_path_network_temporal_profile_report_emits_diagnostics() {
     .expect("write temporal profile csv");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(3.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
-    args.insert("temporal_profile_report".to_string(), json!(report_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "temporal_profile_report".to_string(),
+        json!(report_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("shortest_path_network", &args, &context(&caps))
         .expect("shortest_path_network run");
 
     let report_text = std::fs::read_to_string(&report_path).expect("read temporal profile report");
-    let report: serde_json::Value = serde_json::from_str(&report_text).expect("parse temporal profile report json");
+    let report: serde_json::Value =
+        serde_json::from_str(&report_text).expect("parse temporal profile report json");
 
     assert_eq!(report["profile_edge_id_count"].as_u64(), Some(2));
     assert_eq!(report["network_edge_count"].as_u64(), Some(3));
     assert_eq!(report["network_unique_edge_id_count"].as_u64(), Some(3));
-    assert_eq!(report["network_edges_without_temporal_rows"].as_u64(), Some(1));
+    assert_eq!(
+        report["network_edges_without_temporal_rows"].as_u64(),
+        Some(1)
+    );
     assert_eq!(report["fallback_usage_count"].as_u64(), Some(1));
     let unmatched = report["unmatched_profile_edge_ids"]
         .as_array()
         .expect("unmatched_profile_edge_ids array");
-    assert!(unmatched.is_empty(), "expected all profile edge ids to exist in the network");
+    assert!(
+        unmatched.is_empty(),
+        "expected all profile edge ids to exist in the network"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&profile_csv);
@@ -20654,30 +26582,44 @@ fn shortest_path_network_respects_one_way_field_direction() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("ONEWAY", FieldType::Integer));
+    lines
+        .schema
+        .add_field(FieldDef::new("ONEWAY", FieldType::Integer));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("ONEWAY", FieldValue::Integer(1))],
         )
         .expect("add one-way edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("ONEWAY", FieldValue::Integer(0))],
         )
         .expect("add two-way edge");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(2.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(0.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("one_way_field".to_string(), json!("ONEWAY"));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let err = registry
         .run("shortest_path_network", &args, &context(&caps))
@@ -20707,22 +26649,33 @@ fn shortest_path_network_supports_ft_tf_b_one_way_values() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("DIR", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("DIR", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("FT".to_string()))],
         )
         .expect("add FT component");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(10.0, 0.0), Coord::xy(11.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(10.0, 0.0),
+                Coord::xy(11.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("TF".to_string()))],
         )
         .expect("add TF component");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(20.0, 0.0), Coord::xy(21.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(20.0, 0.0),
+                Coord::xy(21.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("B".to_string()))],
         )
         .expect("add B component");
@@ -20730,14 +26683,20 @@ fn shortest_path_network_supports_ft_tf_b_one_way_values() {
 
     let run_shortest = |start_x: f64, end_x: f64, output_path: &std::path::Path| {
         let mut args = ToolArgs::new();
-        args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+        args.insert(
+            "input".to_string(),
+            json!(input_path.to_string_lossy().to_string()),
+        );
         args.insert("start_x".to_string(), json!(start_x));
         args.insert("start_y".to_string(), json!(0.0));
         args.insert("end_x".to_string(), json!(end_x));
         args.insert("end_y".to_string(), json!(0.0));
         args.insert("one_way_field".to_string(), json!("DIR"));
         args.insert("max_snap_distance".to_string(), json!(0.25));
-        args.insert("output".to_string(), json!(output_path.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(output_path.to_string_lossy().to_string()),
+        );
         registry
             .run("shortest_path_network", &args, &context(&caps))
             .expect("shortest_path_network run")
@@ -20748,7 +26707,12 @@ fn shortest_path_network_supports_ft_tf_b_one_way_values() {
     run_shortest(20.0, 21.0, &out_b_forward_path);
     run_shortest(21.0, 20.0, &out_b_reverse_path);
 
-    for output_path in [&out_ft_path, &out_tf_path, &out_b_forward_path, &out_b_reverse_path] {
+    for output_path in [
+        &out_ft_path,
+        &out_tf_path,
+        &out_b_forward_path,
+        &out_b_reverse_path,
+    ] {
         let out = wbvector::read(output_path).expect("read shortest path output");
         assert_eq!(out.features.len(), 1);
         let cost_idx = out.schema.field_index("COST").expect("COST field");
@@ -20757,7 +26721,11 @@ fn shortest_path_network_supports_ft_tf_b_one_way_values() {
             FieldValue::Integer(v) => *v as f64,
             other => panic!("expected numeric COST, got {:?}", other),
         };
-        assert!((cost - 1.0).abs() < 1.0e-9, "expected one-unit cost, got {}", cost);
+        assert!(
+            (cost - 1.0).abs() < 1.0e-9,
+            "expected one-unit cost, got {}",
+            cost
+        );
     }
 
     let _ = std::fs::remove_file(&input_path);
@@ -20782,54 +26750,80 @@ fn shortest_path_network_respects_blocked_field_edges() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("BLOCKED", FieldType::Integer));
+    lines
+        .schema
+        .add_field(FieldDef::new("BLOCKED", FieldType::Integer));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("BLOCKED", FieldValue::Integer(1))],
         )
         .expect("add blocked edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("BLOCKED", FieldValue::Integer(1))],
         )
         .expect("add blocked edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("BLOCKED", FieldValue::Integer(0))],
         )
         .expect("add detour edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("BLOCKED", FieldValue::Integer(0))],
         )
         .expect("add detour edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 1.0), Coord::xy(2.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 1.0),
+                Coord::xy(2.0, 1.0),
+            ])),
             &[("BLOCKED", FieldValue::Integer(0))],
         )
         .expect("add detour edge 3");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("BLOCKED", FieldValue::Integer(0))],
         )
         .expect("add detour edge 4");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(2.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("blocked_field".to_string(), json!("BLOCKED"));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("shortest_path_network", &args, &context(&caps))
         .expect("shortest_path_network run");
@@ -20842,7 +26836,11 @@ fn shortest_path_network_respects_blocked_field_edges() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((cost - 4.0).abs() < 1.0e-9, "expected detour cost 4.0, got {}", cost);
+    assert!(
+        (cost - 4.0).abs() < 1.0e-9,
+        "expected detour cost 4.0, got {}",
+        cost
+    );
 
     let coords = match out.features[0].geometry.as_ref().expect("path geometry") {
         Geometry::LineString(coords) => coords,
@@ -20872,13 +26870,19 @@ fn shortest_path_network_respects_barrier_points() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -20890,18 +26894,28 @@ fn shortest_path_network_respects_barrier_points() {
     barriers
         .add_feature(Some(Geometry::Point(Coord::xy(1.0, 0.0))), &[])
         .expect("add barrier");
-    wbvector::write(&barriers, &barriers_path, VectorFormat::GeoPackage).expect("write barrier input");
+    wbvector::write(&barriers, &barriers_path, VectorFormat::GeoPackage)
+        .expect("write barrier input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(2.0));
     args.insert("end_y".to_string(), json!(0.0));
-    args.insert("barriers".to_string(), json!(barriers_path.to_string_lossy().to_string()));
+    args.insert(
+        "barriers".to_string(),
+        json!(barriers_path.to_string_lossy().to_string()),
+    );
     args.insert("barrier_snap_distance".to_string(), json!(0.25));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let err = registry
         .run("shortest_path_network", &args, &context(&caps))
@@ -20931,27 +26945,39 @@ fn shortest_path_network_applies_turn_penalty_to_cost() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(1.0));
     args.insert("end_y".to_string(), json!(1.0));
     args.insert("turn_penalty".to_string(), json!(3.0));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("shortest_path_network", &args, &context(&caps))
         .expect("shortest_path_network run");
@@ -20964,7 +26990,11 @@ fn shortest_path_network_applies_turn_penalty_to_cost() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((cost - 5.0).abs() < 1.0e-9, "expected cost 5.0 with turn penalty, got {}", cost);
+    assert!(
+        (cost - 5.0).abs() < 1.0e-9,
+        "expected cost 5.0 with turn penalty, got {}",
+        cost
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&out_path);
@@ -20985,35 +27015,52 @@ fn shortest_path_network_can_forbid_left_turns() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("IMP", FieldType::Float));
+    lines
+        .schema
+        .add_field(FieldDef::new("IMP", FieldType::Float));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add AB");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add BC");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add AD");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add DC");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(1.0));
@@ -21021,7 +27068,10 @@ fn shortest_path_network_can_forbid_left_turns() {
     args.insert("edge_cost_field".to_string(), json!("IMP"));
     args.insert("forbid_left_turns".to_string(), json!(true));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("shortest_path_network", &args, &context(&caps))
         .expect("shortest_path_network run");
@@ -21034,7 +27084,11 @@ fn shortest_path_network_can_forbid_left_turns() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((cost - 4.0).abs() < 1.0e-9, "expected cost 4.0 with left-turn restriction, got {}", cost);
+    assert!(
+        (cost - 4.0).abs() < 1.0e-9,
+        "expected cost 4.0 with left-turn restriction, got {}",
+        cost
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&out_path);
@@ -21056,28 +27110,42 @@ fn shortest_path_network_respects_turn_restrictions_csv() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("IMP", FieldType::Float));
+    lines
+        .schema
+        .add_field(FieldDef::new("IMP", FieldType::Float));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add AB");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add BC");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add AD");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add DC");
@@ -21090,7 +27158,10 @@ fn shortest_path_network_respects_turn_restrictions_csv() {
     .expect("write turn restrictions csv");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(1.0));
@@ -21101,7 +27172,10 @@ fn shortest_path_network_respects_turn_restrictions_csv() {
         json!(restrictions_csv.to_string_lossy().to_string()),
     );
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("shortest_path_network", &args, &context(&caps))
         .expect("shortest_path_network run");
@@ -21114,7 +27188,11 @@ fn shortest_path_network_respects_turn_restrictions_csv() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((cost - 4.0).abs() < 1.0e-9, "expected detour cost 4.0 with turn restriction, got {}", cost);
+    assert!(
+        (cost - 4.0).abs() < 1.0e-9,
+        "expected detour cost 4.0 with turn restriction, got {}",
+        cost
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&restrictions_csv);
@@ -21138,34 +27216,52 @@ fn network_node_degree_identifies_junction_and_dead_ends() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[],
         )
         .expect("add edge 3");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_node_degree", &args, &context(&caps))
         .expect("network_node_degree run");
 
     let out = wbvector::read(&out_path).expect("read network nodes output");
     let degree_idx = out.schema.field_index("DEGREE").expect("DEGREE field");
-    let node_type_idx = out.schema.field_index("NODE_TYPE").expect("NODE_TYPE field");
+    let node_type_idx = out
+        .schema
+        .field_index("NODE_TYPE")
+        .expect("NODE_TYPE field");
 
     let mut count_deg1 = 0;
     let mut count_deg3 = 0;
@@ -21213,13 +27309,19 @@ fn network_service_area_returns_nodes_within_max_cost() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -21234,16 +27336,29 @@ fn network_service_area_returns_nodes_within_max_cost() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(1.1));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area output");
-    assert_eq!(out.features.len(), 2, "expected nodes at costs 0 and 1 within max_cost");
+    assert_eq!(
+        out.features.len(),
+        2,
+        "expected nodes at costs 0 and 1 within max_cost"
+    );
 
     let cost_idx = out.schema.field_index("COST").expect("COST field");
     let mut costs = Vec::<f64>::new();
@@ -21280,22 +27395,33 @@ fn network_service_area_mode_allowlist_filters_edges() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("MODE", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("MODE", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("drive".to_string()))],
         )
         .expect("add edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add edge 3");
@@ -21310,18 +27436,31 @@ fn network_service_area_mode_allowlist_filters_edges() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(10.0));
     args.insert("mode_field".to_string(), json!("MODE"));
     args.insert("allowed_modes".to_string(), json!("walk"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area output");
-    assert_eq!(out.features.len(), 2, "expected only walk-connected nodes to be reachable");
+    assert_eq!(
+        out.features.len(),
+        2,
+        "expected only walk-connected nodes to be reachable"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -21344,16 +27483,24 @@ fn network_service_area_mode_speed_overrides_change_reachability() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("MODE", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("MODE", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("MODE", FieldValue::Text("walk".to_string()))],
         )
         .expect("add edge 2");
@@ -21368,18 +27515,31 @@ fn network_service_area_mode_speed_overrides_change_reachability() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(1.6));
     args.insert("mode_field".to_string(), json!("MODE"));
     args.insert("mode_speed_overrides".to_string(), json!("walk:2.0"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area output");
-    assert_eq!(out.features.len(), 3, "expected speed override to make third node reachable within max_cost");
+    assert_eq!(
+        out.features.len(),
+        3,
+        "expected speed override to make third node reachable within max_cost"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -21402,34 +27562,51 @@ fn network_service_area_respects_ft_tf_b_one_way_values() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("DIR", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("DIR", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("FT".to_string()))],
         )
         .expect("add FT edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("FT".to_string()))],
         )
         .expect("add FT edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("FT".to_string()))],
         )
         .expect("add FT edge 3");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("TF".to_string()))],
         )
         .expect("add TF edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 0.0), Coord::xy(2.0, -1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 0.0),
+                Coord::xy(2.0, -1.0),
+            ])),
             &[("DIR", FieldValue::Text("B".to_string()))],
         )
         .expect("add bidirectional edge");
@@ -21444,18 +27621,31 @@ fn network_service_area_respects_ft_tf_b_one_way_values() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(3.1));
     args.insert("one_way_field".to_string(), json!("DIR"));
     args.insert("output_mode".to_string(), json!("nodes"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area output");
-    assert_eq!(out.features.len(), 6, "expected six reachable nodes along the directed chain and branches");
+    assert_eq!(
+        out.features.len(),
+        6,
+        "expected six reachable nodes along the directed chain and branches"
+    );
 
     let mut reachability = std::collections::HashSet::<(i64, i64)>::new();
     for feature in &out.features {
@@ -21463,23 +27653,50 @@ fn network_service_area_respects_ft_tf_b_one_way_values() {
             Geometry::Point(coord) => coord,
             other => panic!("expected point geometry, got {:?}", other),
         };
-        let key = ((coord.x * 1.0e9).round() as i64, (coord.y * 1.0e9).round() as i64);
+        let key = (
+            (coord.x * 1.0e9).round() as i64,
+            (coord.y * 1.0e9).round() as i64,
+        );
         reachability.insert(key);
     }
 
-    let p0 = ((0.0_f64 * 1.0e9).round() as i64, (0.0_f64 * 1.0e9).round() as i64);
-    let p1 = ((1.0_f64 * 1.0e9).round() as i64, (0.0_f64 * 1.0e9).round() as i64);
-    let p2 = ((2.0_f64 * 1.0e9).round() as i64, (0.0_f64 * 1.0e9).round() as i64);
-    let p3 = ((3.0_f64 * 1.0e9).round() as i64, (0.0_f64 * 1.0e9).round() as i64);
-    let p_up = ((2.0_f64 * 1.0e9).round() as i64, (1.0_f64 * 1.0e9).round() as i64);
-    let p_down = ((2.0_f64 * 1.0e9).round() as i64, (-1.0_f64 * 1.0e9).round() as i64);
+    let p0 = (
+        (0.0_f64 * 1.0e9).round() as i64,
+        (0.0_f64 * 1.0e9).round() as i64,
+    );
+    let p1 = (
+        (1.0_f64 * 1.0e9).round() as i64,
+        (0.0_f64 * 1.0e9).round() as i64,
+    );
+    let p2 = (
+        (2.0_f64 * 1.0e9).round() as i64,
+        (0.0_f64 * 1.0e9).round() as i64,
+    );
+    let p3 = (
+        (3.0_f64 * 1.0e9).round() as i64,
+        (0.0_f64 * 1.0e9).round() as i64,
+    );
+    let p_up = (
+        (2.0_f64 * 1.0e9).round() as i64,
+        (1.0_f64 * 1.0e9).round() as i64,
+    );
+    let p_down = (
+        (2.0_f64 * 1.0e9).round() as i64,
+        (-1.0_f64 * 1.0e9).round() as i64,
+    );
 
     assert!(reachability.contains(&p0));
     assert!(reachability.contains(&p1));
     assert!(reachability.contains(&p2));
     assert!(reachability.contains(&p3));
-    assert!(reachability.contains(&p_up), "expected TF branch to be reachable from C");
-    assert!(reachability.contains(&p_down), "expected bidirectional branch to be reachable from C");
+    assert!(
+        reachability.contains(&p_up),
+        "expected TF branch to be reachable from C"
+    );
+    assert!(
+        reachability.contains(&p_down),
+        "expected bidirectional branch to be reachable from C"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -21504,13 +27721,19 @@ fn network_service_area_nodes_output_supports_ring_costs() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -21525,12 +27748,21 @@ fn network_service_area_nodes_output_supports_ring_costs() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(2.5));
     args.insert("ring_costs".to_string(), json!("1.0,2.0"));
     args.insert("output_mode".to_string(), json!("nodes"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
@@ -21583,28 +27815,42 @@ fn network_service_area_temporal_profile_changes_reachability_by_departure_time(
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add direct edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add direct edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_D".to_string()))],
         )
         .expect("add detour edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("D_C".to_string()))],
         )
         .expect("add detour edge 2");
@@ -21625,34 +27871,66 @@ fn network_service_area_temporal_profile_changes_reachability_by_departure_time(
     .expect("write temporal profile csv");
 
     let mut rush_args = ToolArgs::new();
-    rush_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    rush_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    rush_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     rush_args.insert("max_cost".to_string(), json!(2.5));
     rush_args.insert("output_mode".to_string(), json!("nodes"));
-    rush_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    rush_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     rush_args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
-    rush_args.insert("output".to_string(), json!(rush_out_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "output".to_string(),
+        json!(rush_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &rush_args, &context(&caps))
         .expect("network_service_area rush run");
 
     let rush_out = wbvector::read(&rush_out_path).expect("read rush service area output");
-    assert_eq!(rush_out.features.len(), 2, "expected only origin and one detour node at rush hour");
+    assert_eq!(
+        rush_out.features.len(),
+        2,
+        "expected only origin and one detour node at rush hour"
+    );
 
     let mut offpeak_args = ToolArgs::new();
-    offpeak_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    offpeak_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    offpeak_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("max_cost".to_string(), json!(2.5));
     offpeak_args.insert("output_mode".to_string(), json!("nodes"));
-    offpeak_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("departure_time".to_string(), json!("2026-04-13T11:00:00Z"));
-    offpeak_args.insert("output".to_string(), json!(offpeak_out_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "output".to_string(),
+        json!(offpeak_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &offpeak_args, &context(&caps))
         .expect("network_service_area offpeak run");
 
     let offpeak_out = wbvector::read(&offpeak_out_path).expect("read offpeak service area output");
-    assert_eq!(offpeak_out.features.len(), 4, "expected all reachable nodes offpeak, including detour branch");
+    assert_eq!(
+        offpeak_out.features.len(),
+        4,
+        "expected all reachable nodes offpeak, including detour branch"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -21679,16 +27957,24 @@ fn map_matching_v1_matches_clean_trajectory_and_emits_diagnostics() {
     let mut network = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    network.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    network
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("E1".to_string()))],
         )
         .expect("add network edge 1");
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("E2".to_string()))],
         )
         .expect("add network edge 2");
@@ -21697,7 +27983,9 @@ fn map_matching_v1_matches_clean_trajectory_and_emits_diagnostics() {
     let mut trajectory = Layer::new("trajectory")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
-    trajectory.schema.add_field(FieldDef::new("TS", FieldType::Text));
+    trajectory
+        .schema
+        .add_field(FieldDef::new("TS", FieldType::Text));
     trajectory
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.05, 0.02))),
@@ -21716,26 +28004,52 @@ fn map_matching_v1_matches_clean_trajectory_and_emits_diagnostics() {
             &[("TS", FieldValue::Text("2026-04-12T10:02:00Z".to_string()))],
         )
         .expect("add trajectory point 3");
-    wbvector::write(&trajectory, &trajectory_path, VectorFormat::GeoPackage).expect("write trajectory");
+    wbvector::write(&trajectory, &trajectory_path, VectorFormat::GeoPackage)
+        .expect("write trajectory");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("trajectory_points".to_string(), json!(trajectory_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "trajectory_points".to_string(),
+        json!(trajectory_path.to_string_lossy().to_string()),
+    );
     args.insert("timestamp_field".to_string(), json!("TS"));
     args.insert("search_radius".to_string(), json!(0.5));
     args.insert("candidate_k".to_string(), json!(3));
-    args.insert("matched_points_output".to_string(), json!(points_out_path.to_string_lossy().to_string()));
-    args.insert("match_report".to_string(), json!(report_out_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(route_out_path.to_string_lossy().to_string()));
+    args.insert(
+        "matched_points_output".to_string(),
+        json!(points_out_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "match_report".to_string(),
+        json!(report_out_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(route_out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("map_matching_v1", &args, &context(&caps))
         .expect("map_matching_v1 run");
 
     let route_out = wbvector::read(&route_out_path).expect("read route output");
-    assert_eq!(route_out.features.len(), 1, "expected single matched route feature");
-    let matched_idx = route_out.schema.field_index("MATCHED_PTS").expect("MATCHED_PTS field");
-    let unmatched_idx = route_out.schema.field_index("UNMATCHED").expect("UNMATCHED field");
+    assert_eq!(
+        route_out.features.len(),
+        1,
+        "expected single matched route feature"
+    );
+    let matched_idx = route_out
+        .schema
+        .field_index("MATCHED_PTS")
+        .expect("MATCHED_PTS field");
+    let unmatched_idx = route_out
+        .schema
+        .field_index("UNMATCHED")
+        .expect("UNMATCHED field");
     let matched = match &route_out.features[0].attributes[matched_idx] {
         FieldValue::Integer(v) => *v,
         other => panic!("expected integer MATCHED_PTS, got {:?}", other),
@@ -21748,8 +28062,15 @@ fn map_matching_v1_matches_clean_trajectory_and_emits_diagnostics() {
     assert_eq!(unmatched, 0);
 
     let points_out = wbvector::read(&points_out_path).expect("read matched points output");
-    assert_eq!(points_out.features.len(), 3, "expected matched diagnostics for each point");
-    let status_idx = points_out.schema.field_index("STATUS").expect("STATUS field");
+    assert_eq!(
+        points_out.features.len(),
+        3,
+        "expected matched diagnostics for each point"
+    );
+    let status_idx = points_out
+        .schema
+        .field_index("STATUS")
+        .expect("STATUS field");
     for feature in &points_out.features {
         let status = match &feature.attributes[status_idx] {
             FieldValue::Text(v) => v.as_str(),
@@ -21759,8 +28080,12 @@ fn map_matching_v1_matches_clean_trajectory_and_emits_diagnostics() {
     }
 
     let report_text = std::fs::read_to_string(&report_out_path).expect("read report output");
-    let report_json: serde_json::Value = serde_json::from_str(&report_text).expect("parse report json");
-    assert!(report_json.get("match_rate").is_some(), "match_report should include match_rate");
+    let report_json: serde_json::Value =
+        serde_json::from_str(&report_text).expect("parse report json");
+    assert!(
+        report_json.get("match_rate").is_some(),
+        "match_report should include match_rate"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&trajectory_path);
@@ -21787,16 +28112,24 @@ fn map_matching_v1_partial_unmatched_points_still_emit_outputs() {
     let mut network = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    network.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    network
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("E1".to_string()))],
         )
         .expect("add network edge 1");
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("E2".to_string()))],
         )
         .expect("add network edge 2");
@@ -21805,7 +28138,9 @@ fn map_matching_v1_partial_unmatched_points_still_emit_outputs() {
     let mut trajectory = Layer::new("trajectory")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
-    trajectory.schema.add_field(FieldDef::new("TS", FieldType::Text));
+    trajectory
+        .schema
+        .add_field(FieldDef::new("TS", FieldType::Text));
     trajectory
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.05, 0.01))),
@@ -21824,26 +28159,52 @@ fn map_matching_v1_partial_unmatched_points_still_emit_outputs() {
             &[("TS", FieldValue::Text("2026-04-12T10:02:00Z".to_string()))],
         )
         .expect("add trajectory point 3");
-    wbvector::write(&trajectory, &trajectory_path, VectorFormat::GeoPackage).expect("write trajectory");
+    wbvector::write(&trajectory, &trajectory_path, VectorFormat::GeoPackage)
+        .expect("write trajectory");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("trajectory_points".to_string(), json!(trajectory_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "trajectory_points".to_string(),
+        json!(trajectory_path.to_string_lossy().to_string()),
+    );
     args.insert("timestamp_field".to_string(), json!("TS"));
     args.insert("search_radius".to_string(), json!(0.25));
     args.insert("candidate_k".to_string(), json!(3));
-    args.insert("matched_points_output".to_string(), json!(points_out_path.to_string_lossy().to_string()));
-    args.insert("match_report".to_string(), json!(report_out_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(route_out_path.to_string_lossy().to_string()));
+    args.insert(
+        "matched_points_output".to_string(),
+        json!(points_out_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "match_report".to_string(),
+        json!(report_out_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(route_out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("map_matching_v1", &args, &context(&caps))
         .expect("map_matching_v1 run");
 
     let route_out = wbvector::read(&route_out_path).expect("read route output");
-    assert_eq!(route_out.features.len(), 1, "expected single matched route feature");
-    let matched_idx = route_out.schema.field_index("MATCHED_PTS").expect("MATCHED_PTS field");
-    let unmatched_idx = route_out.schema.field_index("UNMATCHED").expect("UNMATCHED field");
+    assert_eq!(
+        route_out.features.len(),
+        1,
+        "expected single matched route feature"
+    );
+    let matched_idx = route_out
+        .schema
+        .field_index("MATCHED_PTS")
+        .expect("MATCHED_PTS field");
+    let unmatched_idx = route_out
+        .schema
+        .field_index("UNMATCHED")
+        .expect("UNMATCHED field");
     let matched = match &route_out.features[0].attributes[matched_idx] {
         FieldValue::Integer(v) => *v,
         other => panic!("expected integer MATCHED_PTS, got {:?}", other),
@@ -21856,8 +28217,15 @@ fn map_matching_v1_partial_unmatched_points_still_emit_outputs() {
     assert_eq!(unmatched, 1);
 
     let points_out = wbvector::read(&points_out_path).expect("read matched points output");
-    assert_eq!(points_out.features.len(), 3, "expected diagnostics for all trajectory points");
-    let status_idx = points_out.schema.field_index("STATUS").expect("STATUS field");
+    assert_eq!(
+        points_out.features.len(),
+        3,
+        "expected diagnostics for all trajectory points"
+    );
+    let status_idx = points_out
+        .schema
+        .field_index("STATUS")
+        .expect("STATUS field");
     let unmatched_count = points_out
         .features
         .iter()
@@ -21866,15 +28234,22 @@ fn map_matching_v1_partial_unmatched_points_still_emit_outputs() {
             _ => false,
         })
         .count();
-    assert_eq!(unmatched_count, 1, "expected one unmatched diagnostic record");
+    assert_eq!(
+        unmatched_count, 1,
+        "expected one unmatched diagnostic record"
+    );
 
     let report_text = std::fs::read_to_string(&report_out_path).expect("read report output");
-    let report_json: serde_json::Value = serde_json::from_str(&report_text).expect("parse report json");
+    let report_json: serde_json::Value =
+        serde_json::from_str(&report_text).expect("parse report json");
     let match_rate = report_json
         .get("match_rate")
         .and_then(|v| v.as_f64())
         .expect("match_rate value");
-    assert!(match_rate > 0.0 && match_rate < 1.0, "match_rate should reflect partial matching");
+    assert!(
+        match_rate > 0.0 && match_rate < 1.0,
+        "match_rate should reflect partial matching"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&trajectory_path);
@@ -21900,10 +28275,15 @@ fn map_matching_v1_confidence_decreases_with_offset_noise() {
     let mut network = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    network.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    network
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("E_MAIN".to_string()))],
         )
         .expect("add network edge");
@@ -21912,7 +28292,9 @@ fn map_matching_v1_confidence_decreases_with_offset_noise() {
     let mut trajectory = Layer::new("trajectory")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
-    trajectory.schema.add_field(FieldDef::new("TS", FieldType::Text));
+    trajectory
+        .schema
+        .add_field(FieldDef::new("TS", FieldType::Text));
     trajectory
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.5, 0.02))),
@@ -21925,25 +28307,48 @@ fn map_matching_v1_confidence_decreases_with_offset_noise() {
             &[("TS", FieldValue::Text("2026-04-12T10:01:00Z".to_string()))],
         )
         .expect("add high-noise point");
-    wbvector::write(&trajectory, &trajectory_path, VectorFormat::GeoPackage).expect("write trajectory");
+    wbvector::write(&trajectory, &trajectory_path, VectorFormat::GeoPackage)
+        .expect("write trajectory");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("trajectory_points".to_string(), json!(trajectory_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "trajectory_points".to_string(),
+        json!(trajectory_path.to_string_lossy().to_string()),
+    );
     args.insert("timestamp_field".to_string(), json!("TS"));
     args.insert("search_radius".to_string(), json!(0.5));
     args.insert("candidate_k".to_string(), json!(3));
-    args.insert("matched_points_output".to_string(), json!(points_out_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(route_out_path.to_string_lossy().to_string()));
+    args.insert(
+        "matched_points_output".to_string(),
+        json!(points_out_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(route_out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("map_matching_v1", &args, &context(&caps))
         .expect("map_matching_v1 run");
 
     let points_out = wbvector::read(&points_out_path).expect("read matched points output");
-    assert_eq!(points_out.features.len(), 2, "expected diagnostics for both points");
-    let conf_idx = points_out.schema.field_index("CONFIDENCE").expect("CONFIDENCE field");
-    let offset_idx = points_out.schema.field_index("OFFSET_DST").expect("OFFSET_DST field");
+    assert_eq!(
+        points_out.features.len(),
+        2,
+        "expected diagnostics for both points"
+    );
+    let conf_idx = points_out
+        .schema
+        .field_index("CONFIDENCE")
+        .expect("CONFIDENCE field");
+    let offset_idx = points_out
+        .schema
+        .field_index("OFFSET_DST")
+        .expect("OFFSET_DST field");
 
     let mut pairs = Vec::<(f64, f64)>::new();
     for feature in &points_out.features {
@@ -21961,8 +28366,14 @@ fn map_matching_v1_confidence_decreases_with_offset_noise() {
     }
     pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
     assert_eq!(pairs.len(), 2);
-    assert!(pairs[0].0 < pairs[1].0, "low-noise point should have smaller offset");
-    assert!(pairs[0].1 > pairs[1].1, "confidence should decrease as offset/noise increases");
+    assert!(
+        pairs[0].0 < pairs[1].0,
+        "low-noise point should have smaller offset"
+    );
+    assert!(
+        pairs[0].1 > pairs[1].1,
+        "confidence should decrease as offset/noise increases"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&trajectory_path);
@@ -21990,10 +28401,15 @@ fn map_matching_v1_one_way_restriction_avoided() {
     let mut network = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    network.schema.add_field(FieldDef::new("ONE_WAY", FieldType::Integer));
+    network
+        .schema
+        .add_field(FieldDef::new("ONE_WAY", FieldType::Integer));
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("ONE_WAY", FieldValue::Integer(1))],
         )
         .expect("add one-way edge");
@@ -22003,7 +28419,9 @@ fn map_matching_v1_one_way_restriction_avoided() {
     let mut trajectory = Layer::new("trajectory")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
-    trajectory.schema.add_field(FieldDef::new("TS", FieldType::Text));
+    trajectory
+        .schema
+        .add_field(FieldDef::new("TS", FieldType::Text));
     // Point 1 at t=T1: near right/end of edge → will snap to node (2,0)
     trajectory
         .add_feature(
@@ -22018,25 +28436,45 @@ fn map_matching_v1_one_way_restriction_avoided() {
             &[("TS", FieldValue::Text("2026-04-12T10:01:00Z".to_string()))],
         )
         .expect("add left-end point");
-    wbvector::write(&trajectory, &trajectory_path, VectorFormat::GeoPackage).expect("write trajectory");
+    wbvector::write(&trajectory, &trajectory_path, VectorFormat::GeoPackage)
+        .expect("write trajectory");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("trajectory_points".to_string(), json!(trajectory_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "trajectory_points".to_string(),
+        json!(trajectory_path.to_string_lossy().to_string()),
+    );
     args.insert("timestamp_field".to_string(), json!("TS"));
     args.insert("one_way_field".to_string(), json!("ONE_WAY"));
     args.insert("search_radius".to_string(), json!(0.3));
     args.insert("candidate_k".to_string(), json!(3));
-    args.insert("matched_points_output".to_string(), json!(points_out_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(route_out_path.to_string_lossy().to_string()));
+    args.insert(
+        "matched_points_output".to_string(),
+        json!(points_out_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(route_out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("map_matching_v1", &args, &context(&caps))
         .expect("map_matching_v1 run");
 
     let route_out = wbvector::read(&route_out_path).expect("read route output");
-    assert_eq!(route_out.features.len(), 1, "expected exactly one route feature");
-    let disc_seg_idx = route_out.schema.field_index("DISC_SEG").expect("DISC_SEG field");
+    assert_eq!(
+        route_out.features.len(),
+        1,
+        "expected exactly one route feature"
+    );
+    let disc_seg_idx = route_out
+        .schema
+        .field_index("DISC_SEG")
+        .expect("DISC_SEG field");
     let disc_seg = match &route_out.features[0].attributes[disc_seg_idx] {
         FieldValue::Integer(v) => *v,
         other => panic!("expected Integer for DISC_SEG, got {:?}", other),
@@ -22072,41 +28510,71 @@ fn network_topology_audit_reports_nodes_and_components() {
     let mut network = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    network.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    network
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("AB".to_string()))],
         )
         .expect("add edge AB");
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("BC".to_string()))],
         )
         .expect("add edge BC");
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("CD".to_string()))],
         )
         .expect("add edge CD");
     wbvector::write(&network, &network_path, VectorFormat::GeoPackage).expect("write network");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(nodes_out_path.to_string_lossy().to_string()));
-    args.insert("report".to_string(), json!(report_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(nodes_out_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "report".to_string(),
+        json!(report_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("network_topology_audit", &args, &context(&caps))
         .expect("network_topology_audit run");
 
     let nodes_out = wbvector::read(&nodes_out_path).expect("read nodes output");
-    assert_eq!(nodes_out.features.len(), 4, "expected 4 graph nodes for a 3-segment linear chain");
+    assert_eq!(
+        nodes_out.features.len(),
+        4,
+        "expected 4 graph nodes for a 3-segment linear chain"
+    );
 
-    let node_type_idx = nodes_out.schema.field_index("NODE_TYPE").expect("NODE_TYPE field");
-    let component_idx = nodes_out.schema.field_index("COMPONENT").expect("COMPONENT field");
+    let node_type_idx = nodes_out
+        .schema
+        .field_index("NODE_TYPE")
+        .expect("NODE_TYPE field");
+    let component_idx = nodes_out
+        .schema
+        .field_index("COMPONENT")
+        .expect("COMPONENT field");
 
     // All nodes should be in component 1 (single connected network).
     for feature in &nodes_out.features {
@@ -22114,7 +28582,10 @@ fn network_topology_audit_reports_nodes_and_components() {
             FieldValue::Integer(v) => *v,
             other => panic!("expected Integer for COMPONENT, got {:?}", other),
         };
-        assert_eq!(comp, 1, "all nodes must be in component 1 for a connected network");
+        assert_eq!(
+            comp, 1,
+            "all nodes must be in component 1 for a connected network"
+        );
     }
 
     // Endpoint nodes (degree=1) should be dead_end; interior nodes should be through.
@@ -22126,19 +28597,43 @@ fn network_topology_audit_reports_nodes_and_components() {
             other => panic!("expected Text for NODE_TYPE, got {:?}", other),
         })
         .collect();
-    let dead_ends = node_types.iter().filter(|t| t.as_str() == "dead_end").count();
-    let throughs = node_types.iter().filter(|t| t.as_str() == "through").count();
-    assert_eq!(dead_ends, 2, "expected 2 dead-end nodes at the chain endpoints");
-    assert_eq!(throughs, 2, "expected 2 through nodes at the interior junction");
+    let dead_ends = node_types
+        .iter()
+        .filter(|t| t.as_str() == "dead_end")
+        .count();
+    let throughs = node_types
+        .iter()
+        .filter(|t| t.as_str() == "through")
+        .count();
+    assert_eq!(
+        dead_ends, 2,
+        "expected 2 dead-end nodes at the chain endpoints"
+    );
+    assert_eq!(
+        throughs, 2,
+        "expected 2 through nodes at the interior junction"
+    );
 
     let report_text = std::fs::read_to_string(&report_path).expect("read audit report");
     let report: serde_json::Value = serde_json::from_str(&report_text).expect("parse report JSON");
     assert_eq!(report["node_count"], 4, "report node_count should be 4");
-    assert_eq!(report["component_count"], 1, "single connected network should have 1 component");
-    assert_eq!(report["dead_end_node_count"], 2, "report should count 2 dead-end nodes");
-    assert_eq!(report["isolated_node_count"], 0, "no isolated nodes expected");
+    assert_eq!(
+        report["component_count"], 1,
+        "single connected network should have 1 component"
+    );
+    assert_eq!(
+        report["dead_end_node_count"], 2,
+        "report should count 2 dead-end nodes"
+    );
+    assert_eq!(
+        report["isolated_node_count"], 0,
+        "no isolated nodes expected"
+    );
     let warnings = report["potential_routing_failures"].as_array().unwrap();
-    assert!(warnings.is_empty(), "no routing failure warnings expected for a fully connected network");
+    assert!(
+        warnings.is_empty(),
+        "no routing failure warnings expected for a fully connected network"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&nodes_out_path);
@@ -22163,34 +28658,58 @@ fn network_topology_audit_detects_disconnected_components_and_warns() {
     let mut network = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    network.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    network
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("SEGMENT_A".to_string()))],
         )
         .expect("add segment A");
     network
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(5.0, 0.0), Coord::xy(6.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(5.0, 0.0),
+                Coord::xy(6.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("SEGMENT_B".to_string()))],
         )
         .expect("add segment B");
     wbvector::write(&network, &network_path, VectorFormat::GeoPackage).expect("write network");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(nodes_out_path.to_string_lossy().to_string()));
-    args.insert("report".to_string(), json!(report_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(nodes_out_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "report".to_string(),
+        json!(report_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("network_topology_audit", &args, &context(&caps))
         .expect("network_topology_audit run");
 
     let nodes_out = wbvector::read(&nodes_out_path).expect("read nodes output");
-    assert_eq!(nodes_out.features.len(), 4, "expected 4 graph nodes total (2 per isolated segment)");
+    assert_eq!(
+        nodes_out.features.len(),
+        4,
+        "expected 4 graph nodes total (2 per isolated segment)"
+    );
 
-    let component_idx = nodes_out.schema.field_index("COMPONENT").expect("COMPONENT field");
+    let component_idx = nodes_out
+        .schema
+        .field_index("COMPONENT")
+        .expect("COMPONENT field");
     let component_ids: Vec<i64> = nodes_out
         .features
         .iter()
@@ -22200,11 +28719,18 @@ fn network_topology_audit_detects_disconnected_components_and_warns() {
         })
         .collect();
     let unique_components: std::collections::HashSet<i64> = component_ids.into_iter().collect();
-    assert_eq!(unique_components.len(), 2, "two isolated segments should produce two distinct component IDs");
+    assert_eq!(
+        unique_components.len(),
+        2,
+        "two isolated segments should produce two distinct component IDs"
+    );
 
     let report_text = std::fs::read_to_string(&report_path).expect("read audit report");
     let report: serde_json::Value = serde_json::from_str(&report_text).expect("parse report JSON");
-    assert_eq!(report["component_count"], 2, "report should show 2 components");
+    assert_eq!(
+        report["component_count"], 2,
+        "report should show 2 components"
+    );
     let warnings = report["potential_routing_failures"].as_array().unwrap();
     assert!(
         !warnings.is_empty(),
@@ -22240,28 +28766,42 @@ fn network_service_area_temporal_profile_and_ring_costs_interact_consistently() 
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add direct edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add direct edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_D".to_string()))],
         )
         .expect("add detour edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("D_C".to_string()))],
         )
         .expect("add detour edge 2");
@@ -22282,20 +28822,35 @@ fn network_service_area_temporal_profile_and_ring_costs_interact_consistently() 
     .expect("write temporal profile csv");
 
     let mut rush_args = ToolArgs::new();
-    rush_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    rush_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    rush_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     rush_args.insert("max_cost".to_string(), json!(2.5));
     rush_args.insert("ring_costs".to_string(), json!("1.0,2.5"));
     rush_args.insert("output_mode".to_string(), json!("nodes"));
-    rush_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    rush_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     rush_args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
-    rush_args.insert("output".to_string(), json!(rush_out_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "output".to_string(),
+        json!(rush_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &rush_args, &context(&caps))
         .expect("network_service_area rush run");
 
     let rush_out = wbvector::read(&rush_out_path).expect("read rush service area output");
-    let rush_ring_idx = rush_out.schema.field_index("RING_IDX").expect("rush RING_IDX field");
+    let rush_ring_idx = rush_out
+        .schema
+        .field_index("RING_IDX")
+        .expect("rush RING_IDX field");
     let rush_rings: Vec<i64> = rush_out
         .features
         .iter()
@@ -22304,23 +28859,41 @@ fn network_service_area_temporal_profile_and_ring_costs_interact_consistently() 
             other => panic!("expected integer RING_IDX, got {:?}", other),
         })
         .collect();
-    assert!(rush_rings.iter().all(|v| *v == 1), "rush-hour reachable nodes should remain in first ring");
+    assert!(
+        rush_rings.iter().all(|v| *v == 1),
+        "rush-hour reachable nodes should remain in first ring"
+    );
 
     let mut offpeak_args = ToolArgs::new();
-    offpeak_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    offpeak_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    offpeak_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("max_cost".to_string(), json!(2.5));
     offpeak_args.insert("ring_costs".to_string(), json!("1.0,2.5"));
     offpeak_args.insert("output_mode".to_string(), json!("nodes"));
-    offpeak_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("departure_time".to_string(), json!("2026-04-13T11:00:00Z"));
-    offpeak_args.insert("output".to_string(), json!(offpeak_out_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "output".to_string(),
+        json!(offpeak_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &offpeak_args, &context(&caps))
         .expect("network_service_area offpeak run");
 
     let offpeak_out = wbvector::read(&offpeak_out_path).expect("read offpeak service area output");
-    let offpeak_ring_idx = offpeak_out.schema.field_index("RING_IDX").expect("offpeak RING_IDX field");
+    let offpeak_ring_idx = offpeak_out
+        .schema
+        .field_index("RING_IDX")
+        .expect("offpeak RING_IDX field");
     let mut offpeak_rings: Vec<i64> = offpeak_out
         .features
         .iter()
@@ -22332,8 +28905,14 @@ fn network_service_area_temporal_profile_and_ring_costs_interact_consistently() 
     offpeak_rings.sort_unstable();
     offpeak_rings.dedup();
 
-    assert!(offpeak_rings.contains(&1), "offpeak should include first ring nodes");
-    assert!(offpeak_rings.contains(&2), "offpeak should include second ring nodes");
+    assert!(
+        offpeak_rings.contains(&1),
+        "offpeak should include first ring nodes"
+    );
+    assert!(
+        offpeak_rings.contains(&2),
+        "offpeak should include second ring nodes"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -22360,28 +28939,42 @@ fn network_service_area_edges_temporal_profile_and_ring_costs_interact_consisten
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add direct edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add direct edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_D".to_string()))],
         )
         .expect("add detour edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("D_C".to_string()))],
         )
         .expect("add detour edge 2");
@@ -22402,14 +28995,26 @@ fn network_service_area_edges_temporal_profile_and_ring_costs_interact_consisten
     .expect("write temporal profile csv");
 
     let mut rush_args = ToolArgs::new();
-    rush_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    rush_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    rush_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     rush_args.insert("max_cost".to_string(), json!(2.5));
     rush_args.insert("ring_costs".to_string(), json!("1.0,2.5"));
     rush_args.insert("output_mode".to_string(), json!("edges"));
-    rush_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    rush_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     rush_args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
-    rush_args.insert("output".to_string(), json!(rush_out_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "output".to_string(),
+        json!(rush_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &rush_args, &context(&caps))
         .expect("network_service_area rush edges run");
@@ -22417,19 +29022,32 @@ fn network_service_area_edges_temporal_profile_and_ring_costs_interact_consisten
     let rush_out = wbvector::read(&rush_out_path).expect("read rush service area edges output");
 
     let mut offpeak_args = ToolArgs::new();
-    offpeak_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    offpeak_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    offpeak_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("max_cost".to_string(), json!(2.5));
     offpeak_args.insert("ring_costs".to_string(), json!("1.0,2.5"));
     offpeak_args.insert("output_mode".to_string(), json!("edges"));
-    offpeak_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("departure_time".to_string(), json!("2026-04-13T11:00:00Z"));
-    offpeak_args.insert("output".to_string(), json!(offpeak_out_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "output".to_string(),
+        json!(offpeak_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &offpeak_args, &context(&caps))
         .expect("network_service_area offpeak edges run");
 
-    let offpeak_out = wbvector::read(&offpeak_out_path).expect("read offpeak service area edges output");
+    let offpeak_out =
+        wbvector::read(&offpeak_out_path).expect("read offpeak service area edges output");
     assert!(
         offpeak_out.features.len() > rush_out.features.len(),
         "offpeak should yield more reachable edge features than rush-hour"
@@ -22460,28 +29078,42 @@ fn network_service_area_polygons_temporal_profile_and_ring_costs_interact_consis
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add direct edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add direct edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_D".to_string()))],
         )
         .expect("add detour edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("D_C".to_string()))],
         )
         .expect("add detour edge 2");
@@ -22502,20 +29134,35 @@ fn network_service_area_polygons_temporal_profile_and_ring_costs_interact_consis
     .expect("write temporal profile csv");
 
     let mut rush_args = ToolArgs::new();
-    rush_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    rush_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    rush_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     rush_args.insert("max_cost".to_string(), json!(2.5));
     rush_args.insert("ring_costs".to_string(), json!("1.0,2.5"));
     rush_args.insert("output_mode".to_string(), json!("polygons"));
-    rush_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    rush_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     rush_args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
-    rush_args.insert("output".to_string(), json!(rush_out_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "output".to_string(),
+        json!(rush_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &rush_args, &context(&caps))
         .expect("network_service_area rush polygons run");
 
     let rush_out = wbvector::read(&rush_out_path).expect("read rush service area polygons output");
-    let rush_node_count_idx = rush_out.schema.field_index("NODE_COUNT").expect("rush NODE_COUNT field");
+    let rush_node_count_idx = rush_out
+        .schema
+        .field_index("NODE_COUNT")
+        .expect("rush NODE_COUNT field");
     let rush_max_node_count = rush_out
         .features
         .iter()
@@ -22527,27 +29174,45 @@ fn network_service_area_polygons_temporal_profile_and_ring_costs_interact_consis
         .expect("rush polygon features");
 
     let mut offpeak_args = ToolArgs::new();
-    offpeak_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    offpeak_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    offpeak_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("max_cost".to_string(), json!(2.5));
     offpeak_args.insert("ring_costs".to_string(), json!("1.0,2.5"));
     offpeak_args.insert("output_mode".to_string(), json!("polygons"));
-    offpeak_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("departure_time".to_string(), json!("2026-04-13T11:00:00Z"));
-    offpeak_args.insert("output".to_string(), json!(offpeak_out_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "output".to_string(),
+        json!(offpeak_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &offpeak_args, &context(&caps))
         .expect("network_service_area offpeak polygons run");
 
-    let offpeak_out = wbvector::read(&offpeak_out_path).expect("read offpeak service area polygons output");
-    let offpeak_node_count_idx = offpeak_out.schema.field_index("NODE_COUNT").expect("offpeak NODE_COUNT field");
+    let offpeak_out =
+        wbvector::read(&offpeak_out_path).expect("read offpeak service area polygons output");
+    let offpeak_node_count_idx = offpeak_out
+        .schema
+        .field_index("NODE_COUNT")
+        .expect("offpeak NODE_COUNT field");
     let offpeak_max_node_count = offpeak_out
         .features
         .iter()
-        .map(|feature| match &feature.attributes[offpeak_node_count_idx] {
-            FieldValue::Integer(v) => *v,
-            other => panic!("expected integer NODE_COUNT, got {:?}", other),
-        })
+        .map(
+            |feature| match &feature.attributes[offpeak_node_count_idx] {
+                FieldValue::Integer(v) => *v,
+                other => panic!("expected integer NODE_COUNT, got {:?}", other),
+            },
+        )
         .max()
         .expect("offpeak polygon features");
 
@@ -22582,13 +29247,19 @@ fn network_service_area_respects_barrier_points() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -22611,18 +29282,34 @@ fn network_service_area_respects_barrier_points() {
     wbvector::write(&barriers, &barriers_path, VectorFormat::GeoPackage).expect("write barriers");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(5.0));
-    args.insert("barriers".to_string(), json!(barriers_path.to_string_lossy().to_string()));
+    args.insert(
+        "barriers".to_string(),
+        json!(barriers_path.to_string_lossy().to_string()),
+    );
     args.insert("barrier_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area output");
-    assert_eq!(out.features.len(), 1, "expected only origin node reachable when middle node is barrier-blocked");
+    assert_eq!(
+        out.features.len(),
+        1,
+        "expected only origin node reachable when middle node is barrier-blocked"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -22646,16 +29333,24 @@ fn network_service_area_edges_output_trims_segments_by_remaining_cost() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("ONEWAY", FieldType::Integer));
+    lines
+        .schema
+        .add_field(FieldDef::new("ONEWAY", FieldType::Integer));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("ONEWAY", FieldValue::Integer(1))],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("ONEWAY", FieldValue::Integer(1))],
         )
         .expect("add edge 2");
@@ -22670,19 +29365,35 @@ fn network_service_area_edges_output_trims_segments_by_remaining_cost() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(1.5));
     args.insert("one_way_field".to_string(), json!("ONEWAY"));
     args.insert("output_mode".to_string(), json!("edges"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area edge output");
-    assert_eq!(out.features.len(), 2, "expected one full edge and one trimmed partial edge");
-    let frac_idx = out.schema.field_index("EDGE_FRAC").expect("EDGE_FRAC field");
+    assert_eq!(
+        out.features.len(),
+        2,
+        "expected one full edge and one trimmed partial edge"
+    );
+    let frac_idx = out
+        .schema
+        .field_index("EDGE_FRAC")
+        .expect("EDGE_FRAC field");
 
     let mut has_full = false;
     let mut has_half = false;
@@ -22731,13 +29442,19 @@ fn network_service_area_edges_output_supports_ring_costs() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -22752,12 +29469,21 @@ fn network_service_area_edges_output_supports_ring_costs() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(2.0));
     args.insert("output_mode".to_string(), json!("edges"));
     args.insert("ring_costs".to_string(), json!("1.0,2.0"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area edges run");
@@ -22780,7 +29506,10 @@ fn network_service_area_edges_output_supports_ring_costs() {
             has_ring2 = true;
         }
     }
-    assert!(has_ring1 && has_ring2, "expected edge features in ring 1 and ring 2");
+    assert!(
+        has_ring1 && has_ring2,
+        "expected edge features in ring 1 and ring 2"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -22805,13 +29534,19 @@ fn network_service_area_polygons_output_emits_origin_hulls() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -22826,27 +29561,45 @@ fn network_service_area_polygons_output_emits_origin_hulls() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(1.5));
     args.insert("output_mode".to_string(), json!("polygons"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area polygon output");
     assert_eq!(out.features.len(), 1, "expected one polygon for one origin");
-    let node_count_idx = out.schema.field_index("NODE_COUNT").expect("NODE_COUNT field");
+    let node_count_idx = out
+        .schema
+        .field_index("NODE_COUNT")
+        .expect("NODE_COUNT field");
     let node_count = match &out.features[0].attributes[node_count_idx] {
         FieldValue::Integer(v) => *v,
         other => panic!("expected integer NODE_COUNT, got {:?}", other),
     };
-    assert_eq!(node_count, 2, "expected two reachable nodes within max_cost");
+    assert_eq!(
+        node_count, 2,
+        "expected two reachable nodes within max_cost"
+    );
 
     match out.features[0].geometry.as_ref().expect("polygon geometry") {
         Geometry::Polygon { exterior, .. } => {
-            assert!(exterior.coords().len() >= 3, "expected polygon ring with at least three vertices");
+            assert!(
+                exterior.coords().len() >= 3,
+                "expected polygon ring with at least three vertices"
+            );
         }
         other => panic!("expected polygon geometry, got {:?}", other),
     }
@@ -22874,13 +29627,19 @@ fn network_service_area_polygons_output_supports_ring_costs() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -22895,18 +29654,30 @@ fn network_service_area_polygons_output_supports_ring_costs() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(2.0));
     args.insert("output_mode".to_string(), json!("polygons"));
     args.insert("ring_costs".to_string(), json!("1.0,2.0"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area polygons run");
 
     let out = wbvector::read(&out_path).expect("read service area polygons output");
-    assert!(out.features.len() >= 2, "expected at least two ring polygons");
+    assert!(
+        out.features.len() >= 2,
+        "expected at least two ring polygons"
+    );
     let ring_idx = out.schema.field_index("RING_IDX").expect("RING_IDX field");
 
     let mut has_ring1 = false;
@@ -22923,7 +29694,10 @@ fn network_service_area_polygons_output_supports_ring_costs() {
             has_ring2 = true;
         }
     }
-    assert!(has_ring1 && has_ring2, "expected polygon features in ring 1 and ring 2");
+    assert!(
+        has_ring1 && has_ring2,
+        "expected polygon features in ring 1 and ring 2"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -22948,13 +29722,19 @@ fn network_service_area_polygons_output_emits_diagnostics_counts() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -22969,11 +29749,20 @@ fn network_service_area_polygons_output_emits_diagnostics_counts() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(1.1));
     args.insert("output_mode".to_string(), json!("polygons"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area polygons run");
@@ -22981,8 +29770,14 @@ fn network_service_area_polygons_output_emits_diagnostics_counts() {
     let out = wbvector::read(&out_path).expect("read service area polygons output");
     assert!(!out.features.is_empty(), "expected at least one polygon");
 
-    let frontier_idx = out.schema.field_index("FRONTIER_CT").expect("FRONTIER_CT field");
-    let partial_idx = out.schema.field_index("PARTIAL_CT").expect("PARTIAL_CT field");
+    let frontier_idx = out
+        .schema
+        .field_index("FRONTIER_CT")
+        .expect("FRONTIER_CT field");
+    let partial_idx = out
+        .schema
+        .field_index("PARTIAL_CT")
+        .expect("PARTIAL_CT field");
 
     for feature in &out.features {
         let frontier = match &feature.attributes[frontier_idx] {
@@ -22995,7 +29790,10 @@ fn network_service_area_polygons_output_emits_diagnostics_counts() {
         };
         assert!(frontier >= 0, "frontier count should be non-negative");
         assert!(partial >= 0, "partial count should be non-negative");
-        assert!(partial <= frontier, "partial count should not exceed frontier count");
+        assert!(
+            partial <= frontier,
+            "partial count should not exceed frontier count"
+        );
     }
 
     let _ = std::fs::remove_file(&network_path);
@@ -23021,13 +29819,19 @@ fn network_service_area_polygons_output_tracks_partial_edge_frontier() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -23042,11 +29846,20 @@ fn network_service_area_polygons_output_tracks_partial_edge_frontier() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(1.5));
     args.insert("output_mode".to_string(), json!("polygons"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
@@ -23061,7 +29874,11 @@ fn network_service_area_polygons_output_tracks_partial_edge_frontier() {
                 .iter()
                 .map(|coord| coord.y)
                 .fold(f64::NEG_INFINITY, f64::max);
-            assert!(max_y > 0.45, "expected polygon frontier to extend near y=0.5, got {}", max_y);
+            assert!(
+                max_y > 0.45,
+                "expected polygon frontier to extend near y=0.5, got {}",
+                max_y
+            );
         }
         other => panic!("expected polygon geometry, got {:?}", other),
     }
@@ -23090,13 +29907,19 @@ fn network_service_area_polygons_output_emits_one_polygon_per_origin() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -23114,11 +29937,20 @@ fn network_service_area_polygons_output_emits_one_polygon_per_origin() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(1.1));
     args.insert("output_mode".to_string(), json!("polygons"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
@@ -23126,8 +29958,14 @@ fn network_service_area_polygons_output_emits_one_polygon_per_origin() {
     let out = wbvector::read(&out_path).expect("read service area polygon output");
     assert_eq!(out.features.len(), 2, "expected one polygon per origin");
 
-    let origin_id_idx = out.schema.field_index("ORIGIN_ID").expect("ORIGIN_ID field");
-    let node_count_idx = out.schema.field_index("NODE_COUNT").expect("NODE_COUNT field");
+    let origin_id_idx = out
+        .schema
+        .field_index("ORIGIN_ID")
+        .expect("ORIGIN_ID field");
+    let node_count_idx = out
+        .schema
+        .field_index("NODE_COUNT")
+        .expect("NODE_COUNT field");
 
     let mut origin_ids = BTreeSet::<i64>::new();
     for feature in &out.features {
@@ -23141,16 +29979,26 @@ fn network_service_area_polygons_output_emits_one_polygon_per_origin() {
             FieldValue::Integer(v) => *v,
             other => panic!("expected integer NODE_COUNT, got {:?}", other),
         };
-        assert_eq!(node_count, 2, "expected each origin service area to include two nodes");
+        assert_eq!(
+            node_count, 2,
+            "expected each origin service area to include two nodes"
+        );
 
         match feature.geometry.as_ref().expect("polygon geometry") {
             Geometry::Polygon { exterior, .. } => {
-                assert!(exterior.coords().len() >= 3, "expected polygon ring with at least three vertices");
+                assert!(
+                    exterior.coords().len() >= 3,
+                    "expected polygon ring with at least three vertices"
+                );
             }
             other => panic!("expected polygon geometry, got {:?}", other),
         }
     }
-    assert_eq!(origin_ids, BTreeSet::from([0, 1]), "expected polygons for both origin features");
+    assert_eq!(
+        origin_ids,
+        BTreeSet::from([0, 1]),
+        "expected polygons for both origin features"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -23175,13 +30023,19 @@ fn network_service_area_polygons_can_merge_overlapping_origins() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -23199,26 +30053,48 @@ fn network_service_area_polygons_can_merge_overlapping_origins() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(1.1));
     args.insert("output_mode".to_string(), json!("polygons"));
     args.insert("polygon_merge_origins".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read merged service area polygon output");
-    assert_eq!(out.features.len(), 1, "expected overlapping origin polygons to dissolve into one merged polygon");
-    assert!(out.schema.field_index("ORIGIN_ID").is_none(), "merged output should not expose per-origin ORIGIN_ID field");
+    assert_eq!(
+        out.features.len(),
+        1,
+        "expected overlapping origin polygons to dissolve into one merged polygon"
+    );
+    assert!(
+        out.schema.field_index("ORIGIN_ID").is_none(),
+        "merged output should not expose per-origin ORIGIN_ID field"
+    );
 
-    let origin_ct_idx = out.schema.field_index("ORIGIN_CT").expect("ORIGIN_CT field");
+    let origin_ct_idx = out
+        .schema
+        .field_index("ORIGIN_CT")
+        .expect("ORIGIN_CT field");
     let origin_ct = match &out.features[0].attributes[origin_ct_idx] {
         FieldValue::Integer(v) => *v,
         other => panic!("expected integer ORIGIN_CT, got {:?}", other),
     };
-    assert_eq!(origin_ct, 2, "expected merged polygon to record both contributing origins");
+    assert_eq!(
+        origin_ct, 2,
+        "expected merged polygon to record both contributing origins"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -23245,7 +30121,10 @@ fn network_service_area_polygons_can_merge_origins_by_ring() {
     for segment in [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0), (3.0, 4.0)] {
         lines
             .add_feature(
-                Some(Geometry::line_string(vec![Coord::xy(segment.0, 0.0), Coord::xy(segment.1, 0.0)])),
+                Some(Geometry::line_string(vec![
+                    Coord::xy(segment.0, 0.0),
+                    Coord::xy(segment.1, 0.0),
+                ])),
                 &[],
             )
             .expect("add segment");
@@ -23264,22 +30143,38 @@ fn network_service_area_polygons_can_merge_origins_by_ring() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(2.1));
     args.insert("ring_costs".to_string(), json!("1.1,2.1"));
     args.insert("output_mode".to_string(), json!("polygons"));
     args.insert("polygon_merge_origins".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read merged ring service area polygon output");
-    assert_eq!(out.features.len(), 2, "expected one dissolved polygon per ring after merging origins");
+    assert_eq!(
+        out.features.len(),
+        2,
+        "expected one dissolved polygon per ring after merging origins"
+    );
 
     let ring_idx = out.schema.field_index("RING_IDX").expect("RING_IDX field");
-    let origin_ct_idx = out.schema.field_index("ORIGIN_CT").expect("ORIGIN_CT field");
+    let origin_ct_idx = out
+        .schema
+        .field_index("ORIGIN_CT")
+        .expect("ORIGIN_CT field");
     let mut rings = BTreeSet::<i64>::new();
     for feature in &out.features {
         let ring = match &feature.attributes[ring_idx] {
@@ -23291,9 +30186,16 @@ fn network_service_area_polygons_can_merge_origins_by_ring() {
             FieldValue::Integer(v) => *v,
             other => panic!("expected integer ORIGIN_CT, got {:?}", other),
         };
-        assert_eq!(origin_ct, 2, "expected each dissolved ring polygon to include both origins");
+        assert_eq!(
+            origin_ct, 2,
+            "expected each dissolved ring polygon to include both origins"
+        );
     }
-    assert_eq!(rings, BTreeSet::from([1, 2]), "expected dissolved polygons for both requested rings");
+    assert_eq!(
+        rings,
+        BTreeSet::from([1, 2]),
+        "expected dissolved polygons for both requested rings"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -23319,13 +30221,19 @@ fn network_service_area_polygons_output_respects_barrier_points() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -23348,25 +30256,43 @@ fn network_service_area_polygons_output_respects_barrier_points() {
     wbvector::write(&barriers, &barriers_path, VectorFormat::GeoPackage).expect("write barriers");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(5.0));
     args.insert("output_mode".to_string(), json!("polygons"));
-    args.insert("barriers".to_string(), json!(barriers_path.to_string_lossy().to_string()));
+    args.insert(
+        "barriers".to_string(),
+        json!(barriers_path.to_string_lossy().to_string()),
+    );
     args.insert("barrier_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area polygon output");
     assert_eq!(out.features.len(), 1, "expected one polygon for one origin");
-    let node_count_idx = out.schema.field_index("NODE_COUNT").expect("NODE_COUNT field");
+    let node_count_idx = out
+        .schema
+        .field_index("NODE_COUNT")
+        .expect("NODE_COUNT field");
     let node_count = match &out.features[0].attributes[node_count_idx] {
         FieldValue::Integer(v) => *v,
         other => panic!("expected integer NODE_COUNT, got {:?}", other),
     };
-    assert_eq!(node_count, 1, "expected only the origin node to remain reachable when barrier blocks corridor");
+    assert_eq!(
+        node_count, 1,
+        "expected only the origin node to remain reachable when barrier blocks corridor"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -23391,28 +30317,42 @@ fn network_service_area_polygons_output_respects_turn_restrictions_csv() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("IMP", FieldType::Float));
+    lines
+        .schema
+        .add_field(FieldDef::new("IMP", FieldType::Float));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add AB");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add BC");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add AD");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add DC");
@@ -23433,8 +30373,14 @@ fn network_service_area_polygons_output_respects_turn_restrictions_csv() {
     .expect("write turn restrictions csv");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(2.1));
     args.insert("output_mode".to_string(), json!("polygons"));
     args.insert("edge_cost_field".to_string(), json!("IMP"));
@@ -23442,19 +30388,28 @@ fn network_service_area_polygons_output_respects_turn_restrictions_csv() {
         "turn_restrictions_csv".to_string(),
         json!(restrictions_csv.to_string_lossy().to_string()),
     );
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area polygon output");
     assert_eq!(out.features.len(), 1, "expected one polygon for one origin");
-    let node_count_idx = out.schema.field_index("NODE_COUNT").expect("NODE_COUNT field");
+    let node_count_idx = out
+        .schema
+        .field_index("NODE_COUNT")
+        .expect("NODE_COUNT field");
     let node_count = match &out.features[0].attributes[node_count_idx] {
         FieldValue::Integer(v) => *v,
         other => panic!("expected integer NODE_COUNT, got {:?}", other),
     };
-    assert_eq!(node_count, 3, "expected turn restriction to remove only the direct AB->BC reachability");
+    assert_eq!(
+        node_count, 3,
+        "expected turn restriction to remove only the direct AB->BC reachability"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -23481,7 +30436,10 @@ fn network_service_area_polygons_output_handles_duplicate_origins() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge");
@@ -23499,18 +30457,34 @@ fn network_service_area_polygons_output_handles_duplicate_origins() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(1.1));
     args.insert("output_mode".to_string(), json!("polygons"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area polygon output");
-    assert_eq!(out.features.len(), 2, "expected one polygon per origin feature, even if coordinates duplicate");
-    let origin_id_idx = out.schema.field_index("ORIGIN_ID").expect("ORIGIN_ID field");
+    assert_eq!(
+        out.features.len(),
+        2,
+        "expected one polygon per origin feature, even if coordinates duplicate"
+    );
+    let origin_id_idx = out
+        .schema
+        .field_index("ORIGIN_ID")
+        .expect("ORIGIN_ID field");
     let mut origin_ids = BTreeSet::<i64>::new();
     for feature in &out.features {
         let origin_id = match &feature.attributes[origin_id_idx] {
@@ -23544,13 +30518,19 @@ fn network_service_area_polygons_output_with_tiny_snap_tolerance() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 0.000001)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 0.000001),
+            ])),
             &[],
         )
         .expect("add short edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.000001), Coord::xy(0.000001, 0.000001)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.000001),
+                Coord::xy(0.000001, 0.000001),
+            ])),
             &[],
         )
         .expect("add short edge 2");
@@ -23565,24 +30545,39 @@ fn network_service_area_polygons_output_with_tiny_snap_tolerance() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(0.0000025));
     args.insert("snap_tolerance".to_string(), json!(1.0e-12));
     args.insert("output_mode".to_string(), json!("polygons"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
 
     let out = wbvector::read(&out_path).expect("read service area polygon output");
     assert_eq!(out.features.len(), 1, "expected one polygon output");
-    let node_count_idx = out.schema.field_index("NODE_COUNT").expect("NODE_COUNT field");
+    let node_count_idx = out
+        .schema
+        .field_index("NODE_COUNT")
+        .expect("NODE_COUNT field");
     let node_count = match &out.features[0].attributes[node_count_idx] {
         FieldValue::Integer(v) => *v,
         other => panic!("expected integer NODE_COUNT, got {:?}", other),
     };
-    assert_eq!(node_count, 3, "expected all three nodes reachable with tiny snap_tolerance");
+    assert_eq!(
+        node_count, 3,
+        "expected all three nodes reachable with tiny snap_tolerance"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -23608,13 +30603,19 @@ fn network_service_area_polygons_output_single_reachable_node_has_degenerate_hul
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -23637,13 +30638,25 @@ fn network_service_area_polygons_output_single_reachable_node_has_degenerate_hul
     wbvector::write(&barriers, &barriers_path, VectorFormat::GeoPackage).expect("write barriers");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(100.0));
     args.insert("output_mode".to_string(), json!("polygons"));
-    args.insert("barriers".to_string(), json!(barriers_path.to_string_lossy().to_string()));
+    args.insert(
+        "barriers".to_string(),
+        json!(barriers_path.to_string_lossy().to_string()),
+    );
     args.insert("barrier_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_service_area", &args, &context(&caps))
         .expect("network_service_area run");
@@ -23653,13 +30666,23 @@ fn network_service_area_polygons_output_single_reachable_node_has_degenerate_hul
     match out.features[0].geometry.as_ref().expect("polygon geometry") {
         Geometry::Polygon { exterior, .. } => {
             let coords = exterior.coords();
-            assert_eq!(coords.len(), 4, "degenerate hull bbox should contain four ring vertices");
+            assert_eq!(
+                coords.len(),
+                4,
+                "degenerate hull bbox should contain four ring vertices"
+            );
             let min_x = coords.iter().map(|c| c.x).fold(f64::INFINITY, f64::min);
             let max_x = coords.iter().map(|c| c.x).fold(f64::NEG_INFINITY, f64::max);
             let min_y = coords.iter().map(|c| c.y).fold(f64::INFINITY, f64::min);
             let max_y = coords.iter().map(|c| c.y).fold(f64::NEG_INFINITY, f64::max);
-            assert!(max_x > min_x, "degenerate hull bbox should have positive width");
-            assert!(max_y > min_y, "degenerate hull bbox should have positive height");
+            assert!(
+                max_x > min_x,
+                "degenerate hull bbox should have positive width"
+            );
+            assert!(
+                max_y > min_y,
+                "degenerate hull bbox should have positive height"
+            );
         }
         other => panic!("expected polygon geometry, got {:?}", other),
     }
@@ -23688,7 +30711,10 @@ fn network_service_area_rejects_unknown_output_mode() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge");
@@ -23703,11 +30729,20 @@ fn network_service_area_rejects_unknown_output_mode() {
     wbvector::write(&origins, &origins_path, VectorFormat::GeoPackage).expect("write origins");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
     args.insert("max_cost".to_string(), json!(1.0));
     args.insert("output_mode".to_string(), json!("mesh"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let err = registry
         .run("network_service_area", &args, &context(&caps))
@@ -23743,13 +30778,19 @@ fn network_od_cost_matrix_writes_expected_cost_row() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -23773,10 +30814,22 @@ fn network_od_cost_matrix_writes_expected_cost_row() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &args, &context(&caps))
         .expect("network_od_cost_matrix run");
@@ -23815,16 +30868,24 @@ fn network_od_cost_matrix_uses_edge_cost_field_multiplier() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("IMP", FieldType::Float));
+    lines
+        .schema
+        .add_field(FieldDef::new("IMP", FieldType::Float));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(2.5))],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(2.5))],
         )
         .expect("add edge 2");
@@ -23848,11 +30909,23 @@ fn network_od_cost_matrix_uses_edge_cost_field_multiplier() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("edge_cost_field".to_string(), json!("IMP"));
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &args, &context(&caps))
         .expect("network_od_cost_matrix run");
@@ -23862,7 +30935,11 @@ fn network_od_cost_matrix_uses_edge_cost_field_multiplier() {
     assert_eq!(lines.len(), 2, "expected header + one OD row");
     let parts: Vec<&str> = lines[1].split(',').collect();
     let cost: f64 = parts[2].parse().expect("parse cost");
-    assert!((cost - 5.0).abs() < 1.0e-9, "expected weighted cost 5.0, got {}", cost);
+    assert!(
+        (cost - 5.0).abs() < 1.0e-9,
+        "expected weighted cost 5.0, got {}",
+        cost
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -23887,22 +30964,33 @@ fn network_od_cost_matrix_supports_ft_tf_b_one_way_values() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("DIR", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("DIR", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("FT".to_string()))],
         )
         .expect("add FT edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(10.0, 0.0), Coord::xy(11.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(10.0, 0.0),
+                Coord::xy(11.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("TF".to_string()))],
         )
         .expect("add TF edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(20.0, 0.0), Coord::xy(21.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(20.0, 0.0),
+                Coord::xy(21.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("B".to_string()))],
         )
         .expect("add B edge");
@@ -23944,11 +31032,23 @@ fn network_od_cost_matrix_supports_ft_tf_b_one_way_values() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("one_way_field".to_string(), json!("DIR"));
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &args, &context(&caps))
         .expect("network_od_cost_matrix run");
@@ -23987,15 +31087,25 @@ fn network_od_cost_matrix_supports_ft_tf_b_one_way_values() {
                 .copied()
                 .expect("missing OD row");
             if let Some(expected_cost) = expected_reachable.get(&(origin_fid, destination_fid)) {
-                assert!(reachable, "expected reachable pair ({origin_fid}, {destination_fid})");
                 assert!(
-                    cost.map(|value| (value - expected_cost).abs() < 1.0e-9).unwrap_or(false),
+                    reachable,
+                    "expected reachable pair ({origin_fid}, {destination_fid})"
+                );
+                assert!(
+                    cost.map(|value| (value - expected_cost).abs() < 1.0e-9)
+                        .unwrap_or(false),
                     "expected cost {} for reachable pair ({origin_fid}, {destination_fid})",
                     expected_cost
                 );
             } else {
-                assert!(!reachable, "expected unreachable pair ({origin_fid}, {destination_fid})");
-                assert!(cost.is_none(), "cost should be empty for unreachable pair ({origin_fid}, {destination_fid})");
+                assert!(
+                    !reachable,
+                    "expected unreachable pair ({origin_fid}, {destination_fid})"
+                );
+                assert!(
+                    cost.is_none(),
+                    "cost should be empty for unreachable pair ({origin_fid}, {destination_fid})"
+                );
             }
         }
     }
@@ -24023,22 +31133,33 @@ fn network_od_cost_matrix_marks_unreachable_with_blocked_field() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("BLOCKED", FieldType::Integer));
+    lines
+        .schema
+        .add_field(FieldDef::new("BLOCKED", FieldType::Integer));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(-1.0, 0.0), Coord::xy(0.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(-1.0, 0.0),
+                Coord::xy(0.0, 0.0),
+            ])),
             &[("BLOCKED", FieldValue::Integer(0))],
         )
         .expect("add local origin edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("BLOCKED", FieldValue::Integer(1))],
         )
         .expect("add blocked edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("BLOCKED", FieldValue::Integer(0))],
         )
         .expect("add open edge");
@@ -24062,11 +31183,23 @@ fn network_od_cost_matrix_marks_unreachable_with_blocked_field() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("blocked_field".to_string(), json!("BLOCKED"));
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &args, &context(&caps))
         .expect("network_od_cost_matrix run");
@@ -24075,8 +31208,14 @@ fn network_od_cost_matrix_marks_unreachable_with_blocked_field() {
     let lines: Vec<&str> = csv.lines().collect();
     assert_eq!(lines.len(), 2, "expected header + one OD row");
     let parts: Vec<&str> = lines[1].split(',').collect();
-    assert_eq!(parts[3], "false", "expected unreachable OD pair due to blocked edge");
-    assert!(parts[2].is_empty(), "cost should be empty for unreachable OD row");
+    assert_eq!(
+        parts[3], "false",
+        "expected unreachable OD pair due to blocked edge"
+    );
+    assert!(
+        parts[2].is_empty(),
+        "cost should be empty for unreachable OD row"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -24104,13 +31243,19 @@ fn network_od_cost_matrix_marks_unreachable_with_barriers() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -24142,12 +31287,27 @@ fn network_od_cost_matrix_marks_unreachable_with_barriers() {
     wbvector::write(&barriers, &barriers_path, VectorFormat::GeoPackage).expect("write barriers");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
-    args.insert("barriers".to_string(), json!(barriers_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "barriers".to_string(),
+        json!(barriers_path.to_string_lossy().to_string()),
+    );
     args.insert("barrier_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &args, &context(&caps))
         .expect("network_od_cost_matrix run");
@@ -24156,8 +31316,14 @@ fn network_od_cost_matrix_marks_unreachable_with_barriers() {
     let lines: Vec<&str> = csv.lines().collect();
     assert_eq!(lines.len(), 2, "expected header + one OD row");
     let parts: Vec<&str> = lines[1].split(',').collect();
-    assert_eq!(parts[3], "false", "expected unreachable OD pair due to barrier node");
-    assert!(parts[2].is_empty(), "cost should be empty for unreachable OD row");
+    assert_eq!(
+        parts[3], "false",
+        "expected unreachable OD pair due to barrier node"
+    );
+    assert!(
+        parts[2].is_empty(),
+        "cost should be empty for unreachable OD row"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -24183,22 +31349,33 @@ fn closest_facility_network_supports_ft_tf_b_one_way_values() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("DIR", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("DIR", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("FT".to_string()))],
         )
         .expect("add FT edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(10.0, 0.0), Coord::xy(11.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(10.0, 0.0),
+                Coord::xy(11.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("TF".to_string()))],
         )
         .expect("add TF edge");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(20.0, 0.0), Coord::xy(21.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(20.0, 0.0),
+                Coord::xy(21.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("B".to_string()))],
         )
         .expect("add B edge");
@@ -24216,7 +31393,8 @@ fn closest_facility_network_supports_ft_tf_b_one_way_values() {
     incidents
         .add_feature(Some(Geometry::Point(Coord::xy(21.0, 0.0))), &[])
         .expect("add B reverse incident");
-    wbvector::write(&incidents, &incidents_path, VectorFormat::GeoPackage).expect("write incidents");
+    wbvector::write(&incidents, &incidents_path, VectorFormat::GeoPackage)
+        .expect("write incidents");
 
     let mut facilities = Layer::new("facilities")
         .with_geom_type(GeometryType::Point)
@@ -24230,14 +31408,27 @@ fn closest_facility_network_supports_ft_tf_b_one_way_values() {
     facilities
         .add_feature(Some(Geometry::Point(Coord::xy(20.0, 0.0))), &[])
         .expect("add B reverse facility");
-    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage).expect("write facilities");
+    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage)
+        .expect("write facilities");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("incidents".to_string(), json!(incidents_path.to_string_lossy().to_string()));
-    args.insert("facilities".to_string(), json!(facilities_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "incidents".to_string(),
+        json!(incidents_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "facilities".to_string(),
+        json!(facilities_path.to_string_lossy().to_string()),
+    );
     args.insert("one_way_field".to_string(), json!("DIR"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("closest_facility_network", &args, &context(&caps))
         .expect("closest_facility_network run");
@@ -24245,8 +31436,14 @@ fn closest_facility_network_supports_ft_tf_b_one_way_values() {
     let out = wbvector::read(&out_path).expect("read closest facility output");
     assert_eq!(out.features.len(), 3, "expected one route per incident");
 
-    let incident_idx = out.schema.field_index("INCIDENT_FID").expect("INCIDENT_FID field");
-    let facility_idx = out.schema.field_index("FACILITY_FID").expect("FACILITY_FID field");
+    let incident_idx = out
+        .schema
+        .field_index("INCIDENT_FID")
+        .expect("INCIDENT_FID field");
+    let facility_idx = out
+        .schema
+        .field_index("FACILITY_FID")
+        .expect("FACILITY_FID field");
     let cost_idx = out.schema.field_index("COST").expect("COST field");
 
     let mut seen = std::collections::HashMap::<i64, (i64, f64)>::new();
@@ -24278,8 +31475,16 @@ fn closest_facility_network_supports_ft_tf_b_one_way_values() {
             3 => 3,
             _ => unreachable!(),
         };
-        assert_eq!(facility_fid, expected_facility, "unexpected facility chosen for incident {}", incident_fid);
-        assert!((cost - 1.0).abs() < 1.0e-9, "expected unit-cost route for incident {}", incident_fid);
+        assert_eq!(
+            facility_fid, expected_facility,
+            "unexpected facility chosen for incident {}",
+            incident_fid
+        );
+        assert!(
+            (cost - 1.0).abs() < 1.0e-9,
+            "expected unit-cost route for incident {}",
+            incident_fid
+        );
     }
 
     let _ = std::fs::remove_file(&network_path);
@@ -24307,13 +31512,19 @@ fn network_od_cost_matrix_applies_turn_penalty_to_cost() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -24337,11 +31548,23 @@ fn network_od_cost_matrix_applies_turn_penalty_to_cost() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("turn_penalty".to_string(), json!(2.0));
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &args, &context(&caps))
         .expect("network_od_cost_matrix run");
@@ -24351,7 +31574,11 @@ fn network_od_cost_matrix_applies_turn_penalty_to_cost() {
     assert_eq!(lines.len(), 2, "expected header + one OD row");
     let parts: Vec<&str> = lines[1].split(',').collect();
     let cost: f64 = parts[2].parse().expect("parse cost");
-    assert!((cost - 4.0).abs() < 1.0e-9, "expected cost 4.0 with turn penalty, got {}", cost);
+    assert!(
+        (cost - 4.0).abs() < 1.0e-9,
+        "expected cost 4.0 with turn penalty, got {}",
+        cost
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -24376,28 +31603,42 @@ fn network_od_cost_matrix_can_forbid_left_turns() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("IMP", FieldType::Float));
+    lines
+        .schema
+        .add_field(FieldDef::new("IMP", FieldType::Float));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add AB");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add BC");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add AD");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add DC");
@@ -24421,12 +31662,24 @@ fn network_od_cost_matrix_can_forbid_left_turns() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("edge_cost_field".to_string(), json!("IMP"));
     args.insert("forbid_left_turns".to_string(), json!(true));
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &args, &context(&caps))
         .expect("network_od_cost_matrix run");
@@ -24436,7 +31689,11 @@ fn network_od_cost_matrix_can_forbid_left_turns() {
     assert_eq!(lines.len(), 2, "expected header + one OD row");
     let parts: Vec<&str> = lines[1].split(',').collect();
     let cost: f64 = parts[2].parse().expect("parse cost");
-    assert!((cost - 4.0).abs() < 1.0e-9, "expected cost 4.0 with left-turn restriction, got {}", cost);
+    assert!(
+        (cost - 4.0).abs() < 1.0e-9,
+        "expected cost 4.0 with left-turn restriction, got {}",
+        cost
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -24462,28 +31719,42 @@ fn network_od_cost_matrix_respects_turn_restrictions_csv() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("IMP", FieldType::Float));
+    lines
+        .schema
+        .add_field(FieldDef::new("IMP", FieldType::Float));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add AB");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add BC");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add AD");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add DC");
@@ -24513,15 +31784,27 @@ fn network_od_cost_matrix_respects_turn_restrictions_csv() {
     .expect("write turn restrictions csv");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("edge_cost_field".to_string(), json!("IMP"));
     args.insert(
         "turn_restrictions_csv".to_string(),
         json!(restrictions_csv.to_string_lossy().to_string()),
     );
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &args, &context(&caps))
         .expect("network_od_cost_matrix run");
@@ -24531,7 +31814,11 @@ fn network_od_cost_matrix_respects_turn_restrictions_csv() {
     assert_eq!(lines.len(), 2, "expected header + one OD row");
     let parts: Vec<&str> = lines[1].split(',').collect();
     let cost: f64 = parts[2].parse().expect("parse cost");
-    assert!((cost - 4.0).abs() < 1.0e-9, "expected detour cost 4.0 with turn restriction, got {}", cost);
+    assert!(
+        (cost - 4.0).abs() < 1.0e-9,
+        "expected detour cost 4.0 with turn restriction, got {}",
+        cost
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -24558,28 +31845,42 @@ fn network_od_cost_matrix_applies_turn_cost_override_from_csv() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("IMP", FieldType::Float));
+    lines
+        .schema
+        .add_field(FieldDef::new("IMP", FieldType::Float));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add AB");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add BC");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add AD");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add DC");
@@ -24609,15 +31910,27 @@ fn network_od_cost_matrix_applies_turn_cost_override_from_csv() {
     .expect("write turn override csv");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("edge_cost_field".to_string(), json!("IMP"));
     args.insert(
         "turn_restrictions_csv".to_string(),
         json!(restrictions_csv.to_string_lossy().to_string()),
     );
-    args.insert("output".to_string(), json!(out_csv.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &args, &context(&caps))
         .expect("network_od_cost_matrix run");
@@ -24659,40 +31972,60 @@ fn network_od_cost_matrix_temporal_profile_changes_cost_by_departure_time() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add direct edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add direct edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_D".to_string()))],
         )
         .expect("add detour edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("D_E".to_string()))],
         )
         .expect("add detour edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 1.0), Coord::xy(2.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 1.0),
+                Coord::xy(2.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("E_F".to_string()))],
         )
         .expect("add detour edge 3");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("F_C".to_string()))],
         )
         .expect("add detour edge 4");
@@ -24722,12 +32055,27 @@ fn network_od_cost_matrix_temporal_profile_changes_cost_by_departure_time() {
     .expect("write temporal profile csv");
 
     let mut rush_args = ToolArgs::new();
-    rush_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    rush_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    rush_args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
-    rush_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    rush_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    rush_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    rush_args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
+    rush_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     rush_args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
-    rush_args.insert("output".to_string(), json!(rush_out_csv.to_string_lossy().to_string()));
+    rush_args.insert(
+        "output".to_string(),
+        json!(rush_out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &rush_args, &context(&caps))
         .expect("network_od_cost_matrix rush run");
@@ -24736,15 +32084,34 @@ fn network_od_cost_matrix_temporal_profile_changes_cost_by_departure_time() {
     let rush_lines: Vec<&str> = rush_csv.lines().collect();
     let rush_parts: Vec<&str> = rush_lines[1].split(',').collect();
     let rush_cost: f64 = rush_parts[2].parse().expect("parse rush cost");
-    assert!((rush_cost - 4.0).abs() < 1.0e-9, "expected rush-hour detour cost 4.0, got {}", rush_cost);
+    assert!(
+        (rush_cost - 4.0).abs() < 1.0e-9,
+        "expected rush-hour detour cost 4.0, got {}",
+        rush_cost
+    );
 
     let mut offpeak_args = ToolArgs::new();
-    offpeak_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    offpeak_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    offpeak_args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
-    offpeak_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    offpeak_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    offpeak_args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
+    offpeak_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("departure_time".to_string(), json!("2026-04-13T11:00:00Z"));
-    offpeak_args.insert("output".to_string(), json!(offpeak_out_csv.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "output".to_string(),
+        json!(offpeak_out_csv.to_string_lossy().to_string()),
+    );
     registry
         .run("network_od_cost_matrix", &offpeak_args, &context(&caps))
         .expect("network_od_cost_matrix offpeak run");
@@ -24753,7 +32120,11 @@ fn network_od_cost_matrix_temporal_profile_changes_cost_by_departure_time() {
     let offpeak_lines: Vec<&str> = offpeak_csv.lines().collect();
     let offpeak_parts: Vec<&str> = offpeak_lines[1].split(',').collect();
     let offpeak_cost: f64 = offpeak_parts[2].parse().expect("parse offpeak cost");
-    assert!((offpeak_cost - 2.0).abs() < 1.0e-9, "expected offpeak direct cost 2.0, got {}", offpeak_cost);
+    assert!(
+        (offpeak_cost - 2.0).abs() < 1.0e-9,
+        "expected offpeak direct cost 2.0, got {}",
+        offpeak_cost
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -24780,27 +32151,42 @@ fn network_connected_components_labels_disconnected_subnetworks() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add component A edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add component A edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(10.0, 0.0), Coord::xy(11.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(10.0, 0.0),
+                Coord::xy(11.0, 0.0),
+            ])),
             &[],
         )
         .expect("add component B edge");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write input network");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_connected_components", &args, &context(&caps))
         .expect("network_connected_components run");
@@ -24823,7 +32209,10 @@ fn network_connected_components_labels_disconnected_subnetworks() {
     };
 
     assert_eq!(c0, c1, "connected edges should share the same component id");
-    assert_ne!(c0, c2, "disconnected subnetwork should have a different component id");
+    assert_ne!(
+        c0, c2,
+        "disconnected subnetwork should have a different component id"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&out_path);
@@ -24847,13 +32236,19 @@ fn shortest_path_network_barrier_snap_distance_can_ignore_distant_barriers() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -24868,15 +32263,24 @@ fn shortest_path_network_barrier_snap_distance_can_ignore_distant_barriers() {
     wbvector::write(&barriers, &barriers_path, VectorFormat::GeoPackage).expect("write barriers");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(2.0));
     args.insert("end_y".to_string(), json!(0.0));
-    args.insert("barriers".to_string(), json!(barriers_path.to_string_lossy().to_string()));
+    args.insert(
+        "barriers".to_string(),
+        json!(barriers_path.to_string_lossy().to_string()),
+    );
     args.insert("barrier_snap_distance".to_string(), json!(0.05));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("shortest_path_network", &args, &context(&caps))
         .expect("shortest_path_network run");
@@ -24889,7 +32293,10 @@ fn shortest_path_network_barrier_snap_distance_can_ignore_distant_barriers() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((cost - 2.0).abs() < 1.0e-9, "expected barrier to be ignored due to small snap distance");
+    assert!(
+        (cost - 2.0).abs() < 1.0e-9,
+        "expected barrier to be ignored due to small snap distance"
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&barriers_path);
@@ -24915,13 +32322,19 @@ fn network_routes_from_od_outputs_route_geometry_and_cost() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -24945,10 +32358,22 @@ fn network_routes_from_od_outputs_route_geometry_and_cost() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_routes_from_od", &args, &context(&caps))
         .expect("network_routes_from_od run");
@@ -24996,22 +32421,33 @@ fn network_routes_from_od_supports_ft_tf_b_one_way_values() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("DIR", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("DIR", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("FT".to_string()))],
         )
         .expect("add FT component");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(10.0, 0.0), Coord::xy(11.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(10.0, 0.0),
+                Coord::xy(11.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("TF".to_string()))],
         )
         .expect("add TF component");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(20.0, 0.0), Coord::xy(21.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(20.0, 0.0),
+                Coord::xy(21.0, 0.0),
+            ])),
             &[("DIR", FieldValue::Text("B".to_string()))],
         )
         .expect("add B component");
@@ -25053,19 +32489,38 @@ fn network_routes_from_od_supports_ft_tf_b_one_way_values() {
         .expect("write destinations");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("one_way_field".to_string(), json!("DIR"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_routes_from_od", &args, &context(&caps))
         .expect("network_routes_from_od run");
 
     let out = wbvector::read(&out_path).expect("read route output");
-    assert_eq!(out.features.len(), 6, "expected all reachable OD pairs within each component");
+    assert_eq!(
+        out.features.len(),
+        6,
+        "expected all reachable OD pairs within each component"
+    );
 
-    let origin_idx = out.schema.field_index("ORIGIN_FID").expect("ORIGIN_FID field");
+    let origin_idx = out
+        .schema
+        .field_index("ORIGIN_FID")
+        .expect("ORIGIN_FID field");
     let dest_idx = out.schema.field_index("DEST_FID").expect("DEST_FID field");
     let cost_idx = out.schema.field_index("COST").expect("COST field");
 
@@ -25092,8 +32547,16 @@ fn network_routes_from_od_supports_ft_tf_b_one_way_values() {
         ((2, 2), 1.0, "expected TF route D->C"),
         ((3, 3), 1.0, "expected B route E->F"),
         ((4, 4), 1.0, "expected B route F->E"),
-        ((3, 4), 0.0, "expected zero-cost same-node route from E to E"),
-        ((4, 3), 0.0, "expected zero-cost same-node route from F to F"),
+        (
+            (3, 4),
+            0.0,
+            "expected zero-cost same-node route from E to E",
+        ),
+        (
+            (4, 3),
+            0.0,
+            "expected zero-cost same-node route from F to F",
+        ),
     ];
     for ((origin_fid, dest_fid), expected_cost, message) in expected {
         let actual_cost = seen
@@ -25133,28 +32596,42 @@ fn network_routes_from_od_respects_turn_restrictions_csv() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("IMP", FieldType::Float));
+    lines
+        .schema
+        .add_field(FieldDef::new("IMP", FieldType::Float));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add AB");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add BC");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add AD");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add DC");
@@ -25184,15 +32661,27 @@ fn network_routes_from_od_respects_turn_restrictions_csv() {
     .expect("write turn restrictions csv");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
     args.insert("edge_cost_field".to_string(), json!("IMP"));
     args.insert(
         "turn_restrictions_csv".to_string(),
         json!(restrictions_csv.to_string_lossy().to_string()),
     );
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_routes_from_od", &args, &context(&caps))
         .expect("network_routes_from_od run");
@@ -25205,7 +32694,11 @@ fn network_routes_from_od_respects_turn_restrictions_csv() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((cost - 4.0).abs() < 1.0e-9, "expected detour cost 4.0 with turn restriction, got {}", cost);
+    assert!(
+        (cost - 4.0).abs() < 1.0e-9,
+        "expected detour cost 4.0 with turn restriction, got {}",
+        cost
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -25233,40 +32726,60 @@ fn network_routes_from_od_temporal_profile_changes_cost_by_departure_time() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add direct edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add direct edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_D".to_string()))],
         )
         .expect("add detour edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("D_E".to_string()))],
         )
         .expect("add detour edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 1.0), Coord::xy(2.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 1.0),
+                Coord::xy(2.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("E_F".to_string()))],
         )
         .expect("add detour edge 3");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("F_C".to_string()))],
         )
         .expect("add detour edge 4");
@@ -25296,12 +32809,27 @@ fn network_routes_from_od_temporal_profile_changes_cost_by_departure_time() {
     .expect("write temporal profile csv");
 
     let mut rush_args = ToolArgs::new();
-    rush_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    rush_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    rush_args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
-    rush_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    rush_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    rush_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    rush_args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
+    rush_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     rush_args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
-    rush_args.insert("output".to_string(), json!(rush_out_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "output".to_string(),
+        json!(rush_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_routes_from_od", &rush_args, &context(&caps))
         .expect("network_routes_from_od rush run");
@@ -25314,15 +32842,34 @@ fn network_routes_from_od_temporal_profile_changes_cost_by_departure_time() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((rush_cost - 4.0).abs() < 1.0e-9, "expected rush-hour detour cost 4.0, got {}", rush_cost);
+    assert!(
+        (rush_cost - 4.0).abs() < 1.0e-9,
+        "expected rush-hour detour cost 4.0, got {}",
+        rush_cost
+    );
 
     let mut offpeak_args = ToolArgs::new();
-    offpeak_args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    offpeak_args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    offpeak_args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
-    offpeak_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    offpeak_args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    offpeak_args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
+    offpeak_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("departure_time".to_string(), json!("2026-04-13T11:00:00Z"));
-    offpeak_args.insert("output".to_string(), json!(offpeak_out_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "output".to_string(),
+        json!(offpeak_out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_routes_from_od", &offpeak_args, &context(&caps))
         .expect("network_routes_from_od offpeak run");
@@ -25335,7 +32882,11 @@ fn network_routes_from_od_temporal_profile_changes_cost_by_departure_time() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((offpeak_cost - 2.0).abs() < 1.0e-9, "expected offpeak direct cost 2.0, got {}", offpeak_cost);
+    assert!(
+        (offpeak_cost - 2.0).abs() < 1.0e-9,
+        "expected offpeak direct cost 2.0, got {}",
+        offpeak_cost
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -25365,13 +32916,19 @@ fn network_routes_from_od_respects_barrier_points() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -25403,18 +32960,37 @@ fn network_routes_from_od_respects_barrier_points() {
     wbvector::write(&barriers, &barriers_path, VectorFormat::GeoPackage).expect("write barriers");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("origins".to_string(), json!(origins_path.to_string_lossy().to_string()));
-    args.insert("destinations".to_string(), json!(destinations_path.to_string_lossy().to_string()));
-    args.insert("barriers".to_string(), json!(barriers_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "origins".to_string(),
+        json!(origins_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "destinations".to_string(),
+        json!(destinations_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "barriers".to_string(),
+        json!(barriers_path.to_string_lossy().to_string()),
+    );
     args.insert("barrier_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("network_routes_from_od", &args, &context(&caps))
         .expect("network_routes_from_od run");
 
     let out = wbvector::read(&out_path).expect("read route output");
-    assert_eq!(out.features.len(), 0, "expected no route features when barrier blocks the only corridor");
+    assert_eq!(
+        out.features.len(),
+        0,
+        "expected no route features when barrier blocks the only corridor"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&origins_path);
@@ -25442,19 +33018,28 @@ fn closest_facility_network_routes_incidents_to_nearest_reachable_facility() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 3");
@@ -25469,7 +33054,8 @@ fn closest_facility_network_routes_incidents_to_nearest_reachable_facility() {
     incidents
         .add_feature(Some(Geometry::Point(Coord::xy(3.0, 0.0))), &[])
         .expect("add incident 2");
-    wbvector::write(&incidents, &incidents_path, VectorFormat::GeoPackage).expect("write incidents");
+    wbvector::write(&incidents, &incidents_path, VectorFormat::GeoPackage)
+        .expect("write incidents");
 
     let mut facilities = Layer::new("facilities")
         .with_geom_type(GeometryType::Point)
@@ -25480,20 +33066,36 @@ fn closest_facility_network_routes_incidents_to_nearest_reachable_facility() {
     facilities
         .add_feature(Some(Geometry::Point(Coord::xy(2.0, 0.0))), &[])
         .expect("add facility 2");
-    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage).expect("write facilities");
+    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage)
+        .expect("write facilities");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("incidents".to_string(), json!(incidents_path.to_string_lossy().to_string()));
-    args.insert("facilities".to_string(), json!(facilities_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "incidents".to_string(),
+        json!(incidents_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "facilities".to_string(),
+        json!(facilities_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("closest_facility_network", &args, &context(&caps))
         .expect("closest_facility_network run");
 
     let out = wbvector::read(&out_path).expect("read closest facility output");
     assert_eq!(out.features.len(), 2, "expected one route per incident");
-    let incident_idx = out.schema.field_index("INCIDENT_FID").expect("INCIDENT_FID field");
+    let incident_idx = out
+        .schema
+        .field_index("INCIDENT_FID")
+        .expect("INCIDENT_FID field");
     let cost_idx = out.schema.field_index("COST").expect("COST field");
 
     let mut costs_by_incident = std::collections::BTreeMap::<i64, f64>::new();
@@ -25511,7 +33113,9 @@ fn closest_facility_network_routes_incidents_to_nearest_reachable_facility() {
     }
 
     assert!(
-        costs_by_incident.values().all(|c| (*c - 1.0).abs() < 1.0e-9),
+        costs_by_incident
+            .values()
+            .all(|c| (*c - 1.0).abs() < 1.0e-9),
         "expected each incident to route one edge to nearest facility"
     );
 
@@ -25540,13 +33144,19 @@ fn closest_facility_network_tie_break_prefers_first_facility_feature() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge left");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge right");
@@ -25558,7 +33168,8 @@ fn closest_facility_network_tie_break_prefers_first_facility_feature() {
     incidents
         .add_feature(Some(Geometry::Point(Coord::xy(1.0, 0.0))), &[])
         .expect("add center incident");
-    wbvector::write(&incidents, &incidents_path, VectorFormat::GeoPackage).expect("write incidents");
+    wbvector::write(&incidents, &incidents_path, VectorFormat::GeoPackage)
+        .expect("write incidents");
 
     let mut facilities = Layer::new("facilities")
         .with_geom_type(GeometryType::Point)
@@ -25570,13 +33181,26 @@ fn closest_facility_network_tie_break_prefers_first_facility_feature() {
         .add_feature(Some(Geometry::Point(Coord::xy(2.0, 0.0))), &[])
         .expect("add facility second");
     let expected_first_facility_fid = facilities.features[0].fid as i64;
-    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage).expect("write facilities");
+    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage)
+        .expect("write facilities");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("incidents".to_string(), json!(incidents_path.to_string_lossy().to_string()));
-    args.insert("facilities".to_string(), json!(facilities_path.to_string_lossy().to_string()));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "incidents".to_string(),
+        json!(incidents_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "facilities".to_string(),
+        json!(facilities_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("closest_facility_network", &args, &context(&caps))
         .expect("closest_facility_network run");
@@ -25584,7 +33208,10 @@ fn closest_facility_network_tie_break_prefers_first_facility_feature() {
     let out = wbvector::read(&out_path).expect("read closest facility output");
     assert_eq!(out.features.len(), 1, "expected one route for one incident");
 
-    let facility_idx = out.schema.field_index("FACILITY_FID").expect("FACILITY_FID field");
+    let facility_idx = out
+        .schema
+        .field_index("FACILITY_FID")
+        .expect("FACILITY_FID field");
     let chosen_facility = match &out.features[0].attributes[facility_idx] {
         FieldValue::Integer(v) => *v,
         other => panic!("expected integer FACILITY_FID, got {:?}", other),
@@ -25620,25 +33247,37 @@ fn location_allocation_network_selects_two_facilities_and_allocates_demand() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 0.0), Coord::xy(3.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 0.0),
+                Coord::xy(3.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 3");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(3.0, 0.0), Coord::xy(4.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(3.0, 0.0),
+                Coord::xy(4.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 4");
@@ -25647,7 +33286,9 @@ fn location_allocation_network_selects_two_facilities_and_allocates_demand() {
     let mut demand = Layer::new("demand")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
-    demand.schema.add_field(FieldDef::new("W", FieldType::Float));
+    demand
+        .schema
+        .add_field(FieldDef::new("W", FieldType::Float));
     demand
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
@@ -25674,24 +33315,47 @@ fn location_allocation_network_selects_two_facilities_and_allocates_demand() {
     facilities
         .add_feature(Some(Geometry::Point(Coord::xy(4.0, 0.0))), &[])
         .expect("add facility 3");
-    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage).expect("write facilities");
+    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage)
+        .expect("write facilities");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("demand_points".to_string(), json!(demand_path.to_string_lossy().to_string()));
-    args.insert("facilities".to_string(), json!(facilities_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "demand_points".to_string(),
+        json!(demand_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "facilities".to_string(),
+        json!(facilities_path.to_string_lossy().to_string()),
+    );
     args.insert("facility_count".to_string(), json!(2));
     args.insert("demand_weight_field".to_string(), json!("W"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("location_allocation_network", &args, &context(&caps))
         .expect("location_allocation_network run");
 
     let out = wbvector::read(&out_path).expect("read location-allocation output");
-    assert_eq!(out.features.len(), 2, "expected one allocated route per demand point");
+    assert_eq!(
+        out.features.len(),
+        2,
+        "expected one allocated route per demand point"
+    );
 
-    let facility_idx = out.schema.field_index("FACILITY_FID").expect("FACILITY_FID field");
-    let alloc_cost_idx = out.schema.field_index("ALLOC_COST").expect("ALLOC_COST field");
+    let facility_idx = out
+        .schema
+        .field_index("FACILITY_FID")
+        .expect("FACILITY_FID field");
+    let alloc_cost_idx = out
+        .schema
+        .field_index("ALLOC_COST")
+        .expect("ALLOC_COST field");
 
     let mut selected_facilities = std::collections::BTreeSet::<i64>::new();
     let mut total_alloc_cost = 0.0f64;
@@ -25710,7 +33374,11 @@ fn location_allocation_network_selects_two_facilities_and_allocates_demand() {
         total_alloc_cost += alloc_cost;
     }
 
-    assert_eq!(selected_facilities.len(), 2, "expected exactly two selected facilities");
+    assert_eq!(
+        selected_facilities.len(),
+        2,
+        "expected exactly two selected facilities"
+    );
     assert!(
         total_alloc_cost.abs() < 1.0e-9,
         "expected zero weighted allocation cost for end-point facilities, got {}",
@@ -25740,14 +33408,13 @@ fn location_allocation_network_exact_mode_reports_exact_solver_usage() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    for segment in [
-        (0.0, 1.0),
-        (1.0, 2.0),
-        (2.0, 3.0),
-    ] {
+    for segment in [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)] {
         lines
             .add_feature(
-                Some(Geometry::line_string(vec![Coord::xy(segment.0, 0.0), Coord::xy(segment.1, 0.0)])),
+                Some(Geometry::line_string(vec![
+                    Coord::xy(segment.0, 0.0),
+                    Coord::xy(segment.1, 0.0),
+                ])),
                 &[],
             )
             .expect("add segment");
@@ -25777,15 +33444,28 @@ fn location_allocation_network_exact_mode_reports_exact_solver_usage() {
     facilities
         .add_feature(Some(Geometry::Point(Coord::xy(3.0, 0.0))), &[])
         .expect("add facility 3");
-    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage).expect("write facilities");
+    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage)
+        .expect("write facilities");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("demand_points".to_string(), json!(demand_path.to_string_lossy().to_string()));
-    args.insert("facilities".to_string(), json!(facilities_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "demand_points".to_string(),
+        json!(demand_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "facilities".to_string(),
+        json!(facilities_path.to_string_lossy().to_string()),
+    );
     args.insert("facility_count".to_string(), json!(1));
     args.insert("solver_mode".to_string(), json!("exact"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     let result = registry
         .run("location_allocation_network", &args, &context(&caps))
         .expect("location_allocation_network run");
@@ -25819,15 +33499,13 @@ fn location_allocation_network_respects_facility_capacities() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    for segment in [
-        (0.0, 1.0),
-        (1.0, 2.0),
-        (2.0, 3.0),
-        (3.0, 4.0),
-    ] {
+    for segment in [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0), (3.0, 4.0)] {
         lines
             .add_feature(
-                Some(Geometry::line_string(vec![Coord::xy(segment.0, 0.0), Coord::xy(segment.1, 0.0)])),
+                Some(Geometry::line_string(vec![
+                    Coord::xy(segment.0, 0.0),
+                    Coord::xy(segment.1, 0.0),
+                ])),
                 &[],
             )
             .expect("add segment");
@@ -25837,10 +33515,15 @@ fn location_allocation_network_respects_facility_capacities() {
     let mut demand = Layer::new("demand")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
-    demand.schema.add_field(FieldDef::new("W", FieldType::Float));
+    demand
+        .schema
+        .add_field(FieldDef::new("W", FieldType::Float));
     for x in [0.0, 1.0, 4.0] {
         demand
-            .add_feature(Some(Geometry::Point(Coord::xy(x, 0.0))), &[("W", FieldValue::Float(1.0))])
+            .add_feature(
+                Some(Geometry::Point(Coord::xy(x, 0.0))),
+                &[("W", FieldValue::Float(1.0))],
+            )
             .expect("add demand point");
     }
     wbvector::write(&demand, &demand_path, VectorFormat::GeoPackage).expect("write demand");
@@ -25848,32 +33531,60 @@ fn location_allocation_network_respects_facility_capacities() {
     let mut facilities = Layer::new("facilities")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
-    facilities.schema.add_field(FieldDef::new("CAP", FieldType::Float));
     facilities
-        .add_feature(Some(Geometry::Point(Coord::xy(0.0, 0.0))), &[("CAP", FieldValue::Float(1.0))])
+        .schema
+        .add_field(FieldDef::new("CAP", FieldType::Float));
+    facilities
+        .add_feature(
+            Some(Geometry::Point(Coord::xy(0.0, 0.0))),
+            &[("CAP", FieldValue::Float(1.0))],
+        )
         .expect("add facility 1");
     facilities
-        .add_feature(Some(Geometry::Point(Coord::xy(4.0, 0.0))), &[("CAP", FieldValue::Float(2.0))])
+        .add_feature(
+            Some(Geometry::Point(Coord::xy(4.0, 0.0))),
+            &[("CAP", FieldValue::Float(2.0))],
+        )
         .expect("add facility 2");
-    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage).expect("write facilities");
+    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage)
+        .expect("write facilities");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("demand_points".to_string(), json!(demand_path.to_string_lossy().to_string()));
-    args.insert("facilities".to_string(), json!(facilities_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "demand_points".to_string(),
+        json!(demand_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "facilities".to_string(),
+        json!(facilities_path.to_string_lossy().to_string()),
+    );
     args.insert("facility_count".to_string(), json!(2));
     args.insert("demand_weight_field".to_string(), json!("W"));
     args.insert("facility_capacity_field".to_string(), json!("CAP"));
     args.insert("solver_mode".to_string(), json!("exact"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("location_allocation_network", &args, &context(&caps))
         .expect("location_allocation_network run");
 
     let out = wbvector::read(&out_path).expect("read capacity output");
-    assert_eq!(out.features.len(), 3, "expected all three demands to be served");
+    assert_eq!(
+        out.features.len(),
+        3,
+        "expected all three demands to be served"
+    );
 
-    let facility_idx = out.schema.field_index("FACILITY_FID").expect("FACILITY_FID field");
+    let facility_idx = out
+        .schema
+        .field_index("FACILITY_FID")
+        .expect("FACILITY_FID field");
     let mut counts = std::collections::BTreeMap::<i64, usize>::new();
     for feature in &out.features {
         let facility_fid = match &feature.attributes[facility_idx] {
@@ -25882,7 +33593,11 @@ fn location_allocation_network_respects_facility_capacities() {
         };
         *counts.entry(facility_fid).or_insert(0) += 1;
     }
-    assert_eq!(counts.values().copied().collect::<Vec<_>>(), vec![1, 2], "expected capacities to split allocations 1/2 across the two facilities");
+    assert_eq!(
+        counts.values().copied().collect::<Vec<_>>(),
+        vec![1, 2],
+        "expected capacities to split allocations 1/2 across the two facilities"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&demand_path);
@@ -25907,15 +33622,13 @@ fn location_allocation_network_respects_required_and_forbidden_facilities() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    for segment in [
-        (0.0, 1.0),
-        (1.0, 2.0),
-        (2.0, 3.0),
-        (3.0, 4.0),
-    ] {
+    for segment in [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0), (3.0, 4.0)] {
         lines
             .add_feature(
-                Some(Geometry::line_string(vec![Coord::xy(segment.0, 0.0), Coord::xy(segment.1, 0.0)])),
+                Some(Geometry::line_string(vec![
+                    Coord::xy(segment.0, 0.0),
+                    Coord::xy(segment.1, 0.0),
+                ])),
                 &[],
             )
             .expect("add segment");
@@ -25936,38 +33649,64 @@ fn location_allocation_network_respects_required_and_forbidden_facilities() {
     let mut facilities = Layer::new("facilities")
         .with_geom_type(GeometryType::Point)
         .with_epsg(3857);
-    facilities.schema.add_field(FieldDef::new("REQ", FieldType::Boolean));
-    facilities.schema.add_field(FieldDef::new("BAN", FieldType::Boolean));
+    facilities
+        .schema
+        .add_field(FieldDef::new("REQ", FieldType::Boolean));
+    facilities
+        .schema
+        .add_field(FieldDef::new("BAN", FieldType::Boolean));
     facilities
         .add_feature(
             Some(Geometry::Point(Coord::xy(0.0, 0.0))),
-            &[("REQ", FieldValue::Boolean(true)), ("BAN", FieldValue::Boolean(false))],
+            &[
+                ("REQ", FieldValue::Boolean(true)),
+                ("BAN", FieldValue::Boolean(false)),
+            ],
         )
         .expect("add required facility");
     facilities
         .add_feature(
             Some(Geometry::Point(Coord::xy(2.0, 0.0))),
-            &[("REQ", FieldValue::Boolean(false)), ("BAN", FieldValue::Boolean(true))],
+            &[
+                ("REQ", FieldValue::Boolean(false)),
+                ("BAN", FieldValue::Boolean(true)),
+            ],
         )
         .expect("add forbidden facility");
     facilities
         .add_feature(
             Some(Geometry::Point(Coord::xy(4.0, 0.0))),
-            &[("REQ", FieldValue::Boolean(false)), ("BAN", FieldValue::Boolean(false))],
+            &[
+                ("REQ", FieldValue::Boolean(false)),
+                ("BAN", FieldValue::Boolean(false)),
+            ],
         )
         .expect("add optional facility");
     let required_fid = facilities.features[0].fid as i64;
     let optional_fid = facilities.features[2].fid as i64;
-    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage).expect("write facilities");
+    wbvector::write(&facilities, &facilities_path, VectorFormat::GeoPackage)
+        .expect("write facilities");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(network_path.to_string_lossy().to_string()));
-    args.insert("demand_points".to_string(), json!(demand_path.to_string_lossy().to_string()));
-    args.insert("facilities".to_string(), json!(facilities_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(network_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "demand_points".to_string(),
+        json!(demand_path.to_string_lossy().to_string()),
+    );
+    args.insert(
+        "facilities".to_string(),
+        json!(facilities_path.to_string_lossy().to_string()),
+    );
     args.insert("facility_count".to_string(), json!(2));
     args.insert("required_facility_field".to_string(), json!("REQ"));
     args.insert("forbidden_facility_field".to_string(), json!("BAN"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     let result = registry
         .run("location_allocation_network", &args, &context(&caps))
         .expect("location_allocation_network run");
@@ -25980,7 +33719,11 @@ fn location_allocation_network_respects_required_and_forbidden_facilities() {
         .iter()
         .filter_map(|v| v.as_i64())
         .collect::<Vec<_>>();
-    assert_eq!(selected, vec![required_fid, optional_fid], "expected required facility included and forbidden facility excluded");
+    assert_eq!(
+        selected,
+        vec![required_fid, optional_fid],
+        "expected required facility included and forbidden facility excluded"
+    );
 
     let _ = std::fs::remove_file(&network_path);
     let _ = std::fs::remove_file(&demand_path);
@@ -26005,45 +33748,66 @@ fn k_shortest_paths_network_returns_multiple_ranked_routes() {
         .with_epsg(3857);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[],
         )
         .expect("add edge 3");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(2.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(2.0, 1.0),
+            ])),
             &[],
         )
         .expect("add edge 4");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 5");
     wbvector::write(&lines, &input_path, VectorFormat::GeoPackage).expect("write network input");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(2.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("k".to_string(), json!(2));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("k_shortest_paths_network", &args, &context(&caps))
         .expect("k_shortest_paths_network run");
@@ -26051,7 +33815,10 @@ fn k_shortest_paths_network_returns_multiple_ranked_routes() {
     let out = wbvector::read(&out_path).expect("read k shortest paths output");
     assert_eq!(out.features.len(), 2, "expected two alternative paths");
 
-    let rank_idx = out.schema.field_index("PATH_RANK").expect("PATH_RANK field");
+    let rank_idx = out
+        .schema
+        .field_index("PATH_RANK")
+        .expect("PATH_RANK field");
     let cost_idx = out.schema.field_index("COST").expect("COST field");
 
     let rank1 = match &out.features[0].attributes[rank_idx] {
@@ -26100,41 +33867,61 @@ fn k_shortest_paths_network_temporal_profile_changes_route_by_departure_time() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
 
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add direct edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add direct edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_D".to_string()))],
         )
         .expect("add detour edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("D_E".to_string()))],
         )
         .expect("add detour edge 2");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 1.0), Coord::xy(2.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 1.0),
+                Coord::xy(2.0, 1.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("E_F".to_string()))],
         )
         .expect("add detour edge 3");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(2.0, 1.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(2.0, 1.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("F_C".to_string()))],
         )
         .expect("add detour edge 4");
@@ -26147,16 +33934,25 @@ fn k_shortest_paths_network_temporal_profile_changes_route_by_departure_time() {
     .expect("write temporal profile csv");
 
     let mut rush_args = ToolArgs::new();
-    rush_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     rush_args.insert("start_x".to_string(), json!(0.0));
     rush_args.insert("start_y".to_string(), json!(0.0));
     rush_args.insert("end_x".to_string(), json!(2.0));
     rush_args.insert("end_y".to_string(), json!(0.0));
     rush_args.insert("k".to_string(), json!(1));
     rush_args.insert("max_snap_distance".to_string(), json!(0.25));
-    rush_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    rush_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     rush_args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
-    rush_args.insert("output".to_string(), json!(rush_out_path.to_string_lossy().to_string()));
+    rush_args.insert(
+        "output".to_string(),
+        json!(rush_out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("k_shortest_paths_network", &rush_args, &context(&caps))
@@ -26170,19 +33966,32 @@ fn k_shortest_paths_network_temporal_profile_changes_route_by_departure_time() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((rush_cost - 4.0).abs() < 1.0e-9, "expected detour cost 4.0 during rush hour, got {}", rush_cost);
+    assert!(
+        (rush_cost - 4.0).abs() < 1.0e-9,
+        "expected detour cost 4.0 during rush hour, got {}",
+        rush_cost
+    );
 
     let mut offpeak_args = ToolArgs::new();
-    offpeak_args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("start_x".to_string(), json!(0.0));
     offpeak_args.insert("start_y".to_string(), json!(0.0));
     offpeak_args.insert("end_x".to_string(), json!(2.0));
     offpeak_args.insert("end_y".to_string(), json!(0.0));
     offpeak_args.insert("k".to_string(), json!(1));
     offpeak_args.insert("max_snap_distance".to_string(), json!(0.25));
-    offpeak_args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     offpeak_args.insert("departure_time".to_string(), json!("2026-04-13T11:00:00Z"));
-    offpeak_args.insert("output".to_string(), json!(offpeak_out_path.to_string_lossy().to_string()));
+    offpeak_args.insert(
+        "output".to_string(),
+        json!(offpeak_out_path.to_string_lossy().to_string()),
+    );
 
     registry
         .run("k_shortest_paths_network", &offpeak_args, &context(&caps))
@@ -26196,7 +34005,11 @@ fn k_shortest_paths_network_temporal_profile_changes_route_by_departure_time() {
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((offpeak_cost - 2.0).abs() < 1.0e-9, "expected direct cost 2.0 offpeak, got {}", offpeak_cost);
+    assert!(
+        (offpeak_cost - 2.0).abs() < 1.0e-9,
+        "expected direct cost 2.0 offpeak, got {}",
+        offpeak_cost
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&profile_csv);
@@ -26220,16 +34033,24 @@ fn k_shortest_paths_network_temporal_profile_error_fallback_requires_coverage() 
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("EDGE_ID", FieldType::Text));
+    lines
+        .schema
+        .add_field(FieldDef::new("EDGE_ID", FieldType::Text));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("A_B".to_string()))],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[("EDGE_ID", FieldValue::Text("B_C".to_string()))],
         )
         .expect("add edge 2");
@@ -26242,17 +34063,26 @@ fn k_shortest_paths_network_temporal_profile_error_fallback_requires_coverage() 
     .expect("write temporal profile csv");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(2.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("k".to_string(), json!(1));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("temporal_cost_profile".to_string(), json!(profile_csv.to_string_lossy().to_string()));
+    args.insert(
+        "temporal_cost_profile".to_string(),
+        json!(profile_csv.to_string_lossy().to_string()),
+    );
     args.insert("departure_time".to_string(), json!("2026-04-13T08:30:00Z"));
     args.insert("temporal_fallback".to_string(), json!("error"));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let err = registry
         .run("k_shortest_paths_network", &args, &context(&caps))
@@ -26285,28 +34115,42 @@ fn k_shortest_paths_network_respects_turn_restrictions_csv() {
     let mut lines = Layer::new("network")
         .with_geom_type(GeometryType::LineString)
         .with_epsg(3857);
-    lines.schema.add_field(FieldDef::new("IMP", FieldType::Float));
+    lines
+        .schema
+        .add_field(FieldDef::new("IMP", FieldType::Float));
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add AB");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(1.0))],
         )
         .expect("add BC");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(0.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(0.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add AD");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 1.0), Coord::xy(1.0, 1.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 1.0),
+                Coord::xy(1.0, 1.0),
+            ])),
             &[("IMP", FieldValue::Float(2.0))],
         )
         .expect("add DC");
@@ -26319,7 +34163,10 @@ fn k_shortest_paths_network_respects_turn_restrictions_csv() {
     .expect("write turn restrictions csv");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(1.0));
@@ -26331,20 +34178,31 @@ fn k_shortest_paths_network_respects_turn_restrictions_csv() {
         json!(restrictions_csv.to_string_lossy().to_string()),
     );
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
     registry
         .run("k_shortest_paths_network", &args, &context(&caps))
         .expect("k_shortest_paths_network run");
 
     let out = wbvector::read(&out_path).expect("read k shortest paths output");
-    assert_eq!(out.features.len(), 1, "expected only one feasible path after restriction");
+    assert_eq!(
+        out.features.len(),
+        1,
+        "expected only one feasible path after restriction"
+    );
     let cost_idx = out.schema.field_index("COST").expect("COST field");
     let cost = match &out.features[0].attributes[cost_idx] {
         FieldValue::Float(v) => *v,
         FieldValue::Integer(v) => *v as f64,
         other => panic!("expected numeric COST, got {:?}", other),
     };
-    assert!((cost - 4.0).abs() < 1.0e-9, "expected remaining path cost 4.0, got {}", cost);
+    assert!(
+        (cost - 4.0).abs() < 1.0e-9,
+        "expected remaining path cost 4.0, got {}",
+        cost
+    );
 
     let _ = std::fs::remove_file(&input_path);
     let _ = std::fs::remove_file(&restrictions_csv);
@@ -26369,13 +34227,19 @@ fn k_shortest_paths_network_respects_barrier_points() {
         .with_epsg(4326);
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(1.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 1");
     lines
         .add_feature(
-            Some(Geometry::line_string(vec![Coord::xy(1.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Some(Geometry::line_string(vec![
+                Coord::xy(1.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
             &[],
         )
         .expect("add edge 2");
@@ -26390,16 +34254,25 @@ fn k_shortest_paths_network_respects_barrier_points() {
     wbvector::write(&barriers, &barriers_path, VectorFormat::GeoPackage).expect("write barriers");
 
     let mut args = ToolArgs::new();
-    args.insert("input".to_string(), json!(input_path.to_string_lossy().to_string()));
+    args.insert(
+        "input".to_string(),
+        json!(input_path.to_string_lossy().to_string()),
+    );
     args.insert("start_x".to_string(), json!(0.0));
     args.insert("start_y".to_string(), json!(0.0));
     args.insert("end_x".to_string(), json!(2.0));
     args.insert("end_y".to_string(), json!(0.0));
     args.insert("k".to_string(), json!(2));
-    args.insert("barriers".to_string(), json!(barriers_path.to_string_lossy().to_string()));
+    args.insert(
+        "barriers".to_string(),
+        json!(barriers_path.to_string_lossy().to_string()),
+    );
     args.insert("barrier_snap_distance".to_string(), json!(0.25));
     args.insert("max_snap_distance".to_string(), json!(0.25));
-    args.insert("output".to_string(), json!(out_path.to_string_lossy().to_string()));
+    args.insert(
+        "output".to_string(),
+        json!(out_path.to_string_lossy().to_string()),
+    );
 
     let err = registry
         .run("k_shortest_paths_network", &args, &context(&caps))

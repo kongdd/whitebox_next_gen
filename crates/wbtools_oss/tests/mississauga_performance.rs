@@ -1,6 +1,5 @@
 /// Integration test for Mississauga performance fixture
 /// Run with: cargo test -p wbtools_oss --test mississauga_performance -- --nocapture
-
 use serde_json::json;
 use std::time::Instant;
 use wbcore::{CapabilityProvider, LicenseTier, ProgressSink, ToolArgs, ToolContext};
@@ -24,38 +23,46 @@ impl ProgressSink for NoProgress {}
 fn get_registry_and_context() -> (ToolRegistry, ToolContext<'static>) {
     let mut registry = ToolRegistry::new();
     register_default_tools(&mut registry);
-    
+
     static PROGRESS: NoProgress = NoProgress;
     static CAP: TestCapabilities = TestCapabilities;
     let ctx = ToolContext {
         progress: &PROGRESS,
         capabilities: &CAP,
     };
-    
+
     (registry, ctx)
 }
 
 #[test]
 fn mississauga_network_topology_audit_perf() {
     eprintln!("\n>>> Testing network_topology_audit on Mississauga (19,889 edges)");
-    
+
     let (registry, ctx) = get_registry_and_context();
-    
+
     let output = format!("{}/topology_audit_mississauga.json", FIXTURE_DIR);
     let mut args = ToolArgs::new();
     args.insert("input".to_string(), json!(MISSISSAUGA_NETWORK.to_string()));
     args.insert("output".to_string(), json!(output.clone()));
-    
+
     let start = Instant::now();
     let result = registry.run("network_topology_audit", &args, &ctx);
     let elapsed = start.elapsed();
-    
+
     match result {
         Ok(_) => {
-            eprintln!("✓ PASS: topology audit completed in {:.3}s", elapsed.as_secs_f64());
-            eprintln!("  Scaling vs Guelph (3.6k edges): {:.1}x slower", 
-                elapsed.as_secs_f64() / 0.5);
-            assert!(elapsed.as_secs_f64() < 3.0, "Performance regression: expected <3.0s");
+            eprintln!(
+                "✓ PASS: topology audit completed in {:.3}s",
+                elapsed.as_secs_f64()
+            );
+            eprintln!(
+                "  Scaling vs Guelph (3.6k edges): {:.1}x slower",
+                elapsed.as_secs_f64() / 0.5
+            );
+            assert!(
+                elapsed.as_secs_f64() < 3.0,
+                "Performance regression: expected <3.0s"
+            );
         }
         Err(e) => {
             eprintln!("✗ FAILED: {:?}", e);
@@ -67,22 +74,28 @@ fn mississauga_network_topology_audit_perf() {
 #[test]
 fn mississauga_network_connected_components_perf() {
     eprintln!("\n>>> Testing network_connected_components on Mississauga");
-    
+
     let (registry, ctx) = get_registry_and_context();
-    
+
     let output = format!("{}/components_mississauga.shp", FIXTURE_DIR);
     let mut args = ToolArgs::new();
     args.insert("input".to_string(), json!(MISSISSAUGA_NETWORK.to_string()));
     args.insert("output".to_string(), json!(output.clone()));
-    
+
     let start = Instant::now();
     let result = registry.run("network_connected_components", &args, &ctx);
     let elapsed = start.elapsed();
-    
+
     match result {
         Ok(_) => {
-            eprintln!("✓ PASS: connected components analyzed in {:.3}s", elapsed.as_secs_f64());
-            assert!(elapsed.as_secs_f64() < 2.0, "Performance regression: expected <2.0s");
+            eprintln!(
+                "✓ PASS: connected components analyzed in {:.3}s",
+                elapsed.as_secs_f64()
+            );
+            assert!(
+                elapsed.as_secs_f64() < 2.0,
+                "Performance regression: expected <2.0s"
+            );
         }
         Err(e) => {
             eprintln!("✗ FAILED: {:?}", e);
@@ -94,22 +107,28 @@ fn mississauga_network_connected_components_perf() {
 #[test]
 fn mississauga_network_node_degree_perf() {
     eprintln!("\n>>> Testing network_node_degree on Mississauga");
-    
+
     let (registry, ctx) = get_registry_and_context();
-    
+
     let output = format!("{}/node_degree_mississauga.shp", FIXTURE_DIR);
     let mut args = ToolArgs::new();
     args.insert("input".to_string(), json!(MISSISSAUGA_NETWORK.to_string()));
     args.insert("output".to_string(), json!(output.clone()));
-    
+
     let start = Instant::now();
     let result = registry.run("network_node_degree", &args, &ctx);
     let elapsed = start.elapsed();
-    
+
     match result {
         Ok(_) => {
-            eprintln!("✓ PASS: node degree computed in {:.3}s", elapsed.as_secs_f64());
-            assert!(elapsed.as_secs_f64() < 2.5, "Performance regression: expected <2.5s");
+            eprintln!(
+                "✓ PASS: node degree computed in {:.3}s",
+                elapsed.as_secs_f64()
+            );
+            assert!(
+                elapsed.as_secs_f64() < 2.5,
+                "Performance regression: expected <2.5s"
+            );
         }
         Err(e) => {
             eprintln!("✗ FAILED: {:?}", e);

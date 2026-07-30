@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use crate::memory_store;
 use serde_json::json;
 use wbcore::{
-    parse_optional_output_path, parse_raster_path_arg, LicenseTier, Tool,
-    ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
-    ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
+    parse_optional_output_path, parse_raster_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory,
+    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor,
+    ToolParamSpec, ToolRunResult, ToolStability,
 };
 use wbraster::{Raster, RasterFormat};
-use crate::memory_store;
 
 pub struct RasterAddTool;
 pub struct RasterAtan2Tool;
@@ -191,13 +191,25 @@ impl BinaryMathOp {
             Self::Add => z1 + z2,
             Self::Atan2 => z1.atan2(z2),
             Self::BoolAnd => {
-                if z1 != 0.0 && z2 != 0.0 { 1.0 } else { 0.0 }
+                if z1 != 0.0 && z2 != 0.0 {
+                    1.0
+                } else {
+                    0.0
+                }
             }
             Self::BoolOr => {
-                if z1 != 0.0 || z2 != 0.0 { 1.0 } else { 0.0 }
+                if z1 != 0.0 || z2 != 0.0 {
+                    1.0
+                } else {
+                    0.0
+                }
             }
             Self::BoolXor => {
-                if (z1 != 0.0) ^ (z2 != 0.0) { 1.0 } else { 0.0 }
+                if (z1 != 0.0) ^ (z2 != 0.0) {
+                    1.0
+                } else {
+                    0.0
+                }
             }
             Self::Subtract => z1 - z2,
             Self::Multiply => z1 * z2,
@@ -209,28 +221,60 @@ impl BinaryMathOp {
                 }
             }
             Self::EqualTo => {
-                if z1 == z2 { 1.0 } else { 0.0 }
+                if z1 == z2 {
+                    1.0
+                } else {
+                    0.0
+                }
             }
             Self::GreaterThan => {
-                if z1 > z2 { 1.0 } else { 0.0 }
+                if z1 > z2 {
+                    1.0
+                } else {
+                    0.0
+                }
             }
             Self::GreaterThanOrEqualTo => {
-                if z1 >= z2 { 1.0 } else { 0.0 }
+                if z1 >= z2 {
+                    1.0
+                } else {
+                    0.0
+                }
             }
             Self::IntegerDivision => {
-                if z2 == 0.0 { nodata } else { (z1 / z2).trunc() }
+                if z2 == 0.0 {
+                    nodata
+                } else {
+                    (z1 / z2).trunc()
+                }
             }
             Self::LessThan => {
-                if z1 < z2 { 1.0 } else { 0.0 }
+                if z1 < z2 {
+                    1.0
+                } else {
+                    0.0
+                }
             }
             Self::LessThanOrEqualTo => {
-                if z1 <= z2 { 1.0 } else { 0.0 }
+                if z1 <= z2 {
+                    1.0
+                } else {
+                    0.0
+                }
             }
             Self::Modulo => {
-                if z2 == 0.0 { nodata } else { z1 % z2 }
+                if z2 == 0.0 {
+                    nodata
+                } else {
+                    z1 % z2
+                }
             }
             Self::NotEqualTo => {
-                if z1 != z2 { 1.0 } else { 0.0 }
+                if z1 != z2 {
+                    1.0
+                } else {
+                    0.0
+                }
             }
             Self::Power => z1.powf(z2),
         }
@@ -337,7 +381,11 @@ impl RasterAddTool {
         }
     }
 
-    fn run_with_op(op: BinaryMathOp, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_with_op(
+        op: BinaryMathOp,
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let (input1_path, input2_path) = Self::parse_input_paths(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
 
@@ -347,7 +395,8 @@ impl RasterAddTool {
         let input1 = Self::load_raster_from_arg(&input1_path, "input1")?;
         let input2 = Self::load_raster_from_arg(&input2_path, "input2")?;
 
-        if input1.rows != input2.rows || input1.cols != input2.cols || input1.bands != input2.bands {
+        if input1.rows != input2.rows || input1.cols != input2.cols || input1.bands != input2.bands
+        {
             return Err(ToolError::Validation(
                 "input rasters must have identical rows, columns, and bands".to_string(),
             ));
@@ -357,15 +406,17 @@ impl RasterAddTool {
 
         ctx.progress.info(op.processing_message());
         let nodata = output.nodata;
-        output.apply_binary_math_from(|z1, z2| op.apply(z1, z2, nodata), &input1, &input2)
+        output
+            .apply_binary_math_from(|z1, z2| op.apply(z1, z2, nodata), &input1, &input2)
             .map_err(|e| ToolError::Execution(format!("apply_binary_math_from failed: {e}")))?;
         ctx.progress.progress(0.9);
 
         let output_locator = if let Some(output_path) = output_path {
             if let Some(parent) = output_path.parent() {
                 if !parent.as_os_str().is_empty() {
-                    std::fs::create_dir_all(parent)
-                        .map_err(|e| ToolError::Execution(format!("failed creating output directory: {e}")))?;
+                    std::fs::create_dir_all(parent).map_err(|e| {
+                        ToolError::Execution(format!("failed creating output directory: {e}"))
+                    })?;
                 }
             }
 
@@ -446,7 +497,10 @@ impl_binary_tool!(RasterBoolXorTool, BinaryMathOp::BoolXor);
 impl_binary_tool!(RasterDivideTool, BinaryMathOp::Divide);
 impl_binary_tool!(RasterEqualToTool, BinaryMathOp::EqualTo);
 impl_binary_tool!(RasterGreaterThanTool, BinaryMathOp::GreaterThan);
-impl_binary_tool!(RasterGreaterThanOrEqualToTool, BinaryMathOp::GreaterThanOrEqualTo);
+impl_binary_tool!(
+    RasterGreaterThanOrEqualToTool,
+    BinaryMathOp::GreaterThanOrEqualTo
+);
 impl_binary_tool!(RasterIntegerDivisionTool, BinaryMathOp::IntegerDivision);
 impl_binary_tool!(RasterLessThanTool, BinaryMathOp::LessThan);
 impl_binary_tool!(RasterLessThanOrEqualToTool, BinaryMathOp::LessThanOrEqualTo);
@@ -460,9 +514,9 @@ impl_binary_tool!(RasterSubtractTool, BinaryMathOp::Subtract);
 mod tests {
     use super::*;
     use serde_json::Value;
-    use std::sync::Mutex;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
     use wbcore::{CapabilityProvider, ToolContext};
     use wbraster::{DataType, RasterConfig};
@@ -681,13 +735,19 @@ mod tests {
 
         let percents = progress.percents();
         assert!(!percents.is_empty(), "expected progress events");
-        assert!(percents.len() <= 101, "progress events should be bounded to percent buckets");
+        assert!(
+            percents.len() <= 101,
+            "progress events should be bounded to percent buckets"
+        );
 
         for w in percents.windows(2) {
             assert!(w[1] >= w[0], "progress should be monotonic non-decreasing");
         }
 
         let final_pct = *percents.last().unwrap();
-        assert!((final_pct - 1.0).abs() < 1e-9, "final progress should be 100%");
+        assert!(
+            (final_pct - 1.0).abs() < 1e-9,
+            "final progress should be 100%"
+        );
     }
 }

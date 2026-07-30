@@ -12,15 +12,18 @@ use image::{Delay, Frame, Rgba, RgbaImage};
 use rand::RngExt;
 use rayon::prelude::*;
 use serde_json::json;
-use wbprojection::{Crs, EpsgIdentifyPolicy, identify_epsg_from_wkt_with_policy};
-use wbcore::{PercentCoalescer, 
-    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor,
-    ToolParamSpec, ToolRunResult, ToolStability,
+use wbcore::{
+    parse_optional_output_path, parse_raster_path_arg, parse_vector_path_arg, LicenseTier,
+    PercentCoalescer, Tool, ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample,
+    ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
+    IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH,
 };
+use wbprojection::{identify_epsg_from_wkt_with_policy, Crs, EpsgIdentifyPolicy};
 use wbraster::{DataType, Raster, RasterConfig, RasterFormat};
-use wbvector::{Coord as VCoord, FieldDef, FieldType, FieldValue, Geometry, GeometryType, Layer, VectorFormat};
 use wbvector::memory_store as vector_memory_store;
+use wbvector::{
+    Coord as VCoord, FieldDef, FieldType, FieldValue, Geometry, GeometryType, Layer, VectorFormat,
+};
 
 use crate::memory_store;
 use crate::palettes::LegacyPalette;
@@ -187,11 +190,17 @@ impl SkyVisibilityCore {
 
     fn load_vector(path: &str, label: &str) -> Result<Layer, ToolError> {
         if wbvector::memory_store::vector_is_memory_path(path) {
-            let id = wbvector::memory_store::vector_path_to_id(path)
-                .ok_or_else(|| ToolError::Validation(format!("malformed in-memory vector path for '{}'", label)))?;
+            let id = wbvector::memory_store::vector_path_to_id(path).ok_or_else(|| {
+                ToolError::Validation(format!("malformed in-memory vector path for '{}'", label))
+            })?;
             return wbvector::memory_store::get_vector_arc_by_id(id)
                 .map(|layer| layer.as_ref().clone())
-                .ok_or_else(|| ToolError::Validation(format!("unknown in-memory vector id '{}' for '{}'", id, label)));
+                .ok_or_else(|| {
+                    ToolError::Validation(format!(
+                        "unknown in-memory vector id '{}' for '{}'",
+                        id, label
+                    ))
+                });
         }
         wbvector::read(path)
             .map_err(|e| ToolError::Execution(format!("failed reading {} vector: {}", label, e)))
@@ -201,11 +210,7 @@ impl SkyVisibilityCore {
         let cx = width * 0.5;
         let cy = height * 0.55;
         let radius = width.min(height) * 0.34;
-        let max_val = values
-            .iter()
-            .copied()
-            .fold(0.0_f64, f64::max)
-            .max(1.0);
+        let max_val = values.iter().copied().fold(0.0_f64, f64::max).max(1.0);
         let mut points = String::new();
         for (i, value) in values.iter().enumerate() {
             let angle = (i as f64 / values.len().max(1) as f64) * std::f64::consts::TAU
@@ -241,7 +246,9 @@ impl SkyVisibilityCore {
     fn load_raster(path: &str) -> Result<Arc<Raster>, ToolError> {
         if memory_store::raster_is_memory_path(path) {
             let id = memory_store::raster_path_to_id(path).ok_or_else(|| {
-                ToolError::Validation("parameter 'dem' has malformed in-memory raster path".to_string())
+                ToolError::Validation(
+                    "parameter 'dem' has malformed in-memory raster path".to_string(),
+                )
             })?;
             return memory_store::get_raster_arc_by_id(id).ok_or_else(|| {
                 ToolError::Validation(format!(
@@ -255,7 +262,10 @@ impl SkyVisibilityCore {
             .map_err(|e| ToolError::Execution(format!("Failed to read DEM: {}", e)))
     }
 
-    fn write_or_store_output(output: Raster, output_path: Option<std::path::PathBuf>) -> Result<String, ToolError> {
+    fn write_or_store_output(
+        output: Raster,
+        output_path: Option<std::path::PathBuf>,
+    ) -> Result<String, ToolError> {
         if let Some(output_path) = output_path {
             if let Some(parent) = output_path.parent() {
                 if !parent.as_os_str().is_empty() {
@@ -528,8 +538,9 @@ impl SkyVisibilityCore {
         ToolManifest {
             id: "horizon_angle".to_string(),
             display_name: "Horizon Angle".to_string(),
-            summary: "Calculates horizon angle (maximum slope) along a specified azimuth direction."
-                .to_string(),
+            summary:
+                "Calculates horizon angle (maximum slope) along a specified azimuth direction."
+                    .to_string(),
             category: ToolCategory::Terrain,
             license_tier: LicenseTier::Open,
             params,
@@ -561,10 +572,7 @@ impl SkyVisibilityCore {
         let _ = DataType::F64;
         let dem_path = Self::parse_dem_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
-        let azimuth = args
-            .get("azimuth")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(0.0) as f32;
+        let azimuth = args.get("azimuth").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
         let mut max_dist = Self::parse_max_dist(args, true);
 
         let dem = Self::load_raster(&dem_path)?;
@@ -594,13 +602,7 @@ impl SkyVisibilityCore {
                     let mut data = vec![nodata_f32 as f64; cols as usize];
                     for col in 0..cols {
                         if let Some((max_slope, _)) = SkyVisibilityCore::trace_horizon(
-                            &dem,
-                            row,
-                            col,
-                            &offsets,
-                            nodata_f32,
-                            0.0,
-                            true,
+                            &dem, row, col, &offsets, nodata_f32, 0.0, true,
                         ) {
                             data[col as usize] = max_slope.atan().to_degrees() as f64;
                         }
@@ -708,7 +710,10 @@ impl SkyVisibilityCore {
         Ok(())
     }
 
-    fn run_sky_view_factor(args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_sky_view_factor(
+        args: &ToolArgs,
+        _ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let dem_path = Self::parse_dem_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let az_fraction = args
@@ -863,7 +868,8 @@ impl SkyVisibilityCore {
         ToolManifest {
             id: "visibility_index".to_string(),
             display_name: "Visibility Index".to_string(),
-            summary: "Calculates a topography-based visibility index from sampled viewsheds.".to_string(),
+            summary: "Calculates a topography-based visibility index from sampled viewsheds."
+                .to_string(),
             category: ToolCategory::Terrain,
             license_tier: LicenseTier::Open,
             params: vec![],
@@ -897,7 +903,10 @@ impl SkyVisibilityCore {
         (row * cols + col) as usize
     }
 
-    fn run_visibility_index(args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_visibility_index(
+        args: &ToolArgs,
+        _ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let dem_path = Self::parse_dem_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
 
@@ -927,8 +936,8 @@ impl SkyVisibilityCore {
         max_dist = Self::clamp_max_dist(max_dist, &dem, cell_size_x)?;
         let max_dist_sq = max_dist * max_dist;
 
-        let num_cells_tested = (rows as f64 / res_factor as f64).ceil()
-            * (cols as f64 / res_factor as f64).ceil();
+        let num_cells_tested =
+            (rows as f64 / res_factor as f64).ceil() * (cols as f64 / res_factor as f64).ceil();
 
         let num_threads = Self::num_threads();
         let (tx, rx) = mpsc::channel();
@@ -1600,7 +1609,8 @@ impl SkyVisibilityCore {
         ToolManifest {
             id: "average_horizon_distance".to_string(),
             display_name: "Average Horizon Distance".to_string(),
-            summary: "Calculates average distance to horizon across azimuth directions.".to_string(),
+            summary: "Calculates average distance to horizon across azimuth directions."
+                .to_string(),
             category: ToolCategory::Terrain,
             license_tier: LicenseTier::Open,
             params: vec![],
@@ -1805,12 +1815,13 @@ impl SkyVisibilityCore {
             .trim()
             .parse::<u32>()
             .map_err(|_| ToolError::Validation("failed parsing hour in time string".to_string()))?;
-        let minute = parts[1]
-            .trim()
-            .parse::<u32>()
-            .map_err(|_| ToolError::Validation("failed parsing minute in time string".to_string()))?;
+        let minute = parts[1].trim().parse::<u32>().map_err(|_| {
+            ToolError::Validation("failed parsing minute in time string".to_string())
+        })?;
         if minute > 59 {
-            return Err(ToolError::Validation("minute must be in [0, 59]".to_string()));
+            return Err(ToolError::Validation(
+                "minute must be in [0, 59]".to_string(),
+            ));
         }
         if is_pm {
             if hour < 12 {
@@ -1836,10 +1847,9 @@ impl SkyVisibilityCore {
             .trim()
             .parse::<u32>()
             .map_err(|_| ToolError::Validation("failed parsing day in date string".to_string()))?;
-        let month = parts[1]
-            .trim()
-            .parse::<u32>()
-            .map_err(|_| ToolError::Validation("failed parsing month in date string".to_string()))?;
+        let month = parts[1].trim().parse::<u32>().map_err(|_| {
+            ToolError::Validation("failed parsing month in date string".to_string())
+        })?;
         let year = parts[2]
             .trim()
             .parse::<i32>()
@@ -1859,27 +1869,30 @@ impl SkyVisibilityCore {
                 "location must be formatted as LAT/LON/UTC_OFFSET".to_string(),
             ));
         }
-        let latitude = parts[0]
-            .trim()
-            .parse::<f64>()
-            .map_err(|_| ToolError::Validation("failed parsing latitude in location string".to_string()))?;
-        let longitude = parts[1]
-            .trim()
-            .parse::<f64>()
-            .map_err(|_| ToolError::Validation("failed parsing longitude in location string".to_string()))?;
-        let utc_offset = parts[2]
-            .trim()
-            .parse::<f64>()
-            .map_err(|_| ToolError::Validation("failed parsing UTC offset in location string".to_string()))?;
+        let latitude = parts[0].trim().parse::<f64>().map_err(|_| {
+            ToolError::Validation("failed parsing latitude in location string".to_string())
+        })?;
+        let longitude = parts[1].trim().parse::<f64>().map_err(|_| {
+            ToolError::Validation("failed parsing longitude in location string".to_string())
+        })?;
+        let utc_offset = parts[2].trim().parse::<f64>().map_err(|_| {
+            ToolError::Validation("failed parsing UTC offset in location string".to_string())
+        })?;
 
         if !(-90.0..=90.0).contains(&latitude) {
-            return Err(ToolError::Validation("latitude must be in [-90, 90]".to_string()));
+            return Err(ToolError::Validation(
+                "latitude must be in [-90, 90]".to_string(),
+            ));
         }
         if !(-180.0..=180.0).contains(&longitude) {
-            return Err(ToolError::Validation("longitude must be in [-180, 180]".to_string()));
+            return Err(ToolError::Validation(
+                "longitude must be in [-180, 180]".to_string(),
+            ));
         }
         if !(-12.0..=12.0).contains(&utc_offset) {
-            return Err(ToolError::Validation("UTC offset must be in [-12, 12]".to_string()));
+            return Err(ToolError::Validation(
+                "UTC offset must be in [-12, 12]".to_string(),
+            ));
         }
 
         Ok((latitude, longitude, utc_offset))
@@ -1933,10 +1946,7 @@ impl SkyVisibilityCore {
             .get("date")
             .and_then(|v| v.as_str())
             .unwrap_or("21/06/2021");
-        let time_text = args
-            .get("time")
-            .and_then(|v| v.as_str())
-            .unwrap_or("13:00");
+        let time_text = args.get("time").and_then(|v| v.as_str()).unwrap_or("13:00");
         let location_text = args
             .get("location")
             .and_then(|v| v.as_str())
@@ -1978,7 +1988,13 @@ impl SkyVisibilityCore {
         let palette_vals = palette.get_palette();
         let palette_vals: Vec<(f32, f32, f32)> = palette_vals
             .into_iter()
-            .map(|(r, g, b)| (r.clamp(0.0, 255.0), g.clamp(0.0, 255.0), b.clamp(0.0, 255.0)))
+            .map(|(r, g, b)| {
+                (
+                    r.clamp(0.0, 255.0),
+                    g.clamp(0.0, 255.0),
+                    b.clamp(0.0, 255.0),
+                )
+            })
             .collect();
         let p_last = palette_vals.len().saturating_sub(1) as f32;
 
@@ -2006,7 +2022,9 @@ impl SkyVisibilityCore {
         let dt = tz
             .with_ymd_and_hms(year, month, day, hour, minute, 0)
             .single()
-            .ok_or_else(|| ToolError::Validation("invalid date/time with UTC offset".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("invalid date/time with UTC offset".to_string())
+            })?;
         let pos = solar_pos(dt.timestamp_millis(), latitude, longitude);
         let azimuth = pos.azimuth.to_degrees() as f32;
         let altitude = pos.altitude.to_degrees() as f32;
@@ -2070,13 +2088,7 @@ impl SkyVisibilityCore {
 
                     let horizon_deg = if altitude > -6.0 {
                         if let Some((max_slope, _)) = SkyVisibilityCore::trace_horizon(
-                            &dem,
-                            row,
-                            col,
-                            &offsets,
-                            nodata_f32,
-                            0.0,
-                            true,
+                            &dem, row, col, &offsets, nodata_f32, 0.0, true,
                         ) {
                             max_slope.atan().to_degrees()
                         } else {
@@ -2093,8 +2105,7 @@ impl SkyVisibilityCore {
                     };
 
                     let term2 = sin_theta / ts;
-                    let term3 = cos_theta
-                        * (((azimuth as f64 - 90.0).to_radians()) - aspect).sin();
+                    let term3 = cos_theta * (((azimuth as f64 - 90.0).to_radians()) - aspect).sin();
                     let hillshade = (slope_term * (term2 - term3)).max(0.0);
                     shade *= 0.75 + hillshade * 0.25;
 
@@ -2131,7 +2142,11 @@ impl SkyVisibilityCore {
         } else {
             DataType::U32
         };
-        let output_nodata = if no_hyspo_tint { nodata_f32 as f64 } else { 0.0 };
+        let output_nodata = if no_hyspo_tint {
+            nodata_f32 as f64
+        } else {
+            0.0
+        };
         let output_color_interp = if no_hyspo_tint {
             None
         } else {
@@ -2288,7 +2303,10 @@ impl SkyVisibilityCore {
         Ok(())
     }
 
-    fn run_shadow_animation(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_shadow_animation(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let dem_path = Self::parse_dem_input(args)?;
         let output_html = parse_optional_output_path(args, "output")?
             .unwrap_or_else(|| std::env::temp_dir().join("shadow_animation.html"));
@@ -2324,10 +2342,7 @@ impl SkyVisibilityCore {
             .and_then(|v| v.as_u64())
             .unwrap_or(600)
             .max(50) as usize;
-        let delay_ms = args
-            .get("delay")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(250) as u32;
+        let delay_ms = args.get("delay").and_then(|v| v.as_u64()).unwrap_or(250) as u32;
         let label = args
             .get("label")
             .and_then(|v| v.as_str())
@@ -2393,7 +2408,13 @@ impl SkyVisibilityCore {
         let palette_vals = palette.get_palette();
         let palette_vals: Vec<(f32, f32, f32)> = palette_vals
             .into_iter()
-            .map(|(r, g, b)| (r.clamp(0.0, 255.0), g.clamp(0.0, 255.0), b.clamp(0.0, 255.0)))
+            .map(|(r, g, b)| {
+                (
+                    r.clamp(0.0, 255.0),
+                    g.clamp(0.0, 255.0),
+                    b.clamp(0.0, 255.0),
+                )
+            })
             .collect();
         let p_last = palette_vals.len().saturating_sub(1) as f32;
 
@@ -2406,7 +2427,8 @@ impl SkyVisibilityCore {
             .into_par_iter()
             .map(|row_usize| {
                 let row = row_usize as isize;
-                let mut row_out = vec![([0u8; 4], 0.00017_f64, std::f64::consts::PI); cols as usize];
+                let mut row_out =
+                    vec![([0u8; 4], 0.00017_f64, std::f64::consts::PI); cols as usize];
                 for col in 0..cols {
                     let zc = dem.get(0, row, col) as f32;
                     if zc == nodata_f32 {
@@ -2487,7 +2509,9 @@ impl SkyVisibilityCore {
             .set_repeat(Repeat::Infinite)
             .map_err(|e| ToolError::Execution(format!("failed setting GIF repeat: {e}")))?;
         let delay = Delay::from_numer_denom_ms(delay_ms, 1);
-        let width = ((image_height as f64) * (cols as f64 / rows as f64)).round().max(1.0) as usize;
+        let width = ((image_height as f64) * (cols as f64 / rows as f64))
+            .round()
+            .max(1.0) as usize;
         let dark_shadow = 0.28_f64;
 
         let push_dark_frame = |encoder: &mut GifEncoder<BufWriter<File>>| -> Result<(), ToolError> {
@@ -2528,7 +2552,9 @@ impl SkyVisibilityCore {
             let dt = tz
                 .with_ymd_and_hms(year, month, day, hour, minute, 0)
                 .single()
-                .ok_or_else(|| ToolError::Validation("invalid date/time with UTC offset".to_string()))?;
+                .ok_or_else(|| {
+                    ToolError::Validation("invalid date/time with UTC offset".to_string())
+                })?;
             let pos = solar_pos(dt.timestamp_millis(), latitude, longitude);
             let azimuth = pos.azimuth.to_degrees() as f32;
             let altitude = pos.altitude.to_degrees() as f32;
@@ -2556,15 +2582,9 @@ impl SkyVisibilityCore {
                             continue;
                         }
 
-                        let horizon_deg = if let Some((max_slope, _)) = Self::trace_horizon(
-                            &dem,
-                            row,
-                            col,
-                            &offsets,
-                            nodata_f32,
-                            0.0,
-                            true,
-                        ) {
+                        let horizon_deg = if let Some((max_slope, _)) =
+                            Self::trace_horizon(&dem, row, col, &offsets, nodata_f32, 0.0, true)
+                        {
                             max_slope.atan().to_degrees()
                         } else {
                             0.0
@@ -2864,9 +2884,7 @@ impl SkyVisibilityCore {
         }
         if let Some(v) = args.get("z_factor").and_then(|v| v.as_f64()) {
             if v <= 0.0 {
-                return Err(ToolError::Validation(
-                    "z_factor must be > 0".to_string(),
-                ));
+                return Err(ToolError::Validation("z_factor must be > 0".to_string()));
             }
         }
         Ok(())
@@ -3026,7 +3044,11 @@ impl SkyVisibilityCore {
                     let mut n = [0.0_f64; 8];
                     for i in 0..8 {
                         let zn = dem.get(0, row + dy[i], col + dx[i]);
-                        n[i] = if zn == nodata { z_scaled } else { zn * z_factor };
+                        n[i] = if zn == nodata {
+                            z_scaled
+                        } else {
+                            zn * z_factor
+                        };
                     }
 
                     let fy = (n[6] - n[4] + 2.0 * (n[7] - n[3]) + n[0] - n[2]) / eight_grid_res;
@@ -3191,7 +3213,8 @@ impl SkyVisibilityCore {
                         }
                     }
 
-                    let mut hs_proportion = ((hs_val_f64 - new_min as f64) / hs_range).clamp(0.0, 1.0);
+                    let mut hs_proportion =
+                        ((hs_val_f64 - new_min as f64) / hs_range).clamp(0.0, 1.0);
                     hs_proportion = relief_alpha + hillshade_weight * hs_proportion;
 
                     let prop_r = (1.0 * (1.0 - hs_proportion)) + red_relief * hs_proportion;
@@ -3213,12 +3236,8 @@ impl SkyVisibilityCore {
             })
             .collect();
 
-        let mut output = Self::new_output_like(
-            dem.as_ref(),
-            DataType::U32,
-            0.0,
-            Some("packed_rgb"),
-        );
+        let mut output =
+            Self::new_output_like(dem.as_ref(), DataType::U32, 0.0, Some("packed_rgb"));
         for (r, row) in row_data.iter().enumerate() {
             output
                 .set_row_slice(0, r as isize, row)
@@ -3329,7 +3348,9 @@ impl SkyVisibilityCore {
             },
             ToolParamDescriptor {
                 name: "palette".to_string(),
-                description: "Palette name (soft, atlas, high_relief, turbo, viridis, dem, grey, white).".to_string(),
+                description:
+                    "Palette name (soft, atlas, high_relief, turbo, viridis, dem, grey, white)."
+                        .to_string(),
                 required: false,
             },
             ToolParamDescriptor {
@@ -3349,12 +3370,15 @@ impl SkyVisibilityCore {
             },
             ToolParamDescriptor {
                 name: "clipping_polygon".to_string(),
-                description: "Optional polygon vector path; only DEM cells inside polygon(s) are rendered.".to_string(),
+                description:
+                    "Optional polygon vector path; only DEM cells inside polygon(s) are rendered."
+                        .to_string(),
                 required: false,
             },
             ToolParamDescriptor {
                 name: "background_hgt_offset".to_string(),
-                description: "Vertical offset from minimum DEM elevation to background plane.".to_string(),
+                description: "Vertical offset from minimum DEM elevation to background plane."
+                    .to_string(),
                 required: false,
             },
             ToolParamDescriptor {
@@ -3496,10 +3520,7 @@ impl SkyVisibilityCore {
                 ));
             }
         }
-        if let Some(a) = args
-            .get("attenuation_parameter")
-            .and_then(|v| v.as_f64())
-        {
+        if let Some(a) = args.get("attenuation_parameter").and_then(|v| v.as_f64()) {
             if a < 0.0 {
                 return Err(ToolError::Validation(
                     "attenuation_parameter must be >= 0".to_string(),
@@ -3508,9 +3529,7 @@ impl SkyVisibilityCore {
         }
         if let Some(z) = args.get("z_factor").and_then(|v| v.as_f64()) {
             if z <= 0.0 {
-                return Err(ToolError::Validation(
-                    "z_factor must be > 0".to_string(),
-                ));
+                return Err(ToolError::Validation("z_factor must be > 0".to_string()));
             }
         }
         let _ = Self::parse_rgba_arg(args, "background_clr", [255, 255, 255, 255])?;
@@ -3557,10 +3576,7 @@ impl SkyVisibilityCore {
             .get("ambient_light")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.2) as f32;
-        let z_factor = args
-            .get("z_factor")
-            .and_then(|v| v.as_f64())
-            .unwrap_or(1.0) as f32;
+        let z_factor = args.get("z_factor").and_then(|v| v.as_f64()).unwrap_or(1.0) as f32;
 
         let clipping_polygon_path = parse_vector_path_arg(args, "clipping_polygon")
             .or_else(|_| parse_vector_path_arg(args, "polygon"))
@@ -3630,7 +3646,13 @@ impl SkyVisibilityCore {
         }
         let palette_vals: Vec<(f32, f32, f32)> = palette_vals
             .into_iter()
-            .map(|(r, g, b)| (r.clamp(0.0, 255.0), g.clamp(0.0, 255.0), b.clamp(0.0, 255.0)))
+            .map(|(r, g, b)| {
+                (
+                    r.clamp(0.0, 255.0),
+                    g.clamp(0.0, 255.0),
+                    b.clamp(0.0, 255.0),
+                )
+            })
             .collect();
         let p_last = palette_vals.len().saturating_sub(1) as f32;
 
@@ -3688,7 +3710,8 @@ impl SkyVisibilityCore {
                     let y = row_center_y_vals[row as usize];
                     for col in 0..cols {
                         let p = wbtopology::Coord::xy(col_center_x_vals[col as usize], y);
-                        row_mask[col as usize] = !prepared_polys.iter().any(|poly| poly.contains_coord(p));
+                        row_mask[col as usize] =
+                            !prepared_polys.iter().any(|poly| poly.contains_coord(p));
                     }
                     row_mask
                 })
@@ -3716,131 +3739,132 @@ impl SkyVisibilityCore {
         let resx = cell_size_x.max(f32::EPSILON) as f64;
         let resy = cell_size_y.max(f32::EPSILON) as f64;
 
-        let row_data: Vec<Vec<f64>> = (0..rows)
-            .into_par_iter()
-            .map(|row| {
-                let mut out_row = vec![0.0; cols as usize];
-                for col in 0..cols {
-                    let mut zc = dem.get(0, row, col) as f32;
-                    let clipped_out = clipping_mask
-                        .as_ref()
-                        .map(|m| m[row as usize][col as usize])
-                        .unwrap_or(false);
-                    let is_background = zc == nodata_f32 || clipped_out;
-                    if is_background {
-                        zc = background_hgt;
-                    }
-
-                    let mut r = background_clr[0] as f64;
-                    let mut g = background_clr[1] as f64;
-                    let mut b = background_clr[2] as f64;
-                    let a = background_clr[3] as u32;
-
-                    if !is_background {
-                        let mut p = ((zc - min_z) / range).clamp(0.0, 1.0);
-                        if !p.is_finite() {
-                            p = 0.0;
+        let row_data: Vec<Vec<f64>> =
+            (0..rows)
+                .into_par_iter()
+                .map(|row| {
+                    let mut out_row = vec![0.0; cols as usize];
+                    for col in 0..cols {
+                        let mut zc = dem.get(0, row, col) as f32;
+                        let clipped_out = clipping_mask
+                            .as_ref()
+                            .map(|m| m[row as usize][col as usize])
+                            .unwrap_or(false);
+                        let is_background = zc == nodata_f32 || clipped_out;
+                        if is_background {
+                            zc = background_hgt;
                         }
-                        let idxf = p * p_last;
-                        let i0 = idxf.floor() as usize;
-                        let i1 = (i0 + 1).min(palette_vals.len() - 1);
-                        let t = (idxf - i0 as f32).clamp(0.0, 1.0);
-                        let (r0, g0, b0) = palette_vals[i0];
-                        let (r1, g1, b1) = palette_vals[i1];
-                        r = (r0 + t * (r1 - r0)) as f64;
-                        g = (g0 + t * (g1 - g0)) as f64;
-                        b = (b0 + t * (b1 - b0)) as f64;
-                    }
 
-                    let z = |dr: isize, dc: isize| {
-                        let v = dem.get(0, row + dr, col + dc) as f32;
-                        if v == nodata_f32 {
-                            zc
+                        let mut r = background_clr[0] as f64;
+                        let mut g = background_clr[1] as f64;
+                        let mut b = background_clr[2] as f64;
+                        let a = background_clr[3] as u32;
+
+                        if !is_background {
+                            let mut p = ((zc - min_z) / range).clamp(0.0, 1.0);
+                            if !p.is_finite() {
+                                p = 0.0;
+                            }
+                            let idxf = p * p_last;
+                            let i0 = idxf.floor() as usize;
+                            let i1 = (i0 + 1).min(palette_vals.len() - 1);
+                            let t = (idxf - i0 as f32).clamp(0.0, 1.0);
+                            let (r0, g0, b0) = palette_vals[i0];
+                            let (r1, g1, b1) = palette_vals[i1];
+                            r = (r0 + t * (r1 - r0)) as f64;
+                            g = (g0 + t * (g1 - g0)) as f64;
+                            b = (b0 + t * (b1 - b0)) as f64;
+                        }
+
+                        let z = |dr: isize, dc: isize| {
+                            let v = dem.get(0, row + dr, col + dc) as f32;
+                            if v == nodata_f32 {
+                                zc
+                            } else {
+                                v
+                            }
+                        };
+                        let z1 = z(-1, -1) as f64;
+                        let z2 = z(-1, 0) as f64;
+                        let z3 = z(-1, 1) as f64;
+                        let z4 = z(0, -1) as f64;
+                        let z6 = z(0, 1) as f64;
+                        let z7 = z(1, -1) as f64;
+                        let z8 = z(1, 0) as f64;
+                        let z9 = z(1, 1) as f64;
+
+                        let dzdx = ((z3 + 2.0 * z6 + z9) - (z1 + 2.0 * z4 + z7)) / (8.0 * resx);
+                        let dzdy = ((z7 + 2.0 * z8 + z9) - (z1 + 2.0 * z2 + z3)) / (8.0 * resy);
+                        let ts = (dzdx * dzdx + dzdy * dzdy).sqrt().max(0.00017);
+                        let slope_term = ts / (1.0 + ts * ts).sqrt();
+
+                        let mut aspect = if dzdx != 0.0 {
+                            std::f64::consts::PI - (dzdy / dzdx).atan()
+                                + (std::f64::consts::FRAC_PI_2 * (dzdx / dzdx.abs()))
                         } else {
-                            v
+                            std::f64::consts::PI
+                        };
+                        if !aspect.is_finite() {
+                            aspect = std::f64::consts::PI;
                         }
-                    };
-                    let z1 = z(-1, -1) as f64;
-                    let z2 = z(-1, 0) as f64;
-                    let z3 = z(-1, 1) as f64;
-                    let z4 = z(0, -1) as f64;
-                    let z6 = z(0, 1) as f64;
-                    let z7 = z(1, -1) as f64;
-                    let z8 = z(1, 0) as f64;
-                    let z9 = z(1, 1) as f64;
 
-                    let dzdx = ((z3 + 2.0 * z6 + z9) - (z1 + 2.0 * z4 + z7)) / (8.0 * resx);
-                    let dzdy = ((z7 + 2.0 * z8 + z9) - (z1 + 2.0 * z2 + z3)) / (8.0 * resy);
-                    let ts = (dzdx * dzdx + dzdy * dzdy).sqrt().max(0.00017);
-                    let slope_term = ts / (1.0 + ts * ts).sqrt();
+                        let horizon_deg = if let Some((max_slope, _)) =
+                            SkyVisibilityCore::trace_horizon(
+                                &dem, row, col, &offsets, nodata_f32, 0.0, true,
+                            ) {
+                            max_slope.atan().to_degrees()
+                        } else {
+                            0.0
+                        };
 
-                    let mut aspect = if dzdx != 0.0 {
-                        std::f64::consts::PI - (dzdy / dzdx).atan()
-                            + (std::f64::consts::FRAC_PI_2 * (dzdx / dzdx.abs()))
-                    } else {
-                        std::f64::consts::PI
-                    };
-                    if !aspect.is_finite() {
-                        aspect = std::f64::consts::PI;
-                    }
+                        let mut shadow_factor = 1.0_f64;
+                        let horizon_deg = horizon_deg as f64;
+                        if horizon_deg >= altitude as f64 + half_solar_diameter {
+                            shadow_factor = shadow_light;
+                        } else if horizon_deg >= altitude as f64 - half_solar_diameter {
+                            let frac = ((altitude as f64 + half_solar_diameter) - horizon_deg)
+                                / (2.0 * half_solar_diameter);
+                            shadow_factor =
+                                shadow_light + (1.0 - shadow_light) * frac.clamp(0.0, 1.0);
+                        }
 
-                    let horizon_deg = if let Some((max_slope, _)) = SkyVisibilityCore::trace_horizon(
-                        &dem,
-                        row,
-                        col,
-                        &offsets,
-                        nodata_f32,
-                        0.0,
-                        true,
-                    ) {
-                        max_slope.atan().to_degrees()
-                    } else {
-                        0.0
-                    };
+                        let term2 = sin_theta / ts;
+                        let term3 =
+                            cos_theta * (((azimuth as f64 - 90.0).to_radians()) - aspect).sin();
+                        let hillshade = (slope_term * (term2 - term3)).clamp(0.0, 1.0);
+                        let hillshade_factor = (hillshade + ambient_light).clamp(0.0, 1.0);
 
-                    let mut shadow_factor = 1.0_f64;
-                    let horizon_deg = horizon_deg as f64;
-                    if horizon_deg >= altitude as f64 + half_solar_diameter {
-                        shadow_factor = shadow_light;
-                    } else if horizon_deg >= altitude as f64 - half_solar_diameter {
-                        let frac = ((altitude as f64 + half_solar_diameter) - horizon_deg)
-                            / (2.0 * half_solar_diameter);
-                        shadow_factor = shadow_light + (1.0 - shadow_light) * frac.clamp(0.0, 1.0);
-                    }
-
-                    let term2 = sin_theta / ts;
-                    let term3 = cos_theta
-                        * (((azimuth as f64 - 90.0).to_radians()) - aspect).sin();
-                    let hillshade = (slope_term * (term2 - term3)).clamp(0.0, 1.0);
-                    let hillshade_factor = (hillshade + ambient_light).clamp(0.0, 1.0);
-
-                    let dx = dx_by_col[col as usize];
-                    let dy = dy_by_row[row as usize];
-                    let d = ((ls_x - dx).powi(2) + (ls_y - dy).powi(2) + (ls_z - zc as f64).powi(2)).sqrt();
-                    let d_norm = (d / radius).max(1.0e-6);
-                    let attenuation = if attenuation_parameter <= 0.0 {
-                        1.0
-                    } else if let Some(lut) = attenuation_lut.as_ref() {
-                        if d_norm >= ATTENUATION_LUT_MAX_DNORM {
+                        let dx = dx_by_col[col as usize];
+                        let dy = dy_by_row[row as usize];
+                        let d = ((ls_x - dx).powi(2)
+                            + (ls_y - dy).powi(2)
+                            + (ls_z - zc as f64).powi(2))
+                        .sqrt();
+                        let d_norm = (d / radius).max(1.0e-6);
+                        let attenuation = if attenuation_parameter <= 0.0 {
+                            1.0
+                        } else if let Some(lut) = attenuation_lut.as_ref() {
+                            if d_norm >= ATTENUATION_LUT_MAX_DNORM {
+                                (1.0 / d_norm.powf(attenuation_parameter)).clamp(0.0, 1.0)
+                            } else {
+                                let idx = ((d_norm / ATTENUATION_LUT_MAX_DNORM)
+                                    * ATTENUATION_LUT_SIZE as f64)
+                                    as usize;
+                                lut[idx]
+                            }
+                        } else {
                             (1.0 / d_norm.powf(attenuation_parameter)).clamp(0.0, 1.0)
-                        } else {
-                            let idx = ((d_norm / ATTENUATION_LUT_MAX_DNORM)
-                                * ATTENUATION_LUT_SIZE as f64) as usize;
-                            lut[idx]
-                        }
-                    } else {
-                        (1.0 / d_norm.powf(attenuation_parameter)).clamp(0.0, 1.0)
-                    };
+                        };
 
-                    let light = attenuation * shadow_factor * (0.5 + hillshade_factor * 0.5);
-                    let r = (r * light).clamp(0.0, 255.0) as u32;
-                    let g = (g * light).clamp(0.0, 255.0) as u32;
-                    let b = (b * light).clamp(0.0, 255.0) as u32;
-                    out_row[col as usize] = ((a << 24) | (b << 16) | (g << 8) | r) as f64;
-                }
-                out_row
-            })
-            .collect();
+                        let light = attenuation * shadow_factor * (0.5 + hillshade_factor * 0.5);
+                        let r = (r * light).clamp(0.0, 255.0) as u32;
+                        let g = (g * light).clamp(0.0, 255.0) as u32;
+                        let b = (b * light).clamp(0.0, 255.0) as u32;
+                        out_row[col as usize] = ((a << 24) | (b << 16) | (g << 8) | r) as f64;
+                    }
+                    out_row
+                })
+                .collect();
 
         let mut output = Self::new_output_like(&dem, DataType::U32, 0.0, Some("packed_rgb"));
         for (r, row) in row_data.iter().enumerate() {
@@ -3855,13 +3879,12 @@ impl SkyVisibilityCore {
     }
 
     fn raster_is_geographic(input: &Raster) -> bool {
-        let epsg = input.crs.epsg.or_else(|| {
-            input
-                .crs
-                .wkt
-                .as_deref()
-                .and_then(|w| identify_epsg_from_wkt_with_policy(w, EpsgIdentifyPolicy::Lenient))
-        });
+        let epsg =
+            input.crs.epsg.or_else(|| {
+                input.crs.wkt.as_deref().and_then(|w| {
+                    identify_epsg_from_wkt_with_policy(w, EpsgIdentifyPolicy::Lenient)
+                })
+            });
         if let Some(code) = epsg {
             if let Ok(crs) = Crs::from_epsg(code) {
                 return crs.is_geographic();
@@ -3875,7 +3898,10 @@ impl SkyVisibilityCore {
         let center_y = (dem.y_min + dem.y_max()) * 0.5;
 
         if Self::raster_is_geographic(dem) {
-            return Ok((center_y.clamp(-90.0, 90.0), wbprojection::normalize_longitude(center_x)));
+            return Ok((
+                center_y.clamp(-90.0, 90.0),
+                wbprojection::normalize_longitude(center_x),
+            ));
         }
 
         let src = if let Some(code) = dem.crs.epsg {
@@ -3883,9 +3909,8 @@ impl SkyVisibilityCore {
                 ToolError::Validation(format!("failed parsing DEM CRS EPSG {}: {}", code, e))
             })?
         } else if let Some(wkt) = dem.crs.wkt.as_deref() {
-            wbprojection::from_wkt(wkt).map_err(|e| {
-                ToolError::Validation(format!("failed parsing DEM CRS WKT: {}", e))
-            })?
+            wbprojection::from_wkt(wkt)
+                .map_err(|e| ToolError::Validation(format!("failed parsing DEM CRS WKT: {}", e)))?
         } else {
             return Err(ToolError::Validation(
                 "unable to infer center latitude/longitude because DEM CRS metadata is missing; supply 'latitude' and 'longitude' explicitly"
@@ -3893,8 +3918,9 @@ impl SkyVisibilityCore {
             ));
         };
 
-        let wgs84 = Crs::from_epsg(4326)
-            .map_err(|e| ToolError::Execution(format!("failed constructing EPSG:4326 CRS: {}", e)))?;
+        let wgs84 = Crs::from_epsg(4326).map_err(|e| {
+            ToolError::Execution(format!("failed constructing EPSG:4326 CRS: {}", e))
+        })?;
         let (lon, lat) = src.transform_to(center_x, center_y, &wgs84).map_err(|e| {
             ToolError::Execution(format!(
                 "failed transforming DEM center to geographic coordinates: {}",
@@ -3908,7 +3934,10 @@ impl SkyVisibilityCore {
             ));
         }
 
-        Ok((lat.clamp(-90.0, 90.0), wbprojection::normalize_longitude(lon)))
+        Ok((
+            lat.clamp(-90.0, 90.0),
+            wbprojection::normalize_longitude(lon),
+        ))
     }
 
     fn parse_utc_offset_hours(s: &str) -> Result<f64, ToolError> {
@@ -3920,10 +3949,16 @@ impl SkyVisibilityCore {
         let min_part = parts.next().unwrap_or("0").trim();
 
         let hours = hour_part.parse::<i32>().map_err(|_| {
-            ToolError::Validation(format!("invalid utc_offset value '{}': bad hour component", s))
+            ToolError::Validation(format!(
+                "invalid utc_offset value '{}': bad hour component",
+                s
+            ))
         })?;
         let minutes = min_part.parse::<i32>().map_err(|_| {
-            ToolError::Validation(format!("invalid utc_offset value '{}': bad minute component", s))
+            ToolError::Validation(format!(
+                "invalid utc_offset value '{}': bad minute component",
+                s
+            ))
         })?;
 
         if minutes < 0 || minutes >= 60 {
@@ -4123,7 +4158,10 @@ impl SkyVisibilityCore {
         Ok(Self::build_result(out))
     }
 
-    fn run_time_in_daylight(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_time_in_daylight(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let dem_path = Self::parse_dem_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
 
@@ -4143,14 +4181,8 @@ impl SkyVisibilityCore {
             .or_else(|| args.get("utc_offset_str"))
             .and_then(|v| v.as_str());
 
-        let start_day = args
-            .get("start_day")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(1) as u32;
-        let end_day = args
-            .get("end_day")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(365) as u32;
+        let start_day = args.get("start_day").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+        let end_day = args.get("end_day").and_then(|v| v.as_u64()).unwrap_or(365) as u32;
         if start_day < 1 || start_day > 366 || end_day < 1 || end_day > 366 || end_day < start_day {
             return Err(ToolError::Validation(
                 "start_day/end_day must be in [1, 366] and start_day <= end_day".to_string(),
@@ -4225,7 +4257,8 @@ impl SkyVisibilityCore {
             ));
         }
 
-        let diag_m = ((rows as f32 * cell_size_y).powi(2) + (cols as f32 * cell_size_x).powi(2)).sqrt();
+        let diag_m =
+            ((rows as f32 * cell_size_y).powi(2) + (cols as f32 * cell_size_x).powi(2)).sqrt();
         if max_dist.is_infinite() {
             max_dist = diag_m;
         } else {
@@ -4269,7 +4302,13 @@ impl SkyVisibilityCore {
                 continue;
             }
 
-            let offsets = Arc::new(Self::compute_offsets(azimuth, max_dist, cell_size_x, cell_size_y, false));
+            let offsets = Arc::new(Self::compute_offsets(
+                azimuth,
+                max_dist,
+                cell_size_x,
+                cell_size_y,
+                false,
+            ));
             let num_threads = Self::num_threads();
             let (tx, rx) = mpsc::channel();
             for tid in 0..num_threads {
@@ -4281,13 +4320,7 @@ impl SkyVisibilityCore {
                         let mut ha_row = vec![nodata_f32; cols as usize];
                         for col in 0..cols {
                             if let Some((max_slope, _)) = SkyVisibilityCore::trace_horizon(
-                                &dem,
-                                row,
-                                col,
-                                &offsets,
-                                nodata_f32,
-                                0.0,
-                                true,
+                                &dem, row, col, &offsets, nodata_f32, 0.0, true,
                             ) {
                                 ha_row[col as usize] = max_slope.atan().to_degrees();
                             }
@@ -4315,7 +4348,11 @@ impl SkyVisibilityCore {
                             if *dur <= 0.0 {
                                 break;
                             }
-                            if *ord < start_day || *ord > end_day || *t < start_time || *t > end_time {
+                            if *ord < start_day
+                                || *ord > end_day
+                                || *t < start_time
+                                || *t > end_time
+                            {
                                 continue;
                             }
                             if *alt < *ha {
@@ -4452,8 +4489,9 @@ impl SkyVisibilityCore {
             ));
         }
         parse_vector_path_arg(args, "points")?;
-        let _ = parse_optional_output_path(args, "output")?
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'output'".to_string()))?;
+        let _ = parse_optional_output_path(args, "output")?.ok_or_else(|| {
+            ToolError::Validation("missing required parameter 'output'".to_string())
+        })?;
         if let Some(v) = args.get("az_fraction").and_then(|v| v.as_f64()) {
             if !(0.01..=45.0).contains(&v) {
                 return Err(ToolError::Validation(
@@ -4464,12 +4502,16 @@ impl SkyVisibilityCore {
         Ok(())
     }
 
-    fn run_skyline_analysis(args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
-    let coalescer = PercentCoalescer::new(1, 99);
+    fn run_skyline_analysis(
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
+        let coalescer = PercentCoalescer::new(1, 99);
         let dem_path = Self::parse_dem_input(args)?;
         let points_path = parse_vector_path_arg(args, "points")?;
-        let output_path = parse_optional_output_path(args, "output")?
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'output'".to_string()))?;
+        let output_path = parse_optional_output_path(args, "output")?.ok_or_else(|| {
+            ToolError::Validation("missing required parameter 'output'".to_string())
+        })?;
         let output_html = parse_optional_output_path(args, "output_html")?
             .unwrap_or_else(|| output_path.with_extension("html"));
         let az_fraction = args
@@ -4548,13 +4590,8 @@ impl SkyVisibilityCore {
 
             let mut azimuth = 0.0_f32;
             while azimuth < 360.0 {
-                let offsets = Self::compute_offsets(
-                    azimuth,
-                    max_dist,
-                    cell_size_x,
-                    cell_size_y,
-                    true,
-                );
+                let offsets =
+                    Self::compute_offsets(azimuth, max_dist, cell_size_x, cell_size_y, true);
                 let (max_slope, dist) = Self::trace_horizon(
                     &dem,
                     row,
@@ -4571,7 +4608,8 @@ impl SkyVisibilityCore {
                 let azimuth_rad = (azimuth as f64).to_radians();
                 let x = station.x + dist as f64 * azimuth_rad.cos();
                 let y = station.y + dist as f64 * azimuth_rad.sin();
-                let z = base_elev as f64 + observer_hgt_offset as f64 + max_slope as f64 * dist as f64;
+                let z =
+                    base_elev as f64 + observer_hgt_offset as f64 + max_slope as f64 * dist as f64;
 
                 skyline_points.push(VCoord {
                     x,
@@ -4607,7 +4645,8 @@ impl SkyVisibilityCore {
             }
             let svf = (1.0 - (svf_acc / n)).clamp(0.0, 1.0);
 
-            let mut area_points: Vec<(f64, f64)> = skyline_points.iter().map(|c| (c.x, c.y)).collect();
+            let mut area_points: Vec<(f64, f64)> =
+                skyline_points.iter().map(|c| (c.x, c.y)).collect();
             if area_points.first() != area_points.last() {
                 area_points.push(area_points[0]);
             }
@@ -4640,7 +4679,9 @@ impl SkyVisibilityCore {
                         ("SVF", FieldValue::Float(svf)),
                     ],
                 )
-                .map_err(|e| ToolError::Execution(format!("failed adding skyline feature: {}", e)))?;
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed adding skyline feature: {}", e))
+                })?;
 
             html.push_str(&format!(
                 "<div class='card'><h3 style='margin:0 0 8px 0'>Site {}</h3><table><tr><th>Metric</th><th>Value</th></tr><tr><td>Avg. zenith angle</td><td>{:.2} deg</td></tr><tr><td>Avg. horizon distance</td><td>{:.2}</td></tr><tr><td>Horizon area</td><td>{:.3}</td></tr><tr><td>Avg. skyline elevation</td><td>{:.2}</td></tr><tr><td>Std. dev. skyline elevation</td><td>{:.2}</td></tr><tr><td>Sky-view factor</td><td>{:.2}</td></tr></table><p style='margin:10px 0 6px 0'><strong>Zenith angle and horizon distance plots:</strong></p><div class='grid'><div>{}</div><div>{}</div></div></div>",
@@ -4749,11 +4790,13 @@ fn generate_almanac(
             for minute in 0..60 {
                 for sec in (0..=45).step_by(seconds_interval) {
                     let dt = tz
-                        .from_local_datetime(&date.and_hms_opt(hr, minute, sec as u32).ok_or_else(|| {
-                            ToolError::Execution("failed constructing datetime".to_string())
-                        })?)
+                        .from_local_datetime(&date.and_hms_opt(hr, minute, sec as u32).ok_or_else(
+                            || ToolError::Execution("failed constructing datetime".to_string()),
+                        )?)
                         .single()
-                        .ok_or_else(|| ToolError::Execution("invalid local datetime".to_string()))?;
+                        .ok_or_else(|| {
+                            ToolError::Execution("invalid local datetime".to_string())
+                        })?;
 
                     let unix_ms = dt.timestamp_millis();
                     let pos = solar_pos(unix_ms, latitude, longitude);
@@ -5302,7 +5345,12 @@ mod tests {
             &[],
         )
         .unwrap();
-        wbvector::write(&pts, points_path.to_string_lossy().as_ref(), VectorFormat::Shapefile).unwrap();
+        wbvector::write(
+            &pts,
+            points_path.to_string_lossy().as_ref(),
+            VectorFormat::Shapefile,
+        )
+        .unwrap();
 
         let mut args = ToolArgs::new();
         args.insert(
@@ -5345,20 +5393,36 @@ mod tests {
         let output_gif = tmp_dir.join("shadow_animation.gif");
 
         let mut args = ToolArgs::new();
-        args.insert("dem".to_string(), json!(memory_store::make_raster_memory_path(&id)));
+        args.insert(
+            "dem".to_string(),
+            json!(memory_store::make_raster_memory_path(&id)),
+        );
         args.insert("date".to_string(), json!("21/06/2021"));
         args.insert("time_interval".to_string(), json!(60u64));
         args.insert("location".to_string(), json!("43.5448/-80.2482/-4"));
         args.insert("palette".to_string(), json!("soft"));
         args.insert("image_height".to_string(), json!(50u64));
         args.insert("delay".to_string(), json!(250u64));
-        args.insert("output".to_string(), json!(output_html.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(output_html.to_string_lossy().to_string()),
+        );
 
         let result = ShadowAnimationTool.run(&args, &make_ctx()).unwrap();
         let html_path = result.outputs.get("path").and_then(|v| v.as_str()).unwrap();
-        let gif_path = result.outputs.get("gif_path").and_then(|v| v.as_str()).unwrap();
-        assert!(std::path::Path::new(html_path).exists(), "HTML file not found: {html_path}");
-        assert!(std::path::Path::new(gif_path).exists(), "GIF file not found: {gif_path}");
+        let gif_path = result
+            .outputs
+            .get("gif_path")
+            .and_then(|v| v.as_str())
+            .unwrap();
+        assert!(
+            std::path::Path::new(html_path).exists(),
+            "HTML file not found: {html_path}"
+        );
+        assert!(
+            std::path::Path::new(gif_path).exists(),
+            "GIF file not found: {gif_path}"
+        );
         assert_eq!(std::path::Path::new(gif_path), output_gif);
     }
 }

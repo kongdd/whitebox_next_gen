@@ -81,18 +81,42 @@ impl AdvancedOp {
 
     fn summary(self) -> &'static str {
         match self {
-            Self::AnisotropicDiffusion => r#"Anisotropic diffusion filtering implements iterative edge-preserving smoothing via directional diffusion processes that distinguish between edges and flat regions. The algorithm iteratively updates each pixel based on weighted differences with neighbors, using a conductance function that reduces diffusion across high-gradient boundaries while permitting smoothing within homogeneous regions. Implementation solves the partial differential equation ∂I/∂t = div(c(|∇I|)∇I), where conductance c(·) adapts to local gradient magnitude. This data-driven approach preserves sharp transitions while progressively reducing noise in uniform areas. Key features include true edge preservation without explicit edge masks, automatic scale selection via iteration count, effective noise reduction maintaining feature sharpness, and applicability to single and multispectral data. Anisotropic diffusion excels in LiDAR point cloud smoothing preserving terrain breaks, satellite image denoising for subtle geological feature detection, SAR speckle reduction maintaining radar-target edges, and medical/scientific imagery where edge fidelity is critical. Output interpretation requires understanding that smooth regions progressively homogenize (values converge toward local mean), while edges steepen until stabilizing. Early iterations (t<5) yield mild noise reduction; intermediate iterations (t=5-20) provide substantial smoothing; excessive iterations (t>50) risk boundary over-enhancement or false features. Output values remain in source data ranges; statistics shift toward regional means as processing proceeds. Monitor output variance to assess smoothing completeness. Common metrics include signal-to-noise ratio improvement and edge sharpness indices. Apply carefully in multi-scale workflows where edge preservation precision directly impacts downstream classification or change detection accuracy."#,
-            Self::GammaCorrection => r#"Gamma correction applies non-linear brightness adjustment via power-law transformation to optimize image contrast, display fidelity, and perceptual luminance distribution. The mathematical transformation is I_corrected = I^(1/γ), where γ (gamma) is a user-specified exponent controlling brightness adjustment direction and magnitude. Values γ > 1 darken images (brightening display compensation), while γ < 1 brighten images (darkening display compensation). Implementation operates independently on each pixel or spectral band, preserving spatial relationships while adjusting intensity scaling. Key features include preserving image structure while redistributing tonal values, computational efficiency requiring only lookup tables, applicability to any radiometric data including 16/32-bit imagery, and reversibility enabling inverse correction. Gamma correction finds essential application in preparing satellite imagery for visual interpretation by compensating sensor characteristics, normalizing orthophoto brightness across flight lines or sensor types, enhancing thermal imagery for feature visibility, and pre-processing multispectral data for machine-learning pipelines where input normalization improves convergence. Output interpretation shows that corrected values follow power-law scaling: mid-tones undergo greatest relative adjustment, while extremes compress less. For 8-bit input (0-255), typical gamma 0.4-0.6 brightens images significantly; gamma 1.4-1.6 darkens substantially. Histogram shapes transform predictably: left-skewed histograms (dark images) benefit from γ < 1, while right-skewed histograms (bright images) benefit from γ > 1. Verify corrected output using histogram visualization and visual inspection. Apply consistency across image collections requiring uniform preprocessing. Common workflow chains gamma correction before threshold selection or classification to ensure balanced feature visibility."#,
-            Self::Guided => r#"The guided filter implements edge-preserving smoothing by constraining filter outputs to locally linear relationships with a guide image, typically the original or a related reference layer. Implementation divides the image into overlapping rectangular regions, computing linear regression parameters within each region to enforce output smoothness while respecting guide-image structure. The mathematical formulation minimizes ||Fᵢ - a·Gᵢ - b||² + ε||a||², where Fᵢ is filtered output, Gᵢ is guide image, and (a, b) are locally linear parameters. Key features include flexibility (guide image may be independent of filtered image), computational efficiency via O(N) separable implementation, parameter control enabling edge-preservation strength adjustment, and effectiveness on single or multispectral guidance. Guided filtering excels in multi-sensor fusion workflows where optical data guides SAR denoising, refining LiDAR classifications using coincident orthophotos, shadow/cloud removal in satellite mosaics using temporal reference images, and detail enhancement in map regularization tasks. Output interpretation reveals that filtered regions remain locally similar to guide-image structure while intensity averaging proceeds within homogeneous regions. Smoothing radius controls spatial extent (larger radius = greater smoothing); regularization parameter ε balances smoothness versus structure fidelity (larger ε = smoother, smaller ε = more detail). Output ranges match input; visual comparison with guide image validates edge preservation fidelity. Common artifacts include over-smoothing at strong discontinuities (select appropriate parameters) and insufficient smoothing in guide-poor regions (verify guide-image quality). Monitor cross-correlation between filtered output and guide image to assess alignment quality. Apply strategically in image fusion, sharpening, and reconstruction workflows where edge information from one source guides filtering of another."#,
-            Self::Wiener => r#"The Wiener filter performs adaptive noise reduction by minimizing mean-squared error between filtered output and true signal, assuming knowledge of signal and noise statistical properties. Implementation estimates local signal and noise variances within moving windows, computing filter coefficients that balance noise suppression against detail preservation: F = μ + (σ² - σₙ²)/σ² · (I - μ), where μ is local mean, σ² is signal variance, σₙ² is noise variance. This data-driven adaptation ensures filtering strength responds to local image characteristics. Key features include automatic adaptation to local statistics (flat regions smooth aggressively; detailed regions preserve structure), proven effectiveness on optical and SAR imagery, interpretable parameters based on noise model assumptions, and computational feasibility via separable approximations. Wiener filtering excels in satellite image preprocessing where noise varies spatially, SAR speckle reduction while preserving point targets, despeckled multispectral data for vegetation mapping, and radar-optical fusion denoising. Output interpretation shows that high-variance (detailed) regions filter minimally, while low-variance (noisy) regions filter aggressively. Noise variance estimation affects output: underestimated noise variance yields under-smoothing; overestimated variance causes over-smoothing and detail loss. Output ranges approach input ranges; examine difference images (original - filtered) to verify noise reduction. Peak Signal-to-Noise Ratio (PSNR) and Structural Similarity Index (SSIM) quantify filtering effectiveness. Local variance thresholds indicate processing impact: regions with detected variance ratio > 5 filter substantially; ratios < 1 filter minimally. Common pitfalls include inaccurate noise variance estimation (conduct dark-frame or homogeneous-region analysis for estimation) and window-size selection affecting localization. Apply before classification or feature extraction to reduce noise-driven category misclassification."#,
-            Self::NonLocalMeans => r#"Non-local means filtering performs powerful denoising by averaging similar patches identified across the entire image rather than neighboring pixels, exploiting image self-similarity to suppress noise while preserving structures. Implementation identifies patches similar to each target patch via Euclidean distance in patch-space, weights similar patches exponentially by similarity, and averages weighted patches. The algorithm computes: Fᵢ = (1/Z) Σⱼ exp(-d(Pᵢ, Pⱼ)²/h²) · Iⱼ, where d measures patch distance, h controls bandwidth, Z normalizes. Key features include superior denoising via similarity search rather than spatial proximity alone, effectiveness on complex textures and fine details, applicability to any data type, and proven performance on medical, satellite, and photographic imagery. Non-local means filtering excels in detailed satellite image restoration preserving fine texture and structure, multi-temporal stack averaging for change detection preparation, very noisy survey data denoising (ultrasonic, hyperspectral), and archaeological/aerial survey imagery enhancement. Output interpretation requires understanding that similar regions throughout the image contribute to each output pixel; locally dissimilar regions contribute negligibly. Patch size controls feature preservation (larger patches = smoother results, finer patches = more detail); bandwidth h controls similarity weighting (larger h = more patches included, smaller h = stricter similarity requirements). Output ranges match input; statistics shift toward regional means while fine structures remain. Computational cost scales with image size and patch radius; typical execution requires substantial processing time for large imagery. Monitor filtering progression via PSNR or visual inspection. Common artifacts include over-smoothing fine textures (increase patch size carefully) and under-smoothing in high-noise regions (increase bandwidth). Apply strategically in workflows requiring maximum noise reduction while preserving fine-scale features."#,
-            Self::Kuwahara => r#"The Kuwahara filter implements non-linear edge-preserving smoothing by dividing each pixel's neighborhood into four quadrants, computing statistics within each quadrant, and selecting the quadrant with lowest variance as the output value. Implementation partitions a (2k+1)×(2k+1) window into four overlapping k×k sub-windows, calculates mean and variance of each quadrant, and outputs the mean from the quadrant with minimum variance. This rank-based approach simultaneously smooths homogeneous regions and sharpens edges. Key features include true edge preservation via quadrant selection (edges between quadrants suppress output blurring), computational simplicity requiring only mean/variance calculations, parameter control via quadrant size k, and effectiveness on optical, radar, and thermal imagery. Kuwahara filtering excels in LiDAR-derived DEM smoothing preserving scarps and terraces, road network extraction from high-resolution imagery maintaining centerline sharpness, building footprint delineation from aerial photos, and oil-spill boundary detection in SAR imagery. Output interpretation reveals that homogeneous regions output the naturally averaging quadrant (lowest variance); edges output the quadrant containing uniform structure nearest the edge, effectively anchoring output to the cleaner side. Quadrant size k controls detail preservation: k=1 (minimal smoothing) preserves fine edges; k=3-4 provides balanced smoothing and edge preservation; k>5 risks detail loss. Output values exactly match input pixel values from selected quadrants (no interpolation). Monitor output histograms for bimodal distributions (edges and homogeneous regions clearly separated); unimodal distributions suggest edge blurring. Apply complementary sharpening if over-smoothing occurs. Common artifacts include directional bias depending on quadrant alignment and blockiness near weak edges. Use in pre-processing for segmentation where edge preservation ensures accurate boundary extraction."#,
-            Self::Frost => r#"The Frost filter implements SAR speckle reduction using multiplicative noise model and adaptive local statistics, designed specifically for radar imagery where speckle follows Gamma distribution rather than Gaussian noise. Implementation computes local mean and variance, then applies adaptive multiplicative weighting: F = I · exp(-variance/(2·mean²)·distance²), where distance measures pixel deviation from local mean. This formulation reduces speckle intensity inversely to estimated coherence. Key features include SAR-specific adaptation (multiplicative rather than additive noise model), preservation of point targets and edges (coherent features), local variance-driven adaptation enabling strength adjustment, and proven effectiveness on single-pol and multi-pol SAR data. Frost filtering excels in SAR image preprocessing for classification (agricultural monitoring, land-use mapping), coherence-weighted SAR-optical fusion, flood mapping from radar during cloud cover, and synthetic aperture radar change detection workflows. Output interpretation shows that high-variance (potentially coherent target) regions filter minimally; low-variance (speckle-dominated) regions filter aggressively. Typical output ranges match input; logarithmic scaling (decibels) often applied pre- or post-filtering for visualization. Variance-to-mean ratio directly controls filter strength: ratio > 0.5 indicates probable speckle; ratio < 0.1 suggests coherent targets. Output artifacts include potential detail loss if variance estimation is unreliable and directional bias in oriented features. Verification via coherence maps confirms edge preservation in high-coherence zones. Monitor output statistics: mean should stabilize across filtering iterations; variance should decrease substantially. Apply before classification to improve categorical accuracy. Combine with morphological post-processing to refine object boundaries and remove residual speckle chips."#,
-            Self::GammaMap => r#"The Gamma Map filter performs SAR speckle reduction using Gamma distribution statistical model, explicitly accounting for radar signal's multiplicative speckle characteristics through parametric adaptation. Implementation estimates local Gamma distribution parameters (shape α and scale β) from image statistics, then filters via a weighting function respecting the distribution: F = I · [1 - (1-L/N)/(1 + L/N)·√(1 + N/L²)], where L is equivalent looks (coherence measure) and N is estimated parameter. Key features include theoretically rigorous SAR statistics (Gamma distribution standard for radar), automatic look-number estimation requiring minimal user input, superior edge preservation compared to uniform filters, and applicability to single- and multi-look SAR. Gamma Map filtering excels in multi-temporal SAR stack denoising for time-series change detection, interferometric SAR (InSAR) phase coherence enhancement, polarimetric SAR decomposition pre-processing, and forestry SAR backscatter normalization. Output interpretation reveals that filter strength adapts to scene coherence: high-coherence regions (large α) filter gently, preserving targets; low-coherence regions (small α) filter aggressively, suppressing speckle. Equivalent look-number L indicates filtering effectiveness: L=1 (minimal filtering) preserves all detail; L>5 produces substantial smoothing. Output scaling remains in input units; logarithmic conversion facilitates visualization. Typical output variance reductions range 50-80% depending on scene character and look-number selection. Monitor output histograms for remaining speckle signature; bi-modal distributions suggest good separation of scene components. Artifacts include potential striping in oriented features or slight texture degradation if L is overestimated. Validate filtering against ground truth in training areas. Apply strategically in polarimetric SAR classification or InSAR phase filtering requiring coherence-weighted enhancement."#,
-            Self::Kuan => r#"Performs Kuan speckle filtering for SAR/radar imagery using parametric approach estimating local means and variance. Adaptive weighting based on noise variance and local image variance. Similar to Lee but with different statistical assumptions. Widely used operational SAR processing method. Balance of computational efficiency and good results across varied SAR data. Kuan filtering assumes Gaussian statistics with multiplicative speckle model. Adapts to local variance—distinguishes between signal variation and speckle. Particularly effective for heterogeneous SAR imagery (mixed bright and dark features). Computationally reasonable. Represents practical compromise between sophistication and computational cost. Standard in many SAR processing systems. Applications: (1) Operational SAR despeckling, (2) Mixed-backscatter SAR preprocessing, (3) RadarSat/Sentinel-1 preprocessing, (4) Routine SAR processing. Typical parameters: filter_size=5×7 to 7×7."#,
-            Self::Gabor => r#"Performs multi-orientation Gabor response filtering—directional texture analysis. Applies bank of Gabor filters at multiple orientations (typically 0°, 45°, 90°, 135°) to extract directional texture features. Gabor responses indicate texture strength and orientation. Useful for directional feature detection, texture characterization, and oriented pattern analysis. Each orientation is output separately. Gabor filtering extracts directional texture by convolving with orientation-specific wavelets. Each orientation reveals features aligned with that direction. Outputs multiple bands (one per orientation) revealing local texture direction and strength. Gabor responses are foundational for texture feature extraction and object detection in computer vision. Bank of filters enables comprehensive directional analysis. Applications: (1) Directional texture analysis, (2) Oriented feature detection (ridges, valleys, linear structures), (3) Directional erosion/deposition mapping, (4) Road/stream detection (linear features), (5) Texture-based classification."#,
-            Self::Frangi => r#"Performs multiscale Frangi vesselness enhancement for detecting vessel-like (tubular) structures at multiple scales. Based on Hessian matrix eigenvalue analysis. Responds strongly to line-like features (vessels, roads, rivers) and weakly to blob-like structures. Multiscale analysis (try multiple sigma values) automatically detects vessels at different widths. Widely used in medical imaging and remote sensing for linear feature detection. Frangi vesselness uses principal curvatures (Hessian eigenvalues) to classify local structure: high vesselness for linear features, low for plateaus or blobs. Multiscale implementation applies at multiple sigma (width) values, combines responses. Excellent for detecting roads, rivers, vessel networks. Computationally moderate for multiple scales. Highly interpretable output—responds to recognizable features. Applications: (1) Road detection in satellite imagery, (2) River/stream network extraction, (3) Linear feature detection generally, (4) Vessel detection (medical imaging), (5) Multi-scale structure detection."#,
-            Self::SavitzkyGolay2d => r#"Performs 2D Savitzky-Golay smoothing—polynomial fitting-based filter preserving local polynomial features. Fits local polynomial to neighborhood, replaces center with fitted value. Preserves peaks/valleys better than Gaussian. Useful for noisy data where feature preservation important. Less blurring than Gaussian for low-order polynomials; smoothing increases with polynomial order. Savitzky-Golay filtering fits local polynomial (typically quadratic/cubic) by least-squares to neighborhood. Center value replaced with polynomial value. Different from median/Gaussian—preserves features that appear as polynomial structures (peaks, valleys, ridges). Computationally straightforward but slower than simple convolution. Polynomial order controls smoothing/preservation trade-off. Applications: (1) Smooth noisy data while preserving peak structures, (2) Elevation grid processing (preserves ridge/valley topography), (3) Spectral data smoothing (preserves absorption features), (4) Feature-preserving preprocessing."#,
+            Self::AnisotropicDiffusion => {
+                r#"Anisotropic diffusion filtering implements iterative edge-preserving smoothing via directional diffusion processes that distinguish between edges and flat regions. The algorithm iteratively updates each pixel based on weighted differences with neighbors, using a conductance function that reduces diffusion across high-gradient boundaries while permitting smoothing within homogeneous regions. Implementation solves the partial differential equation ∂I/∂t = div(c(|∇I|)∇I), where conductance c(·) adapts to local gradient magnitude. This data-driven approach preserves sharp transitions while progressively reducing noise in uniform areas. Key features include true edge preservation without explicit edge masks, automatic scale selection via iteration count, effective noise reduction maintaining feature sharpness, and applicability to single and multispectral data. Anisotropic diffusion excels in LiDAR point cloud smoothing preserving terrain breaks, satellite image denoising for subtle geological feature detection, SAR speckle reduction maintaining radar-target edges, and medical/scientific imagery where edge fidelity is critical. Output interpretation requires understanding that smooth regions progressively homogenize (values converge toward local mean), while edges steepen until stabilizing. Early iterations (t<5) yield mild noise reduction; intermediate iterations (t=5-20) provide substantial smoothing; excessive iterations (t>50) risk boundary over-enhancement or false features. Output values remain in source data ranges; statistics shift toward regional means as processing proceeds. Monitor output variance to assess smoothing completeness. Common metrics include signal-to-noise ratio improvement and edge sharpness indices. Apply carefully in multi-scale workflows where edge preservation precision directly impacts downstream classification or change detection accuracy."#
+            }
+            Self::GammaCorrection => {
+                r#"Gamma correction applies non-linear brightness adjustment via power-law transformation to optimize image contrast, display fidelity, and perceptual luminance distribution. The mathematical transformation is I_corrected = I^(1/γ), where γ (gamma) is a user-specified exponent controlling brightness adjustment direction and magnitude. Values γ > 1 darken images (brightening display compensation), while γ < 1 brighten images (darkening display compensation). Implementation operates independently on each pixel or spectral band, preserving spatial relationships while adjusting intensity scaling. Key features include preserving image structure while redistributing tonal values, computational efficiency requiring only lookup tables, applicability to any radiometric data including 16/32-bit imagery, and reversibility enabling inverse correction. Gamma correction finds essential application in preparing satellite imagery for visual interpretation by compensating sensor characteristics, normalizing orthophoto brightness across flight lines or sensor types, enhancing thermal imagery for feature visibility, and pre-processing multispectral data for machine-learning pipelines where input normalization improves convergence. Output interpretation shows that corrected values follow power-law scaling: mid-tones undergo greatest relative adjustment, while extremes compress less. For 8-bit input (0-255), typical gamma 0.4-0.6 brightens images significantly; gamma 1.4-1.6 darkens substantially. Histogram shapes transform predictably: left-skewed histograms (dark images) benefit from γ < 1, while right-skewed histograms (bright images) benefit from γ > 1. Verify corrected output using histogram visualization and visual inspection. Apply consistency across image collections requiring uniform preprocessing. Common workflow chains gamma correction before threshold selection or classification to ensure balanced feature visibility."#
+            }
+            Self::Guided => {
+                r#"The guided filter implements edge-preserving smoothing by constraining filter outputs to locally linear relationships with a guide image, typically the original or a related reference layer. Implementation divides the image into overlapping rectangular regions, computing linear regression parameters within each region to enforce output smoothness while respecting guide-image structure. The mathematical formulation minimizes ||Fᵢ - a·Gᵢ - b||² + ε||a||², where Fᵢ is filtered output, Gᵢ is guide image, and (a, b) are locally linear parameters. Key features include flexibility (guide image may be independent of filtered image), computational efficiency via O(N) separable implementation, parameter control enabling edge-preservation strength adjustment, and effectiveness on single or multispectral guidance. Guided filtering excels in multi-sensor fusion workflows where optical data guides SAR denoising, refining LiDAR classifications using coincident orthophotos, shadow/cloud removal in satellite mosaics using temporal reference images, and detail enhancement in map regularization tasks. Output interpretation reveals that filtered regions remain locally similar to guide-image structure while intensity averaging proceeds within homogeneous regions. Smoothing radius controls spatial extent (larger radius = greater smoothing); regularization parameter ε balances smoothness versus structure fidelity (larger ε = smoother, smaller ε = more detail). Output ranges match input; visual comparison with guide image validates edge preservation fidelity. Common artifacts include over-smoothing at strong discontinuities (select appropriate parameters) and insufficient smoothing in guide-poor regions (verify guide-image quality). Monitor cross-correlation between filtered output and guide image to assess alignment quality. Apply strategically in image fusion, sharpening, and reconstruction workflows where edge information from one source guides filtering of another."#
+            }
+            Self::Wiener => {
+                r#"The Wiener filter performs adaptive noise reduction by minimizing mean-squared error between filtered output and true signal, assuming knowledge of signal and noise statistical properties. Implementation estimates local signal and noise variances within moving windows, computing filter coefficients that balance noise suppression against detail preservation: F = μ + (σ² - σₙ²)/σ² · (I - μ), where μ is local mean, σ² is signal variance, σₙ² is noise variance. This data-driven adaptation ensures filtering strength responds to local image characteristics. Key features include automatic adaptation to local statistics (flat regions smooth aggressively; detailed regions preserve structure), proven effectiveness on optical and SAR imagery, interpretable parameters based on noise model assumptions, and computational feasibility via separable approximations. Wiener filtering excels in satellite image preprocessing where noise varies spatially, SAR speckle reduction while preserving point targets, despeckled multispectral data for vegetation mapping, and radar-optical fusion denoising. Output interpretation shows that high-variance (detailed) regions filter minimally, while low-variance (noisy) regions filter aggressively. Noise variance estimation affects output: underestimated noise variance yields under-smoothing; overestimated variance causes over-smoothing and detail loss. Output ranges approach input ranges; examine difference images (original - filtered) to verify noise reduction. Peak Signal-to-Noise Ratio (PSNR) and Structural Similarity Index (SSIM) quantify filtering effectiveness. Local variance thresholds indicate processing impact: regions with detected variance ratio > 5 filter substantially; ratios < 1 filter minimally. Common pitfalls include inaccurate noise variance estimation (conduct dark-frame or homogeneous-region analysis for estimation) and window-size selection affecting localization. Apply before classification or feature extraction to reduce noise-driven category misclassification."#
+            }
+            Self::NonLocalMeans => {
+                r#"Non-local means filtering performs powerful denoising by averaging similar patches identified across the entire image rather than neighboring pixels, exploiting image self-similarity to suppress noise while preserving structures. Implementation identifies patches similar to each target patch via Euclidean distance in patch-space, weights similar patches exponentially by similarity, and averages weighted patches. The algorithm computes: Fᵢ = (1/Z) Σⱼ exp(-d(Pᵢ, Pⱼ)²/h²) · Iⱼ, where d measures patch distance, h controls bandwidth, Z normalizes. Key features include superior denoising via similarity search rather than spatial proximity alone, effectiveness on complex textures and fine details, applicability to any data type, and proven performance on medical, satellite, and photographic imagery. Non-local means filtering excels in detailed satellite image restoration preserving fine texture and structure, multi-temporal stack averaging for change detection preparation, very noisy survey data denoising (ultrasonic, hyperspectral), and archaeological/aerial survey imagery enhancement. Output interpretation requires understanding that similar regions throughout the image contribute to each output pixel; locally dissimilar regions contribute negligibly. Patch size controls feature preservation (larger patches = smoother results, finer patches = more detail); bandwidth h controls similarity weighting (larger h = more patches included, smaller h = stricter similarity requirements). Output ranges match input; statistics shift toward regional means while fine structures remain. Computational cost scales with image size and patch radius; typical execution requires substantial processing time for large imagery. Monitor filtering progression via PSNR or visual inspection. Common artifacts include over-smoothing fine textures (increase patch size carefully) and under-smoothing in high-noise regions (increase bandwidth). Apply strategically in workflows requiring maximum noise reduction while preserving fine-scale features."#
+            }
+            Self::Kuwahara => {
+                r#"The Kuwahara filter implements non-linear edge-preserving smoothing by dividing each pixel's neighborhood into four quadrants, computing statistics within each quadrant, and selecting the quadrant with lowest variance as the output value. Implementation partitions a (2k+1)×(2k+1) window into four overlapping k×k sub-windows, calculates mean and variance of each quadrant, and outputs the mean from the quadrant with minimum variance. This rank-based approach simultaneously smooths homogeneous regions and sharpens edges. Key features include true edge preservation via quadrant selection (edges between quadrants suppress output blurring), computational simplicity requiring only mean/variance calculations, parameter control via quadrant size k, and effectiveness on optical, radar, and thermal imagery. Kuwahara filtering excels in LiDAR-derived DEM smoothing preserving scarps and terraces, road network extraction from high-resolution imagery maintaining centerline sharpness, building footprint delineation from aerial photos, and oil-spill boundary detection in SAR imagery. Output interpretation reveals that homogeneous regions output the naturally averaging quadrant (lowest variance); edges output the quadrant containing uniform structure nearest the edge, effectively anchoring output to the cleaner side. Quadrant size k controls detail preservation: k=1 (minimal smoothing) preserves fine edges; k=3-4 provides balanced smoothing and edge preservation; k>5 risks detail loss. Output values exactly match input pixel values from selected quadrants (no interpolation). Monitor output histograms for bimodal distributions (edges and homogeneous regions clearly separated); unimodal distributions suggest edge blurring. Apply complementary sharpening if over-smoothing occurs. Common artifacts include directional bias depending on quadrant alignment and blockiness near weak edges. Use in pre-processing for segmentation where edge preservation ensures accurate boundary extraction."#
+            }
+            Self::Frost => {
+                r#"The Frost filter implements SAR speckle reduction using multiplicative noise model and adaptive local statistics, designed specifically for radar imagery where speckle follows Gamma distribution rather than Gaussian noise. Implementation computes local mean and variance, then applies adaptive multiplicative weighting: F = I · exp(-variance/(2·mean²)·distance²), where distance measures pixel deviation from local mean. This formulation reduces speckle intensity inversely to estimated coherence. Key features include SAR-specific adaptation (multiplicative rather than additive noise model), preservation of point targets and edges (coherent features), local variance-driven adaptation enabling strength adjustment, and proven effectiveness on single-pol and multi-pol SAR data. Frost filtering excels in SAR image preprocessing for classification (agricultural monitoring, land-use mapping), coherence-weighted SAR-optical fusion, flood mapping from radar during cloud cover, and synthetic aperture radar change detection workflows. Output interpretation shows that high-variance (potentially coherent target) regions filter minimally; low-variance (speckle-dominated) regions filter aggressively. Typical output ranges match input; logarithmic scaling (decibels) often applied pre- or post-filtering for visualization. Variance-to-mean ratio directly controls filter strength: ratio > 0.5 indicates probable speckle; ratio < 0.1 suggests coherent targets. Output artifacts include potential detail loss if variance estimation is unreliable and directional bias in oriented features. Verification via coherence maps confirms edge preservation in high-coherence zones. Monitor output statistics: mean should stabilize across filtering iterations; variance should decrease substantially. Apply before classification to improve categorical accuracy. Combine with morphological post-processing to refine object boundaries and remove residual speckle chips."#
+            }
+            Self::GammaMap => {
+                r#"The Gamma Map filter performs SAR speckle reduction using Gamma distribution statistical model, explicitly accounting for radar signal's multiplicative speckle characteristics through parametric adaptation. Implementation estimates local Gamma distribution parameters (shape α and scale β) from image statistics, then filters via a weighting function respecting the distribution: F = I · [1 - (1-L/N)/(1 + L/N)·√(1 + N/L²)], where L is equivalent looks (coherence measure) and N is estimated parameter. Key features include theoretically rigorous SAR statistics (Gamma distribution standard for radar), automatic look-number estimation requiring minimal user input, superior edge preservation compared to uniform filters, and applicability to single- and multi-look SAR. Gamma Map filtering excels in multi-temporal SAR stack denoising for time-series change detection, interferometric SAR (InSAR) phase coherence enhancement, polarimetric SAR decomposition pre-processing, and forestry SAR backscatter normalization. Output interpretation reveals that filter strength adapts to scene coherence: high-coherence regions (large α) filter gently, preserving targets; low-coherence regions (small α) filter aggressively, suppressing speckle. Equivalent look-number L indicates filtering effectiveness: L=1 (minimal filtering) preserves all detail; L>5 produces substantial smoothing. Output scaling remains in input units; logarithmic conversion facilitates visualization. Typical output variance reductions range 50-80% depending on scene character and look-number selection. Monitor output histograms for remaining speckle signature; bi-modal distributions suggest good separation of scene components. Artifacts include potential striping in oriented features or slight texture degradation if L is overestimated. Validate filtering against ground truth in training areas. Apply strategically in polarimetric SAR classification or InSAR phase filtering requiring coherence-weighted enhancement."#
+            }
+            Self::Kuan => {
+                r#"Performs Kuan speckle filtering for SAR/radar imagery using parametric approach estimating local means and variance. Adaptive weighting based on noise variance and local image variance. Similar to Lee but with different statistical assumptions. Widely used operational SAR processing method. Balance of computational efficiency and good results across varied SAR data. Kuan filtering assumes Gaussian statistics with multiplicative speckle model. Adapts to local variance—distinguishes between signal variation and speckle. Particularly effective for heterogeneous SAR imagery (mixed bright and dark features). Computationally reasonable. Represents practical compromise between sophistication and computational cost. Standard in many SAR processing systems. Applications: (1) Operational SAR despeckling, (2) Mixed-backscatter SAR preprocessing, (3) RadarSat/Sentinel-1 preprocessing, (4) Routine SAR processing. Typical parameters: filter_size=5×7 to 7×7."#
+            }
+            Self::Gabor => {
+                r#"Performs multi-orientation Gabor response filtering—directional texture analysis. Applies bank of Gabor filters at multiple orientations (typically 0°, 45°, 90°, 135°) to extract directional texture features. Gabor responses indicate texture strength and orientation. Useful for directional feature detection, texture characterization, and oriented pattern analysis. Each orientation is output separately. Gabor filtering extracts directional texture by convolving with orientation-specific wavelets. Each orientation reveals features aligned with that direction. Outputs multiple bands (one per orientation) revealing local texture direction and strength. Gabor responses are foundational for texture feature extraction and object detection in computer vision. Bank of filters enables comprehensive directional analysis. Applications: (1) Directional texture analysis, (2) Oriented feature detection (ridges, valleys, linear structures), (3) Directional erosion/deposition mapping, (4) Road/stream detection (linear features), (5) Texture-based classification."#
+            }
+            Self::Frangi => {
+                r#"Performs multiscale Frangi vesselness enhancement for detecting vessel-like (tubular) structures at multiple scales. Based on Hessian matrix eigenvalue analysis. Responds strongly to line-like features (vessels, roads, rivers) and weakly to blob-like structures. Multiscale analysis (try multiple sigma values) automatically detects vessels at different widths. Widely used in medical imaging and remote sensing for linear feature detection. Frangi vesselness uses principal curvatures (Hessian eigenvalues) to classify local structure: high vesselness for linear features, low for plateaus or blobs. Multiscale implementation applies at multiple sigma (width) values, combines responses. Excellent for detecting roads, rivers, vessel networks. Computationally moderate for multiple scales. Highly interpretable output—responds to recognizable features. Applications: (1) Road detection in satellite imagery, (2) River/stream network extraction, (3) Linear feature detection generally, (4) Vessel detection (medical imaging), (5) Multi-scale structure detection."#
+            }
+            Self::SavitzkyGolay2d => {
+                r#"Performs 2D Savitzky-Golay smoothing—polynomial fitting-based filter preserving local polynomial features. Fits local polynomial to neighborhood, replaces center with fitted value. Preserves peaks/valleys better than Gaussian. Useful for noisy data where feature preservation important. Less blurring than Gaussian for low-order polynomials; smoothing increases with polynomial order. Savitzky-Golay filtering fits local polynomial (typically quadratic/cubic) by least-squares to neighborhood. Center value replaced with polynomial value. Different from median/Gaussian—preserves features that appear as polynomial structures (peaks, valleys, ridges). Computationally straightforward but slower than simple convolution. Polynomial order controls smoothing/preservation trade-off. Applications: (1) Smooth noisy data while preserving peak structures, (2) Elevation grid processing (preserves ridge/valley topography), (3) Spectral data smoothing (preserves absorption features), (4) Feature-preserving preprocessing."#
+            }
         }
     }
 }
@@ -105,7 +129,9 @@ impl AdvancedFilters {
     fn load_raster(path: &str) -> Result<Arc<Raster>, ToolError> {
         if memory_store::raster_is_memory_path(path) {
             let id = memory_store::raster_path_to_id(path).ok_or_else(|| {
-                ToolError::Validation("parameter 'input' has malformed in-memory raster path".to_string())
+                ToolError::Validation(
+                    "parameter 'input' has malformed in-memory raster path".to_string(),
+                )
             })?;
             return memory_store::get_raster_arc_by_id(id).ok_or_else(|| {
                 ToolError::Validation(format!(
@@ -120,7 +146,10 @@ impl AdvancedFilters {
             .map_err(|e| ToolError::Execution(format!("failed reading input raster: {}", e)))
     }
 
-    fn write_or_store_output(output: Raster, output_path: Option<std::path::PathBuf>) -> Result<String, ToolError> {
+    fn write_or_store_output(
+        output: Raster,
+        output_path: Option<std::path::PathBuf>,
+    ) -> Result<String, ToolError> {
         if let Some(output_path) = output_path {
             if let Some(parent) = output_path.parent() {
                 if !parent.as_os_str().is_empty() {
@@ -231,7 +260,8 @@ impl AdvancedFilters {
                 });
                 params.push(ToolParamSpec {
                     name: "damping_factor",
-                    description: "Frost damping factor controlling exponential decay (default 2.0).",
+                    description:
+                        "Frost damping factor controlling exponential decay (default 2.0).",
                     required: false,
                 });
             }
@@ -279,7 +309,8 @@ impl AdvancedFilters {
             AdvancedOp::Frangi => {
                 params.push(ToolParamSpec {
                     name: "scales",
-                    description: "List of Gaussian-like scales in pixels (default [1.0, 2.0, 3.0]).",
+                    description:
+                        "List of Gaussian-like scales in pixels (default [1.0, 2.0, 3.0]).",
                     required: false,
                 });
                 params.push(ToolParamSpec {
@@ -296,7 +327,8 @@ impl AdvancedFilters {
             AdvancedOp::SavitzkyGolay2d => {
                 params.push(ToolParamSpec {
                     name: "window_size",
-                    description: "Odd window size (default 5). Currently supports 5 for polynomial order 2.",
+                    description:
+                        "Odd window size (default 5). Currently supports 5 for polynomial order 2.",
                     required: false,
                 });
             }
@@ -423,22 +455,25 @@ impl AdvancedFilters {
         let nodata = input.nodata;
         let mut rows_buf = vec![vec![nodata; cols]; rows];
 
-        rows_buf.par_iter_mut().enumerate().for_each(|(r, out_row)| {
-            for c in 0..cols {
-                let idx = r * cols + c;
-                let v = vals[idx];
-                if v == nodata {
-                    continue;
+        rows_buf
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(r, out_row)| {
+                for c in 0..cols {
+                    let idx = r * cols + c;
+                    let v = vals[idx];
+                    if v == nodata {
+                        continue;
+                    }
+                    if packed_rgb {
+                        let z0 = input.get(band, r as isize, c as isize);
+                        let (h, s, _) = value2hsi(z0);
+                        out_row[c] = hsi2value(h, s, v);
+                    } else {
+                        out_row[c] = v;
+                    }
                 }
-                if packed_rgb {
-                    let z0 = input.get(band, r as isize, c as isize);
-                    let (h, s, _) = value2hsi(z0);
-                    out_row[c] = hsi2value(h, s, v);
-                } else {
-                    out_row[c] = v;
-                }
-            }
-        });
+            });
 
         for (r, row) in rows_buf.iter().enumerate() {
             output
@@ -460,16 +495,18 @@ impl AdvancedFilters {
         for band_idx in 0..bands {
             let band = band_idx as isize;
             let mut vals = vec![nodata; rows * cols];
-            vals.par_chunks_mut(cols).enumerate().for_each(|(r, row_out)| {
-                for c in 0..cols {
-                    let z_raw = input.get(band, r as isize, c as isize);
-                    if input.is_nodata(z_raw) {
-                        continue;
+            vals.par_chunks_mut(cols)
+                .enumerate()
+                .for_each(|(r, row_out)| {
+                    for c in 0..cols {
+                        let z_raw = input.get(band, r as isize, c as isize);
+                        if input.is_nodata(z_raw) {
+                            continue;
+                        }
+                        let z = if packed_rgb { value2i(z_raw) } else { z_raw };
+                        row_out[c] = z.powf(gamma);
                     }
-                    let z = if packed_rgb { value2i(z_raw) } else { z_raw };
-                    row_out[c] = z.powf(gamma);
-                }
-            });
+                });
             Self::set_band_from_values(input, &mut out, band_idx, &vals, packed_rgb)?;
         }
 
@@ -505,44 +542,62 @@ impl AdvancedFilters {
 
             for _ in 0..iterations {
                 let mut next = current.clone();
-                next.par_chunks_mut(cols).enumerate().for_each(|(r, out_row)| {
-                    for c in 0..cols {
-                        let idx = r * cols + c;
-                        let z = current[idx];
-                        if z == nodata {
-                            continue;
-                        }
+                next.par_chunks_mut(cols)
+                    .enumerate()
+                    .for_each(|(r, out_row)| {
+                        for c in 0..cols {
+                            let idx = r * cols + c;
+                            let z = current[idx];
+                            if z == nodata {
+                                continue;
+                            }
 
-                        let north = if r > 0 { current[(r - 1) * cols + c] } else { nodata };
-                        let south = if r + 1 < rows { current[(r + 1) * cols + c] } else { nodata };
-                        let west = if c > 0 { current[r * cols + (c - 1)] } else { nodata };
-                        let east = if c + 1 < cols { current[r * cols + (c + 1)] } else { nodata };
+                            let north = if r > 0 {
+                                current[(r - 1) * cols + c]
+                            } else {
+                                nodata
+                            };
+                            let south = if r + 1 < rows {
+                                current[(r + 1) * cols + c]
+                            } else {
+                                nodata
+                            };
+                            let west = if c > 0 {
+                                current[r * cols + (c - 1)]
+                            } else {
+                                nodata
+                            };
+                            let east = if c + 1 < cols {
+                                current[r * cols + (c + 1)]
+                            } else {
+                                nodata
+                            };
 
-                        let mut acc = 0.0;
-                        if north != nodata {
-                            let d = north - z;
-                            let c_n = (-(d / kappa).powi(2)).exp();
-                            acc += c_n * d;
-                        }
-                        if south != nodata {
-                            let d = south - z;
-                            let c_s = (-(d / kappa).powi(2)).exp();
-                            acc += c_s * d;
-                        }
-                        if west != nodata {
-                            let d = west - z;
-                            let c_w = (-(d / kappa).powi(2)).exp();
-                            acc += c_w * d;
-                        }
-                        if east != nodata {
-                            let d = east - z;
-                            let c_e = (-(d / kappa).powi(2)).exp();
-                            acc += c_e * d;
-                        }
+                            let mut acc = 0.0;
+                            if north != nodata {
+                                let d = north - z;
+                                let c_n = (-(d / kappa).powi(2)).exp();
+                                acc += c_n * d;
+                            }
+                            if south != nodata {
+                                let d = south - z;
+                                let c_s = (-(d / kappa).powi(2)).exp();
+                                acc += c_s * d;
+                            }
+                            if west != nodata {
+                                let d = west - z;
+                                let c_w = (-(d / kappa).powi(2)).exp();
+                                acc += c_w * d;
+                            }
+                            if east != nodata {
+                                let d = east - z;
+                                let c_e = (-(d / kappa).powi(2)).exp();
+                                acc += c_e * d;
+                            }
 
-                        out_row[c] = z + lambda * acc;
-                    }
-                });
+                            out_row[c] = z + lambda * acc;
+                        }
+                    });
                 current = next;
             }
 
@@ -552,7 +607,13 @@ impl AdvancedFilters {
         Ok(out)
     }
 
-    fn box_mean_from_integral(data: &[f64], rows: usize, cols: usize, radius: usize, nodata: f64) -> Vec<f64> {
+    fn box_mean_from_integral(
+        data: &[f64],
+        rows: usize,
+        cols: usize,
+        radius: usize,
+        nodata: f64,
+    ) -> Vec<f64> {
         let stride = cols + 1;
         let mut integral_sum = vec![0.0f64; (rows + 1) * (cols + 1)];
         let mut integral_count = vec![0u32; (rows + 1) * (cols + 1)];
@@ -575,28 +636,38 @@ impl AdvancedFilters {
         }
 
         let mut out = vec![nodata; rows * cols];
-        out.par_chunks_mut(cols).enumerate().for_each(|(r, out_row)| {
-            for c in 0..cols {
-                let y1 = r.saturating_sub(radius);
-                let y2 = (r + radius).min(rows - 1);
-                let x1 = c.saturating_sub(radius);
-                let x2 = (c + radius).min(cols - 1);
+        out.par_chunks_mut(cols)
+            .enumerate()
+            .for_each(|(r, out_row)| {
+                for c in 0..cols {
+                    let y1 = r.saturating_sub(radius);
+                    let y2 = (r + radius).min(rows - 1);
+                    let x1 = c.saturating_sub(radius);
+                    let x2 = (c + radius).min(cols - 1);
 
-                let a = y1 * stride + x1;
-                let b = y1 * stride + (x2 + 1);
-                let cc = (y2 + 1) * stride + x1;
-                let d = (y2 + 1) * stride + (x2 + 1);
-                let n = (integral_count[d] + integral_count[a] - integral_count[b] - integral_count[cc]) as f64;
-                if n > 0.0 {
-                    let sum = integral_sum[d] + integral_sum[a] - integral_sum[b] - integral_sum[cc];
-                    out_row[c] = sum / n;
+                    let a = y1 * stride + x1;
+                    let b = y1 * stride + (x2 + 1);
+                    let cc = (y2 + 1) * stride + x1;
+                    let d = (y2 + 1) * stride + (x2 + 1);
+                    let n = (integral_count[d] + integral_count[a]
+                        - integral_count[b]
+                        - integral_count[cc]) as f64;
+                    if n > 0.0 {
+                        let sum =
+                            integral_sum[d] + integral_sum[a] - integral_sum[b] - integral_sum[cc];
+                        out_row[c] = sum / n;
+                    }
                 }
-            }
-        });
+            });
         out
     }
 
-    fn run_guided(input: &Raster, packed_rgb: bool, radius: usize, epsilon: f64) -> Result<Raster, ToolError> {
+    fn run_guided(
+        input: &Raster,
+        packed_rgb: bool,
+        radius: usize,
+        epsilon: f64,
+    ) -> Result<Raster, ToolError> {
         let rows = input.rows;
         let cols = input.cols;
         let bands = input.bands;
@@ -845,11 +916,7 @@ impl AdvancedFilters {
         Ok(out)
     }
 
-    fn run_kuwahara(
-        input: &Raster,
-        packed_rgb: bool,
-        radius: usize,
-    ) -> Result<Raster, ToolError> {
+    fn run_kuwahara(input: &Raster, packed_rgb: bool, radius: usize) -> Result<Raster, ToolError> {
         let rows = input.rows;
         let cols = input.cols;
         let bands = input.bands;
@@ -932,7 +999,13 @@ impl AdvancedFilters {
         Ok(out)
     }
 
-    fn local_mean_var(vals: &[f64], rows: usize, cols: usize, radius: usize, nodata: f64) -> (Vec<f64>, Vec<f64>) {
+    fn local_mean_var(
+        vals: &[f64],
+        rows: usize,
+        cols: usize,
+        radius: usize,
+        nodata: f64,
+    ) -> (Vec<f64>, Vec<f64>) {
         let mean = Self::box_mean_from_integral(vals, rows, cols, radius, nodata);
         let sq: Vec<f64> = vals
             .iter()
@@ -1167,47 +1240,49 @@ impl AdvancedFilters {
             }
 
             let mut resp = vec![nodata; rows * cols];
-            resp.par_chunks_mut(cols).enumerate().for_each(|(r, out_row)| {
-                let row = r as isize;
-                for c in 0..cols {
-                    let col = c as isize;
-                    let z0 = vals[r * cols + c];
-                    if z0 == nodata {
-                        continue;
-                    }
-                    let mut best: f64 = 0.0;
-                    for k in 0..orientations {
-                        let theta = (k as f64) * PI / (orientations as f64);
-                        let ct = theta.cos();
-                        let st = theta.sin();
-                        let mut sum = 0.0;
-                        let mut ws = 0.0;
-                        for dy in -radius..=radius {
-                            for dx in -radius..=radius {
-                                let y = row + dy;
-                                let x = col + dx;
-                                if y < 0 || x < 0 || y >= rows as isize || x >= cols as isize {
-                                    continue;
+            resp.par_chunks_mut(cols)
+                .enumerate()
+                .for_each(|(r, out_row)| {
+                    let row = r as isize;
+                    for c in 0..cols {
+                        let col = c as isize;
+                        let z0 = vals[r * cols + c];
+                        if z0 == nodata {
+                            continue;
+                        }
+                        let mut best: f64 = 0.0;
+                        for k in 0..orientations {
+                            let theta = (k as f64) * PI / (orientations as f64);
+                            let ct = theta.cos();
+                            let st = theta.sin();
+                            let mut sum = 0.0;
+                            let mut ws = 0.0;
+                            for dy in -radius..=radius {
+                                for dx in -radius..=radius {
+                                    let y = row + dy;
+                                    let x = col + dx;
+                                    if y < 0 || x < 0 || y >= rows as isize || x >= cols as isize {
+                                        continue;
+                                    }
+                                    let z = vals[y as usize * cols + x as usize];
+                                    if z == nodata {
+                                        continue;
+                                    }
+                                    let xp = (dx as f64) * ct + (dy as f64) * st;
+                                    let yp = -(dx as f64) * st + (dy as f64) * ct;
+                                    let g = (-(xp * xp + yp * yp) / (2.0 * sigma * sigma)).exp();
+                                    let w = g * (2.0 * PI * frequency * xp).cos();
+                                    sum += w * z;
+                                    ws += w.abs();
                                 }
-                                let z = vals[y as usize * cols + x as usize];
-                                if z == nodata {
-                                    continue;
-                                }
-                                let xp = (dx as f64) * ct + (dy as f64) * st;
-                                let yp = -(dx as f64) * st + (dy as f64) * ct;
-                                let g = (-(xp * xp + yp * yp) / (2.0 * sigma * sigma)).exp();
-                                let w = g * (2.0 * PI * frequency * xp).cos();
-                                sum += w * z;
-                                ws += w.abs();
+                            }
+                            if ws > 0.0 {
+                                best = best.max((sum / ws).abs());
                             }
                         }
-                        if ws > 0.0 {
-                            best = best.max((sum / ws).abs());
-                        }
+                        out_row[c] = best;
                     }
-                    out_row[c] = best;
-                }
-            });
+                });
 
             Self::set_band_from_values(input, &mut out, band_idx, &resp, false)?;
         }
@@ -1243,62 +1318,69 @@ impl AdvancedFilters {
             }
 
             let mut vessel = vec![nodata; rows * cols];
-            vessel.par_chunks_mut(cols).enumerate().for_each(|(r, out_row)| {
-                for c0 in 0..cols {
-                    let idx = r * cols + c0;
-                    if vals[idx] == nodata {
-                        continue;
-                    }
-                    let mut best = 0.0;
-                    for &s in scales {
-                        let rad = s.max(1.0).round() as isize;
-                        let mut sx = 0.0;
-                        let mut sy = 0.0;
-                        let mut n = 0.0;
-                        for dy in -rad..=rad {
-                            for dx in -rad..=rad {
-                                let y = r as isize + dy;
-                                let x = c0 as isize + dx;
-                                if y < 0 || x < 0 || y >= rows as isize || x >= cols as isize {
-                                    continue;
+            vessel
+                .par_chunks_mut(cols)
+                .enumerate()
+                .for_each(|(r, out_row)| {
+                    for c0 in 0..cols {
+                        let idx = r * cols + c0;
+                        if vals[idx] == nodata {
+                            continue;
+                        }
+                        let mut best = 0.0;
+                        for &s in scales {
+                            let rad = s.max(1.0).round() as isize;
+                            let mut sx = 0.0;
+                            let mut sy = 0.0;
+                            let mut n = 0.0;
+                            for dy in -rad..=rad {
+                                for dx in -rad..=rad {
+                                    let y = r as isize + dy;
+                                    let x = c0 as isize + dx;
+                                    if y < 0 || x < 0 || y >= rows as isize || x >= cols as isize {
+                                        continue;
+                                    }
+                                    let z = vals[y as usize * cols + x as usize];
+                                    if z == nodata {
+                                        continue;
+                                    }
+                                    sx += z * (dx as f64);
+                                    sy += z * (dy as f64);
+                                    n += 1.0;
                                 }
-                                let z = vals[y as usize * cols + x as usize];
-                                if z == nodata {
-                                    continue;
-                                }
-                                sx += z * (dx as f64);
-                                sy += z * (dy as f64);
-                                n += 1.0;
+                            }
+                            if n <= 0.0 {
+                                continue;
+                            }
+                            let ix = sx / n;
+                            let iy = sy / n;
+                            let ixx = ix * ix;
+                            let iyy = iy * iy;
+                            let ixy = ix * iy;
+
+                            let tr = ixx + iyy;
+                            let det_term = ((ixx - iyy) * (ixx - iyy) + 4.0 * ixy * ixy).sqrt();
+                            let l1 = 0.5 * (tr + det_term);
+                            let l2 = 0.5 * (tr - det_term);
+                            let (lam1, lam2) = if l1.abs() <= l2.abs() {
+                                (l1, l2)
+                            } else {
+                                (l2, l1)
+                            };
+
+                            if lam2 >= 0.0 {
+                                continue;
+                            }
+                            let rb = (lam1 / (lam2 + 1e-12)).powi(2);
+                            let s2 = lam1 * lam1 + lam2 * lam2;
+                            let v = (-rb / beta2).exp() * (1.0 - (-s2 / c2).exp());
+                            if v > best {
+                                best = v;
                             }
                         }
-                        if n <= 0.0 {
-                            continue;
-                        }
-                        let ix = sx / n;
-                        let iy = sy / n;
-                        let ixx = ix * ix;
-                        let iyy = iy * iy;
-                        let ixy = ix * iy;
-
-                        let tr = ixx + iyy;
-                        let det_term = ((ixx - iyy) * (ixx - iyy) + 4.0 * ixy * ixy).sqrt();
-                        let l1 = 0.5 * (tr + det_term);
-                        let l2 = 0.5 * (tr - det_term);
-                        let (lam1, lam2) = if l1.abs() <= l2.abs() { (l1, l2) } else { (l2, l1) };
-
-                        if lam2 >= 0.0 {
-                            continue;
-                        }
-                        let rb = (lam1 / (lam2 + 1e-12)).powi(2);
-                        let s2 = lam1 * lam1 + lam2 * lam2;
-                        let v = (-rb / beta2).exp() * (1.0 - (-s2 / c2).exp());
-                        if v > best {
-                            best = v;
-                        }
+                        out_row[c0] = best;
                     }
-                    out_row[c0] = best;
-                }
-            });
+                });
 
             Self::set_band_from_values(input, &mut out, band_idx, &vessel, false)?;
         }
@@ -1311,7 +1393,11 @@ impl AdvancedFilters {
         packed_rgb: bool,
         window_size: usize,
     ) -> Result<Raster, ToolError> {
-        let ws = if window_size % 2 == 1 { window_size } else { window_size + 1 };
+        let ws = if window_size % 2 == 1 {
+            window_size
+        } else {
+            window_size + 1
+        };
         if ws != 5 {
             return Err(ToolError::Validation(
                 "savitzky_golay_2d_filter currently supports window_size=5 only".to_string(),
@@ -1345,39 +1431,42 @@ impl AdvancedFilters {
             }
 
             let mut filtered = vec![nodata; rows * cols];
-            filtered.par_chunks_mut(cols).enumerate().for_each(|(r, out_row)| {
-                let row = r as isize;
-                for c in 0..cols {
-                    let col = c as isize;
-                    let z0 = vals[r * cols + c];
-                    if z0 == nodata {
-                        continue;
-                    }
-                    let mut sum = 0.0;
-                    let mut wsum = 0.0;
-                    for ky in 0..5 {
-                        for kx in 0..5 {
-                            let y = row + ky as isize - 2;
-                            let x = col + kx as isize - 2;
-                            if y < 0 || x < 0 || y >= rows as isize || x >= cols as isize {
-                                continue;
+            filtered
+                .par_chunks_mut(cols)
+                .enumerate()
+                .for_each(|(r, out_row)| {
+                    let row = r as isize;
+                    for c in 0..cols {
+                        let col = c as isize;
+                        let z0 = vals[r * cols + c];
+                        if z0 == nodata {
+                            continue;
+                        }
+                        let mut sum = 0.0;
+                        let mut wsum = 0.0;
+                        for ky in 0..5 {
+                            for kx in 0..5 {
+                                let y = row + ky as isize - 2;
+                                let x = col + kx as isize - 2;
+                                if y < 0 || x < 0 || y >= rows as isize || x >= cols as isize {
+                                    continue;
+                                }
+                                let z = vals[y as usize * cols + x as usize];
+                                if z == nodata {
+                                    continue;
+                                }
+                                let w = kernel[ky][kx] / norm;
+                                sum += w * z;
+                                wsum += w;
                             }
-                            let z = vals[y as usize * cols + x as usize];
-                            if z == nodata {
-                                continue;
-                            }
-                            let w = kernel[ky][kx] / norm;
-                            sum += w * z;
-                            wsum += w;
+                        }
+                        if wsum.abs() > 1e-12 {
+                            out_row[c] = sum / wsum;
+                        } else {
+                            out_row[c] = z0;
                         }
                     }
-                    if wsum.abs() > 1e-12 {
-                        out_row[c] = sum / wsum;
-                    } else {
-                        out_row[c] = z0;
-                    }
-                }
-            });
+                });
 
             Self::set_band_from_values(input, &mut out, band_idx, &filtered, packed_rgb)?;
         }
@@ -1385,7 +1474,11 @@ impl AdvancedFilters {
         Ok(out)
     }
 
-    fn run_with_op(op: AdvancedOp, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_with_op(
+        op: AdvancedOp,
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
 
@@ -1396,7 +1489,10 @@ impl AdvancedFilters {
 
         let output = match op {
             AdvancedOp::AnisotropicDiffusion => {
-                let iterations = args.get("iterations").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
+                let iterations = args
+                    .get("iterations")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(10) as usize;
                 let kappa = args.get("kappa").and_then(|v| v.as_f64()).unwrap_or(20.0);
                 let lambda = args.get("lambda").and_then(|v| v.as_f64()).unwrap_or(0.2);
                 Self::run_anisotropic(&input, packed_rgb, iterations.max(1), kappa, lambda)?
@@ -1516,7 +1612,10 @@ macro_rules! define_adv_tool {
     };
 }
 
-define_adv_tool!(AnisotropicDiffusionFilterTool, AdvancedOp::AnisotropicDiffusion);
+define_adv_tool!(
+    AnisotropicDiffusionFilterTool,
+    AdvancedOp::AnisotropicDiffusion
+);
 define_adv_tool!(GammaCorrectionTool, AdvancedOp::GammaCorrection);
 define_adv_tool!(GuidedFilterTool, AdvancedOp::Guided);
 define_adv_tool!(WienerFilterTool, AdvancedOp::Wiener);
@@ -1569,7 +1668,13 @@ mod tests {
         let input_path = memory_store::make_raster_memory_path(&id);
         args.insert("input".to_string(), json!(input_path));
         let result = tool.run(args, &make_ctx()).unwrap();
-        let out_path = result.outputs.get("path").unwrap().as_str().unwrap().to_string();
+        let out_path = result
+            .outputs
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         let out_id = memory_store::raster_path_to_id(&out_path).unwrap();
         memory_store::get_raster_by_id(out_id).unwrap()
     }
@@ -1592,7 +1697,11 @@ mod tests {
     fn gamma_unit_input_unchanged() {
         let mut args = ToolArgs::new();
         args.insert("gamma".to_string(), json!(0.5));
-        let out = run_with_memory(&GammaCorrectionTool, &mut args, make_constant_raster(25, 25, 1.0));
+        let out = run_with_memory(
+            &GammaCorrectionTool,
+            &mut args,
+            make_constant_raster(25, 25, 1.0),
+        );
         assert!((out.get(0, 12, 12) - 1.0).abs() < 1e-9);
     }
 
@@ -1601,7 +1710,11 @@ mod tests {
         let mut args = ToolArgs::new();
         args.insert("radius".to_string(), json!(4));
         args.insert("epsilon".to_string(), json!(0.01));
-        let out = run_with_memory(&GuidedFilterTool, &mut args, make_constant_raster(25, 25, 10.0));
+        let out = run_with_memory(
+            &GuidedFilterTool,
+            &mut args,
+            make_constant_raster(25, 25, 10.0),
+        );
         assert!((out.get(0, 12, 12) - 10.0).abs() < 1e-9);
     }
 
@@ -1609,7 +1722,11 @@ mod tests {
     fn wiener_constant_raster_is_unchanged() {
         let mut args = ToolArgs::new();
         args.insert("radius".to_string(), json!(2));
-        let out = run_with_memory(&WienerFilterTool, &mut args, make_constant_raster(25, 25, 10.0));
+        let out = run_with_memory(
+            &WienerFilterTool,
+            &mut args,
+            make_constant_raster(25, 25, 10.0),
+        );
         assert!((out.get(0, 12, 12) - 10.0).abs() < 1e-9);
     }
 
@@ -1631,7 +1748,11 @@ mod tests {
     fn kuwahara_constant_raster_is_unchanged() {
         let mut args = ToolArgs::new();
         args.insert("radius".to_string(), json!(2));
-        let out = run_with_memory(&KuwaharaFilterTool, &mut args, make_constant_raster(25, 25, 10.0));
+        let out = run_with_memory(
+            &KuwaharaFilterTool,
+            &mut args,
+            make_constant_raster(25, 25, 10.0),
+        );
         assert!((out.get(0, 12, 12) - 10.0).abs() < 1e-9);
     }
 
@@ -1640,7 +1761,11 @@ mod tests {
         let mut args = ToolArgs::new();
         args.insert("radius".to_string(), json!(2));
         args.insert("damping_factor".to_string(), json!(2.0));
-        let out = run_with_memory(&FrostFilterTool, &mut args, make_constant_raster(25, 25, 10.0));
+        let out = run_with_memory(
+            &FrostFilterTool,
+            &mut args,
+            make_constant_raster(25, 25, 10.0),
+        );
         assert!((out.get(0, 12, 12) - 10.0).abs() < 1e-9);
     }
 
@@ -1649,7 +1774,11 @@ mod tests {
         let mut args = ToolArgs::new();
         args.insert("radius".to_string(), json!(2));
         args.insert("enl".to_string(), json!(1.0));
-        let out = run_with_memory(&GammaMapFilterTool, &mut args, make_constant_raster(25, 25, 10.0));
+        let out = run_with_memory(
+            &GammaMapFilterTool,
+            &mut args,
+            make_constant_raster(25, 25, 10.0),
+        );
         assert!((out.get(0, 12, 12) - 10.0).abs() < 1e-9);
     }
 
@@ -1658,7 +1787,11 @@ mod tests {
         let mut args = ToolArgs::new();
         args.insert("radius".to_string(), json!(2));
         args.insert("enl".to_string(), json!(1.0));
-        let out = run_with_memory(&KuanFilterTool, &mut args, make_constant_raster(25, 25, 10.0));
+        let out = run_with_memory(
+            &KuanFilterTool,
+            &mut args,
+            make_constant_raster(25, 25, 10.0),
+        );
         assert!((out.get(0, 12, 12) - 10.0).abs() < 1e-9);
     }
 
@@ -1668,7 +1801,11 @@ mod tests {
         args.insert("sigma".to_string(), json!(2.0));
         args.insert("frequency".to_string(), json!(0.2));
         args.insert("orientations".to_string(), json!(6));
-        let out = run_with_memory(&GaborFilterBankTool, &mut args, make_constant_raster(25, 25, 10.0));
+        let out = run_with_memory(
+            &GaborFilterBankTool,
+            &mut args,
+            make_constant_raster(25, 25, 10.0),
+        );
         assert!(out.get(0, 12, 12) >= 0.0);
     }
 
@@ -1678,7 +1815,11 @@ mod tests {
         args.insert("scales".to_string(), json!([1.0, 2.0, 3.0]));
         args.insert("beta".to_string(), json!(0.5));
         args.insert("c".to_string(), json!(15.0));
-        let out = run_with_memory(&FrangiFilterTool, &mut args, make_constant_raster(25, 25, 10.0));
+        let out = run_with_memory(
+            &FrangiFilterTool,
+            &mut args,
+            make_constant_raster(25, 25, 10.0),
+        );
         assert!(out.get(0, 12, 12).abs() < 1e-9);
     }
 

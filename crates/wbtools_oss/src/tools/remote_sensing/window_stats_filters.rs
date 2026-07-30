@@ -4,10 +4,9 @@ use std::sync::Arc;
 use rayon::prelude::*;
 use serde_json::json;
 use wbcore::{
-    parse_optional_output_path, parse_raster_path_arg, LicenseTier, PercentCoalescer,
-    ProgressSink, Tool, ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample,
-    ToolManifest, ToolMetadata, ToolParamDescriptor, ToolParamSpec, ToolRunResult,
-    ToolStability,
+    parse_optional_output_path, parse_raster_path_arg, LicenseTier, PercentCoalescer, ProgressSink,
+    Tool, ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
+    ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
 };
 use wbraster::{Raster, RasterFormat};
 
@@ -57,36 +56,48 @@ impl WindowOp {
 
     fn summary(self) -> &'static str {
         match self {
-            Self::Mean => r#"Computes moving-window mean (average) for each pixel. Fundamental smoothing operation reducing local noise while blurring sharp transitions. Output represents local central tendency. Widely used for preprocessing, noise reduction, and multi-scale analysis.
+            Self::Mean => {
+                r#"Computes moving-window mean (average) for each pixel. Fundamental smoothing operation reducing local noise while blurring sharp transitions. Output represents local central tendency. Widely used for preprocessing, noise reduction, and multi-scale analysis.
 
 Mean filtering is the most common low-pass smoothing operation. Highly sensitive to outliers (extreme values can distort results), making median filter preferable for noisy data. Computationally efficient. Filter size controls smoothing extent: small (3×3) preserves detail, large (31×31+) creates heavily smoothed surface. Often applied iteratively or at multiple scales for multi-resolution analysis.
 
-Applications: (1) Basic noise reduction, (2) Preprocessing before feature detection (smooths false positives), (3) Multi-scale analysis (apply at 3×3, 11×11, 31×31), (4) Temporal smoothing (combining scenes), (5) Baseline for other statistical operations. Compare with median (non-linear, preserves edges) for improved edge preservation."#,
-            Self::Total => r#"Computes moving-window sum (total) of pixel values in neighborhood. Integrates local signal strength. Applications depend on data semantics: for counts/densities, total reveals local density patterns; for precipitation, total reveals basin-scale accumulation; for reflectance, total is proportional to local target size.
+Applications: (1) Basic noise reduction, (2) Preprocessing before feature detection (smooths false positives), (3) Multi-scale analysis (apply at 3×3, 11×11, 31×31), (4) Temporal smoothing (combining scenes), (5) Baseline for other statistical operations. Compare with median (non-linear, preserves edges) for improved edge preservation."#
+            }
+            Self::Total => {
+                r#"Computes moving-window sum (total) of pixel values in neighborhood. Integrates local signal strength. Applications depend on data semantics: for counts/densities, total reveals local density patterns; for precipitation, total reveals basin-scale accumulation; for reflectance, total is proportional to local target size.
 
 Total filtering has different interpretations by domain. In count/population data, total reveals clustering and hotspots. In elevation data, total is rarely used (sum has no geomorphological meaning). In spectral analysis, total can reveal multi-band signal strength. Often used as intermediate step (e.g., divide by neighborhood cell count to compute mean, or compare with neighboring totals for local heterogeneity detection).
 
-Applications: (1) Hotspot detection in count data (high total = clusters), (2) Basin/watershed accumulation models, (3) Integration of distributed measurements, (4) Intermediate calculation (total/N = mean), (5) Signal strength aggregation in multi-sensor mosaics."#,
-            Self::StdDev => r#"Computes moving-window standard deviation, measuring local value variation/dispersion. High stdev = diverse values (rough/heterogeneous), low stdev = uniform values (smooth/homogeneous). Reveals texture, roughness, and variability patterns. Critical for uncertainty quantification and quality assessment.
+Applications: (1) Hotspot detection in count data (high total = clusters), (2) Basin/watershed accumulation models, (3) Integration of distributed measurements, (4) Intermediate calculation (total/N = mean), (5) Signal strength aggregation in multi-sensor mosaics."#
+            }
+            Self::StdDev => {
+                r#"Computes moving-window standard deviation, measuring local value variation/dispersion. High stdev = diverse values (rough/heterogeneous), low stdev = uniform values (smooth/homogeneous). Reveals texture, roughness, and variability patterns. Critical for uncertainty quantification and quality assessment.
 
 Standard deviation is more robust than range for characterizing local variation (not biased by single outlier). Enables classification of areas by texture: steep slopes (high stdev), gentle slopes (low stdev); forests (high stdev), grasslands (low stdev). Often normalized (coefficient of variation = stdev/mean) to enable comparison across data with different value ranges. Can be computed from histogram (variance = mean_of_squares - square_of_mean).
 
-Applications: (1) Texture mapping (roughness/heterogeneity analysis), (2) Uncertainty quantification in noisy data, (3) Quality assessment (uniform background = low stdev, feature-rich areas = high), (4) Classification confidence (high stdev = mixed/uncertain classes), (5) Multi-band heterogeneity (stack stdevs from each band). Typical workflow: compute stdev at multiple scales→compare pattern changes across scales→identify characteristic scales."#,
-            Self::Min => r#"Computes moving-window minimum value, revealing local lows and troughs. Erosion operator in morphological image processing. Useful for detecting valley floors, depressions, and minimum-altitude features. Sensitive to single outlier (one low value in window produces low output).
+Applications: (1) Texture mapping (roughness/heterogeneity analysis), (2) Uncertainty quantification in noisy data, (3) Quality assessment (uniform background = low stdev, feature-rich areas = high), (4) Classification confidence (high stdev = mixed/uncertain classes), (5) Multi-band heterogeneity (stack stdevs from each band). Typical workflow: compute stdev at multiple scales→compare pattern changes across scales→identify characteristic scales."#
+            }
+            Self::Min => {
+                r#"Computes moving-window minimum value, revealing local lows and troughs. Erosion operator in morphological image processing. Useful for detecting valley floors, depressions, and minimum-altitude features. Sensitive to single outlier (one low value in window produces low output).
 
 Minimum filter is the morphological "erosion" operator—shrinks light regions and expands dark regions. When applied repeatedly (multi-pass erosion), creates smoothed valleys and isolated features disappear. Combined with maximum filter (dilation) enables opening (erosion then dilation) and closing (dilation then erosion) operations. Often used in multi-scale decomposition: compare min at 3×3, 11×11, 31×31 to identify feature scales.
 
-Applications: (1) Morphological erosion for size-based filtering, (2) Opening via erosion→dilation to remove small noise objects, (3) Depression/valley identification in terrain, (4) Local floor level in bathymetry/DEM, (5) Multi-scale feature analysis (compare erosion across scales). Typical workflow: minimum→comparison with maximum→opening or closing depending on feature type."#,
-            Self::Max => r#"Computes moving-window maximum value, revealing local peaks and ridges. Dilation operator in morphological image processing. Useful for detecting peaks, ridgelines, and maximum-amplitude features. Sensitive to single outlier (one high value in window produces high output).
+Applications: (1) Morphological erosion for size-based filtering, (2) Opening via erosion→dilation to remove small noise objects, (3) Depression/valley identification in terrain, (4) Local floor level in bathymetry/DEM, (5) Multi-scale feature analysis (compare erosion across scales). Typical workflow: minimum→comparison with maximum→opening or closing depending on feature type."#
+            }
+            Self::Max => {
+                r#"Computes moving-window maximum value, revealing local peaks and ridges. Dilation operator in morphological image processing. Useful for detecting peaks, ridgelines, and maximum-amplitude features. Sensitive to single outlier (one high value in window produces high output).
 
 Maximum filter is the morphological "dilation" operator—expands light regions and shrinks dark regions. When applied repeatedly (multi-pass dilation), creates smoothed peaks and isolated features grow to fill their neighborhoods. Combined with minimum filter enables closing (dilation then erosion) and opening (erosion then dilation). Essential for morphological feature detection and multi-scale analysis.
 
-Applications: (1) Morphological dilation for size-based filtering, (2) Closing via dilation→erosion to fill small holes, (3) Peak/ridge identification in terrain and imagery, (4) Local ceiling level in bathymetry/DEM, (5) Multi-scale feature analysis (compare dilation across scales). Typical workflow: maximum→comparison with minimum→closing or opening depending on feature type."#,
-            Self::Range => r#"Computes moving-window range (maximum - minimum), revealing local value spread independent of mean level. Simple heterogeneity metric: high range = diverse values, low range = uniform values. Simpler than standard deviation but equally informative for many applications, and more robust to distribution shape.
+Applications: (1) Morphological dilation for size-based filtering, (2) Closing via dilation→erosion to fill small holes, (3) Peak/ridge identification in terrain and imagery, (4) Local ceiling level in bathymetry/DEM, (5) Multi-scale feature analysis (compare dilation across scales). Typical workflow: maximum→comparison with minimum→closing or opening depending on feature type."#
+            }
+            Self::Range => {
+                r#"Computes moving-window range (maximum - minimum), revealing local value spread independent of mean level. Simple heterogeneity metric: high range = diverse values, low range = uniform values. Simpler than standard deviation but equally informative for many applications, and more robust to distribution shape.
 
 Range is computationally efficient (requires only two comparisons). Particularly useful for detecting transitions/boundaries where range spikes indicate contrast zones. Less sensitive to distribution shape than stdev (stdev emphasizes outliers, range only uses extremes). Normalized range (range/mean) enables cross-band comparison like coefficient of variation enables cross-scale comparison.
 
-Applications: (1) Texture/contrast mapping (easy interpretation: high range = rough/contrasted), (2) Boundary detection via range peaks, (3) Computational efficiency alternative to stdev, (4) Quality control (uniform background low range, feature areas high range), (5) Roughness/variability in generic data. Typical workflow: compute range→threshold to identify transition zones→vectorize high-range boundaries."#,
+Applications: (1) Texture/contrast mapping (easy interpretation: high range = rough/contrasted), (2) Boundary detection via range peaks, (3) Computational efficiency alternative to stdev, (4) Quality control (uniform background low range, feature areas high range), (5) Roughness/variability in generic data. Typical workflow: compute range→threshold to identify transition zones→vectorize high-range boundaries."#
+            }
         }
     }
 
@@ -148,7 +159,9 @@ impl MeanFilterTool {
     fn load_raster(path: &str) -> Result<Arc<Raster>, ToolError> {
         if memory_store::raster_is_memory_path(path) {
             let id = memory_store::raster_path_to_id(path).ok_or_else(|| {
-                ToolError::Validation("parameter 'input' has malformed in-memory raster path".to_string())
+                ToolError::Validation(
+                    "parameter 'input' has malformed in-memory raster path".to_string(),
+                )
             })?;
             return memory_store::get_raster_arc_by_id(id).ok_or_else(|| {
                 ToolError::Validation(format!(
@@ -246,7 +259,10 @@ impl MeanFilterTool {
         }
     }
 
-    fn write_or_store_output(output: Raster, output_path: Option<std::path::PathBuf>) -> Result<String, ToolError> {
+    fn write_or_store_output(
+        output: Raster,
+        output_path: Option<std::path::PathBuf>,
+    ) -> Result<String, ToolError> {
         if let Some(output_path) = output_path {
             if let Some(parent) = output_path.parent() {
                 if !parent.as_os_str().is_empty() {
@@ -338,21 +354,31 @@ impl MeanFilterTool {
                             let cidx = (y2 + 1) * stride + x1;
                             let d = (y2 + 1) * stride + (x2 + 1);
 
-                            let n = (integral_count[d] + integral_count[a] - integral_count[b] - integral_count[cidx]) as f64;
+                            let n = (integral_count[d] + integral_count[a]
+                                - integral_count[b]
+                                - integral_count[cidx]) as f64;
                             if n <= 0.0 {
                                 row_out[c] = 0.0;
                                 continue;
                             }
 
-                            let sum = integral_sum[d] + integral_sum[a] - integral_sum[b] - integral_sum[cidx];
+                            let sum = integral_sum[d] + integral_sum[a]
+                                - integral_sum[b]
+                                - integral_sum[cidx];
 
                             row_out[c] = match op {
                                 WindowOp::Total => sum,
                                 WindowOp::Mean => sum / n,
                                 WindowOp::StdDev => {
-                                    let sum_sq = integral_sum_sq[d] + integral_sum_sq[a] - integral_sum_sq[b] - integral_sum_sq[cidx];
+                                    let sum_sq = integral_sum_sq[d] + integral_sum_sq[a]
+                                        - integral_sum_sq[b]
+                                        - integral_sum_sq[cidx];
                                     let variance = (sum_sq - (sum * sum) / n) / n;
-                                    if variance > 0.0 { variance.sqrt() } else { 0.0 }
+                                    if variance > 0.0 {
+                                        variance.sqrt()
+                                    } else {
+                                        0.0
+                                    }
                                 }
                                 _ => nodata,
                             };
@@ -362,11 +388,12 @@ impl MeanFilterTool {
                     .collect();
 
                 for (r, row) in row_data {
-                    output
-                        .set_row_slice(band, r as isize, &row)
-                        .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                    output.set_row_slice(band, r as isize, &row).map_err(|e| {
+                        ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                    })?;
                     *done_rows += 1;
-                    compute_progress.emit_unit_fraction(progress, *done_rows as f64 / total_rows as f64);
+                    compute_progress
+                        .emit_unit_fraction(progress, *done_rows as f64 / total_rows as f64);
                 }
 
                 row_start = row_end;
@@ -414,7 +441,11 @@ impl MeanFilterTool {
 
             // Inline nodata test used in the hot path (avoids is_nodata() call overhead).
             let is_nd = |z: f64| -> bool {
-                if nodata_is_nan { z.is_nan() } else { z == nodata }
+                if nodata_is_nan {
+                    z.is_nan()
+                } else {
+                    z == nodata
+                }
             };
 
             // Clamp a column index to [0, cols) for border handling.
@@ -428,39 +459,49 @@ impl MeanFilterTool {
                 .enumerate()
                 .for_each(|(r, row_out)| {
                     let r_start = ((r as isize) - half_y).max(0) as usize;
-                    let r_end   = ((r as isize) + half_y).min(rows_isize - 1) as usize;
+                    let r_end = ((r as isize) + half_y).min(rows_isize - 1) as usize;
 
                     // Compute min (and optionally max) for a single column cx over
                     // the clamped vertical window [r_start..=r_end].
                     // Returns INFINITY / NEG_INFINITY for OOB columns (no valid data).
                     let col_min = |cx: isize| -> f64 {
-                        if cx < 0 || cx >= cols_isize { return f64::INFINITY; }
+                        if cx < 0 || cx >= cols_isize {
+                            return f64::INFINITY;
+                        }
                         let cx = cx as usize;
                         let mut mn = f64::INFINITY;
                         let mut idx = r_start * cols + cx;
                         for _ in r_start..=r_end {
                             // idx is guaranteed in-bounds by clamped r_start/r_end and cx checks.
                             let z = unsafe { *band_buf.get_unchecked(idx) };
-                            if !is_nd(z) && z < mn { mn = z; }
+                            if !is_nd(z) && z < mn {
+                                mn = z;
+                            }
                             idx += cols;
                         }
                         mn
                     };
                     let col_max = |cx: isize| -> f64 {
-                        if cx < 0 || cx >= cols_isize { return f64::NEG_INFINITY; }
+                        if cx < 0 || cx >= cols_isize {
+                            return f64::NEG_INFINITY;
+                        }
                         let cx = cx as usize;
                         let mut mx = f64::NEG_INFINITY;
                         let mut idx = r_start * cols + cx;
                         for _ in r_start..=r_end {
                             // idx is guaranteed in-bounds by clamped r_start/r_end and cx checks.
                             let z = unsafe { *band_buf.get_unchecked(idx) };
-                            if !is_nd(z) && z > mx { mx = z; }
+                            if !is_nd(z) && z > mx {
+                                mx = z;
+                            }
                             idx += cols;
                         }
                         mx
                     };
                     let col_range = |cx: isize| -> (f64, f64) {
-                        if cx < 0 || cx >= cols_isize { return (f64::INFINITY, f64::NEG_INFINITY); }
+                        if cx < 0 || cx >= cols_isize {
+                            return (f64::INFINITY, f64::NEG_INFINITY);
+                        }
                         let cx = cx as usize;
                         let mut mn = f64::INFINITY;
                         let mut mx = f64::NEG_INFINITY;
@@ -469,8 +510,12 @@ impl MeanFilterTool {
                             // idx is guaranteed in-bounds by clamped r_start/r_end and cx checks.
                             let z = unsafe { *band_buf.get_unchecked(idx) };
                             if !is_nd(z) {
-                                if z < mn { mn = z; }
-                                if z > mx { mx = z; }
+                                if z < mn {
+                                    mn = z;
+                                }
+                                if z > mx {
+                                    mx = z;
+                                }
                             }
                             idx += cols;
                         }
@@ -492,11 +537,19 @@ impl MeanFilterTool {
                                     filter_mins[head] = col_min(c as isize + half_x);
                                     head = (head + 1) % filter_x;
                                 }
-                                if is_nd(band_buf[r * cols + c]) { continue; }
+                                if is_nd(band_buf[r * cols + c]) {
+                                    continue;
+                                }
 
                                 let mut min_val = f64::INFINITY;
-                                for v in &filter_mins { if *v < min_val { min_val = *v; } }
-                                if min_val < f64::INFINITY { row_out[c] = min_val; }
+                                for v in &filter_mins {
+                                    if *v < min_val {
+                                        min_val = *v;
+                                    }
+                                }
+                                if min_val < f64::INFINITY {
+                                    row_out[c] = min_val;
+                                }
                             }
                         }
                         WindowOp::Max => {
@@ -511,11 +564,19 @@ impl MeanFilterTool {
                                     filter_maxs[head] = col_max(c as isize + half_x);
                                     head = (head + 1) % filter_x;
                                 }
-                                if is_nd(band_buf[r * cols + c]) { continue; }
+                                if is_nd(band_buf[r * cols + c]) {
+                                    continue;
+                                }
 
                                 let mut max_val = f64::NEG_INFINITY;
-                                for v in &filter_maxs { if *v > max_val { max_val = *v; } }
-                                if max_val > f64::NEG_INFINITY { row_out[c] = max_val; }
+                                for v in &filter_maxs {
+                                    if *v > max_val {
+                                        max_val = *v;
+                                    }
+                                }
+                                if max_val > f64::NEG_INFINITY {
+                                    row_out[c] = max_val;
+                                }
                             }
                         }
                         WindowOp::Range => {
@@ -535,13 +596,19 @@ impl MeanFilterTool {
                                     filter_maxs[head] = mx;
                                     head = (head + 1) % filter_x;
                                 }
-                                if is_nd(band_buf[r * cols + c]) { continue; }
+                                if is_nd(band_buf[r * cols + c]) {
+                                    continue;
+                                }
 
                                 let mut min_val = f64::INFINITY;
                                 let mut max_val = f64::NEG_INFINITY;
                                 for i in 0..filter_x {
-                                    if filter_mins[i] < min_val { min_val = filter_mins[i]; }
-                                    if filter_maxs[i] > max_val { max_val = filter_maxs[i]; }
+                                    if filter_mins[i] < min_val {
+                                        min_val = filter_mins[i];
+                                    }
+                                    if filter_maxs[i] > max_val {
+                                        max_val = filter_maxs[i];
+                                    }
                                 }
                                 if min_val < f64::INFINITY && max_val > f64::NEG_INFINITY {
                                     row_out[c] = max_val - min_val;
@@ -555,16 +622,23 @@ impl MeanFilterTool {
             for r in 0..rows {
                 output
                     .set_row_slice(band, r as isize, &out_buf[r * cols..(r + 1) * cols])
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                    })?;
                 *done_rows += 1;
-                compute_progress.emit_unit_fraction(progress, *done_rows as f64 / total_rows as f64);
+                compute_progress
+                    .emit_unit_fraction(progress, *done_rows as f64 / total_rows as f64);
             }
         }
 
         Ok(())
     }
 
-    fn run_with_op(op: WindowOp, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_with_op(
+        op: WindowOp,
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let (filter_x, filter_y) = Self::parse_window_sizes(args);
@@ -716,7 +790,13 @@ mod tests {
         let input_path = memory_store::make_raster_memory_path(&id);
         args.insert("input".to_string(), json!(input_path));
         let result = tool.run(args, &make_ctx()).unwrap();
-        let out_path = result.outputs.get("path").unwrap().as_str().unwrap().to_string();
+        let out_path = result
+            .outputs
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         let out_id = memory_store::raster_path_to_id(&out_path).unwrap();
         memory_store::get_raster_by_id(out_id).unwrap()
     }
@@ -726,7 +806,11 @@ mod tests {
         let mut args = ToolArgs::new();
         args.insert("filter_size_x".to_string(), json!(5));
         args.insert("filter_size_y".to_string(), json!(5));
-        let out = run_with_memory(&MeanFilterTool, &mut args, make_constant_raster(25, 25, 10.0));
+        let out = run_with_memory(
+            &MeanFilterTool,
+            &mut args,
+            make_constant_raster(25, 25, 10.0),
+        );
         for row in 0..25isize {
             for col in 0..25isize {
                 assert!((out.get(0, row, col) - 10.0).abs() < 1e-9);
@@ -740,9 +824,21 @@ mod tests {
         args.insert("filter_size_x".to_string(), json!(7));
         args.insert("filter_size_y".to_string(), json!(7));
 
-        let min_out = run_with_memory(&MinimumFilterTool, &mut args.clone(), make_constant_raster(21, 21, 3.0));
-        let max_out = run_with_memory(&MaximumFilterTool, &mut args.clone(), make_constant_raster(21, 21, 3.0));
-        let rng_out = run_with_memory(&RangeFilterTool, &mut args, make_constant_raster(21, 21, 3.0));
+        let min_out = run_with_memory(
+            &MinimumFilterTool,
+            &mut args.clone(),
+            make_constant_raster(21, 21, 3.0),
+        );
+        let max_out = run_with_memory(
+            &MaximumFilterTool,
+            &mut args.clone(),
+            make_constant_raster(21, 21, 3.0),
+        );
+        let rng_out = run_with_memory(
+            &RangeFilterTool,
+            &mut args,
+            make_constant_raster(21, 21, 3.0),
+        );
 
         for row in 0..21isize {
             for col in 0..21isize {
@@ -758,7 +854,11 @@ mod tests {
         let mut args = ToolArgs::new();
         args.insert("filter_size_x".to_string(), json!(9));
         args.insert("filter_size_y".to_string(), json!(9));
-        let out = run_with_memory(&StandardDeviationFilterTool, &mut args, make_constant_raster(30, 30, 42.0));
+        let out = run_with_memory(
+            &StandardDeviationFilterTool,
+            &mut args,
+            make_constant_raster(30, 30, 42.0),
+        );
         for row in 0..30isize {
             for col in 0..30isize {
                 assert!(out.get(0, row, col).abs() < 1e-9);
@@ -771,7 +871,11 @@ mod tests {
         let mut args = ToolArgs::new();
         args.insert("filter_size_x".to_string(), json!(3));
         args.insert("filter_size_y".to_string(), json!(3));
-        let out = run_with_memory(&TotalFilterTool, &mut args, make_constant_raster(10, 10, 2.0));
+        let out = run_with_memory(
+            &TotalFilterTool,
+            &mut args,
+            make_constant_raster(10, 10, 2.0),
+        );
         assert!((out.get(0, 5, 5) - 18.0).abs() < 1e-9);
         assert!((out.get(0, 0, 0) - 8.0).abs() < 1e-9);
     }
@@ -800,13 +904,19 @@ mod tests {
 
         let percents = progress.percents();
         assert!(!percents.is_empty(), "expected progress events");
-        assert!(percents.len() <= 101, "progress events should be bounded to percent buckets");
+        assert!(
+            percents.len() <= 101,
+            "progress events should be bounded to percent buckets"
+        );
 
         for w in percents.windows(2) {
             assert!(w[1] >= w[0], "progress should be monotonic non-decreasing");
         }
 
         let final_pct = *percents.last().unwrap();
-        assert!((final_pct - 1.0).abs() < 1e-9, "final progress should be 100%");
+        assert!(
+            (final_pct - 1.0).abs() < 1e-9,
+            "final progress should be 100%"
+        );
     }
 }

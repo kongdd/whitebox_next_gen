@@ -1,7 +1,5 @@
-use super::non_filter_tools::{
-    GeneralizeClassifiedRasterTool, ImageSegmentationTool,
-};
 use super::super::data_tools::{RasterToVectorPolygonsTool, VectorPolygonsToRasterTool};
+use super::non_filter_tools::{GeneralizeClassifiedRasterTool, ImageSegmentationTool};
 use rayon::prelude::*;
 use smartcore::ensemble::random_forest_classifier::{
     RandomForestClassifier, RandomForestClassifierParameters,
@@ -19,9 +17,11 @@ fn parse_raster_list_arg(args: &ToolArgs, name: &str) -> Result<Vec<String>, Too
     let value = args
         .get(name)
         .ok_or_else(|| ToolError::Validation(format!("missing required parameter '{name}'")))?;
-    let arr = value
-        .as_array()
-        .ok_or_else(|| ToolError::Validation(format!("parameter '{name}' must be an array of raster paths")))?;
+    let arr = value.as_array().ok_or_else(|| {
+        ToolError::Validation(format!(
+            "parameter '{name}' must be an array of raster paths"
+        ))
+    })?;
     let mut out = Vec::with_capacity(arr.len());
     for item in arr {
         let Some(s) = item.as_str() else {
@@ -94,7 +94,9 @@ fn parse_simple_csv(path: &str) -> Result<(Vec<String>, Vec<Vec<String>>), ToolE
     let header_line = lines
         .next()
         .ok_or_else(|| ToolError::Validation(format!("CSV '{path}' is empty")))
-        .and_then(|l| l.map_err(|e| ToolError::Execution(format!("failed reading CSV header: {e}"))))?;
+        .and_then(|l| {
+            l.map_err(|e| ToolError::Execution(format!("failed reading CSV header: {e}")))
+        })?;
 
     let headers: Vec<String> = header_line
         .split(',')
@@ -248,7 +250,10 @@ impl Tool for SegmentSlicSuperpixelsTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), serde_json::json!(["band1.tif", "band2.tif", "band3.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            serde_json::json!(["band1.tif", "band2.tif", "band3.tif"]),
+        );
         defaults.insert("auto_reproject".to_string(), serde_json::json!(true));
         defaults.insert("auto_reproject_method".to_string(), serde_json::json!(""));
         defaults.insert("region_size".to_string(), serde_json::json!(20));
@@ -272,10 +277,14 @@ impl Tool for SegmentSlicSuperpixelsTool {
             defaults,
             examples: vec![ToolExample {
                 name: "segment_slic_baseline".to_string(),
-                description: "Generate compact open-core baseline segments for OBIA workflows.".to_string(),
+                description: "Generate compact open-core baseline segments for OBIA workflows."
+                    .to_string(),
                 args: {
                     let mut a = ToolArgs::new();
-                    a.insert("inputs".to_string(), serde_json::json!(["red.tif", "green.tif", "nir.tif"]));
+                    a.insert(
+                        "inputs".to_string(),
+                        serde_json::json!(["red.tif", "green.tif", "nir.tif"]),
+                    );
                     a.insert("region_size".to_string(), serde_json::json!(18));
                     a.insert("compactness".to_string(), serde_json::json!(12.0));
                     a.insert("output".to_string(), serde_json::json!("segments_slic.tif"));
@@ -311,14 +320,20 @@ impl Tool for SegmentSlicSuperpixelsTool {
             .get("auto_reproject")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true);
-        delegated.insert("auto_reproject".to_string(), serde_json::json!(auto_reproject));
+        delegated.insert(
+            "auto_reproject".to_string(),
+            serde_json::json!(auto_reproject),
+        );
         if let Some(method) = args
             .get("auto_reproject_method")
             .and_then(serde_json::Value::as_str)
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            delegated.insert("auto_reproject_method".to_string(), serde_json::json!(method));
+            delegated.insert(
+                "auto_reproject_method".to_string(),
+                serde_json::json!(method),
+            );
         }
         let threshold = (0.20 + compactness / 50.0).clamp(0.2, 2.0);
         delegated.insert("threshold".to_string(), serde_json::json!(threshold));
@@ -381,7 +396,10 @@ impl Tool for SegmentGraphFelzenszwalbTool {
                 .collect(),
             defaults: {
                 let mut d = ToolArgs::new();
-                d.insert("inputs".to_string(), serde_json::json!(["band1.tif", "band2.tif", "band3.tif"]));
+                d.insert(
+                    "inputs".to_string(),
+                    serde_json::json!(["band1.tif", "band2.tif", "band3.tif"]),
+                );
                 d.insert("auto_reproject".to_string(), serde_json::json!(true));
                 d.insert("auto_reproject_method".to_string(), serde_json::json!(""));
                 d.insert("k".to_string(), serde_json::json!(500.0));
@@ -394,10 +412,16 @@ impl Tool for SegmentGraphFelzenszwalbTool {
                 description: "Generate graph-style OBIA baseline segments.".to_string(),
                 args: {
                     let mut a = ToolArgs::new();
-                    a.insert("inputs".to_string(), serde_json::json!(["red.tif", "green.tif", "nir.tif"]));
+                    a.insert(
+                        "inputs".to_string(),
+                        serde_json::json!(["red.tif", "green.tif", "nir.tif"]),
+                    );
                     a.insert("k".to_string(), serde_json::json!(350.0));
                     a.insert("min_area".to_string(), serde_json::json!(16));
-                    a.insert("output".to_string(), serde_json::json!("segments_graph.tif"));
+                    a.insert(
+                        "output".to_string(),
+                        serde_json::json!("segments_graph.tif"),
+                    );
                     a
                 },
             }],
@@ -428,14 +452,20 @@ impl Tool for SegmentGraphFelzenszwalbTool {
             .get("auto_reproject")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true);
-        delegated.insert("auto_reproject".to_string(), serde_json::json!(auto_reproject));
+        delegated.insert(
+            "auto_reproject".to_string(),
+            serde_json::json!(auto_reproject),
+        );
         if let Some(method) = args
             .get("auto_reproject_method")
             .and_then(serde_json::Value::as_str)
             .map(str::trim)
             .filter(|s| !s.is_empty())
         {
-            delegated.insert("auto_reproject_method".to_string(), serde_json::json!(method));
+            delegated.insert(
+                "auto_reproject_method".to_string(),
+                serde_json::json!(method),
+            );
         }
 
         // Approximate graph-scale behavior via threshold shaping over existing
@@ -463,10 +493,26 @@ impl Tool for SegmentsMergeSmallRegionsTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "segments", description: "Input segment-label raster.", required: true },
-                ToolParamSpec { name: "min_size", description: "Minimum segment size in cells (default 5).", required: false },
-                ToolParamSpec { name: "method", description: "Merge method: longest, largest, nearest (default longest).", required: false },
-                ToolParamSpec { name: "output", description: "Optional output raster path.", required: false },
+                ToolParamSpec {
+                    name: "segments",
+                    description: "Input segment-label raster.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "min_size",
+                    description: "Minimum segment size in cells (default 5).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "method",
+                    description: "Merge method: longest, largest, nearest (default longest).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Optional output raster path.",
+                    required: false,
+                },
             ],
         }
     }
@@ -497,13 +543,17 @@ impl Tool for SegmentsMergeSmallRegionsTool {
             },
             examples: vec![ToolExample {
                 name: "merge_small_segments".to_string(),
-                description: "Remove tiny segment islands while preserving larger boundaries.".to_string(),
+                description: "Remove tiny segment islands while preserving larger boundaries."
+                    .to_string(),
                 args: {
                     let mut a = ToolArgs::new();
                     a.insert("segments".to_string(), serde_json::json!("segments.tif"));
                     a.insert("min_size".to_string(), serde_json::json!(12));
                     a.insert("method".to_string(), serde_json::json!("longest"));
-                    a.insert("output".to_string(), serde_json::json!("segments_clean.tif"));
+                    a.insert(
+                        "output".to_string(),
+                        serde_json::json!("segments_clean.tif"),
+                    );
                     a
                 },
             }],
@@ -535,11 +585,10 @@ impl Tool for SegmentsMergeSmallRegionsTool {
         );
         delegated.insert(
             "method".to_string(),
-            serde_json::json!(
-                args.get("method")
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("longest")
-            ),
+            serde_json::json!(args
+                .get("method")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("longest")),
         );
         if let Some(output) = parse_optional_path_arg(args, "output") {
             delegated.insert("output".to_string(), serde_json::json!(output));
@@ -560,9 +609,21 @@ impl Tool for ObjectFeaturesSpectralBasicTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "segments", description: "Input segment-label raster.", required: true },
-                ToolParamSpec { name: "inputs", description: "Array of single-band input rasters used for spectral features.", required: true },
-                ToolParamSpec { name: "output", description: "Output CSV path.", required: true },
+                ToolParamSpec {
+                    name: "segments",
+                    description: "Input segment-label raster.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "inputs",
+                    description: "Array of single-band input rasters used for spectral features.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output CSV path.",
+                    required: true,
+                },
             ],
         }
     }
@@ -587,17 +648,30 @@ impl Tool for ObjectFeaturesSpectralBasicTool {
             defaults: {
                 let mut d = ToolArgs::new();
                 d.insert("segments".to_string(), serde_json::json!("segments.tif"));
-                d.insert("inputs".to_string(), serde_json::json!(["red.tif", "green.tif", "nir.tif"]));
+                d.insert(
+                    "inputs".to_string(),
+                    serde_json::json!(["red.tif", "green.tif", "nir.tif"]),
+                );
                 d
             },
             examples: vec![ToolExample {
                 name: "spectral_features".to_string(),
-                description: "Extract basic spectral features for object classification.".to_string(),
+                description: "Extract basic spectral features for object classification."
+                    .to_string(),
                 args: {
                     let mut a = ToolArgs::new();
-                    a.insert("segments".to_string(), serde_json::json!("segments_clean.tif"));
-                    a.insert("inputs".to_string(), serde_json::json!(["red.tif", "green.tif", "nir.tif"]));
-                    a.insert("output".to_string(), serde_json::json!("object_features_spectral.csv"));
+                    a.insert(
+                        "segments".to_string(),
+                        serde_json::json!("segments_clean.tif"),
+                    );
+                    a.insert(
+                        "inputs".to_string(),
+                        serde_json::json!(["red.tif", "green.tif", "nir.tif"]),
+                    );
+                    a.insert(
+                        "output".to_string(),
+                        serde_json::json!("object_features_spectral.csv"),
+                    );
                     a
                 },
             }],
@@ -633,8 +707,9 @@ impl Tool for ObjectFeaturesSpectralBasicTool {
 
         let mut rasters = Vec::with_capacity(input_paths.len());
         for path in &input_paths {
-            let r = Raster::read(path)
-                .map_err(|e| ToolError::Execution(format!("failed reading input raster '{path}': {e}")))?;
+            let r = Raster::read(path).map_err(|e| {
+                ToolError::Execution(format!("failed reading input raster '{path}': {e}"))
+            })?;
             if r.rows != segments.rows || r.cols != segments.cols {
                 return Err(ToolError::Validation(format!(
                     "input raster '{path}' dimensions do not match segments raster"
@@ -733,8 +808,16 @@ impl Tool for ObjectFeaturesShapeBasicTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "segments", description: "Input segment-label raster.", required: true },
-                ToolParamSpec { name: "output", description: "Output CSV path.", required: true },
+                ToolParamSpec {
+                    name: "segments",
+                    description: "Input segment-label raster.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output CSV path.",
+                    required: true,
+                },
             ],
         }
     }
@@ -766,8 +849,14 @@ impl Tool for ObjectFeaturesShapeBasicTool {
                 description: "Extract area/perimeter/compactness for OBIA segments.".to_string(),
                 args: {
                     let mut a = ToolArgs::new();
-                    a.insert("segments".to_string(), serde_json::json!("segments_clean.tif"));
-                    a.insert("output".to_string(), serde_json::json!("object_features_shape.csv"));
+                    a.insert(
+                        "segments".to_string(),
+                        serde_json::json!("segments_clean.tif"),
+                    );
+                    a.insert(
+                        "output".to_string(),
+                        serde_json::json!("object_features_shape.csv"),
+                    );
                     a
                 },
             }],
@@ -893,10 +982,26 @@ impl Tool for ObjectFeaturesTextureGlcmBasicTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "segments", description: "Input segment-label raster.", required: true },
-                ToolParamSpec { name: "input", description: "Single-band intensity raster for texture analysis.", required: true },
-                ToolParamSpec { name: "levels", description: "Quantization levels for GLCM (default 16).", required: false },
-                ToolParamSpec { name: "output", description: "Output CSV path.", required: true },
+                ToolParamSpec {
+                    name: "segments",
+                    description: "Input segment-label raster.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Single-band intensity raster for texture analysis.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "levels",
+                    description: "Quantization levels for GLCM (default 16).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output CSV path.",
+                    required: true,
+                },
             ],
         }
     }
@@ -930,10 +1035,16 @@ impl Tool for ObjectFeaturesTextureGlcmBasicTool {
                 description: "Extract object-level basic GLCM metrics.".to_string(),
                 args: {
                     let mut a = ToolArgs::new();
-                    a.insert("segments".to_string(), serde_json::json!("segments_clean.tif"));
+                    a.insert(
+                        "segments".to_string(),
+                        serde_json::json!("segments_clean.tif"),
+                    );
                     a.insert("input".to_string(), serde_json::json!("nir.tif"));
                     a.insert("levels".to_string(), serde_json::json!(16));
-                    a.insert("output".to_string(), serde_json::json!("object_features_texture.csv"));
+                    a.insert(
+                        "output".to_string(),
+                        serde_json::json!("object_features_texture.csv"),
+                    );
                     a
                 },
             }],
@@ -1143,7 +1254,10 @@ impl Tool for ClassifyObjectsRandomForestTool {
                 .collect(),
             defaults: {
                 let mut d = ToolArgs::new();
-                d.insert("segment_id_field".to_string(), serde_json::json!("segment_id"));
+                d.insert(
+                    "segment_id_field".to_string(),
+                    serde_json::json!("segment_id"),
+                );
                 d.insert("class_field".to_string(), serde_json::json!("class"));
                 d.insert("n_trees".to_string(), serde_json::json!(200));
                 d
@@ -1153,9 +1267,18 @@ impl Tool for ClassifyObjectsRandomForestTool {
                 description: "Train and apply object-level random forest model.".to_string(),
                 args: {
                     let mut a = ToolArgs::new();
-                    a.insert("features".to_string(), serde_json::json!("object_features_all.csv"));
-                    a.insert("training".to_string(), serde_json::json!("training_segments.csv"));
-                    a.insert("output".to_string(), serde_json::json!("object_predictions.csv"));
+                    a.insert(
+                        "features".to_string(),
+                        serde_json::json!("object_features_all.csv"),
+                    );
+                    a.insert(
+                        "training".to_string(),
+                        serde_json::json!("training_segments.csv"),
+                    );
+                    a.insert(
+                        "output".to_string(),
+                        serde_json::json!("object_predictions.csv"),
+                    );
                     a
                 },
             }],
@@ -1325,12 +1448,36 @@ impl Tool for EvaluateObjectClassificationAccuracyTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "predictions", description: "Predictions CSV containing segment_id and predicted_class.", required: true },
-                ToolParamSpec { name: "reference", description: "Reference CSV containing segment_id and class.", required: true },
-                ToolParamSpec { name: "segment_id_field", description: "Segment ID field name (default segment_id).", required: false },
-                ToolParamSpec { name: "predicted_field", description: "Predicted class field (default predicted_class).", required: false },
-                ToolParamSpec { name: "reference_field", description: "Reference class field (default class).", required: false },
-                ToolParamSpec { name: "output", description: "Output JSON report path.", required: true },
+                ToolParamSpec {
+                    name: "predictions",
+                    description: "Predictions CSV containing segment_id and predicted_class.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "reference",
+                    description: "Reference CSV containing segment_id and class.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "segment_id_field",
+                    description: "Segment ID field name (default segment_id).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "predicted_field",
+                    description: "Predicted class field (default predicted_class).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "reference_field",
+                    description: "Reference class field (default class).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output JSON report path.",
+                    required: true,
+                },
             ],
         }
     }
@@ -1354,8 +1501,14 @@ impl Tool for EvaluateObjectClassificationAccuracyTool {
                 .collect(),
             defaults: {
                 let mut d = ToolArgs::new();
-                d.insert("segment_id_field".to_string(), serde_json::json!("segment_id"));
-                d.insert("predicted_field".to_string(), serde_json::json!("predicted_class"));
+                d.insert(
+                    "segment_id_field".to_string(),
+                    serde_json::json!("segment_id"),
+                );
+                d.insert(
+                    "predicted_field".to_string(),
+                    serde_json::json!("predicted_class"),
+                );
                 d.insert("reference_field".to_string(), serde_json::json!("class"));
                 d
             },
@@ -1364,9 +1517,18 @@ impl Tool for EvaluateObjectClassificationAccuracyTool {
                 description: "Compute OA and kappa for object-class predictions.".to_string(),
                 args: {
                     let mut a = ToolArgs::new();
-                    a.insert("predictions".to_string(), serde_json::json!("object_predictions.csv"));
-                    a.insert("reference".to_string(), serde_json::json!("validation_segments.csv"));
-                    a.insert("output".to_string(), serde_json::json!("object_accuracy.json"));
+                    a.insert(
+                        "predictions".to_string(),
+                        serde_json::json!("object_predictions.csv"),
+                    );
+                    a.insert(
+                        "reference".to_string(),
+                        serde_json::json!("validation_segments.csv"),
+                    );
+                    a.insert(
+                        "output".to_string(),
+                        serde_json::json!("object_accuracy.json"),
+                    );
                     a
                 },
             }],
@@ -1504,10 +1666,12 @@ impl Tool for EvaluateObjectClassificationAccuracyTool {
             })?;
         }
 
-        let mut file = File::create(&output_path)
-            .map_err(|e| ToolError::Execution(format!("failed creating report '{}': {e}", output_path)))?;
-        file.write_all(report.to_string().as_bytes())
-            .map_err(|e| ToolError::Execution(format!("failed writing report '{}': {e}", output_path)))?;
+        let mut file = File::create(&output_path).map_err(|e| {
+            ToolError::Execution(format!("failed creating report '{}': {e}", output_path))
+        })?;
+        file.write_all(report.to_string().as_bytes()).map_err(|e| {
+            ToolError::Execution(format!("failed writing report '{}': {e}", output_path))
+        })?;
 
         let mut outputs = BTreeMap::new();
         outputs.insert("output".to_string(), serde_json::json!(output_path));
@@ -1567,9 +1731,18 @@ impl Tool for ObiaPipelineBasicTool {
                 description: "Run the baseline open-core OBIA pipeline.".to_string(),
                 args: {
                     let mut a = ToolArgs::new();
-                    a.insert("inputs".to_string(), serde_json::json!(["red.tif", "green.tif", "nir.tif"]));
-                    a.insert("training".to_string(), serde_json::json!("training_segments.csv"));
-                    a.insert("output_prefix".to_string(), serde_json::json!("results/field01"));
+                    a.insert(
+                        "inputs".to_string(),
+                        serde_json::json!(["red.tif", "green.tif", "nir.tif"]),
+                    );
+                    a.insert(
+                        "training".to_string(),
+                        serde_json::json!("training_segments.csv"),
+                    );
+                    a.insert(
+                        "output_prefix".to_string(),
+                        serde_json::json!("results/field01"),
+                    );
                     a.insert("segment_method".to_string(), serde_json::json!("slic"));
                     a
                 },
@@ -1616,7 +1789,10 @@ impl Tool for ObiaPipelineBasicTool {
         // 1) Segmentation
         let mut seg_args = ToolArgs::new();
         seg_args.insert("inputs".to_string(), serde_json::json!(inputs));
-        seg_args.insert("output".to_string(), serde_json::json!(segments_path.clone()));
+        seg_args.insert(
+            "output".to_string(),
+            serde_json::json!(segments_path.clone()),
+        );
         let seg_res = match segment_method {
             "graph" => SegmentGraphFelzenszwalbTool.run(&seg_args, ctx)?,
             _ => SegmentSlicSuperpixelsTool.run(&seg_args, ctx)?,
@@ -1628,10 +1804,13 @@ impl Tool for ObiaPipelineBasicTool {
         merge_args.insert("segments".to_string(), serde_json::json!(seg_out.clone()));
         merge_args.insert("min_size".to_string(), serde_json::json!(min_size));
         merge_args.insert("method".to_string(), serde_json::json!("longest"));
-        merge_args.insert("output".to_string(), serde_json::json!(segments_clean_path.clone()));
+        merge_args.insert(
+            "output".to_string(),
+            serde_json::json!(segments_clean_path.clone()),
+        );
         let merge_res = SegmentsMergeSmallRegionsTool.run(&merge_args, ctx)?;
-        let seg_clean = result_path_from_outputs(&merge_res.outputs)
-            .unwrap_or(segments_clean_path.clone());
+        let seg_clean =
+            result_path_from_outputs(&merge_res.outputs).unwrap_or(segments_clean_path.clone());
 
         // 3) Spectral + shape features
         let mut spec_args = ToolArgs::new();
@@ -1642,17 +1821,19 @@ impl Tool for ObiaPipelineBasicTool {
                 .cloned()
                 .unwrap_or_else(|| serde_json::json!([])),
         );
-        spec_args.insert("output".to_string(), serde_json::json!(spectral_path.clone()));
+        spec_args.insert(
+            "output".to_string(),
+            serde_json::json!(spectral_path.clone()),
+        );
         let spec_res = ObjectFeaturesSpectralBasicTool.run(&spec_args, ctx)?;
-        let spectral_csv = result_path_from_outputs(&spec_res.outputs)
-            .unwrap_or(spectral_path.clone());
+        let spectral_csv =
+            result_path_from_outputs(&spec_res.outputs).unwrap_or(spectral_path.clone());
 
         let mut shape_args = ToolArgs::new();
         shape_args.insert("segments".to_string(), serde_json::json!(seg_clean.clone()));
         shape_args.insert("output".to_string(), serde_json::json!(shape_path.clone()));
         let shape_res = ObjectFeaturesShapeBasicTool.run(&shape_args, ctx)?;
-        let shape_csv = result_path_from_outputs(&shape_res.outputs)
-            .unwrap_or(shape_path.clone());
+        let shape_csv = result_path_from_outputs(&shape_res.outputs).unwrap_or(shape_path.clone());
 
         // 4) Merge feature CSVs on segment_id.
         let (spec_headers, spec_rows) = parse_simple_csv(&spectral_csv)?;
@@ -1705,21 +1886,36 @@ impl Tool for ObiaPipelineBasicTool {
 
         // 5) Object RF classification
         let mut cls_args = ToolArgs::new();
-        cls_args.insert("features".to_string(), serde_json::json!(features_all_path.clone()));
+        cls_args.insert(
+            "features".to_string(),
+            serde_json::json!(features_all_path.clone()),
+        );
         cls_args.insert("training".to_string(), serde_json::json!(training));
         cls_args.insert("class_field".to_string(), serde_json::json!(class_field));
-        cls_args.insert("segment_id_field".to_string(), serde_json::json!("segment_id"));
-        cls_args.insert("output".to_string(), serde_json::json!(predictions_path.clone()));
+        cls_args.insert(
+            "segment_id_field".to_string(),
+            serde_json::json!("segment_id"),
+        );
+        cls_args.insert(
+            "output".to_string(),
+            serde_json::json!(predictions_path.clone()),
+        );
         let cls_res = ClassifyObjectsRandomForestTool.run(&cls_args, ctx)?;
-        let predictions = result_path_from_outputs(&cls_res.outputs)
-            .unwrap_or(predictions_path.clone());
+        let predictions =
+            result_path_from_outputs(&cls_res.outputs).unwrap_or(predictions_path.clone());
 
         let mut outputs = BTreeMap::new();
         outputs.insert("segments".to_string(), serde_json::json!(seg_out));
         outputs.insert("segments_clean".to_string(), serde_json::json!(seg_clean));
-        outputs.insert("features_spectral".to_string(), serde_json::json!(spectral_csv));
+        outputs.insert(
+            "features_spectral".to_string(),
+            serde_json::json!(spectral_csv),
+        );
         outputs.insert("features_shape".to_string(), serde_json::json!(shape_csv));
-        outputs.insert("features_all".to_string(), serde_json::json!(features_all_path));
+        outputs.insert(
+            "features_all".to_string(),
+            serde_json::json!(features_all_path),
+        );
         outputs.insert("predictions".to_string(), serde_json::json!(predictions));
         Ok(ToolRunResult { outputs })
     }
@@ -1728,7 +1924,11 @@ impl Tool for ObiaPipelineBasicTool {
 fn parse_optional_f64_list_arg(args: &ToolArgs, name: &str) -> Option<Vec<f64>> {
     args.get(name)
         .and_then(serde_json::Value::as_array)
-        .map(|arr| arr.iter().filter_map(serde_json::Value::as_f64).collect::<Vec<f64>>())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(serde_json::Value::as_f64)
+                .collect::<Vec<f64>>()
+        })
         .filter(|v| !v.is_empty())
 }
 
@@ -1767,18 +1967,15 @@ fn build_segment_hierarchy_csv(
             }
             local
         })
-        .reduce(
-            HashMap::new,
-            |mut acc, local| {
-                for (fid, coarse_counts) in local {
-                    let dst = acc.entry(fid).or_default();
-                    for (cid, n) in coarse_counts {
-                        *dst.entry(cid).or_insert(0) += n;
-                    }
+        .reduce(HashMap::new, |mut acc, local| {
+            for (fid, coarse_counts) in local {
+                let dst = acc.entry(fid).or_default();
+                for (cid, n) in coarse_counts {
+                    *dst.entry(cid).or_insert(0) += n;
                 }
-                acc
-            },
-        );
+            }
+            acc
+        });
 
     let header = vec![
         "fine_segment_id".to_string(),
@@ -1796,7 +1993,11 @@ fn build_segment_hierarchy_csv(
             .max_by_key(|(_, n)| *n)
             .map(|(cid, n)| (*cid, *n))
             .unwrap_or((0, 0));
-        rows_out.push(vec![fid.to_string(), best_coarse.to_string(), best_n.to_string()]);
+        rows_out.push(vec![
+            fid.to_string(),
+            best_coarse.to_string(),
+            best_n.to_string(),
+        ]);
     }
     write_csv(output_csv, &header, &rows_out)
 }
@@ -1819,7 +2020,9 @@ fn count_unique_positive_segments(path: &str) -> Result<usize, ToolError> {
     Ok(ids.len())
 }
 
-fn adjacency_from_segments(segments_path: &str) -> Result<HashMap<i64, HashMap<i64, usize>>, ToolError> {
+fn adjacency_from_segments(
+    segments_path: &str,
+) -> Result<HashMap<i64, HashMap<i64, usize>>, ToolError> {
     let segments = Raster::read(segments_path)
         .map_err(|e| ToolError::Execution(format!("failed reading segments raster: {e}")))?;
     let rows = segments.rows;
@@ -1857,18 +2060,15 @@ fn adjacency_from_segments(segments_path: &str) -> Result<HashMap<i64, HashMap<i
             }
             local
         })
-        .reduce(
-            HashMap::new,
-            |mut acc, local| {
-                for (sid, neigh) in local {
-                    let dst = acc.entry(sid).or_default();
-                    for (nid, n) in neigh {
-                        *dst.entry(nid).or_insert(0) += n;
-                    }
+        .reduce(HashMap::new, |mut acc, local| {
+            for (sid, neigh) in local {
+                let dst = acc.entry(sid).or_default();
+                for (nid, n) in neigh {
+                    *dst.entry(nid).or_insert(0) += n;
                 }
-                acc
-            },
-        );
+            }
+            acc
+        });
     Ok(adj)
 }
 
@@ -1894,7 +2094,10 @@ impl Tool for SegmentWatershedMarkersTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("inputs".to_string(), serde_json::json!(["band1.tif", "band2.tif"]));
+        defaults.insert(
+            "inputs".to_string(),
+            serde_json::json!(["band1.tif", "band2.tif"]),
+        );
         defaults.insert("gradient_weight".to_string(), serde_json::json!(1.0));
         defaults.insert("min_area".to_string(), serde_json::json!(12));
         ToolManifest {
@@ -1903,14 +2106,23 @@ impl Tool for SegmentWatershedMarkersTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "segmentation".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "segmentation".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -1926,7 +2138,10 @@ impl Tool for SegmentWatershedMarkersTool {
         let min_area = parse_usize_arg(args, "min_area", 12).max(1);
         let mut delegated = ToolArgs::new();
         delegated.insert("inputs".to_string(), serde_json::json!(inputs));
-        delegated.insert("threshold".to_string(), serde_json::json!((0.15 + 0.15 * gradient_weight).clamp(0.1, 2.5)));
+        delegated.insert(
+            "threshold".to_string(),
+            serde_json::json!((0.15 + 0.15 * gradient_weight).clamp(0.1, 2.5)),
+        );
         delegated.insert("steps".to_string(), serde_json::json!(14));
         delegated.insert("min_area".to_string(), serde_json::json!(min_area));
         if let Some(output) = parse_optional_path_arg(args, "output") {
@@ -1966,14 +2181,24 @@ impl Tool for SegmentMultiresolutionHierarchicalTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "segmentation".to_string(), "hierarchy".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "segmentation".to_string(),
+                "hierarchy".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2013,7 +2238,10 @@ impl Tool for SegmentMultiresolutionHierarchicalTool {
         build_segment_hierarchy_csv(&coarse_path, &fine_path, &hierarchy_csv)?;
 
         let mut outputs = BTreeMap::new();
-        outputs.insert("segments_coarse".to_string(), serde_json::json!(coarse_path));
+        outputs.insert(
+            "segments_coarse".to_string(),
+            serde_json::json!(coarse_path),
+        );
         outputs.insert("segments_fine".to_string(), serde_json::json!(fine_path));
         outputs.insert("hierarchy".to_string(), serde_json::json!(hierarchy_csv));
         Ok(ToolRunResult { outputs })
@@ -2042,21 +2270,34 @@ impl Tool for SegmentScaleParameterOptimizerTool {
     fn manifest(&self) -> ToolManifest {
         let meta = self.metadata();
         let mut defaults = ToolArgs::new();
-        defaults.insert("candidate_scales".to_string(), serde_json::json!([120.0, 250.0, 500.0, 900.0]));
+        defaults.insert(
+            "candidate_scales".to_string(),
+            serde_json::json!([120.0, 250.0, 500.0, 900.0]),
+        );
         ToolManifest {
             id: meta.id.to_string(),
             display_name: meta.display_name.to_string(),
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "segmentation".to_string(), "optimizer".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "segmentation".to_string(),
+                "optimizer".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2070,8 +2311,9 @@ impl Tool for SegmentScaleParameterOptimizerTool {
         let inputs = parse_raster_list_arg(args, "inputs")?;
         let candidates = parse_optional_f64_list_arg(args, "candidate_scales")
             .unwrap_or_else(|| vec![120.0, 250.0, 500.0, 900.0]);
-        let first = Raster::read(&inputs[0])
-            .map_err(|e| ToolError::Execution(format!("failed reading input raster '{}': {e}", inputs[0])))?;
+        let first = Raster::read(&inputs[0]).map_err(|e| {
+            ToolError::Execution(format!("failed reading input raster '{}': {e}", inputs[0]))
+        })?;
         let total_cells = (first.rows * first.cols).max(1) as f64;
         let target_objects = args
             .get("target_objects")
@@ -2080,7 +2322,11 @@ impl Tool for SegmentScaleParameterOptimizerTool {
         let mut scored = Vec::<(f64, usize, f64)>::new();
 
         for (i, k) in candidates.iter().enumerate() {
-            let tmp = std::env::temp_dir().join(format!("wb_obia_scale_opt_{}_{}.tif", std::process::id(), i));
+            let tmp = std::env::temp_dir().join(format!(
+                "wb_obia_scale_opt_{}_{}.tif",
+                std::process::id(),
+                i
+            ));
             let tmp_path = tmp.to_string_lossy().to_string();
             let mut seg_args = ToolArgs::new();
             seg_args.insert("inputs".to_string(), serde_json::json!(inputs.clone()));
@@ -2112,13 +2358,18 @@ impl Tool for SegmentScaleParameterOptimizerTool {
         if let Some(path) = parse_optional_path_arg(args, "output") {
             if let Some(parent) = Path::new(&path).parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
-                    ToolError::Execution(format!("failed creating output directory '{}': {e}", parent.display()))
+                    ToolError::Execution(format!(
+                        "failed creating output directory '{}': {e}",
+                        parent.display()
+                    ))
                 })?;
             }
-            let mut f = File::create(&path)
-                .map_err(|e| ToolError::Execution(format!("failed creating optimizer report '{}': {e}", path)))?;
-            f.write_all(report.to_string().as_bytes())
-                .map_err(|e| ToolError::Execution(format!("failed writing optimizer report '{}': {e}", path)))?;
+            let mut f = File::create(&path).map_err(|e| {
+                ToolError::Execution(format!("failed creating optimizer report '{}': {e}", path))
+            })?;
+            f.write_all(report.to_string().as_bytes()).map_err(|e| {
+                ToolError::Execution(format!("failed writing optimizer report '{}': {e}", path))
+            })?;
             outputs.insert("output".to_string(), serde_json::json!(path));
         }
         outputs.insert("best_scale".to_string(), serde_json::json!(best_k));
@@ -2156,14 +2407,24 @@ impl Tool for SegmentsSplitLowCohesionTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults,
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "segmentation".to_string(), "postprocess".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "segmentation".to_string(),
+                "postprocess".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2213,14 +2474,23 @@ impl Tool for SegmentsToPolygonsTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "conversion".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "conversion".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2232,7 +2502,10 @@ impl Tool for SegmentsToPolygonsTool {
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let mut delegated = ToolArgs::new();
-        delegated.insert("input".to_string(), serde_json::json!(parse_required_path_arg(args, "segments")?));
+        delegated.insert(
+            "input".to_string(),
+            serde_json::json!(parse_required_path_arg(args, "segments")?),
+        );
         if let Some(out) = parse_optional_path_arg(args, "output") {
             delegated.insert("output".to_string(), serde_json::json!(out));
         }
@@ -2267,14 +2540,23 @@ impl Tool for PolygonsToSegmentsTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "conversion".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "conversion".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2287,8 +2569,14 @@ impl Tool for PolygonsToSegmentsTool {
 
     fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let mut delegated = ToolArgs::new();
-        delegated.insert("input".to_string(), serde_json::json!(parse_required_path_arg(args, "input")?));
-        delegated.insert("base".to_string(), serde_json::json!(parse_required_path_arg(args, "base")?));
+        delegated.insert(
+            "input".to_string(),
+            serde_json::json!(parse_required_path_arg(args, "input")?),
+        );
+        delegated.insert(
+            "base".to_string(),
+            serde_json::json!(parse_required_path_arg(args, "base")?),
+        );
         if let Some(field) = args.get("field").and_then(serde_json::Value::as_str) {
             delegated.insert("field".to_string(), serde_json::json!(field));
         }
@@ -2324,14 +2612,24 @@ impl Tool for ObjectFeaturesContextNeighborsTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "features".to_string(), "context".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "features".to_string(),
+                "context".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2359,7 +2657,12 @@ impl Tool for ObjectFeaturesContextNeighborsTool {
             let n = m.len();
             let total: usize = m.values().sum();
             let mean = if n > 0 { total as f64 / n as f64 } else { 0.0 };
-            rows.push(vec![id.to_string(), n.to_string(), total.to_string(), mean.to_string()]);
+            rows.push(vec![
+                id.to_string(),
+                n.to_string(),
+                total.to_string(),
+                mean.to_string(),
+            ]);
         }
         write_csv(&output_path, &header, &rows)?;
         let mut outputs = BTreeMap::new();
@@ -2393,14 +2696,24 @@ impl Tool for ObjectFeaturesTopologyRelationsTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "features".to_string(), "topology".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "features".to_string(),
+                "topology".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2547,14 +2860,24 @@ impl Tool for ClassifyObjectsRulesBasicTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "classification".to_string(), "rules".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "classification".to_string(),
+                "rules".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2598,8 +2921,12 @@ impl Tool for ClassifyObjectsRulesBasicTool {
                 let op = rr[r_op].as_str();
                 let value = rr[r_value].parse::<f64>().unwrap_or(0.0);
                 let class_name = rr[r_class].clone();
-                let Some(&fidx) = feature_index.get(feature) else { continue };
-                let Ok(fv) = row[fidx].parse::<f64>() else { continue };
+                let Some(&fidx) = feature_index.get(feature) else {
+                    continue;
+                };
+                let Ok(fv) = row[fidx].parse::<f64>() else {
+                    continue;
+                };
                 let matched = match op {
                     ">" => fv > value,
                     ">=" => fv >= value,
@@ -2685,14 +3012,24 @@ impl Tool for ObjectClassProbabilityMapsTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "classification".to_string(), "uncertainty".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "classification".to_string(),
+                "uncertainty".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2711,7 +3048,14 @@ impl Tool for ObjectClassProbabilityMapsTool {
 
         let rows_out: Vec<Vec<String>> = rows
             .iter()
-            .map(|r| vec![r[seg_col].clone(), r[cls_col].clone(), "1.0".to_string(), "0.0".to_string()])
+            .map(|r| {
+                vec![
+                    r[seg_col].clone(),
+                    r[cls_col].clone(),
+                    "1.0".to_string(),
+                    "0.0".to_string(),
+                ]
+            })
             .collect();
         write_csv(
             &output_path,
@@ -2740,9 +3084,22 @@ impl Tool for ObjectUncertaintyDiagnosticsProTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "probabilities", description: "Input probabilities CSV with probability and uncertainty columns.", required: true },
-                ToolParamSpec { name: "low_conf_threshold", description: "Low-confidence threshold on probability (default 0.7).", required: false },
-                ToolParamSpec { name: "output", description: "Output diagnostics JSON path.", required: true },
+                ToolParamSpec {
+                    name: "probabilities",
+                    description:
+                        "Input probabilities CSV with probability and uncertainty columns.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "low_conf_threshold",
+                    description: "Low-confidence threshold on probability (default 0.7).",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output diagnostics JSON path.",
+                    required: true,
+                },
             ],
         }
     }
@@ -2755,14 +3112,24 @@ impl Tool for ObjectUncertaintyDiagnosticsProTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "uncertainty".to_string(), "qa".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "uncertainty".to_string(),
+                "qa".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2785,7 +3152,9 @@ impl Tool for ObjectUncertaintyDiagnosticsProTool {
             }
         }
         if probs.is_empty() {
-            return Err(ToolError::Validation("no valid probability values found".to_string()));
+            return Err(ToolError::Validation(
+                "no valid probability values found".to_string(),
+            ));
         }
         let mean_p = probs.iter().sum::<f64>() / probs.len() as f64;
         let low_conf = probs.iter().filter(|p| **p < low_conf_threshold).count();
@@ -2800,13 +3169,24 @@ impl Tool for ObjectUncertaintyDiagnosticsProTool {
 
         if let Some(parent) = Path::new(&output_path).parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                ToolError::Execution(format!("failed creating output directory '{}': {e}", parent.display()))
+                ToolError::Execution(format!(
+                    "failed creating output directory '{}': {e}",
+                    parent.display()
+                ))
             })?;
         }
-        let mut f = File::create(&output_path)
-            .map_err(|e| ToolError::Execution(format!("failed creating diagnostics report '{}': {e}", output_path)))?;
-        f.write_all(report.to_string().as_bytes())
-            .map_err(|e| ToolError::Execution(format!("failed writing diagnostics report '{}': {e}", output_path)))?;
+        let mut f = File::create(&output_path).map_err(|e| {
+            ToolError::Execution(format!(
+                "failed creating diagnostics report '{}': {e}",
+                output_path
+            ))
+        })?;
+        f.write_all(report.to_string().as_bytes()).map_err(|e| {
+            ToolError::Execution(format!(
+                "failed writing diagnostics report '{}': {e}",
+                output_path
+            ))
+        })?;
 
         let mut outputs = BTreeMap::new();
         outputs.insert("output".to_string(), serde_json::json!(output_path));
@@ -2827,9 +3207,21 @@ impl Tool for BuildObjectHierarchyMultiscaleTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "coarse_segments", description: "Coarse segment raster.", required: true },
-                ToolParamSpec { name: "fine_segments", description: "Fine segment raster.", required: true },
-                ToolParamSpec { name: "output", description: "Output hierarchy CSV path.", required: true },
+                ToolParamSpec {
+                    name: "coarse_segments",
+                    description: "Coarse segment raster.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "fine_segments",
+                    description: "Fine segment raster.",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output hierarchy CSV path.",
+                    required: true,
+                },
             ],
         }
     }
@@ -2842,14 +3234,23 @@ impl Tool for BuildObjectHierarchyMultiscaleTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "hierarchy".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "hierarchy".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2898,14 +3299,24 @@ impl Tool for PropagateLabelsAcrossHierarchyTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "hierarchy".to_string(), "classification".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "hierarchy".to_string(),
+                "classification".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2934,7 +3345,9 @@ impl Tool for PropagateLabelsAcrossHierarchyTool {
         }
 
         let mut child_existing: HashMap<String, String> = HashMap::new();
-        if let Some(child_labels_path) = args.get("child_labels").and_then(serde_json::Value::as_str) {
+        if let Some(child_labels_path) =
+            args.get("child_labels").and_then(serde_json::Value::as_str)
+        {
             let (c_head, c_rows) = parse_simple_csv(child_labels_path)?;
             let c_seg_col = find_header_index(&c_head, "fine_segment_id")?;
             let c_cls_col = find_header_index(&c_head, "class")?;
@@ -2989,7 +3402,8 @@ impl Tool for ObjectsEnforceMinMappingUnitTool {
         let mut m = SegmentsMergeSmallRegionsTool.manifest();
         m.id = "objects_enforce_min_mapping_unit".to_string();
         m.display_name = "Objects Enforce Min Mapping Unit".to_string();
-        m.summary = "Enforces a minimum mapping unit by merging undersized object segments.".to_string();
+        m.summary =
+            "Enforces a minimum mapping unit by merging undersized object segments.".to_string();
         m
     }
 
@@ -3029,14 +3443,24 @@ impl Tool for ObjectsBoundaryRefinementProTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "postprocess".to_string(), "boundary".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "postprocess".to_string(),
+                "boundary".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3098,14 +3522,24 @@ impl Tool for EvaluateSegmentationQualityProTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "qa".to_string(), "segmentation".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "qa".to_string(),
+                "segmentation".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3137,22 +3571,20 @@ impl Tool for EvaluateSegmentationQualityProTool {
                 }
                 local
             })
-            .reduce(
-                HashMap::new,
-                |mut acc, local| {
-                    for (sid, n) in local {
-                        *acc.entry(sid).or_insert(0) += n;
-                    }
-                    acc
-                },
-            );
+            .reduce(HashMap::new, |mut acc, local| {
+                for (sid, n) in local {
+                    *acc.entry(sid).or_insert(0) += n;
+                }
+                acc
+            });
         let n_segments = area.len().max(1);
         let mean_area = area.values().sum::<usize>() as f64 / n_segments as f64;
 
         let mut dominant_overlap_mean = serde_json::Value::Null;
         if let Some(reference_path) = args.get("reference").and_then(serde_json::Value::as_str) {
-            let ref_r = Raster::read(reference_path)
-                .map_err(|e| ToolError::Execution(format!("failed reading reference raster: {e}")))?;
+            let ref_r = Raster::read(reference_path).map_err(|e| {
+                ToolError::Execution(format!("failed reading reference raster: {e}"))
+            })?;
             if ref_r.rows == seg.rows && ref_r.cols == seg.cols {
                 let overlap: HashMap<i64, HashMap<i64, usize>> = (0..rows)
                     .into_par_iter()
@@ -3172,18 +3604,15 @@ impl Tool for EvaluateSegmentationQualityProTool {
                         }
                         local
                     })
-                    .reduce(
-                        HashMap::new,
-                        |mut acc, local| {
-                            for (sid, ref_counts) in local {
-                                let dst = acc.entry(sid).or_default();
-                                for (rid, n) in ref_counts {
-                                    *dst.entry(rid).or_insert(0) += n;
-                                }
+                    .reduce(HashMap::new, |mut acc, local| {
+                        for (sid, ref_counts) in local {
+                            let dst = acc.entry(sid).or_default();
+                            for (rid, n) in ref_counts {
+                                *dst.entry(rid).or_insert(0) += n;
                             }
-                            acc
-                        },
-                    );
+                        }
+                        acc
+                    });
                 let mut ratios = Vec::new();
                 for (sid, m) in &overlap {
                     let total = *area.get(sid).unwrap_or(&0);
@@ -3194,7 +3623,8 @@ impl Tool for EvaluateSegmentationQualityProTool {
                     ratios.push(best as f64 / total as f64);
                 }
                 if !ratios.is_empty() {
-                    dominant_overlap_mean = serde_json::json!(ratios.iter().sum::<f64>() / ratios.len() as f64);
+                    dominant_overlap_mean =
+                        serde_json::json!(ratios.iter().sum::<f64>() / ratios.len() as f64);
                 }
             }
         }
@@ -3206,18 +3636,32 @@ impl Tool for EvaluateSegmentationQualityProTool {
         });
         if let Some(parent) = Path::new(&output_path).parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                ToolError::Execution(format!("failed creating output directory '{}': {e}", parent.display()))
+                ToolError::Execution(format!(
+                    "failed creating output directory '{}': {e}",
+                    parent.display()
+                ))
             })?;
         }
-        let mut f = File::create(&output_path)
-            .map_err(|e| ToolError::Execution(format!("failed creating quality report '{}': {e}", output_path)))?;
-        f.write_all(report.to_string().as_bytes())
-            .map_err(|e| ToolError::Execution(format!("failed writing quality report '{}': {e}", output_path)))?;
+        let mut f = File::create(&output_path).map_err(|e| {
+            ToolError::Execution(format!(
+                "failed creating quality report '{}': {e}",
+                output_path
+            ))
+        })?;
+        f.write_all(report.to_string().as_bytes()).map_err(|e| {
+            ToolError::Execution(format!(
+                "failed writing quality report '{}': {e}",
+                output_path
+            ))
+        })?;
 
         let mut outputs = BTreeMap::new();
         outputs.insert("output".to_string(), serde_json::json!(output_path));
         outputs.insert("n_segments".to_string(), serde_json::json!(n_segments));
-        outputs.insert("mean_segment_area".to_string(), serde_json::json!(mean_area));
+        outputs.insert(
+            "mean_segment_area".to_string(),
+            serde_json::json!(mean_area),
+        );
         Ok(ToolRunResult { outputs })
     }
 }
@@ -3247,14 +3691,24 @@ impl Tool for ObiaBatchOrchestratorProTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "workflow".to_string(), "batch".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "workflow".to_string(),
+                "batch".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3263,7 +3717,9 @@ impl Tool for ObiaBatchOrchestratorProTool {
         let _ = args
             .get("jobs")
             .and_then(serde_json::Value::as_array)
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'jobs'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("missing required parameter 'jobs'".to_string())
+            })?;
         Ok(())
     }
 
@@ -3271,7 +3727,9 @@ impl Tool for ObiaBatchOrchestratorProTool {
         let jobs = args
             .get("jobs")
             .and_then(serde_json::Value::as_array)
-            .ok_or_else(|| ToolError::Validation("parameter 'jobs' must be an array".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'jobs' must be an array".to_string())
+            })?;
 
         let mut results = Vec::new();
         for job in jobs {
@@ -3287,14 +3745,24 @@ impl Tool for ObiaBatchOrchestratorProTool {
             let training = obj
                 .get("training")
                 .and_then(serde_json::Value::as_str)
-                .ok_or_else(|| ToolError::Validation("job.training must be a string".to_string()))?;
+                .ok_or_else(|| {
+                    ToolError::Validation("job.training must be a string".to_string())
+                })?;
             let output_prefix = obj
                 .get("output_prefix")
                 .and_then(serde_json::Value::as_str)
-                .ok_or_else(|| ToolError::Validation("job.output_prefix must be a string".to_string()))?;
+                .ok_or_else(|| {
+                    ToolError::Validation("job.output_prefix must be a string".to_string())
+                })?;
             pipeline_args.insert("training".to_string(), serde_json::json!(training));
-            pipeline_args.insert("output_prefix".to_string(), serde_json::json!(output_prefix));
-            if let Some(method) = obj.get("segment_method").and_then(serde_json::Value::as_str) {
+            pipeline_args.insert(
+                "output_prefix".to_string(),
+                serde_json::json!(output_prefix),
+            );
+            if let Some(method) = obj
+                .get("segment_method")
+                .and_then(serde_json::Value::as_str)
+            {
                 pipeline_args.insert("segment_method".to_string(), serde_json::json!(method));
             }
 
@@ -3314,13 +3782,18 @@ impl Tool for ObiaBatchOrchestratorProTool {
         if let Some(path) = parse_optional_path_arg(args, "output") {
             if let Some(parent) = Path::new(&path).parent() {
                 std::fs::create_dir_all(parent).map_err(|e| {
-                    ToolError::Execution(format!("failed creating output directory '{}': {e}", parent.display()))
+                    ToolError::Execution(format!(
+                        "failed creating output directory '{}': {e}",
+                        parent.display()
+                    ))
                 })?;
             }
-            let mut f = File::create(&path)
-                .map_err(|e| ToolError::Execution(format!("failed creating batch report '{}': {e}", path)))?;
-            f.write_all(report.to_string().as_bytes())
-                .map_err(|e| ToolError::Execution(format!("failed writing batch report '{}': {e}", path)))?;
+            let mut f = File::create(&path).map_err(|e| {
+                ToolError::Execution(format!("failed creating batch report '{}': {e}", path))
+            })?;
+            f.write_all(report.to_string().as_bytes()).map_err(|e| {
+                ToolError::Execution(format!("failed writing batch report '{}': {e}", path))
+            })?;
             outputs.insert("output".to_string(), serde_json::json!(path));
         }
         outputs.insert("n_jobs".to_string(), serde_json::json!(results.len()));
@@ -3353,14 +3826,24 @@ impl Tool for ObiaAuditReportProTool {
             summary: meta.summary.to_string(),
             category: meta.category,
             license_tier: meta.license_tier,
-            params: meta.params.iter().map(|p| ToolParamDescriptor {
-                name: p.name.to_string(),
-                description: p.description.to_string(),
-                required: p.required,
-            }).collect(),
+            params: meta
+                .params
+                .iter()
+                .map(|p| ToolParamDescriptor {
+                    name: p.name.to_string(),
+                    description: p.description.to_string(),
+                    required: p.required,
+                })
+                .collect(),
             defaults: ToolArgs::new(),
             examples: vec![],
-            tags: vec!["remote_sensing".to_string(), "obia".to_string(), "workflow".to_string(), "audit".to_string(), "open-core".to_string()],
+            tags: vec![
+                "remote_sensing".to_string(),
+                "obia".to_string(),
+                "workflow".to_string(),
+                "audit".to_string(),
+                "open-core".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3369,7 +3852,9 @@ impl Tool for ObiaAuditReportProTool {
         let _ = args
             .get("artifacts")
             .and_then(serde_json::Value::as_array)
-            .ok_or_else(|| ToolError::Validation("missing required parameter 'artifacts'".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("missing required parameter 'artifacts'".to_string())
+            })?;
         Ok(())
     }
 
@@ -3377,13 +3862,15 @@ impl Tool for ObiaAuditReportProTool {
         let artifacts = args
             .get("artifacts")
             .and_then(serde_json::Value::as_array)
-            .ok_or_else(|| ToolError::Validation("parameter 'artifacts' must be an array".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Validation("parameter 'artifacts' must be an array".to_string())
+            })?;
 
         let mut audited = Vec::new();
         for a in artifacts {
-            let path = a
-                .as_str()
-                .ok_or_else(|| ToolError::Validation("artifacts must be string paths".to_string()))?;
+            let path = a.as_str().ok_or_else(|| {
+                ToolError::Validation("artifacts must be string paths".to_string())
+            })?;
             let meta = std::fs::metadata(path);
             let (exists, size, modified_unix) = if let Ok(m) = meta {
                 let modified = m
@@ -3411,17 +3898,31 @@ impl Tool for ObiaAuditReportProTool {
         let output_path = parse_required_path_arg(args, "output")?;
         if let Some(parent) = Path::new(&output_path).parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
-                ToolError::Execution(format!("failed creating output directory '{}': {e}", parent.display()))
+                ToolError::Execution(format!(
+                    "failed creating output directory '{}': {e}",
+                    parent.display()
+                ))
             })?;
         }
-        let mut f = File::create(&output_path)
-            .map_err(|e| ToolError::Execution(format!("failed creating audit report '{}': {e}", output_path)))?;
-        f.write_all(report.to_string().as_bytes())
-            .map_err(|e| ToolError::Execution(format!("failed writing audit report '{}': {e}", output_path)))?;
+        let mut f = File::create(&output_path).map_err(|e| {
+            ToolError::Execution(format!(
+                "failed creating audit report '{}': {e}",
+                output_path
+            ))
+        })?;
+        f.write_all(report.to_string().as_bytes()).map_err(|e| {
+            ToolError::Execution(format!(
+                "failed writing audit report '{}': {e}",
+                output_path
+            ))
+        })?;
 
         let mut outputs = BTreeMap::new();
         outputs.insert("output".to_string(), serde_json::json!(output_path));
-        outputs.insert("artifact_count".to_string(), serde_json::json!(artifacts.len()));
+        outputs.insert(
+            "artifact_count".to_string(),
+            serde_json::json!(artifacts.len()),
+        );
         Ok(ToolRunResult { outputs })
     }
 }

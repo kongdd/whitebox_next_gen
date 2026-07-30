@@ -48,26 +48,34 @@ impl RankOp {
 
     fn summary(self) -> &'static str {
         match self {
-            Self::Median => r#"Computes moving-window median value for each pixel, replacing with 50th percentile of neighborhood. Robust noise filter preserving edges (non-linear). Particularly effective for impulse noise (salt-and-pepper) removal while maintaining sharp boundaries. Output values are actual pixel values from neighborhood (not interpolated).
+            Self::Median => {
+                r#"Computes moving-window median value for each pixel, replacing with 50th percentile of neighborhood. Robust noise filter preserving edges (non-linear). Particularly effective for impulse noise (salt-and-pepper) removal while maintaining sharp boundaries. Output values are actual pixel values from neighborhood (not interpolated).
 
 Median filtering is non-linear—critical advantage over mean filtering for noise reduction because it doesn't create new values or blur edges. Large filter sizes heavily smooth while preserving sharp transitions. Widely used in remote sensing, medical imaging, and SAR image processing. Computational cost increases with filter size but generally faster than bilateral or guided filters.
 
-Applications: (1) SAR image speckle reduction (especially effective for phase coherence), (2) Salt-and-pepper noise removal, (3) Preprocessing before edge detection (reduces false edges), (4) Boundary preservation in classification preprocessing, (5) Radiometric correction for outlier values. Typical workflow: apply median→edge-enhanced output→threshold for feature extraction."#,
-            Self::Percentile => r#"Computes local percentile rank of center cell elevation/value within moving window (0-100%). Analogous to Elevation Percentile for generic raster data. Measures relative position: output=0 indicates local minimum, output=100 indicates local maximum, output=50 indicates median. Reveals local position-in-distribution independently of absolute values.
+Applications: (1) SAR image speckle reduction (especially effective for phase coherence), (2) Salt-and-pepper noise removal, (3) Preprocessing before edge detection (reduces false edges), (4) Boundary preservation in classification preprocessing, (5) Radiometric correction for outlier values. Typical workflow: apply median→edge-enhanced output→threshold for feature extraction."#
+            }
+            Self::Percentile => {
+                r#"Computes local percentile rank of center cell elevation/value within moving window (0-100%). Analogous to Elevation Percentile for generic raster data. Measures relative position: output=0 indicates local minimum, output=100 indicates local maximum, output=50 indicates median. Reveals local position-in-distribution independently of absolute values.
 
 Percentile filtering enables position-relative analysis. Useful for layering analysis: cells ranking high percentile (>80) in all bands indicate "bright" features; low percentile (<20) indicate "dark" features. Particularly useful for classification preprocessing—separates terrain/texture position rather than just magnitude. Often combined with statistical filters for multi-metric characterization.
 
-Applications: (1) Relative brightness/darkness classification, (2) Texture characterization (high percentile variance = rough, low variance = smooth), (3) Local contrast enhancement (percentile-based normalization), (4) Landform identification similar to elevation percentile, (5) Multi-band texture analysis (apply percentile to each band, compare patterns)."#,
-            Self::Majority => r#"Computes moving-window mode (most frequent value/class) for each pixel. Non-linear filter preserving categorical boundaries and dominant patterns. Particularly useful for classified imagery where output must remain within original class set (unlike mean filter which creates interpolated values). Essential for morphological cleaning of classification outputs.
+Applications: (1) Relative brightness/darkness classification, (2) Texture characterization (high percentile variance = rough, low variance = smooth), (3) Local contrast enhancement (percentile-based normalization), (4) Landform identification similar to elevation percentile, (5) Multi-band texture analysis (apply percentile to each band, compare patterns)."#
+            }
+            Self::Majority => {
+                r#"Computes moving-window mode (most frequent value/class) for each pixel. Non-linear filter preserving categorical boundaries and dominant patterns. Particularly useful for classified imagery where output must remain within original class set (unlike mean filter which creates interpolated values). Essential for morphological cleaning of classification outputs.
 
 Majority filtering is the mode-based equivalent of median filtering. For categorical data (classified imagery, land cover), majority preserves class definitions while smoothing noise. For continuous data, majority can reveal local peaks in value distribution. Often followed by minority class elimination (post-classification cleanup) to remove "salt-and-pepper" classification artifacts.
 
-Applications: (1) Post-classification smoothing (removes small spurious class patches), (2) Majority class map from multi-classified outputs, (3) Vector data cleaning (class disaggregation), (4) Noise suppression in thresholded imagery, (5) Attribute smoothing in segmentation outputs. Typical workflow: classify→majority filter→minority elimination→final cleaned map."#,
-            Self::Diversity => r#"Computes moving-window diversity as count of unique values/classes within neighborhood. Measures local heterogeneity: high diversity = varied terrain/classes, low diversity = homogeneous. Reveals texture, fragmentation, and pattern diversity. Often applied to classified or categorical imagery to identify transition/edge zones.
+Applications: (1) Post-classification smoothing (removes small spurious class patches), (2) Majority class map from multi-classified outputs, (3) Vector data cleaning (class disaggregation), (4) Noise suppression in thresholded imagery, (5) Attribute smoothing in segmentation outputs. Typical workflow: classify→majority filter→minority elimination→final cleaned map."#
+            }
+            Self::Diversity => {
+                r#"Computes moving-window diversity as count of unique values/classes within neighborhood. Measures local heterogeneity: high diversity = varied terrain/classes, low diversity = homogeneous. Reveals texture, fragmentation, and pattern diversity. Often applied to classified or categorical imagery to identify transition/edge zones.
 
 Diversity filter creates a metric of local variation independent of specific values. Useful for landscape ecology (habitat diversity, fragmentation metrics), classification quality assessment (high diversity = mixed/uncertain areas), and texture analysis. Applied to elevation data, diversity indicates roughness at neighborhood scale. Applied to classification, it identifies mixed/ecotone/boundary zones.
 
-Applications: (1) Landscape fragmentation mapping (high diversity = diverse mosaic, low diversity = uniform patches), (2) Classification confidence/uncertainty assessment (high diversity = uncertain area), (3) Texture analysis (heterogeneity mapping), (4) Edge/boundary detection via diversity peaks, (5) Habitat diversity for ecological analysis (suitability depends on local diversity)."#,
+Applications: (1) Landscape fragmentation mapping (high diversity = diverse mosaic, low diversity = uniform patches), (2) Classification confidence/uncertainty assessment (high diversity = uncertain area), (3) Texture analysis (heterogeneity mapping), (4) Edge/boundary detection via diversity peaks, (5) Habitat diversity for ecological analysis (suitability depends on local diversity)."#
+            }
         }
     }
 
@@ -130,7 +138,9 @@ impl MedianFilterTool {
     fn load_raster(path: &str) -> Result<Arc<Raster>, ToolError> {
         if memory_store::raster_is_memory_path(path) {
             let id = memory_store::raster_path_to_id(path).ok_or_else(|| {
-                ToolError::Validation("parameter 'input' has malformed in-memory raster path".to_string())
+                ToolError::Validation(
+                    "parameter 'input' has malformed in-memory raster path".to_string(),
+                )
             })?;
             return memory_store::get_raster_arc_by_id(id).ok_or_else(|| {
                 ToolError::Validation(format!(
@@ -166,7 +176,8 @@ impl MedianFilterTool {
         if op.needs_sig_digits() {
             params.push(ToolParamSpec {
                 name: "sig_digits",
-                description: "Number of significant digits used for quantized rank filtering (default 2).",
+                description:
+                    "Number of significant digits used for quantized rank filtering (default 2).",
                 required: false,
             });
         }
@@ -224,13 +235,16 @@ impl MedianFilterTool {
         if op.needs_sig_digits() {
             params.push(ToolParamDescriptor {
                 name: "sig_digits".to_string(),
-                description: "Number of significant digits used for quantized rank filtering (default 2).".to_string(),
+                description:
+                    "Number of significant digits used for quantized rank filtering (default 2)."
+                        .to_string(),
                 required: false,
             });
         }
         params.push(ToolParamDescriptor {
             name: "output".to_string(),
-            description: "Optional output path. If omitted, result is stored in memory.".to_string(),
+            description: "Optional output path. If omitted, result is stored in memory."
+                .to_string(),
             required: false,
         });
 
@@ -252,7 +266,10 @@ impl MedianFilterTool {
         }
     }
 
-    fn write_or_store_output(output: Raster, output_path: Option<std::path::PathBuf>) -> Result<String, ToolError> {
+    fn write_or_store_output(
+        output: Raster,
+        output_path: Option<std::path::PathBuf>,
+    ) -> Result<String, ToolError> {
         if let Some(output_path) = output_path {
             if let Some(parent) = output_path.parent() {
                 if !parent.as_os_str().is_empty() {
@@ -275,7 +292,11 @@ impl MedianFilterTool {
         }
     }
 
-    fn run_with_op(op: RankOp, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
+    fn run_with_op(
+        op: RankOp,
+        args: &ToolArgs,
+        ctx: &ToolContext,
+    ) -> Result<ToolRunResult, ToolError> {
         let input_path = Self::parse_input(args)?;
         let output_path = parse_optional_output_path(args, "output")?;
         let (filter_x, filter_y) = Self::parse_window_sizes(args);
@@ -324,10 +345,8 @@ impl MedianFilterTool {
 
                 if !band_min.is_finite() || !band_max.is_finite() {
                     done_rows += rows;
-                    compute_progress.emit_unit_fraction(
-                        ctx.progress,
-                        done_rows as f64 / total_rows as f64,
-                    );
+                    compute_progress
+                        .emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
                     continue;
                 }
 
@@ -483,14 +502,12 @@ impl MedianFilterTool {
                         .collect();
 
                     for (r, row) in row_data {
-                        output
-                            .set_row_slice(band, r as isize, &row)
-                            .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                        output.set_row_slice(band, r as isize, &row).map_err(|e| {
+                            ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                        })?;
                         done_rows += 1;
-                        compute_progress.emit_unit_fraction(
-                            ctx.progress,
-                            done_rows as f64 / total_rows as f64,
-                        );
+                        compute_progress
+                            .emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
                     }
 
                     row_start = row_end;
@@ -521,10 +538,8 @@ impl MedianFilterTool {
 
                 if !band_min.is_finite() || !band_max.is_finite() {
                     done_rows += rows;
-                    compute_progress.emit_unit_fraction(
-                        ctx.progress,
-                        done_rows as f64 / total_rows as f64,
-                    );
+                    compute_progress
+                        .emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
                     continue;
                 }
 
@@ -655,14 +670,12 @@ impl MedianFilterTool {
                         .collect();
 
                     for (r, row) in row_data {
-                        output
-                            .set_row_slice(band, r as isize, &row)
-                            .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                        output.set_row_slice(band, r as isize, &row).map_err(|e| {
+                            ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                        })?;
                         done_rows += 1;
-                        compute_progress.emit_unit_fraction(
-                            ctx.progress,
-                            done_rows as f64 / total_rows as f64,
-                        );
+                        compute_progress
+                            .emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
                     }
 
                     row_start = row_end;
@@ -693,18 +706,17 @@ impl MedianFilterTool {
 
                 if !band_min.is_finite() || !band_max.is_finite() {
                     done_rows += rows;
-                    compute_progress.emit_unit_fraction(
-                        ctx.progress,
-                        done_rows as f64 / total_rows as f64,
-                    );
+                    compute_progress
+                        .emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
                     continue;
                 }
 
-                let multiplier_diversity = if band_min.floor() != band_min || band_max.floor() != band_max {
-                    1000.0
-                } else {
-                    1.0
-                };
+                let multiplier_diversity =
+                    if band_min.floor() != band_min || band_max.floor() != band_max {
+                        1000.0
+                    } else {
+                        1.0
+                    };
                 let min_bin = (band_min * multiplier_diversity).floor() as i64;
                 let max_bin = (band_max * multiplier_diversity).floor() as i64;
                 let num_bins_i64 = (max_bin - min_bin + 1).max(1);
@@ -814,14 +826,12 @@ impl MedianFilterTool {
                         .collect();
 
                     for (r, row) in row_data {
-                        output
-                            .set_row_slice(band, r as isize, &row)
-                            .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                        output.set_row_slice(band, r as isize, &row).map_err(|e| {
+                            ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                        })?;
                         done_rows += 1;
-                        compute_progress.emit_unit_fraction(
-                            ctx.progress,
-                            done_rows as f64 / total_rows as f64,
-                        );
+                        compute_progress
+                            .emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
                     }
 
                     row_start = row_end;
@@ -852,18 +862,17 @@ impl MedianFilterTool {
 
                 if !band_min.is_finite() || !band_max.is_finite() {
                     done_rows += rows;
-                    compute_progress.emit_unit_fraction(
-                        ctx.progress,
-                        done_rows as f64 / total_rows as f64,
-                    );
+                    compute_progress
+                        .emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
                     continue;
                 }
 
-                let multiplier_majority = if band_min.floor() != band_min || band_max.floor() != band_max {
-                    100.0
-                } else {
-                    1.0
-                };
+                let multiplier_majority =
+                    if band_min.floor() != band_min || band_max.floor() != band_max {
+                        100.0
+                    } else {
+                        1.0
+                    };
                 let min_bin = (band_min * multiplier_majority).floor() as i64;
                 let max_bin = (band_max * multiplier_majority).floor() as i64;
                 let num_bins_i64 = (max_bin - min_bin + 1).max(1);
@@ -951,7 +960,10 @@ impl MedianFilterTool {
                                         }
                                     }
 
-                                    if mode_bin >= 0 && mode_bin < num_bins_i64 && histo[mode_bin as usize] < mode_freq {
+                                    if mode_bin >= 0
+                                        && mode_bin < num_bins_i64
+                                        && histo[mode_bin as usize] < mode_freq
+                                    {
                                         mode_freq = if mode_bin >= 0 && mode_bin < num_bins_i64 {
                                             histo[mode_bin as usize]
                                         } else {
@@ -1001,14 +1013,12 @@ impl MedianFilterTool {
                         .collect();
 
                     for (r, row) in row_data {
-                        output
-                            .set_row_slice(band, r as isize, &row)
-                            .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                        output.set_row_slice(band, r as isize, &row).map_err(|e| {
+                            ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                        })?;
                         done_rows += 1;
-                        compute_progress.emit_unit_fraction(
-                            ctx.progress,
-                            done_rows as f64 / total_rows as f64,
-                        );
+                        compute_progress
+                            .emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
                     }
 
                     row_start = row_end;
@@ -1080,9 +1090,7 @@ impl MedianFilterTool {
                                     bins.sort_unstable();
                                     bins[bins.len() / 2] as f64 / multiplier_rank
                                 }
-                                RankOp::Percentile => {
-                                    n_less as f64 / count as f64 * 100.0
-                                }
+                                RankOp::Percentile => n_less as f64 / count as f64 * 100.0,
                                 RankOp::Majority => {
                                     bins.sort_unstable();
                                     let mut mode_bin = bins[0];
@@ -1129,14 +1137,12 @@ impl MedianFilterTool {
                     .collect();
 
                 for (r, row) in row_data {
-                    output
-                        .set_row_slice(band, r as isize, &row)
-                        .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", r, e)))?;
+                    output.set_row_slice(band, r as isize, &row).map_err(|e| {
+                        ToolError::Execution(format!("failed writing row {}: {}", r, e))
+                    })?;
                     done_rows += 1;
-                    compute_progress.emit_unit_fraction(
-                        ctx.progress,
-                        done_rows as f64 / total_rows as f64,
-                    );
+                    compute_progress
+                        .emit_unit_fraction(ctx.progress, done_rows as f64 / total_rows as f64);
                 }
 
                 row_start = row_end;
@@ -1249,7 +1255,13 @@ mod tests {
         let input_path = memory_store::make_raster_memory_path(&id);
         args.insert("input".to_string(), json!(input_path));
         let result = tool.run(args, &make_ctx()).unwrap();
-        let out_path = result.outputs.get("path").unwrap().as_str().unwrap().to_string();
+        let out_path = result
+            .outputs
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         let out_id = memory_store::raster_path_to_id(&out_path).unwrap();
         memory_store::get_raster_by_id(out_id).unwrap()
     }
@@ -1261,8 +1273,16 @@ mod tests {
         args.insert("filter_size_y".to_string(), json!(5));
         args.insert("sig_digits".to_string(), json!(2));
 
-        let med = run_with_memory(&MedianFilterTool, &mut args.clone(), make_constant_raster(20, 20, 7.0));
-        let maj = run_with_memory(&MajorityFilterTool, &mut args, make_constant_raster(20, 20, 7.0));
+        let med = run_with_memory(
+            &MedianFilterTool,
+            &mut args.clone(),
+            make_constant_raster(20, 20, 7.0),
+        );
+        let maj = run_with_memory(
+            &MajorityFilterTool,
+            &mut args,
+            make_constant_raster(20, 20, 7.0),
+        );
         assert!((med.get(0, 10, 10) - 7.0).abs() < 1e-9);
         assert!((maj.get(0, 10, 10) - 7.0).abs() < 1e-9);
     }
@@ -1274,8 +1294,16 @@ mod tests {
         args.insert("filter_size_y".to_string(), json!(5));
         args.insert("sig_digits".to_string(), json!(2));
 
-        let pct = run_with_memory(&PercentileFilterTool, &mut args.clone(), make_constant_raster(20, 20, 5.0));
-        let div = run_with_memory(&DiversityFilterTool, &mut args, make_constant_raster(20, 20, 5.0));
+        let pct = run_with_memory(
+            &PercentileFilterTool,
+            &mut args.clone(),
+            make_constant_raster(20, 20, 5.0),
+        );
+        let div = run_with_memory(
+            &DiversityFilterTool,
+            &mut args,
+            make_constant_raster(20, 20, 5.0),
+        );
         assert!(pct.get(0, 10, 10).abs() < 1e-9);
         assert!((div.get(0, 10, 10) - 1.0).abs() < 1e-9);
     }
@@ -1305,13 +1333,19 @@ mod tests {
 
         let percents = progress.percents();
         assert!(!percents.is_empty(), "expected progress events");
-        assert!(percents.len() <= 101, "progress events should be bounded to percent buckets");
+        assert!(
+            percents.len() <= 101,
+            "progress events should be bounded to percent buckets"
+        );
 
         for w in percents.windows(2) {
             assert!(w[1] >= w[0], "progress should be monotonic non-decreasing");
         }
 
         let final_pct = *percents.last().unwrap();
-        assert!((final_pct - 1.0).abs() < 1e-9, "final progress should be 100%");
+        assert!(
+            (final_pct - 1.0).abs() < 1e-9,
+            "final progress should be 100%"
+        );
     }
 }

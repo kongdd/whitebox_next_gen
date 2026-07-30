@@ -4,14 +4,14 @@ use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
 
-use serde_json::json;
-use wbprojection::{identify_epsg_from_wkt_with_policy, Crs, EpsgIdentifyPolicy};
-use wbcore::{
-    parse_optional_output_path, parse_raster_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory, ToolContext, ToolError,
-    ToolExample, ToolManifest, ToolMetadata, ToolParamSchema, ToolParamSpec, ToolRunResult, ToolStability,
-    param_schema_map,
-};
 use rand::RngExt;
+use serde_json::json;
+use wbcore::{
+    param_schema_map, parse_optional_output_path, parse_raster_path_arg, LicenseTier, Tool,
+    ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
+    ToolParamSchema, ToolParamSpec, ToolRunResult, ToolStability,
+};
+use wbprojection::{identify_epsg_from_wkt_with_policy, Crs, EpsgIdentifyPolicy};
 use wbraster::{DataType, Raster, RasterFormat};
 
 use crate::memory_store;
@@ -38,7 +38,10 @@ pub fn flow_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPar
         ])),
         "d8_flow_accum" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("out_type", ToolParamSchema::enum_values(&["cells", "ca", "sca"])),
+            (
+                "out_type",
+                ToolParamSchema::enum_values(&["cells", "ca", "sca"]),
+            ),
             ("log_transform", ToolParamSchema::bool()),
             ("clip", ToolParamSchema::bool()),
             ("input_is_pointer", ToolParamSchema::bool()),
@@ -51,7 +54,10 @@ pub fn flow_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPar
         ])),
         "dinf_flow_accum" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("out_type", ToolParamSchema::enum_values(&["cells", "ca", "sca"])),
+            (
+                "out_type",
+                ToolParamSchema::enum_values(&["cells", "ca", "sca"]),
+            ),
             ("convergence_threshold", ToolParamSchema::scalar_float()),
             ("log_transform", ToolParamSchema::bool()),
             ("clip", ToolParamSchema::bool()),
@@ -64,7 +70,10 @@ pub fn flow_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPar
         ])),
         "fd8_flow_accum" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
-            ("out_type", ToolParamSchema::enum_values(&["cells", "ca", "sca"])),
+            (
+                "out_type",
+                ToolParamSchema::enum_values(&["cells", "ca", "sca"]),
+            ),
             ("exponent", ToolParamSchema::scalar_float()),
             ("threshold", ToolParamSchema::scalar_float()),
             ("log_transform", ToolParamSchema::bool()),
@@ -77,14 +86,20 @@ pub fn flow_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPar
         ])),
         "rho8_flow_accum" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
-            ("out_type", ToolParamSchema::enum_values(&["cells", "ca", "sca"])),
+            (
+                "out_type",
+                ToolParamSchema::enum_values(&["cells", "ca", "sca"]),
+            ),
             ("log_transform", ToolParamSchema::bool()),
             ("clip", ToolParamSchema::bool()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "mdinf_flow_accum" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
-            ("out_type", ToolParamSchema::enum_values(&["cells", "ca", "sca"])),
+            (
+                "out_type",
+                ToolParamSchema::enum_values(&["cells", "ca", "sca"]),
+            ),
             ("exponent", ToolParamSchema::scalar_float()),
             ("convergence_threshold", ToolParamSchema::scalar_float()),
             ("log_transform", ToolParamSchema::bool()),
@@ -93,7 +108,10 @@ pub fn flow_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPar
         ])),
         "qin_flow_accumulation" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
-            ("out_type", ToolParamSchema::enum_values(&["cells", "ca", "sca"])),
+            (
+                "out_type",
+                ToolParamSchema::enum_values(&["cells", "ca", "sca"]),
+            ),
             ("exponent", ToolParamSchema::scalar_float()),
             ("max_slope", ToolParamSchema::scalar_float()),
             ("convergence_threshold", ToolParamSchema::scalar_float()),
@@ -103,7 +121,10 @@ pub fn flow_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPar
         ])),
         "quinn_flow_accumulation" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
-            ("out_type", ToolParamSchema::enum_values(&["cells", "ca", "sca"])),
+            (
+                "out_type",
+                ToolParamSchema::enum_values(&["cells", "ca", "sca"]),
+            ),
             ("exponent", ToolParamSchema::scalar_float()),
             ("convergence_threshold", ToolParamSchema::scalar_float()),
             ("log_transform", ToolParamSchema::bool()),
@@ -112,7 +133,10 @@ pub fn flow_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPar
         ])),
         "minimal_dispersion_flow_algorithm" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
-            ("out_type", ToolParamSchema::enum_values(&["cells", "ca", "sca"])),
+            (
+                "out_type",
+                ToolParamSchema::enum_values(&["cells", "ca", "sca"]),
+            ),
             (
                 "path_corrected_direction_preference",
                 ToolParamSchema::scalar_float(),
@@ -156,12 +180,16 @@ fn load_raster(path: &str) -> Result<Arc<Raster>, ToolError> {
         .map_err(|e| ToolError::Execution(format!("failed reading input raster: {}", e)))
 }
 
-fn write_or_store_output(output: Raster, output_path: Option<std::path::PathBuf>) -> Result<String, ToolError> {
+fn write_or_store_output(
+    output: Raster,
+    output_path: Option<std::path::PathBuf>,
+) -> Result<String, ToolError> {
     if let Some(output_path) = output_path {
         if let Some(parent) = output_path.parent() {
             if !parent.as_os_str().is_empty() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| ToolError::Execution(format!("failed creating output directory: {}", e)))?;
+                std::fs::create_dir_all(parent).map_err(|e| {
+                    ToolError::Execution(format!("failed creating output directory: {}", e))
+                })?;
             }
         }
         let output_path_str = output_path.to_string_lossy().to_string();
@@ -204,7 +232,9 @@ fn build_dual_raster_result(flow_dir_path: String, flow_accum_path: String) -> T
     }
 }
 
-fn parse_input_and_output(args: &ToolArgs) -> Result<(Arc<Raster>, Option<std::path::PathBuf>), ToolError> {
+fn parse_input_and_output(
+    args: &ToolArgs,
+) -> Result<(Arc<Raster>, Option<std::path::PathBuf>), ToolError> {
     let input_path = parse_raster_path_arg(args, "dem")
         .or_else(|_| parse_raster_path_arg(args, "raster"))
         .or_else(|_| parse_raster_path_arg(args, "input"))?;
@@ -281,7 +311,8 @@ fn vincenty_distance_m(start: (f64, f64), end: (f64, f64)) -> f64 {
                 * sin_alpha
                 * (sigma
                     + c * sin_sigma
-                        * (cos2_sigma_m + c * cos_sigma * (-1.0 + 2.0 * cos2_sigma_m * cos2_sigma_m)));
+                        * (cos2_sigma_m
+                            + c * cos_sigma * (-1.0 + 2.0 * cos2_sigma_m * cos2_sigma_m)));
         iter_limit -= 1;
         if (lambda - lambda_prime).abs() <= 1e-12 || iter_limit <= 0 {
             break (cos_sq_alpha, sin_sigma, cos_sigma, cos2_sigma_m, sigma);
@@ -441,7 +472,11 @@ fn dinf_pointer_from_dem(input: &Raster) -> Vec<f64> {
                 if e0 > e1 && e0 > e2 {
                     let s1 = (e0 - e1) / grid_res;
                     let s2 = (e1 - e2) / grid_res;
-                    r_ang = if s1 != 0.0 { (s2 / s1).atan() } else { PI / 2.0 };
+                    r_ang = if s1 != 0.0 {
+                        (s2 / s1).atan()
+                    } else {
+                        PI / 2.0
+                    };
                     s = (s1 * s1 + s2 * s2).sqrt();
                     if (s1 < 0.0 && s2 <= 0.0) || (s1 == 0.0 && s2 < 0.0) {
                         s *= -1.0;
@@ -542,7 +577,11 @@ fn dinf_pointer_from_dem_geographic(input: &Raster) -> Vec<f64> {
                     let s2 = (e1 - e2) / grid_res;
                     let grid_res = geo_distance_m(use_haversine, (phi0, lambda0), (phi1, lambda1));
                     let s1 = (e0 - e1) / grid_res;
-                    r_ang = if s1 != 0.0 { (s2 / s1).atan() } else { PI / 2.0 };
+                    r_ang = if s1 != 0.0 {
+                        (s2 / s1).atan()
+                    } else {
+                        PI / 2.0
+                    };
                     s = (s1 * s1 + s2 * s2).sqrt();
                     if (s1 < 0.0 && s2 <= 0.0) || (s1 == 0.0 && s2 < 0.0) {
                         s *= -1.0;
@@ -553,14 +592,16 @@ fn dinf_pointer_from_dem_geographic(input: &Raster) -> Vec<f64> {
                             s = s1;
                         } else {
                             r_ang = atan_of_1;
-                            let diag = geo_distance_m(use_haversine, (phi0, lambda0), (phi2, lambda2));
+                            let diag =
+                                geo_distance_m(use_haversine, (phi0, lambda0), (phi2, lambda2));
                             s = (e0 - e2) / diag;
                         }
                     }
                 } else if e0 > e1 || e0 > e2 {
                     if e0 > e1 {
                         r_ang = 0.0;
-                        let grid_res = geo_distance_m(use_haversine, (phi0, lambda0), (phi1, lambda1));
+                        let grid_res =
+                            geo_distance_m(use_haversine, (phi0, lambda0), (phi1, lambda1));
                         s = (e0 - e1) / grid_res;
                     } else {
                         r_ang = atan_of_1;
@@ -655,21 +696,77 @@ fn dinf_flow_accum_core(
             let r = i / cols;
             let c = i % cols;
             let (mut p1, mut p2, a1, b1, a2, b2) = if dir < 45.0 {
-                ((45.0 - dir) / 45.0, dir / 45.0, c as isize, r as isize - 1, c as isize + 1, r as isize - 1)
+                (
+                    (45.0 - dir) / 45.0,
+                    dir / 45.0,
+                    c as isize,
+                    r as isize - 1,
+                    c as isize + 1,
+                    r as isize - 1,
+                )
             } else if dir < 90.0 {
-                ((90.0 - dir) / 45.0, (dir - 45.0) / 45.0, c as isize + 1, r as isize - 1, c as isize + 1, r as isize)
+                (
+                    (90.0 - dir) / 45.0,
+                    (dir - 45.0) / 45.0,
+                    c as isize + 1,
+                    r as isize - 1,
+                    c as isize + 1,
+                    r as isize,
+                )
             } else if dir < 135.0 {
-                ((135.0 - dir) / 45.0, (dir - 90.0) / 45.0, c as isize + 1, r as isize, c as isize + 1, r as isize + 1)
+                (
+                    (135.0 - dir) / 45.0,
+                    (dir - 90.0) / 45.0,
+                    c as isize + 1,
+                    r as isize,
+                    c as isize + 1,
+                    r as isize + 1,
+                )
             } else if dir < 180.0 {
-                ((180.0 - dir) / 45.0, (dir - 135.0) / 45.0, c as isize + 1, r as isize + 1, c as isize, r as isize + 1)
+                (
+                    (180.0 - dir) / 45.0,
+                    (dir - 135.0) / 45.0,
+                    c as isize + 1,
+                    r as isize + 1,
+                    c as isize,
+                    r as isize + 1,
+                )
             } else if dir < 225.0 {
-                ((225.0 - dir) / 45.0, (dir - 180.0) / 45.0, c as isize, r as isize + 1, c as isize - 1, r as isize + 1)
+                (
+                    (225.0 - dir) / 45.0,
+                    (dir - 180.0) / 45.0,
+                    c as isize,
+                    r as isize + 1,
+                    c as isize - 1,
+                    r as isize + 1,
+                )
             } else if dir < 270.0 {
-                ((270.0 - dir) / 45.0, (dir - 225.0) / 45.0, c as isize - 1, r as isize + 1, c as isize - 1, r as isize)
+                (
+                    (270.0 - dir) / 45.0,
+                    (dir - 225.0) / 45.0,
+                    c as isize - 1,
+                    r as isize + 1,
+                    c as isize - 1,
+                    r as isize,
+                )
             } else if dir < 315.0 {
-                ((315.0 - dir) / 45.0, (dir - 270.0) / 45.0, c as isize - 1, r as isize, c as isize - 1, r as isize - 1)
+                (
+                    (315.0 - dir) / 45.0,
+                    (dir - 270.0) / 45.0,
+                    c as isize - 1,
+                    r as isize,
+                    c as isize - 1,
+                    r as isize - 1,
+                )
             } else {
-                ((360.0 - dir) / 45.0, (dir - 315.0) / 45.0, c as isize - 1, r as isize - 1, c as isize, r as isize - 1)
+                (
+                    (360.0 - dir) / 45.0,
+                    (dir - 315.0) / 45.0,
+                    c as isize - 1,
+                    r as isize - 1,
+                    c as isize,
+                    r as isize - 1,
+                )
             };
 
             if out[i] >= convergence_threshold {
@@ -730,12 +827,7 @@ fn dinf_flow_accum_core(
     out
 }
 
-fn apply_dinf_output_type(
-    accum: &mut [f64],
-    input: &Raster,
-    out_type: &str,
-    log_transform: bool,
-) {
+fn apply_dinf_output_type(accum: &mut [f64], input: &Raster, out_type: &str, log_transform: bool) {
     if !raster_is_geographic(input) || out_type == "cells" {
         let mut area = input.cell_size_x * input.cell_size_y;
         let mut grid_size = (input.cell_size_x + input.cell_size_y) / 2.0;
@@ -768,13 +860,15 @@ fn apply_dinf_output_type(
             let lambda1 = input.col_center_x(c as isize - 1);
             let phi2 = phi1;
             let lambda2 = input.col_center_x(c as isize + 1);
-            let grid_length_x = geo_distance_m(use_haversine, (phi1, lambda1), (phi2, lambda2)) / 2.0;
+            let grid_length_x =
+                geo_distance_m(use_haversine, (phi1, lambda1), (phi2, lambda2)) / 2.0;
 
             let phi1 = input.row_center_y(r as isize - 1);
             let lambda1 = input.col_center_x(c as isize);
             let phi2 = input.row_center_y(r as isize + 1);
             let lambda2 = lambda1;
-            let grid_length_y = geo_distance_m(use_haversine, (phi1, lambda1), (phi2, lambda2)) / 2.0;
+            let grid_length_y =
+                geo_distance_m(use_haversine, (phi1, lambda1), (phi2, lambda2)) / 2.0;
 
             let cell_area = grid_length_x * grid_length_y;
             let mut avg_cell_size = (grid_length_x + grid_length_y) / 2.0;
@@ -903,7 +997,11 @@ fn fd8_flow_accum_core(input: &Raster, exponent: f64, convergence_threshold: f64
     }
 
     let is_geo = raster_is_geographic(input);
-    let use_haversine = if is_geo { should_use_haversine(input) } else { false };
+    let use_haversine = if is_geo {
+        should_use_haversine(input)
+    } else {
+        false
+    };
     let cell_x = input.cell_size_x;
     let cell_y = input.cell_size_y;
     let diag = (cell_x * cell_x + cell_y * cell_y).sqrt();
@@ -932,7 +1030,10 @@ fn fd8_flow_accum_core(input: &Raster, exponent: f64, convergence_threshold: f64
                     continue;
                 }
                 let slope = if is_geo {
-                    let start = (input.row_center_y(r as isize), input.col_center_x(c as isize));
+                    let start = (
+                        input.row_center_y(r as isize),
+                        input.col_center_x(c as isize),
+                    );
                     let end = (input.row_center_y(rn), input.col_center_x(cn));
                     (z - zn) / geo_distance_m(use_haversine, start, end)
                 } else {
@@ -956,7 +1057,10 @@ fn fd8_flow_accum_core(input: &Raster, exponent: f64, convergence_threshold: f64
                     continue;
                 }
                 let slope = if is_geo {
-                    let start = (input.row_center_y(r as isize), input.col_center_x(c as isize));
+                    let start = (
+                        input.row_center_y(r as isize),
+                        input.col_center_x(c as isize),
+                    );
                     let end = (input.row_center_y(rn), input.col_center_x(cn));
                     (z - zn) / geo_distance_m(use_haversine, start, end)
                 } else {
@@ -1046,8 +1150,16 @@ fn mdinf_flow_accum_core(input: &Raster, exponent: f64, convergence_threshold: f
     let xd: [isize; 8] = [0, -1, -1, -1, 0, 1, 1, 1];
     let yd: [isize; 8] = [-1, -1, 0, 1, 1, 1, 0, -1];
     // Distance multipliers: 1 for cardinal vertices (k=0,2,4,6), sqrt(2) for diagonal (k=1,3,5,7)
-    let dd = [1.0_f64, std::f64::consts::SQRT_2, 1.0, std::f64::consts::SQRT_2,
-              1.0, std::f64::consts::SQRT_2, 1.0, std::f64::consts::SQRT_2];
+    let dd = [
+        1.0_f64,
+        std::f64::consts::SQRT_2,
+        1.0,
+        std::f64::consts::SQRT_2,
+        1.0,
+        std::f64::consts::SQRT_2,
+        1.0,
+        std::f64::consts::SQRT_2,
+    ];
     // Grid lengths for D8-like convergent fallback (DX/DY = NE,E,SE,S,SW,W,NW,N)
     let grid_lengths = [diag, cell_x, diag, cell_y, diag, cell_x, diag, cell_y];
     let quarter_pi = PI / 4.0;
@@ -1099,7 +1211,11 @@ fn mdinf_flow_accum_core(input: &Raster, exponent: f64, convergence_threshold: f
                     let nz = (xd[fac] * yd[ii] - xd[ii] * yd[fac]) as f64 * grid_res * grid_res;
 
                     let hr = if nx == 0.0 {
-                        if ny >= 0.0 { 0.0 } else { PI }
+                        if ny >= 0.0 {
+                            0.0
+                        } else {
+                            PI
+                        }
                     } else if nx >= 0.0 {
                         PI / 2.0 - (ny / nx).atan()
                     } else {
@@ -1108,21 +1224,24 @@ fn mdinf_flow_accum_core(input: &Raster, exponent: f64, convergence_threshold: f
 
                     let hs = {
                         let denom_sq = nx * nx + ny * ny + nz * nz;
-                        if denom_sq == 0.0 { 0.0 } else { -(nz / denom_sq.sqrt()).acos().tan() }
+                        if denom_sq == 0.0 {
+                            0.0
+                        } else {
+                            -(nz / denom_sq.sqrt()).acos().tan()
+                        }
                     };
 
                     // Clip hr to facet bounds if it falls outside [fac*pi/4, (fac+1)*pi/4]
-                    let (hr, hs) = if hr < fac as f64 * quarter_pi
-                        || hr > (fac + 1) as f64 * quarter_pi
-                    {
-                        if p1 < p2 {
-                            (fac as f64 * quarter_pi, (z - p1) / (dd[fac] * grid_res))
+                    let (hr, hs) =
+                        if hr < fac as f64 * quarter_pi || hr > (fac + 1) as f64 * quarter_pi {
+                            if p1 < p2 {
+                                (fac as f64 * quarter_pi, (z - p1) / (dd[fac] * grid_res))
+                            } else {
+                                (ii as f64 * quarter_pi, (z - p2) / (dd[ii] * grid_res))
+                            }
                         } else {
-                            (ii as f64 * quarter_pi, (z - p2) / (dd[ii] * grid_res))
-                        }
-                    } else {
-                        (hr, hs)
-                    };
+                            (hr, hs)
+                        };
 
                     r_facet[fac] = hr;
                     s_facet[fac] = hs;
@@ -1198,9 +1317,8 @@ fn mdinf_flow_accum_core(input: &Raster, exponent: f64, convergence_threshold: f
                         weights[fac] += valley[fac]
                             * ((fac + 1) as f64 * quarter_pi - r_facet[fac])
                             / quarter_pi;
-                        weights[ii] += valley[fac]
-                            * (r_facet[fac] - fac as f64 * quarter_pi)
-                            / quarter_pi;
+                        weights[ii] +=
+                            valley[fac] * (r_facet[fac] - fac as f64 * quarter_pi) / quarter_pi;
                     }
                 }
             }
@@ -1283,7 +1401,11 @@ fn minimal_dispersion_core(
     let n = rows * cols;
     let nodata = input.nodata;
     let is_geo = raster_is_geographic(input);
-    let use_haversine = if is_geo { should_use_haversine(input) } else { false };
+    let use_haversine = if is_geo {
+        should_use_haversine(input)
+    } else {
+        false
+    };
 
     // Step 1: calculate D8 pointer and D-infinity direction.
     let mut d8_flow_ptr;
@@ -1345,8 +1467,14 @@ fn minimal_dispersion_core(
                                 continue;
                             }
                             let slope = {
-                                let start = (y_max_val - (r as f64 + 0.5) * cell_y, x_min_val + (c as f64 + 0.5) * cell_x);
-                                let end = (y_max_val - (rn as f64 + 0.5) * cell_y, x_min_val + (cn as f64 + 0.5) * cell_x);
+                                let start = (
+                                    y_max_val - (r as f64 + 0.5) * cell_y,
+                                    x_min_val + (c as f64 + 0.5) * cell_x,
+                                );
+                                let end = (
+                                    y_max_val - (rn as f64 + 0.5) * cell_y,
+                                    x_min_val + (cn as f64 + 0.5) * cell_x,
+                                );
                                 let d = geo_distance_m(use_haversine, start, end);
                                 (z - zn) / d
                             };
@@ -1378,7 +1506,8 @@ fn minimal_dispersion_core(
 
         dinf_flow_dir = dinf_pointer_from_dem_geographic(input);
     } else {
-        (d8_flow_ptr, dinf_flow_dir, interior_pit_found) = mdfa_initial_dirs_projected(input, esri_style);
+        (d8_flow_ptr, dinf_flow_dir, interior_pit_found) =
+            mdfa_initial_dirs_projected(input, esri_style);
     }
 
     // Step 2: find source cells and perform path-correction on D8 pointers.
@@ -1679,7 +1808,11 @@ fn apply_mdfa_output_type(
 
     if out_type == "sca" {
         let is_geo = raster_is_geographic(input);
-        let use_haversine = if is_geo { should_use_haversine(input) } else { false };
+        let use_haversine = if is_geo {
+            should_use_haversine(input)
+        } else {
+            false
+        };
 
         if !is_geo {
             let cell_x = input.cell_size_x;
@@ -1785,7 +1918,12 @@ fn apply_mdfa_output_type(
     }
 }
 
-fn qin_flow_accum_core(input: &Raster, exponent: f64, max_slope_deg: f64, convergence_threshold: f64) -> Vec<f64> {
+fn qin_flow_accum_core(
+    input: &Raster,
+    exponent: f64,
+    max_slope_deg: f64,
+    convergence_threshold: f64,
+) -> Vec<f64> {
     let rows = input.rows;
     let cols = input.cols;
     let nodata = input.nodata;
@@ -2100,7 +2238,11 @@ fn mdfa_initial_dirs_projected(input: &Raster, esri_style: bool) -> (Vec<u16>, V
                         if e0 > e1 && e0 > e2 {
                             let s1 = (e0 - e1) / grid_res;
                             let s2 = (e1 - e2) / grid_res;
-                            r_ang = if s1 != 0.0 { (s2 / s1).atan() } else { PI / 2.0 };
+                            r_ang = if s1 != 0.0 {
+                                (s2 / s1).atan()
+                            } else {
+                                PI / 2.0
+                            };
                             s = (s1 * s1 + s2 * s2).sqrt();
                             if (s1 < 0.0 && s2 <= 0.0) || (s1 == 0.0 && s2 < 0.0) {
                                 s *= -1.0;
@@ -2186,7 +2328,11 @@ fn rho8_dir_from_dem(input: &Raster) -> Vec<i8> {
     let rows = input.rows;
     let cols = input.cols;
     let is_geo = raster_is_geographic(input);
-    let use_haversine = if is_geo { should_use_haversine(input) } else { false };
+    let use_haversine = if is_geo {
+        should_use_haversine(input)
+    } else {
+        false
+    };
     // Capture coord scalars so threads can inline row_center_y / col_center_x.
     let y_max_val = input.y_max();
     let x_min_val = input.x_min;
@@ -2229,14 +2375,18 @@ fn rho8_dir_from_dem(input: &Raster) -> Vec<i8> {
                             let lat1 = y_max_val - (r as f64 + 0.5) * cell_size_y;
                             let lon1 = x_min_val + (c as f64 + 0.5) * cell_size_x;
                             let (lat2, lon2) = if is_cardinal {
-                                (y_max_val - (rn as f64 + 0.5) * cell_size_y,
-                                 x_min_val + (cn as f64 + 0.5) * cell_size_x)
+                                (
+                                    y_max_val - (rn as f64 + 0.5) * cell_size_y,
+                                    x_min_val + (cn as f64 + 0.5) * cell_size_x,
+                                )
                             } else {
                                 // Diagonal: approximate distance via adjacent cardinal cell (k+1).
                                 let rk1 = r as isize + DY[k + 1];
                                 let ck1 = c as isize + DX[k + 1];
-                                (y_max_val - (rk1 as f64 + 0.5) * cell_size_y,
-                                 x_min_val + (ck1 as f64 + 0.5) * cell_size_x)
+                                (
+                                    y_max_val - (rk1 as f64 + 0.5) * cell_size_y,
+                                    x_min_val + (ck1 as f64 + 0.5) * cell_size_x,
+                                )
                             };
                             let d = geo_distance_m(use_haversine, (lat1, lon1), (lat2, lon2));
                             if is_cardinal {
@@ -2416,7 +2566,11 @@ fn apply_accum_output_type(
     log_transform: bool,
 ) {
     let is_geo = raster_is_geographic(input);
-    let use_haversine = if is_geo { should_use_haversine(input) } else { false };
+    let use_haversine = if is_geo {
+        should_use_haversine(input)
+    } else {
+        false
+    };
 
     if !is_geo {
         let mut cell_area = input.cell_size_x * input.cell_size_y;
@@ -2647,7 +2801,11 @@ impl Tool for D8FlowAccumTool {
                 description: "Compute D8 specific contributing area from DEM".to_string(),
                 args: ToolArgs::new(),
             }],
-            tags: vec!["hydrology".to_string(), "flow-accumulation".to_string(), "d8".to_string()],
+            tags: vec![
+                "hydrology".to_string(),
+                "flow-accumulation".to_string(),
+                "d8".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2718,14 +2876,25 @@ impl Tool for D8FlowAccumTool {
                         -32768.0
                     } else {
                         let raw = accum[i] * cell_area / flow_width;
-                        if log_transform { raw.ln() } else { raw }
+                        if log_transform {
+                            raw.ln()
+                        } else {
+                            raw
+                        }
                     };
                     out.set_unchecked(0, r as isize, c as isize, v);
                 }
             }
         } else {
             // Geographic: reuse existing per-cell calculation path then copy.
-            apply_accum_output_type(&mut accum, &flow_dir, &input, -32768.0, out_type, log_transform);
+            apply_accum_output_type(
+                &mut accum,
+                &flow_dir,
+                &input,
+                -32768.0,
+                out_type,
+                log_transform,
+            );
             for r in 0..input.rows {
                 for c in 0..input.cols {
                     out.set_unchecked(0, r as isize, c as isize, accum[idx(r, c, input.cols)]);
@@ -2750,8 +2919,16 @@ D-Infinity has higher computational cost than D8 but better represents true grad
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "dem", description: "Input DEM raster", required: true },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "dem",
+                    description: "Input DEM raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -2801,17 +2978,46 @@ impl Tool for DInfFlowAccumTool {
         ToolMetadata {
             id: "dinf_flow_accum",
             display_name: "D-Infinity Flow Accumulation",
-            summary: "Calculates D-Infinity flow accumulation from a DEM or D-Infinity pointer raster.",
+            summary:
+                "Calculates D-Infinity flow accumulation from a DEM or D-Infinity pointer raster.",
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input DEM or D-Infinity pointer raster", required: true },
-                ToolParamSpec { name: "out_type", description: "Output type: cells, ca, or sca", required: false },
-                ToolParamSpec { name: "convergence_threshold", description: "Threshold above which flow is not dispersed", required: false },
-                ToolParamSpec { name: "log_transform", description: "Log-transform output", required: false },
-                ToolParamSpec { name: "clip", description: "Clip display max (accepted for compatibility)", required: false },
-                ToolParamSpec { name: "input_is_pointer", description: "Treat input as D-Infinity pointer raster", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input DEM or D-Infinity pointer raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "out_type",
+                    description: "Output type: cells, ca, or sca",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "convergence_threshold",
+                    description: "Threshold above which flow is not dispersed",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "log_transform",
+                    description: "Log-transform output",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "clip",
+                    description: "Clip display max (accepted for compatibility)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "input_is_pointer",
+                    description: "Treat input as D-Infinity pointer raster",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -2826,7 +3032,9 @@ impl Tool for DInfFlowAccumTool {
         ToolManifest {
             id: "dinf_flow_accum".to_string(),
             display_name: "D-Infinity Flow Accumulation".to_string(),
-            summary: "Calculates D-Infinity flow accumulation from a DEM or D-Infinity pointer raster.".to_string(),
+            summary:
+                "Calculates D-Infinity flow accumulation from a DEM or D-Infinity pointer raster."
+                    .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
@@ -2836,7 +3044,11 @@ impl Tool for DInfFlowAccumTool {
                 description: "Compute D-Infinity specific contributing area".to_string(),
                 args: ToolArgs::new(),
             }],
-            tags: vec!["hydrology".to_string(), "flow-accumulation".to_string(), "dinf".to_string()],
+            tags: vec![
+                "hydrology".to_string(),
+                "flow-accumulation".to_string(),
+                "dinf".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -2867,7 +3079,11 @@ impl Tool for DInfFlowAccumTool {
             .or_else(|| args.get("threshold"))
             .and_then(|v| v.as_f64())
             .unwrap_or(f64::INFINITY);
-        let convergence_threshold = if convergence_threshold <= 0.0 { f64::INFINITY } else { convergence_threshold };
+        let convergence_threshold = if convergence_threshold <= 0.0 {
+            f64::INFINITY
+        } else {
+            convergence_threshold
+        };
         let log_transform = args
             .get("log_transform")
             .or_else(|| args.get("log"))
@@ -2891,7 +3107,13 @@ impl Tool for DInfFlowAccumTool {
             dinf_pointer_from_dem(&input)
         };
 
-        let mut accum = dinf_flow_accum_core(&flow_dir, input.rows, input.cols, input.nodata, convergence_threshold);
+        let mut accum = dinf_flow_accum_core(
+            &flow_dir,
+            input.rows,
+            input.cols,
+            input.nodata,
+            convergence_threshold,
+        );
         apply_dinf_output_type(&mut accum, &input, out_type, log_transform);
 
         let mut out = input.as_ref().clone();
@@ -2919,13 +3141,41 @@ Slope exponent (default 1.1) controls flow sensitivity to gradient magnitude—h
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "dem", description: "Input DEM raster", required: true },
-                ToolParamSpec { name: "out_type", description: "Output type: cells, ca, or sca", required: false },
-                ToolParamSpec { name: "exponent", description: "Slope weighting exponent", required: false },
-                ToolParamSpec { name: "convergence_threshold", description: "Threshold above which flow is not dispersed", required: false },
-                ToolParamSpec { name: "log_transform", description: "Log-transform output", required: false },
-                ToolParamSpec { name: "clip", description: "Clip display max (accepted for compatibility)", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "dem",
+                    description: "Input DEM raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "out_type",
+                    description: "Output type: cells, ca, or sca",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "exponent",
+                    description: "Slope weighting exponent",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "convergence_threshold",
+                    description: "Threshold above which flow is not dispersed",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "log_transform",
+                    description: "Log-transform output",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "clip",
+                    description: "Clip display max (accepted for compatibility)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -2960,8 +3210,7 @@ Slope exponent (default 1.1) controls flow sensitivity to gradient magnitude—h
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        parse_raster_path_arg(args, "dem")
-            .or_else(|_| parse_raster_path_arg(args, "input"))?;
+        parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
         Ok(())
     }
 
@@ -2985,8 +3234,11 @@ Slope exponent (default 1.1) controls flow sensitivity to gradient magnitude—h
             .or_else(|| args.get("threshold"))
             .and_then(|v| v.as_f64())
             .unwrap_or(f64::INFINITY);
-        let convergence_threshold =
-            if convergence_threshold <= 0.0 { f64::INFINITY } else { convergence_threshold };
+        let convergence_threshold = if convergence_threshold <= 0.0 {
+            f64::INFINITY
+        } else {
+            convergence_threshold
+        };
         let log_transform = args
             .get("log_transform")
             .or_else(|| args.get("log"))
@@ -3017,14 +3269,46 @@ impl Tool for QinFlowAccumulationTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "dem", description: "Input DEM raster", required: true },
-                ToolParamSpec { name: "out_type", description: "Output type: cells, ca, or sca", required: false },
-                ToolParamSpec { name: "exponent", description: "Upper-bound exponent parameter", required: false },
-                ToolParamSpec { name: "max_slope", description: "Upper-bound slope in degrees", required: false },
-                ToolParamSpec { name: "convergence_threshold", description: "Threshold above which flow is not dispersed", required: false },
-                ToolParamSpec { name: "log_transform", description: "Log-transform output", required: false },
-                ToolParamSpec { name: "clip", description: "Clip display max (accepted for compatibility)", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "dem",
+                    description: "Input DEM raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "out_type",
+                    description: "Output type: cells, ca, or sca",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "exponent",
+                    description: "Upper-bound exponent parameter",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "max_slope",
+                    description: "Upper-bound slope in degrees",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "convergence_threshold",
+                    description: "Threshold above which flow is not dispersed",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "log_transform",
+                    description: "Log-transform output",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "clip",
+                    description: "Clip display max (accepted for compatibility)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -3050,14 +3334,17 @@ impl Tool for QinFlowAccumulationTool {
                 description: "Compute Qin specific contributing area from DEM".to_string(),
                 args: ToolArgs::new(),
             }],
-            tags: vec!["hydrology".to_string(), "flow-accumulation".to_string(), "qin".to_string()],
+            tags: vec![
+                "hydrology".to_string(),
+                "flow-accumulation".to_string(),
+                "qin".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        parse_raster_path_arg(args, "dem")
-            .or_else(|_| parse_raster_path_arg(args, "input"))?;
+        parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
         Ok(())
     }
 
@@ -3076,20 +3363,30 @@ impl Tool for QinFlowAccumulationTool {
             "ca"
         };
 
-        let mut exponent = args.get("exponent").and_then(|v| v.as_f64()).unwrap_or(10.0);
+        let mut exponent = args
+            .get("exponent")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(10.0);
         if exponent < 1.1 {
             exponent = 1.1;
         }
         if exponent >= 50.0 {
             exponent = 50.0;
         }
-        let max_slope = args.get("max_slope").and_then(|v| v.as_f64()).unwrap_or(45.0);
+        let max_slope = args
+            .get("max_slope")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(45.0);
         let convergence_threshold = args
             .get("convergence_threshold")
             .or_else(|| args.get("threshold"))
             .and_then(|v| v.as_f64())
             .unwrap_or(f64::INFINITY);
-        let convergence_threshold = if convergence_threshold <= 0.0 { f64::INFINITY } else { convergence_threshold };
+        let convergence_threshold = if convergence_threshold <= 0.0 {
+            f64::INFINITY
+        } else {
+            convergence_threshold
+        };
         let log_transform = args
             .get("log_transform")
             .or_else(|| args.get("log"))
@@ -3119,7 +3416,11 @@ impl Tool for QinFlowAccumulationTool {
                         input.nodata
                     } else {
                         let raw = v * cell_area / flow_width;
-                        if log_transform { raw.ln() } else { raw }
+                        if log_transform {
+                            raw.ln()
+                        } else {
+                            raw
+                        }
                     };
                     out.set_unchecked(0, r as isize, c as isize, v);
                 }
@@ -3146,13 +3447,41 @@ impl Tool for QuinnFlowAccumulationTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "dem", description: "Input DEM raster", required: true },
-                ToolParamSpec { name: "out_type", description: "Output type: cells, ca, or sca", required: false },
-                ToolParamSpec { name: "exponent", description: "Exponent parameter", required: false },
-                ToolParamSpec { name: "convergence_threshold", description: "Threshold above which flow is not dispersed", required: false },
-                ToolParamSpec { name: "log_transform", description: "Log-transform output", required: false },
-                ToolParamSpec { name: "clip", description: "Clip display max (accepted for compatibility)", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "dem",
+                    description: "Input DEM raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "out_type",
+                    description: "Output type: cells, ca, or sca",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "exponent",
+                    description: "Exponent parameter",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "convergence_threshold",
+                    description: "Threshold above which flow is not dispersed",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "log_transform",
+                    description: "Log-transform output",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "clip",
+                    description: "Clip display max (accepted for compatibility)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -3177,14 +3506,17 @@ impl Tool for QuinnFlowAccumulationTool {
                 description: "Compute Quinn specific contributing area from DEM".to_string(),
                 args: ToolArgs::new(),
             }],
-            tags: vec!["hydrology".to_string(), "flow-accumulation".to_string(), "quinn".to_string()],
+            tags: vec![
+                "hydrology".to_string(),
+                "flow-accumulation".to_string(),
+                "quinn".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        parse_raster_path_arg(args, "dem")
-            .or_else(|_| parse_raster_path_arg(args, "input"))?;
+        parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
         Ok(())
     }
 
@@ -3208,7 +3540,11 @@ impl Tool for QuinnFlowAccumulationTool {
             .or_else(|| args.get("threshold"))
             .and_then(|v| v.as_f64())
             .unwrap_or(f64::INFINITY);
-        let convergence_threshold = if convergence_threshold <= 0.0 { f64::INFINITY } else { convergence_threshold };
+        let convergence_threshold = if convergence_threshold <= 0.0 {
+            f64::INFINITY
+        } else {
+            convergence_threshold
+        };
         let log_transform = args
             .get("log_transform")
             .or_else(|| args.get("log"))
@@ -3238,7 +3574,11 @@ impl Tool for QuinnFlowAccumulationTool {
                         input.nodata
                     } else {
                         let raw = v * cell_area / flow_width;
-                        if log_transform { raw.ln() } else { raw }
+                        if log_transform {
+                            raw.ln()
+                        } else {
+                            raw
+                        }
                     };
                     out.set_unchecked(0, r as isize, c as isize, v);
                 }
@@ -3265,15 +3605,51 @@ impl Tool for MinimalDispersionFlowAlgorithmTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "dem", description: "Input DEM raster", required: true },
-                ToolParamSpec { name: "out_type", description: "Output type: cells, ca, or sca", required: false },
-                ToolParamSpec { name: "path_corrected_direction_preference", description: "Preference parameter p in [0,1]", required: false },
-                ToolParamSpec { name: "log_transform", description: "Log-transform accumulation output", required: false },
-                ToolParamSpec { name: "clip", description: "Clip display max (accepted for compatibility)", required: false },
-                ToolParamSpec { name: "esri_pntr", description: "Use ESRI pointer encoding for flow-direction output", required: false },
-                ToolParamSpec { name: "debug_stats", description: "Emit one-line MDFA diagnostics (counts and raw max)", required: false },
-                ToolParamSpec { name: "output", description: "Flow accumulation output raster path", required: false },
-                ToolParamSpec { name: "flow_dir_output", description: "Flow-direction output raster path", required: false },
+                ToolParamSpec {
+                    name: "dem",
+                    description: "Input DEM raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "out_type",
+                    description: "Output type: cells, ca, or sca",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "path_corrected_direction_preference",
+                    description: "Preference parameter p in [0,1]",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "log_transform",
+                    description: "Log-transform accumulation output",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "clip",
+                    description: "Clip display max (accepted for compatibility)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "esri_pntr",
+                    description: "Use ESRI pointer encoding for flow-direction output",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "debug_stats",
+                    description: "Emit one-line MDFA diagnostics (counts and raw max)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Flow accumulation output raster path",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "flow_dir_output",
+                    description: "Flow-direction output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -3281,7 +3657,10 @@ impl Tool for MinimalDispersionFlowAlgorithmTool {
     fn manifest(&self) -> ToolManifest {
         let mut defaults = ToolArgs::new();
         defaults.insert("out_type".to_string(), json!("sca"));
-        defaults.insert("path_corrected_direction_preference".to_string(), json!(0.0));
+        defaults.insert(
+            "path_corrected_direction_preference".to_string(),
+            json!(0.0),
+        );
         defaults.insert("log_transform".to_string(), json!(false));
         defaults.insert("clip".to_string(), json!(false));
         defaults.insert("esri_pntr".to_string(), json!(false));
@@ -3289,14 +3668,16 @@ impl Tool for MinimalDispersionFlowAlgorithmTool {
         ToolManifest {
             id: "minimal_dispersion_flow_algorithm".to_string(),
             display_name: "Minimal Dispersion Flow Algorithm".to_string(),
-            summary: "Generates MDFA flow-direction and flow-accumulation rasters from a DEM.".to_string(),
+            summary: "Generates MDFA flow-direction and flow-accumulation rasters from a DEM."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
             defaults,
             examples: vec![ToolExample {
                 name: "mdfa".to_string(),
-                description: "Compute MDFA direction and specific contributing area from DEM".to_string(),
+                description: "Compute MDFA direction and specific contributing area from DEM"
+                    .to_string(),
                 args: ToolArgs::new(),
             }],
             tags: vec![
@@ -3310,8 +3691,7 @@ impl Tool for MinimalDispersionFlowAlgorithmTool {
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        parse_raster_path_arg(args, "dem")
-            .or_else(|_| parse_raster_path_arg(args, "input"))?;
+        parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
         Ok(())
     }
 
@@ -3342,10 +3722,7 @@ impl Tool for MinimalDispersionFlowAlgorithmTool {
             .or_else(|| args.get("log"))
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        let clip = args
-            .get("clip")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let clip = args.get("clip").and_then(|v| v.as_bool()).unwrap_or(false);
         let esri = args
             .get("esri_pntr")
             .or_else(|| args.get("esri_pointer"))
@@ -3404,7 +3781,11 @@ impl Tool for MinimalDispersionFlowAlgorithmTool {
                     }
                 }
             }
-            let log_max = if raw_max > 0.0 { raw_max.ln() } else { f64::NEG_INFINITY };
+            let log_max = if raw_max > 0.0 {
+                raw_max.ln()
+            } else {
+                f64::NEG_INFINITY
+            };
             let msg = format!(
                 "mdfa debug: valid_cells={valid_cells}, d8_outlets={d8_outlets}, mdfa_outlets={mdfa_outlets}, dispersed_cells={dispersed_cells}, raw_max_cells={raw_max:.6}, log_max={log_max:.10}\n"
             );
@@ -3464,10 +3845,22 @@ impl Tool for MinimalDispersionFlowAlgorithmTool {
                 }
             }
         } else {
-            apply_mdfa_output_type(&mut accum, &pntr_modified, &input, p, out_type, log_transform);
+            apply_mdfa_output_type(
+                &mut accum,
+                &pntr_modified,
+                &input,
+                p,
+                out_type,
+                log_transform,
+            );
             for r in 0..input.rows {
                 for c in 0..input.cols {
-                    accum_out.set_unchecked(0, r as isize, c as isize, accum[idx(r, c, input.cols)]);
+                    accum_out.set_unchecked(
+                        0,
+                        r as isize,
+                        c as isize,
+                        accum[idx(r, c, input.cols)],
+                    );
                 }
             }
         }
@@ -3504,8 +3897,16 @@ Computationally more expensive than D8 but generates accumulation patterns close
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "dem", description: "Input DEM raster", required: true },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "dem",
+                    description: "Input DEM raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -3566,9 +3967,21 @@ Requires multiple runs (typically 50-100) with ensemble averaging for statistica
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "dem", description: "Input DEM raster", required: true },
-                ToolParamSpec { name: "esri_pntr", description: "Use ESRI pointer encoding", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "dem",
+                    description: "Input DEM raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "esri_pntr",
+                    description: "Use ESRI pointer encoding",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -3595,8 +4008,7 @@ Requires multiple runs (typically 50-100) with ensemble averaging for statistica
     }
 
     fn validate(&self, args: &ToolArgs) -> Result<(), ToolError> {
-        parse_raster_path_arg(args, "dem")
-            .or_else(|_| parse_raster_path_arg(args, "input"))?;
+        parse_raster_path_arg(args, "dem").or_else(|_| parse_raster_path_arg(args, "input"))?;
         Ok(())
     }
 
@@ -3644,13 +4056,41 @@ impl Tool for Rho8FlowAccumTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "input", description: "Input DEM or Rho8 pointer raster", required: true },
-                ToolParamSpec { name: "out_type", description: "Output type: cells, ca, or sca", required: false },
-                ToolParamSpec { name: "log_transform", description: "Log-transform output", required: false },
-                ToolParamSpec { name: "clip", description: "Clip display max (accepted for compatibility)", required: false },
-                ToolParamSpec { name: "input_is_pointer", description: "Treat input as Rho8 pointer raster", required: false },
-                ToolParamSpec { name: "esri_pntr", description: "Use ESRI pointer encoding for pointer inputs", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "input",
+                    description: "Input DEM or Rho8 pointer raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "out_type",
+                    description: "Output type: cells, ca, or sca",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "log_transform",
+                    description: "Log-transform output",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "clip",
+                    description: "Clip display max (accepted for compatibility)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "input_is_pointer",
+                    description: "Treat input as Rho8 pointer raster",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "esri_pntr",
+                    description: "Use ESRI pointer encoding for pointer inputs",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -3665,7 +4105,8 @@ impl Tool for Rho8FlowAccumTool {
         ToolManifest {
             id: "rho8_flow_accum".to_string(),
             display_name: "Rho8 Flow Accumulation".to_string(),
-            summary: "Calculates Rho8 flow accumulation from a DEM or Rho8 pointer raster.".to_string(),
+            summary: "Calculates Rho8 flow accumulation from a DEM or Rho8 pointer raster."
+                .to_string(),
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![],
@@ -3675,7 +4116,11 @@ impl Tool for Rho8FlowAccumTool {
                 description: "Compute Rho8 specific contributing area from DEM".to_string(),
                 args: ToolArgs::new(),
             }],
-            tags: vec!["hydrology".to_string(), "flow-accumulation".to_string(), "rho8".to_string()],
+            tags: vec![
+                "hydrology".to_string(),
+                "flow-accumulation".to_string(),
+                "rho8".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3746,13 +4191,24 @@ impl Tool for Rho8FlowAccumTool {
                         -32768.0
                     } else {
                         let raw = accum[i] * cell_area / flow_width;
-                        if log_transform { raw.ln() } else { raw }
+                        if log_transform {
+                            raw.ln()
+                        } else {
+                            raw
+                        }
                     };
                     out.set_unchecked(0, r as isize, c as isize, v);
                 }
             }
         } else {
-            apply_accum_output_type(&mut accum, &flow_dir, &input, -32768.0, out_type, log_transform);
+            apply_accum_output_type(
+                &mut accum,
+                &flow_dir,
+                &input,
+                -32768.0,
+                out_type,
+                log_transform,
+            );
             for r in 0..input.rows {
                 for c in 0..input.cols {
                     out.set_unchecked(0, r as isize, c as isize, accum[idx(r, c, input.cols)]);
@@ -3773,13 +4229,41 @@ impl Tool for FD8FlowAccumTool {
             category: ToolCategory::Raster,
             license_tier: LicenseTier::Open,
             params: vec![
-                ToolParamSpec { name: "dem", description: "Input DEM raster", required: true },
-                ToolParamSpec { name: "out_type", description: "Output type: cells, ca, or sca", required: false },
-                ToolParamSpec { name: "exponent", description: "Slope weighting exponent", required: false },
-                ToolParamSpec { name: "convergence_threshold", description: "Threshold above which flow is not dispersed", required: false },
-                ToolParamSpec { name: "log_transform", description: "Log-transform output", required: false },
-                ToolParamSpec { name: "clip", description: "Clip display max (accepted for compatibility)", required: false },
-                ToolParamSpec { name: "output", description: "Output raster path", required: false },
+                ToolParamSpec {
+                    name: "dem",
+                    description: "Input DEM raster",
+                    required: true,
+                },
+                ToolParamSpec {
+                    name: "out_type",
+                    description: "Output type: cells, ca, or sca",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "exponent",
+                    description: "Slope weighting exponent",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "convergence_threshold",
+                    description: "Threshold above which flow is not dispersed",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "log_transform",
+                    description: "Log-transform output",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "clip",
+                    description: "Clip display max (accepted for compatibility)",
+                    required: false,
+                },
+                ToolParamSpec {
+                    name: "output",
+                    description: "Output raster path",
+                    required: false,
+                },
             ],
         }
     }
@@ -3804,7 +4288,11 @@ impl Tool for FD8FlowAccumTool {
                 description: "Compute FD8 specific contributing area from DEM".to_string(),
                 args: ToolArgs::new(),
             }],
-            tags: vec!["hydrology".to_string(), "flow-accumulation".to_string(), "fd8".to_string()],
+            tags: vec![
+                "hydrology".to_string(),
+                "flow-accumulation".to_string(),
+                "fd8".to_string(),
+            ],
             stability: ToolStability::Stable,
         }
     }
@@ -3836,7 +4324,11 @@ impl Tool for FD8FlowAccumTool {
             .or_else(|| args.get("threshold"))
             .and_then(|v| v.as_f64())
             .unwrap_or(f64::INFINITY);
-        let convergence_threshold = if convergence_threshold <= 0.0 { f64::INFINITY } else { convergence_threshold };
+        let convergence_threshold = if convergence_threshold <= 0.0 {
+            f64::INFINITY
+        } else {
+            convergence_threshold
+        };
         let log_transform = args
             .get("log_transform")
             .or_else(|| args.get("log"))
@@ -3863,7 +4355,11 @@ impl Tool for FD8FlowAccumTool {
                         input.nodata
                     } else {
                         let scaled = accum[i] * area / grid_size;
-                        if log_transform { scaled.ln() } else { scaled }
+                        if log_transform {
+                            scaled.ln()
+                        } else {
+                            scaled
+                        }
                     };
                     out.set_unchecked(0, r as isize, c as isize, v);
                 }

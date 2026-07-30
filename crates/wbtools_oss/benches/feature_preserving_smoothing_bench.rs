@@ -52,11 +52,19 @@ fn make_dem(rows: usize, cols: usize) -> String {
     memory_store::make_raster_memory_path(&id)
 }
 
-fn make_args(input_path: &str, filter_size: u64, normal_diff_threshold: f64, iterations: u64) -> ToolArgs {
+fn make_args(
+    input_path: &str,
+    filter_size: u64,
+    normal_diff_threshold: f64,
+    iterations: u64,
+) -> ToolArgs {
     let mut args = ToolArgs::new();
     args.insert("input".to_string(), json!(input_path));
     args.insert("filter_size".to_string(), json!(filter_size));
-    args.insert("normal_diff_threshold".to_string(), json!(normal_diff_threshold));
+    args.insert(
+        "normal_diff_threshold".to_string(),
+        json!(normal_diff_threshold),
+    );
     args.insert("iterations".to_string(), json!(iterations));
     args
 }
@@ -73,66 +81,54 @@ fn bench_feature_preserving_smoothing(c: &mut Criterion) {
     for size in [128usize, 256, 512] {
         let input = make_dem(size, size);
         let args = make_args(&input, 11, 8.0, 3);
-        group.bench_with_input(
-            BenchmarkId::new("default_params", size),
-            &size,
-            |b, _| {
-                b.iter(|| {
-                    let out = registry
-                        .run_tool(
-                            "feature_preserving_smoothing",
-                            black_box(&args),
-                            black_box(&ctx),
-                        )
-                        .expect("feature_preserving_smoothing benchmark run failed");
-                    black_box(out);
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("default_params", size), &size, |b, _| {
+            b.iter(|| {
+                let out = registry
+                    .run_tool(
+                        "feature_preserving_smoothing",
+                        black_box(&args),
+                        black_box(&ctx),
+                    )
+                    .expect("feature_preserving_smoothing benchmark run failed");
+                black_box(out);
+            })
+        });
     }
 
     // --- Iteration count sensitivity (fixed 256×256 grid) ---
     let input_256 = make_dem(256, 256);
     for iters in [1u64, 3, 8] {
         let args = make_args(&input_256, 11, 8.0, iters);
-        group.bench_with_input(
-            BenchmarkId::new("iters", iters),
-            &iters,
-            |b, _| {
-                b.iter(|| {
-                    let out = registry
-                        .run_tool(
-                            "feature_preserving_smoothing",
-                            black_box(&args),
-                            black_box(&ctx),
-                        )
-                        .expect("feature_preserving_smoothing benchmark run failed");
-                    black_box(out);
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("iters", iters), &iters, |b, _| {
+            b.iter(|| {
+                let out = registry
+                    .run_tool(
+                        "feature_preserving_smoothing",
+                        black_box(&args),
+                        black_box(&ctx),
+                    )
+                    .expect("feature_preserving_smoothing benchmark run failed");
+                black_box(out);
+            })
+        });
     }
 
     // --- Filter size sensitivity (fixed 256×256 grid, 3 iters) ---
     let input_256b = make_dem(256, 256);
     for fs in [3u64, 7, 11, 15] {
         let args = make_args(&input_256b, fs, 8.0, 3);
-        group.bench_with_input(
-            BenchmarkId::new("filter_size", fs),
-            &fs,
-            |b, _| {
-                b.iter(|| {
-                    let out = registry
-                        .run_tool(
-                            "feature_preserving_smoothing",
-                            black_box(&args),
-                            black_box(&ctx),
-                        )
-                        .expect("feature_preserving_smoothing benchmark run failed");
-                    black_box(out);
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("filter_size", fs), &fs, |b, _| {
+            b.iter(|| {
+                let out = registry
+                    .run_tool(
+                        "feature_preserving_smoothing",
+                        black_box(&args),
+                        black_box(&ctx),
+                    )
+                    .expect("feature_preserving_smoothing benchmark run failed");
+                black_box(out);
+            })
+        });
     }
 
     group.finish();

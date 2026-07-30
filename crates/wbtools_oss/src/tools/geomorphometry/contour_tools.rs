@@ -5,14 +5,16 @@ use std::path::Path;
 use rayon::prelude::*;
 use serde_json::json;
 use wbcore::{
-    parse_raster_path_arg, parse_vector_path_arg, IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH, LicenseTier, Tool, ToolArgs, ToolCategory,
+    parse_raster_path_arg, parse_vector_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory,
     ToolContext, ToolError, ToolManifest, ToolMetadata, ToolParamSpec, ToolRunResult,
-    ToolStability,
+    ToolStability, IMPLICIT_MEMORY_VECTOR_OUTPUT_PATH,
 };
 use wbraster::Raster;
 use wbtopology::{delaunay_triangulation, Coord as TopoCoord};
-use wbvector::{Coord, Crs, FieldDef, FieldType, FieldValue, Geometry, GeometryType, Layer, VectorFormat};
 use wbvector::memory_store as vector_memory_store;
+use wbvector::{
+    Coord, Crs, FieldDef, FieldType, FieldValue, Geometry, GeometryType, Layer, VectorFormat,
+};
 
 use crate::memory_store;
 
@@ -43,11 +45,17 @@ fn load_raster(path: &str) -> Result<Raster, ToolError> {
 
 fn load_vector(path: &str, label: &str) -> Result<Layer, ToolError> {
     if wbvector::memory_store::vector_is_memory_path(path) {
-        let id = wbvector::memory_store::vector_path_to_id(path)
-            .ok_or_else(|| ToolError::Validation(format!("malformed in-memory vector path for '{}'", label)))?;
+        let id = wbvector::memory_store::vector_path_to_id(path).ok_or_else(|| {
+            ToolError::Validation(format!("malformed in-memory vector path for '{}'", label))
+        })?;
         return wbvector::memory_store::get_vector_arc_by_id(id)
             .map(|layer| layer.as_ref().clone())
-            .ok_or_else(|| ToolError::Validation(format!("unknown in-memory vector id '{}' for '{}'", id, label)));
+            .ok_or_else(|| {
+                ToolError::Validation(format!(
+                    "unknown in-memory vector id '{}' for '{}'",
+                    id, label
+                ))
+            });
     }
     wbvector::read(path)
         .map_err(|e| ToolError::Execution(format!("failed reading {} vector: {}", label, e)))
@@ -72,8 +80,9 @@ fn detect_vector_format(path: &str) -> Result<VectorFormat, ToolError> {
 fn ensure_parent_dir(path: &str) -> Result<(), ToolError> {
     if let Some(parent) = Path::new(path).parent() {
         if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| ToolError::Execution(format!("failed creating output directory: {}", e)))?;
+            std::fs::create_dir_all(parent).map_err(|e| {
+                ToolError::Execution(format!("failed creating output directory: {}", e))
+            })?;
         }
     }
     Ok(())
@@ -218,49 +227,46 @@ fn chain_segments(segments: &[Segment], eps: f64) -> Vec<(Vec<Coord>, f64)> {
 
             let extend = |front: bool,
                           line: &mut Vec<Coord>,
-                          visited: &mut HashMap<usize, bool>| {
-                loop {
-                    let key = if front {
-                        endpoint_key(&line[0], eps)
-                    } else {
-                        endpoint_key(line.last().unwrap(), eps)
-                    };
-                    let Some(cands) = endpoint_map.get(&key) else {
-                        break;
-                    };
+                          visited: &mut HashMap<usize, bool>| loop {
+                let key = if front {
+                    endpoint_key(&line[0], eps)
+                } else {
+                    endpoint_key(line.last().unwrap(), eps)
+                };
+                let Some(cands) = endpoint_map.get(&key) else {
+                    break;
+                };
 
-                    let mut next_seg: Option<(usize, Coord)> = None;
-                    for (cand_id, is_start) in cands {
-                        if visited.get(cand_id).copied().unwrap_or(false) {
-                            continue;
-                        }
-                        let cand = &segments[*cand_id];
-                        let next_point = if *is_start {
-                            cand.b.clone()
-                        } else {
-                            cand.a.clone()
-                        };
-                        next_seg = Some((*cand_id, next_point));
-                        break;
+                let mut next_seg: Option<(usize, Coord)> = None;
+                for (cand_id, is_start) in cands {
+                    if visited.get(cand_id).copied().unwrap_or(false) {
+                        continue;
                     }
+                    let cand = &segments[*cand_id];
+                    let next_point = if *is_start {
+                        cand.b.clone()
+                    } else {
+                        cand.a.clone()
+                    };
+                    next_seg = Some((*cand_id, next_point));
+                    break;
+                }
 
-                    if let Some((nid, np)) = next_seg {
-                        visited.insert(nid, true);
-                        if front {
-                            if endpoint_key(&np, eps) != endpoint_key(&line[0], eps) {
-                                line.insert(0, np);
-                            } else {
-                                break;
-                            }
-                        } else if endpoint_key(&np, eps) != endpoint_key(line.last().unwrap(), eps)
-                        {
-                            line.push(np);
+                if let Some((nid, np)) = next_seg {
+                    visited.insert(nid, true);
+                    if front {
+                        if endpoint_key(&np, eps) != endpoint_key(&line[0], eps) {
+                            line.insert(0, np);
                         } else {
                             break;
                         }
+                    } else if endpoint_key(&np, eps) != endpoint_key(line.last().unwrap(), eps) {
+                        line.push(np);
                     } else {
                         break;
                     }
+                } else {
+                    break;
                 }
             };
 
@@ -383,18 +389,82 @@ fn output_path_arg(args: &ToolArgs) -> Result<String, ToolError> {
     args.get("output")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
-        .ok_or_else(|| ToolError::Validation("missing required parameter 'output' for vector output".to_string()))
+        .ok_or_else(|| {
+            ToolError::Validation(
+                "missing required parameter 'output' for vector output".to_string(),
+            )
+        })
 }
 
-fn raster_contour_layer(
+/// Extend a contour chain in one direction by following connecting segments.
+///
+/// Extracted from the inner closure of `chain_segments` so it can be called
+/// from the level-by-level streaming path without borrow-checker conflicts.
+fn extend_chain(
+    front: bool,
+    line: &mut Vec<Coord>,
+    visited: &mut HashMap<usize, bool>,
+    segments: &[Segment],
+    endpoint_map: &HashMap<(i64, i64), Vec<(usize, bool)>>,
+    eps: f64,
+) {
+    loop {
+        let key = if front {
+            endpoint_key(&line[0], eps)
+        } else {
+            endpoint_key(line.last().unwrap(), eps)
+        };
+        let Some(cands) = endpoint_map.get(&key) else {
+            break;
+        };
+        let mut next_seg: Option<(usize, Coord)> = None;
+        for (cand_id, is_start) in cands {
+            if visited.get(cand_id).copied().unwrap_or(false) {
+                continue;
+            }
+            let cand = &segments[*cand_id];
+            let next_point = if *is_start { cand.b.clone() } else { cand.a.clone() };
+            next_seg = Some((*cand_id, next_point));
+            break;
+        }
+        if let Some((nid, np)) = next_seg {
+            visited.insert(nid, true);
+            if front {
+                if endpoint_key(&np, eps) != endpoint_key(&line[0], eps) {
+                    line.insert(0, np);
+                } else {
+                    break;
+                }
+            } else if endpoint_key(&np, eps) != endpoint_key(line.last().unwrap(), eps) {
+                line.push(np);
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+}
+
+/// Core streaming contour extraction: marching squares → level-by-level chain
+/// → callback per completed polyline.
+///
+/// Processing one contour level at a time means the per-level `endpoint_map`
+/// and `visited` structures are freed before the next level begins.  Combined
+/// with an immediate-write callback this eliminates the large `all_lines` and
+/// `Layer` accumulations that previously coexisted with the full `segments` Vec.
+fn raster_contour_stream(
     raster: &Raster,
     interval: f64,
     base: f64,
     smooth: usize,
     deflection_tolerance: f64,
-) -> Result<Layer, ToolError> {
+    on_chain: &mut dyn FnMut(Vec<Coord>, f64) -> Result<(), ToolError>,
+) -> Result<(), ToolError> {
     if raster.rows < 2 || raster.cols < 2 {
-        return Err(ToolError::Validation("input raster must have at least 2 rows and 2 cols".to_string()));
+        return Err(ToolError::Validation(
+            "input raster must have at least 2 rows and 2 cols".to_string(),
+        ));
     }
 
     let half_x = raster.cell_size_x * 0.5;
@@ -415,47 +485,94 @@ fn raster_contour_layer(
                 {
                     continue;
                 }
-
                 let min_z = z00.min(z10.min(z11.min(z01)));
                 let max_z = z00.max(z10.max(z11.max(z01)));
-                let Some((lower, upper)) = parse_contour_levels(min_z, max_z, interval, base) else {
+                let Some((lower, upper)) = parse_contour_levels(min_z, max_z, interval, base)
+                else {
                     continue;
                 };
-
                 let cx = raster.col_center_x(col as isize);
                 let cy = raster.row_center_y(row as isize);
                 let p00 = Coord::xy(cx - half_x, cy + half_y);
                 let p10 = Coord::xy(cx + half_x, cy + half_y);
                 let p11 = Coord::xy(cx + half_x, cy - half_y);
                 let p01 = Coord::xy(cx - half_x, cy - half_y);
-
                 for level_idx in lower..=upper {
                     let z = base + level_idx as f64 * interval;
-                    let cell_segments = marching_segments_for_cell(
-                        p00.clone(),
-                        p10.clone(),
-                        p11.clone(),
-                        p01.clone(),
-                        z00,
-                        z10,
-                        z11,
-                        z01,
-                        level_idx,
-                        z,
-                    );
-                    row_segments.extend(cell_segments);
+                    row_segments.extend(marching_segments_for_cell(
+                        p00.clone(), p10.clone(), p11.clone(), p01.clone(),
+                        z00, z10, z11, z01, level_idx, z,
+                    ));
                 }
             }
             row_segments
         })
-        .reduce(Vec::new, |mut a, mut b| {
-            a.append(&mut b);
-            a
-        });
+        .reduce(Vec::new, |mut a, mut b| { a.append(&mut b); a });
 
     let eps = (raster.cell_size_x.abs() + raster.cell_size_y.abs()).max(1.0) * 1.0e-9;
-    let mut lines = chain_segments(&segments, eps);
 
+    // Group segment indices by contour level.  Consuming iteration frees each
+    // level's Vec<usize> as soon as it has been processed.
+    let mut by_level: HashMap<i64, Vec<usize>> = HashMap::new();
+    for (i, s) in segments.iter().enumerate() {
+        by_level.entry(s.level_idx).or_default().push(i);
+    }
+
+    for (_, ids) in by_level {
+        // Build the endpoint map for this level only.  It is freed at the end
+        // of the loop body before the next level is processed.
+        let mut endpoint_map: HashMap<(i64, i64), Vec<(usize, bool)>> = HashMap::new();
+        for &sid in &ids {
+            let s = &segments[sid];
+            endpoint_map
+                .entry(endpoint_key(&s.a, eps))
+                .or_default()
+                .push((sid, true));
+            endpoint_map
+                .entry(endpoint_key(&s.b, eps))
+                .or_default()
+                .push((sid, false));
+        }
+
+        let mut visited: HashMap<usize, bool> = HashMap::new();
+        for &sid in &ids {
+            if visited.get(&sid).copied().unwrap_or(false) {
+                continue;
+            }
+            visited.insert(sid, true);
+            let s = &segments[sid];
+            let z = s.z;
+            let mut line = vec![s.a.clone(), s.b.clone()];
+            extend_chain(false, &mut line, &mut visited, &segments, &endpoint_map, eps);
+            extend_chain(true, &mut line, &mut visited, &segments, &endpoint_map, eps);
+            let mut cleaned = Vec::with_capacity(line.len());
+            for p in line {
+                add_if_distinct(&mut cleaned, p, eps);
+            }
+            if cleaned.len() > 1 {
+                let smoothed = smooth_polyline(&cleaned, smooth);
+                let simplified = simplify_by_deflection(&smoothed, deflection_tolerance);
+                if simplified.len() >= 2 {
+                    on_chain(simplified, z)?;
+                }
+            }
+        }
+        // endpoint_map and visited freed here.
+    }
+    // by_level freed here; segments freed at end of function scope.
+    Ok(())
+}
+
+/// Convenience wrapper: runs [`raster_contour_stream`] and accumulates the
+/// result into an in-memory [`Layer`].  Used for non-file and non-GeoPackage
+/// output paths where the full Layer is needed before writing.
+fn raster_contour_layer(
+    raster: &Raster,
+    interval: f64,
+    base: f64,
+    smooth: usize,
+    deflection_tolerance: f64,
+) -> Result<Layer, ToolError> {
     let mut layer = Layer::new("contours").with_geom_type(GeometryType::LineString);
     if raster.crs.epsg.is_some() || raster.crs.wkt.is_some() {
         layer.crs = Some(Crs {
@@ -467,21 +584,28 @@ fn raster_contour_layer(
     layer.add_field(FieldDef::new("HEIGHT", FieldType::Float));
 
     let mut fid = 1i64;
-    for (pts, z) in lines.drain(..) {
-        let smoothed = smooth_polyline(&pts, smooth);
-        let simplified = simplify_by_deflection(&smoothed, deflection_tolerance);
-        if simplified.len() < 2 {
-            continue;
-        }
-        layer
-            .add_feature(
-                Some(Geometry::line_string(simplified)),
-                &[("FID", FieldValue::Integer(fid)), ("HEIGHT", FieldValue::Float(z))],
-            )
-            .map_err(|e| ToolError::Execution(format!("failed creating contour feature: {}", e)))?;
-        fid += 1;
-    }
-
+    raster_contour_stream(
+        raster,
+        interval,
+        base,
+        smooth,
+        deflection_tolerance,
+        &mut |pts, z| {
+            layer
+                .add_feature(
+                    Some(Geometry::line_string(pts)),
+                    &[
+                        ("FID", FieldValue::Integer(fid)),
+                        ("HEIGHT", FieldValue::Float(z)),
+                    ],
+                )
+                .map_err(|e| {
+                    ToolError::Execution(format!("failed creating contour feature: {}", e))
+                })?;
+            fid += 1;
+            Ok(())
+        },
+    )?;
     Ok(layer)
 }
 
@@ -497,26 +621,24 @@ fn points_contour_layer(
     let mut points = Vec::<Coord>::new();
     let mut z_values = Vec::<f64>::new();
 
-    let field_idx = if !use_z_values {
-        if let Some(name) = field_name {
-            Some(
+    let field_idx =
+        if !use_z_values {
+            if let Some(name) = field_name {
+                Some(input.schema.field_index(name).ok_or_else(|| {
+                    ToolError::Validation(format!("field '{}' does not exist", name))
+                })?)
+            } else {
                 input
                     .schema
-                    .field_index(name)
-                    .ok_or_else(|| ToolError::Validation(format!("field '{}' does not exist", name)))?,
-            )
+                    .fields()
+                    .iter()
+                    .enumerate()
+                    .find(|(_, f)| matches!(f.field_type, FieldType::Integer | FieldType::Float))
+                    .map(|(i, _)| i)
+            }
         } else {
-            input
-                .schema
-                .fields()
-                .iter()
-                .enumerate()
-                .find(|(_, f)| matches!(f.field_type, FieldType::Integer | FieldType::Float))
-                .map(|(i, _)| i)
-        }
-    } else {
-        None
-    };
+            None
+        };
 
     if !use_z_values && field_idx.is_none() {
         return Err(ToolError::Validation(
@@ -525,14 +647,20 @@ fn points_contour_layer(
     }
 
     for feat in &input.features {
-        let Some(geom) = &feat.geometry else { continue; };
+        let Some(geom) = &feat.geometry else {
+            continue;
+        };
 
         let base_z = if !use_z_values {
             let idx = field_idx.unwrap();
             feat.attributes
                 .get(idx)
                 .and_then(|v| v.as_f64())
-                .ok_or_else(|| ToolError::Validation("encountered non-numeric attribute value in contour field".to_string()))?
+                .ok_or_else(|| {
+                    ToolError::Validation(
+                        "encountered non-numeric attribute value in contour field".to_string(),
+                    )
+                })?
         } else {
             0.0
         };
@@ -542,7 +670,8 @@ fn points_contour_layer(
                 let z = if use_z_values {
                     c.z.ok_or_else(|| {
                         ToolError::Validation(
-                            "input point geometry missing Z value while use_z_values=true".to_string(),
+                            "input point geometry missing Z value while use_z_values=true"
+                                .to_string(),
                         )
                     })?
                 } else {
@@ -556,7 +685,8 @@ fn points_contour_layer(
                     let z = if use_z_values {
                         c.z.ok_or_else(|| {
                             ToolError::Validation(
-                                "input multipoint geometry missing Z value while use_z_values=true".to_string(),
+                                "input multipoint geometry missing Z value while use_z_values=true"
+                                    .to_string(),
                             )
                         })?
                     } else {
@@ -575,13 +705,17 @@ fn points_contour_layer(
     }
 
     if points.len() < 3 {
-        return Err(ToolError::Validation("too few input points for triangulation".to_string()));
+        return Err(ToolError::Validation(
+            "too few input points for triangulation".to_string(),
+        ));
     }
 
     let topo_points: Vec<TopoCoord> = points.iter().map(|p| TopoCoord::xy(p.x, p.y)).collect();
     let tri = delaunay_triangulation(&topo_points, 1.0e-10);
     if tri.triangles.is_empty() {
-        return Err(ToolError::Validation("triangulation failed or produced no triangles".to_string()));
+        return Err(ToolError::Validation(
+            "triangulation failed or produced no triangles".to_string(),
+        ));
     }
 
     let mut z_lookup: HashMap<(i64, i64), f64> = HashMap::new();
@@ -612,13 +746,19 @@ fn points_contour_layer(
                 let pc = Coord::xy(c.x, c.y);
 
                 let z1 = *z_lookup.get(&endpoint_key(&pa, 1.0e-9)).ok_or_else(|| {
-                    ToolError::Execution("failed mapping triangulation vertex elevation".to_string())
+                    ToolError::Execution(
+                        "failed mapping triangulation vertex elevation".to_string(),
+                    )
                 })?;
                 let z2 = *z_lookup.get(&endpoint_key(&pb, 1.0e-9)).ok_or_else(|| {
-                    ToolError::Execution("failed mapping triangulation vertex elevation".to_string())
+                    ToolError::Execution(
+                        "failed mapping triangulation vertex elevation".to_string(),
+                    )
                 })?;
                 let z3 = *z_lookup.get(&endpoint_key(&pc, 1.0e-9)).ok_or_else(|| {
-                    ToolError::Execution("failed mapping triangulation vertex elevation".to_string())
+                    ToolError::Execution(
+                        "failed mapping triangulation vertex elevation".to_string(),
+                    )
                 })?;
 
                 let d12 = (pa.x - pb.x).powi(2) + (pa.y - pb.y).powi(2);
@@ -630,7 +770,8 @@ fn points_contour_layer(
 
                 let min_z = z1.min(z2.min(z3));
                 let max_z = z1.max(z2.max(z3));
-                let Some((lower, upper)) = parse_contour_levels(min_z, max_z, interval, base) else {
+                let Some((lower, upper)) = parse_contour_levels(min_z, max_z, interval, base)
+                else {
                     return Ok(local_segments);
                 };
 
@@ -692,7 +833,10 @@ fn points_contour_layer(
         layer
             .add_feature(
                 Some(Geometry::line_string(smoothed)),
-                &[("FID", FieldValue::Integer(fid)), ("HEIGHT", FieldValue::Float(z))],
+                &[
+                    ("FID", FieldValue::Integer(fid)),
+                    ("HEIGHT", FieldValue::Float(z)),
+                ],
             )
             .map_err(|e| ToolError::Execution(format!("failed creating contour feature: {}", e)))?;
         fid += 1;
@@ -949,7 +1093,10 @@ fn insert_flowlines(
     if depth == 0 {
         return;
     }
-    let n = cmp::min(flowlines[n1].len().saturating_sub(k1), flowlines[n2].len().saturating_sub(k2));
+    let n = cmp::min(
+        flowlines[n1].len().saturating_sub(k1),
+        flowlines[n2].len().saturating_sub(k2),
+    );
     for i in 0..n {
         let p1 = flowlines[n1][i + k1].clone();
         let p2 = flowlines[n2][i + k2].clone();
@@ -1011,17 +1158,18 @@ fn insert_flowlines(
 }
 
 fn contours_to_hachure_contours(layer: &Layer, eps: f64) -> Result<Vec<HachureContour>, ToolError> {
-    let height_idx = layer
-        .schema
-        .field_index("HEIGHT")
-        .ok_or_else(|| ToolError::Execution("contour layer missing HEIGHT attribute".to_string()))?;
+    let height_idx = layer.schema.field_index("HEIGHT").ok_or_else(|| {
+        ToolError::Execution("contour layer missing HEIGHT attribute".to_string())
+    })?;
     let mut contours = Vec::new();
     for feat in &layer.features {
         let value = feat
             .attributes
             .get(height_idx)
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| ToolError::Execution("contour feature has non-numeric HEIGHT".to_string()))?;
+            .ok_or_else(|| {
+                ToolError::Execution("contour feature has non-numeric HEIGHT".to_string())
+            })?;
         let Some(geom) = &feat.geometry else {
             continue;
         };
@@ -1040,7 +1188,11 @@ fn contours_to_hachure_contours(layer: &Layer, eps: f64) -> Result<Vec<HachureCo
                     *end = first;
                 }
             }
-            contours.push(HachureContour { points: pts, value, closed });
+            contours.push(HachureContour {
+                points: pts,
+                value,
+                closed,
+            });
         };
         match geom {
             Geometry::LineString(coords) => push_contour(coords, value, &mut contours),
@@ -1070,7 +1222,8 @@ fn topographic_hachure_layer(
     slope_min_deg: f64,
     depth: u8,
 ) -> Result<Layer, ToolError> {
-    let contour_layer = raster_contour_layer(raster, interval, base, smooth, deflection_tolerance_deg)?;
+    let contour_layer =
+        raster_contour_layer(raster, interval, base, smooth, deflection_tolerance_deg)?;
     let res_xy = 0.5 * (raster.cell_size_x.abs() + raster.cell_size_y.abs());
     let coverage = RasterCoverage::new(raster);
     let eps = res_xy.max(1.0) * 1.0e-9;
@@ -1170,15 +1323,8 @@ fn topographic_hachure_layer(
         seed_starts.insert(level_seeds.len());
 
         for seed in &seeds {
-            let mut flowline = get_flowline(
-                &coverage,
-                seed,
-                discr,
-                z_min,
-                slope_min,
-                turn_min_cos,
-                true,
-            );
+            let mut flowline =
+                get_flowline(&coverage, seed, discr, z_min, slope_min, turn_min_cos, true);
             if flowline.len() > 1 {
                 let cut_idx = intersection_idx(&flowline, &flowlines, new_dist_min);
                 flowline.truncate(cut_idx);
@@ -1188,7 +1334,8 @@ fn topographic_hachure_layer(
             }
         }
 
-        let finished_level = idx + 1 == contours.len() || (contours[idx + 1].value - value).abs() > EPS;
+        let finished_level =
+            idx + 1 == contours.len() || (contours[idx + 1].value - value).abs() > EPS;
         if finished_level {
             let n = flowlines.len();
             if n > 1 {
@@ -1329,7 +1476,9 @@ fn topographic_hachure_layer(
                             ("NW", FieldValue::Float(cos_nw)),
                         ],
                     )
-                    .map_err(|e| ToolError::Execution(format!("failed creating hachure feature: {}", e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed creating hachure feature: {}", e))
+                    })?;
                 hid += 1;
             }
 
@@ -1471,15 +1620,24 @@ impl Tool for TopographicHachuresTool {
     fn run(&self, args: &ToolArgs, _ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
         let dem_path = parse_raster_path_arg(args, "dem")?;
         let output = output_path_arg(args)?;
-        let interval = args.get("interval").and_then(|v| v.as_f64()).unwrap_or(10.0);
+        let interval = args
+            .get("interval")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(10.0);
         let base = args.get("base").and_then(|v| v.as_f64()).unwrap_or(0.0);
-        let tolerance = args.get("tolerance").and_then(|v| v.as_f64()).unwrap_or(10.0);
+        let tolerance = args
+            .get("tolerance")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(10.0);
         let smooth = args
             .get("smooth")
             .and_then(|v| v.as_u64())
             .map(|v| v as usize)
             .unwrap_or(9);
-        let separation = args.get("separation").and_then(|v| v.as_f64()).unwrap_or(2.0);
+        let separation = args
+            .get("separation")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(2.0);
         let dist_min = args.get("distmin").and_then(|v| v.as_f64()).unwrap_or(0.5);
         let dist_max = args.get("distmax").and_then(|v| v.as_f64()).unwrap_or(2.0);
         let discretization = args
@@ -1491,19 +1649,29 @@ impl Tool for TopographicHachuresTool {
         let depth = args.get("depth").and_then(|v| v.as_u64()).unwrap_or(16) as u8;
 
         if interval <= 0.0 {
-            return Err(ToolError::Validation("parameter 'interval' must be > 0".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'interval' must be > 0".to_string(),
+            ));
         }
         if separation <= 0.0 {
-            return Err(ToolError::Validation("parameter 'separation' must be > 0".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'separation' must be > 0".to_string(),
+            ));
         }
         if dist_min <= 0.0 || dist_max <= 0.0 {
-            return Err(ToolError::Validation("parameters 'distmin' and 'distmax' must be > 0".to_string()));
+            return Err(ToolError::Validation(
+                "parameters 'distmin' and 'distmax' must be > 0".to_string(),
+            ));
         }
         if discretization <= 0.0 {
-            return Err(ToolError::Validation("parameter 'discretization' must be > 0".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'discretization' must be > 0".to_string(),
+            ));
         }
         if dist_max < dist_min {
-            return Err(ToolError::Validation("parameter 'distmax' must be >= 'distmin'".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'distmax' must be >= 'distmin'".to_string(),
+            ));
         }
 
         let raster = load_raster(&dem_path)?;
@@ -1623,12 +1791,60 @@ impl Tool for ContoursFromRasterTool {
             .clamp(0.0, 45.0);
 
         if interval <= 0.0 {
-            return Err(ToolError::Validation("parameter 'interval' must be > 0".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'interval' must be > 0".to_string(),
+            ));
         }
 
         let raster = load_raster(&input_path)?;
-        let layer = raster_contour_layer(&raster, interval, base, smooth, tolerance)?;
         ensure_parent_dir(&output)?;
+
+        // Use VectorStreamWriter for all file-based outputs: GeoPackage, GeoJSON,
+        // and FlatGeobuf all stream features directly to disk without accumulating
+        // the full Layer in memory.  Other formats fall back to Layer accumulation.
+        if !vector_memory_store::vector_is_memory_path(&output) {
+            let mut schema = Layer::new("contours").with_geom_type(GeometryType::LineString);
+            if let Some(epsg) = raster.crs.epsg {
+                schema.set_crs_epsg(Some(epsg));
+            }
+            if let Some(ref wkt) = raster.crs.wkt {
+                schema.set_crs_wkt(Some(wkt.clone()));
+            }
+            schema.add_field(FieldDef::new("FID", FieldType::Integer));
+            schema.add_field(FieldDef::new("HEIGHT", FieldType::Float));
+
+            let mut writer = wbvector::VectorStreamWriter::open(&output, &schema)
+                .map_err(|e| ToolError::Execution(format!("failed opening output: {}", e)))?;
+
+            let mut fid = 1i64;
+            raster_contour_stream(
+                &raster,
+                interval,
+                base,
+                smooth,
+                tolerance,
+                &mut |pts, z| {
+                    writer
+                        .push_feature(
+                            Some(&Geometry::line_string(pts)),
+                            &[FieldValue::Integer(fid), FieldValue::Float(z)],
+                        )
+                        .map_err(|e| {
+                            ToolError::Execution(format!("failed writing contour: {}", e))
+                        })?;
+                    fid += 1;
+                    Ok(())
+                },
+            )?;
+
+            let out = writer
+                .finish()
+                .map_err(|e| ToolError::Execution(format!("failed finalising output: {}", e)))?;
+            return Ok(build_result(out));
+        }
+
+        // In-memory output: accumulate Layer then store.
+        let layer = raster_contour_layer(&raster, interval, base, smooth, tolerance)?;
         Ok(build_result(write_vector(&layer, &output)?))
     }
 }
@@ -1700,7 +1916,8 @@ impl Tool for ContoursFromPointsTool {
         ToolManifest {
             id: "contours_from_points".to_string(),
             display_name: "Contours From Points".to_string(),
-            summary: "Creates contour polylines from point elevations using a Delaunay TIN.".to_string(),
+            summary: "Creates contour polylines from point elevations using a Delaunay TIN."
+                .to_string(),
             category: ToolCategory::Vector,
             license_tier: LicenseTier::Open,
             params: vec![],
@@ -1747,7 +1964,9 @@ impl Tool for ContoursFromPointsTool {
             .unwrap_or(9);
 
         if interval <= 0.0 {
-            return Err(ToolError::Validation("parameter 'interval' must be > 0".to_string()));
+            return Err(ToolError::Validation(
+                "parameter 'interval' must be > 0".to_string(),
+            ));
         }
 
         let input = load_vector(&input_path, "input")?;
@@ -1768,8 +1987,8 @@ impl Tool for ContoursFromPointsTool {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
     use super::*;
+    use std::collections::BTreeSet;
     use std::time::{SystemTime, UNIX_EPOCH};
     use wbcore::{AllowAllCapabilities, ProgressSink, ToolContext};
     use wbraster::RasterConfig;
@@ -1821,7 +2040,10 @@ mod tests {
         );
         args.insert("interval".to_string(), json!(1.0));
         args.insert("base".to_string(), json!(0.0));
-        args.insert("output".to_string(), json!(out.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(out.to_string_lossy().to_string()),
+        );
 
         let result = ContoursFromRasterTool.run(&args, &make_ctx()).unwrap();
         let path = result.outputs.get("path").unwrap().as_str().unwrap();
@@ -1867,7 +2089,10 @@ mod tests {
         args.insert("field_name".to_string(), json!("elev"));
         args.insert("interval".to_string(), json!(1.0));
         args.insert("base".to_string(), json!(0.0));
-        args.insert("output".to_string(), json!(output.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(output.to_string_lossy().to_string()),
+        );
 
         let result = ContoursFromPointsTool.run(&args, &make_ctx()).unwrap();
         let path = result.outputs.get("path").unwrap().as_str().unwrap();
@@ -1879,7 +2104,10 @@ mod tests {
         for feat in &layer.features {
             let z = feat.attributes[height_idx].as_f64().unwrap();
             let level = (z / 1.0).round();
-            assert!((z - level).abs() < 1.0e-9, "height {z} is not on interval level");
+            assert!(
+                (z - level).abs() < 1.0e-9,
+                "height {z} is not on interval level"
+            );
             level_keys.insert(level as i64);
         }
         assert!(!level_keys.is_empty());
@@ -1916,7 +2144,10 @@ mod tests {
         args.insert("distmin".to_string(), json!(0.4));
         args.insert("distmax".to_string(), json!(1.8));
         args.insert("discretization".to_string(), json!(0.5));
-        args.insert("output".to_string(), json!(output.to_string_lossy().to_string()));
+        args.insert(
+            "output".to_string(),
+            json!(output.to_string_lossy().to_string()),
+        );
 
         let result = TopographicHachuresTool.run(&args, &make_ctx()).unwrap();
         let path = result.outputs.get("path").unwrap().as_str().unwrap();

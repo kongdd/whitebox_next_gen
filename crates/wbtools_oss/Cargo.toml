@@ -17,8 +17,8 @@ wbraster = { path = "../wbraster" }
 wbgeotiff = { path = "../wbgeotiff" }
 wbvector = { path = "../wbvector" }
 wbprojection = { path = "../wbprojection" }
-wbtopology = { path = "../wbtopology", features = ["parallel"] }
-wblidar = { path = "../wblidar", features = ["parallel"] }
+wbtopology = { path = "../wbtopology" }
+wblidar = { path = "../wblidar" }
 wbspatialstats = { path = "../wbspatialstats" }
 rayon = "1"
 rand = "0.10.0"

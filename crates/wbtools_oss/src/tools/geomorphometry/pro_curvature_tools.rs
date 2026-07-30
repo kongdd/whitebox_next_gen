@@ -2,12 +2,12 @@ use std::collections::BTreeMap;
 
 use rayon::prelude::*;
 use serde_json::json;
-use wbprojection::{Crs, EpsgIdentifyPolicy, identify_epsg_from_wkt_with_policy};
-use wbcore::{PercentCoalescer, 
-    parse_optional_output_path, parse_raster_path_arg, LicenseTier, Tool, ToolArgs, ToolCategory,
-    ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata, ToolParamDescriptor,
-    ToolParamSpec, ToolRunResult, ToolStability,
+use wbcore::{
+    parse_optional_output_path, parse_raster_path_arg, LicenseTier, PercentCoalescer, Tool,
+    ToolArgs, ToolCategory, ToolContext, ToolError, ToolExample, ToolManifest, ToolMetadata,
+    ToolParamDescriptor, ToolParamSpec, ToolRunResult, ToolStability,
 };
+use wbprojection::{identify_epsg_from_wkt_with_policy, Crs, EpsgIdentifyPolicy};
 use wbraster::{Raster, RasterFormat};
 
 use wbraster::memory_store;
@@ -135,14 +135,21 @@ impl ProCurvatureOp {
         match self {
             // All operations except principal_curvature_direction need r, t, s (second derivatives)
             // p and q are used in most but only to compute g2 = p² + q²
-            Self::Minimal | Self::Maximal | Self::ShapeIndex | Self::Curvedness
-            | Self::Unsphericity | Self::Ring | Self::Rotor | Self::Difference
-            | Self::HorizontalExcess | Self::VerticalExcess | Self::Accumulation
+            Self::Minimal
+            | Self::Maximal
+            | Self::ShapeIndex
+            | Self::Curvedness
+            | Self::Unsphericity
+            | Self::Ring
+            | Self::Rotor
+            | Self::Difference
+            | Self::HorizontalExcess
+            | Self::VerticalExcess
+            | Self::Accumulation
             | Self::Casorati => DERIV_ALL, // Most operations use all derivatives
-            
-            Self::PrincipalCurvatureDirection => 
-                DERIV_R | DERIV_S | DERIV_T, // Only needs second derivatives (r, s, t)
-            
+
+            Self::PrincipalCurvatureDirection => DERIV_R | DERIV_S | DERIV_T, // Only needs second derivatives (r, s, t)
+
             Self::GeneratingFunction => DERIV_ALL, // Needs all five for complex formula
         }
     }
@@ -203,13 +210,12 @@ impl ProCurvatureCore {
     }
 
     fn raster_is_geographic(input: &Raster) -> bool {
-        let epsg = input.crs.epsg.or_else(|| {
-            input
-                .crs
-                .wkt
-                .as_deref()
-                .and_then(|w| identify_epsg_from_wkt_with_policy(w, EpsgIdentifyPolicy::Lenient))
-        });
+        let epsg =
+            input.crs.epsg.or_else(|| {
+                input.crs.wkt.as_deref().and_then(|w| {
+                    identify_epsg_from_wkt_with_policy(w, EpsgIdentifyPolicy::Lenient)
+                })
+            });
 
         if let Some(code) = epsg {
             if let Ok(crs) = Crs::from_epsg(code) {
@@ -228,26 +234,41 @@ impl ProCurvatureCore {
         let lon2 = lon2_deg.to_radians();
         let dlat = lat2 - lat1;
         let dlon = lon2 - lon1;
-        let a = (dlat / 2.0).sin().powi(2)
-            + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
+        let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
         let c = 2.0 * a.sqrt().atan2((1.0 - a).sqrt());
         r * c
     }
 
-    fn neighbourhood(input: &Raster, band: isize, row: isize, col: isize, z_factor: f64) -> Option<[f64; 9]> {
+    fn neighbourhood(
+        input: &Raster,
+        band: isize,
+        row: isize,
+        col: isize,
+        z_factor: f64,
+    ) -> Option<[f64; 9]> {
         let z5 = input.get(band, row, col);
         if input.is_nodata(z5) {
             return None;
         }
         let offsets = [
-            (-1isize, -1isize), (0, -1), (1, -1),
-            (-1, 0),          (0, 0),  (1, 0),
-            (-1, 1),          (0, 1),  (1, 1),
+            (-1isize, -1isize),
+            (0, -1),
+            (1, -1),
+            (-1, 0),
+            (0, 0),
+            (1, 0),
+            (-1, 1),
+            (0, 1),
+            (1, 1),
         ];
         let mut z = [0.0f64; 9];
         for (i, (ox, oy)) in offsets.iter().enumerate() {
             let v = input.get(band, row + *oy, col + *ox);
-            z[i] = if input.is_nodata(v) { z5 * z_factor } else { v * z_factor };
+            z[i] = if input.is_nodata(v) {
+                z5 * z_factor
+            } else {
+                v * z_factor
+            };
         }
         Some(z)
     }
@@ -312,15 +333,34 @@ impl ProCurvatureCore {
         let r = 1.0 / (35.0 * res * res)
             * (2.0 * (z[0] + z[4] + z[5] + z[9] + z[10] + z[14] + z[15] + z[19] + z[20] + z[24])
                 - 2.0 * (z[2] + z[7] + z[12] + z[17] + z[22])
-                - z[1] - z[3] - z[6] - z[8] - z[11] - z[13] - z[16] - z[18] - z[21] - z[23]);
+                - z[1]
+                - z[3]
+                - z[6]
+                - z[8]
+                - z[11]
+                - z[13]
+                - z[16]
+                - z[18]
+                - z[21]
+                - z[23]);
 
         let t = 1.0 / (35.0 * res * res)
             * (2.0 * (z[0] + z[1] + z[2] + z[3] + z[4] + z[20] + z[21] + z[22] + z[23] + z[24])
                 - 2.0 * (z[10] + z[11] + z[12] + z[13] + z[14])
-                - z[5] - z[6] - z[7] - z[8] - z[9] - z[15] - z[16] - z[17] - z[18] - z[19]);
+                - z[5]
+                - z[6]
+                - z[7]
+                - z[8]
+                - z[9]
+                - z[15]
+                - z[16]
+                - z[17]
+                - z[18]
+                - z[19]);
 
         let s = 1.0 / (100.0 * res * res)
-            * (z[8] + z[16] - z[6] - z[18] + 4.0 * (z[4] + z[20] - z[0] - z[24])
+            * (z[8] + z[16] - z[6] - z[18]
+                + 4.0 * (z[4] + z[20] - z[0] - z[24])
                 + 2.0 * (z[3] + z[9] + z[15] + z[21] - z[1] - z[5] - z[19] - z[23]));
 
         let p = 1.0 / (420.0 * res)
@@ -341,14 +381,18 @@ impl ProCurvatureCore {
 
         let g = 1.0 / (10.0 * res.powi(3))
             * (z[4] + z[9] + z[14] + z[19] + z[24] - z[0] - z[5] - z[10] - z[15] - z[20]
-                + 2.0 * (z[1] + z[6] + z[11] + z[16] + z[21] - z[3] - z[8] - z[13] - z[18] - z[23]));
+                + 2.0
+                    * (z[1] + z[6] + z[11] + z[16] + z[21] - z[3] - z[8] - z[13] - z[18] - z[23]));
 
         let m = 1.0 / (70.0 * res.powi(3))
-            * (z[6] + z[16] - z[8] - z[18] + 4.0 * (z[4] + z[10] + z[24] - z[0] - z[14] - z[20])
-                + 2.0 * (z[3] + z[5] + z[11] + z[15] + z[23] - z[1] - z[9] - z[13] - z[19] - z[21]));
+            * (z[6] + z[16] - z[8] - z[18]
+                + 4.0 * (z[4] + z[10] + z[24] - z[0] - z[14] - z[20])
+                + 2.0
+                    * (z[3] + z[5] + z[11] + z[15] + z[23] - z[1] - z[9] - z[13] - z[19] - z[21]));
 
         let k = 1.0 / (70.0 * res.powi(3))
-            * (z[16] + z[18] - z[6] - z[8] + 4.0 * (z[0] + z[4] + z[22] - z[2] - z[20] - z[24])
+            * (z[16] + z[18] - z[6] - z[8]
+                + 4.0 * (z[0] + z[4] + z[22] - z[2] - z[20] - z[24])
                 + 2.0 * (z[5] + z[9] + z[17] + z[21] + z[23] - z[1] - z[3] - z[7] - z[15] - z[19]));
 
         let g2 = p * p + q * q;
@@ -359,11 +403,16 @@ impl ProCurvatureCore {
         let w = 1.0 + g2;
         let rotor = ((p * p - q * q) * s - p * q * (r - t)) / g2.powi(3).sqrt();
         let horizontal_curv = (q * q * r - 2.0 * p * q * s + p * p * t) / (g2 * w.sqrt());
-        let generating_fn = (q.powi(3) * g - 3.0 * p * q * q * k + 3.0 * p * p * q * m - p.powi(3) * h)
+        let generating_fn = (q.powi(3) * g - 3.0 * p * q * q * k + 3.0 * p * p * q * m
+            - p.powi(3) * h)
             / (g2.powi(3) * w).sqrt()
             - horizontal_curv * rotor * (2.0 + 3.0 * g2) / w;
 
-        Some(if generating_fn.is_finite() { generating_fn } else { 0.0 })
+        Some(if generating_fn.is_finite() {
+            generating_fn
+        } else {
+            0.0
+        })
     }
 
     fn derivatives_projected(
@@ -428,9 +477,12 @@ impl ProCurvatureCore {
 
         let phi1 = input.row_center_y(row);
         let lambda1 = input.col_center_x(col);
-        let b = Self::haversine_distance_m(phi1, lambda1, phi1, input.col_center_x(col - 1)).max(f64::EPSILON);
-        let d = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(row + 1), lambda1).max(f64::EPSILON);
-        let e = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(row - 1), lambda1).max(f64::EPSILON);
+        let b = Self::haversine_distance_m(phi1, lambda1, phi1, input.col_center_x(col - 1))
+            .max(f64::EPSILON);
+        let d = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(row + 1), lambda1)
+            .max(f64::EPSILON);
+        let e = Self::haversine_distance_m(phi1, lambda1, input.row_center_y(row - 1), lambda1)
+            .max(f64::EPSILON);
 
         let a = Self::haversine_distance_m(
             input.row_center_y(row + 1),
@@ -459,15 +511,13 @@ impl ProCurvatureCore {
 
         let t_denom = 3.0 * d * e * (d + e) * (a.powi(4) + b.powi(4) + c.powi(4));
         let t = if (mask & DERIV_T) != 0 {
-            2.0
-                / t_denom
+            2.0 / t_denom
                 * ((d * (a.powi(4) + b.powi(4) + b * b * c * c) - c * c * e * (a * a - b * b))
                     * (z[0] + z[2])
                     - (d * (a.powi(4) + c.powi(4) + b * b * c * c)
                         + e * (a.powi(4) + c.powi(4) + a * a * b * b))
                         * (z[3] + z[5])
-                    + (e * (b.powi(4) + c.powi(4) + a * a * b * b)
-                        + a * a * d * (b * b - c * c))
+                    + (e * (b.powi(4) + c.powi(4) + a * a * b * b) + a * a * d * (b * b - c * c))
                         * (z[6] + z[8])
                     + d * (b.powi(4) * (z[1] - 3.0 * z[4])
                         + c.powi(4) * (3.0 * z[1] - z[4])
@@ -475,8 +525,8 @@ impl ProCurvatureCore {
                     + e * (a.powi(4) * (3.0 * z[7] - z[4])
                         + b.powi(4) * (z[7] - 3.0 * z[4])
                         + (c.powi(4) - 2.0 * a * a * b * b) * (z[7] - z[4]))
-                    - 2.0 * (a * a * d * (b * b - c * c) * z[7]
-                        - c * c * e * (a * a - b * b) * z[1]))
+                    - 2.0
+                        * (a * a * d * (b * b - c * c) * z[7] - c * c * e * (a * a - b * b) * z[1]))
         } else {
             0.0
         };
@@ -485,7 +535,8 @@ impl ProCurvatureCore {
             (c * (a * a * (d + e) + b * b * e) * (z[2] - z[0])
                 - b * (a * a * d - c * c * e) * (z[3] - z[5])
                 + a * (c * c * (d + e) + b * b * d) * (z[6] - z[8]))
-                / (2.0 * (a * a * c * c * (d + e).powi(2) + b * b * (a * a * d * d + c * c * e * e)))
+                / (2.0
+                    * (a * a * c * c * (d + e).powi(2) + b * b * (a * a * d * d + c * c * e * e)))
         } else {
             0.0
         };
@@ -494,14 +545,16 @@ impl ProCurvatureCore {
             (a * a * c * d * (d + e) * (z[2] - z[0])
                 + b * (a * a * d * d + c * c * e * e) * (z[5] - z[3])
                 + a * c * c * e * (d + e) * (z[8] - z[6]))
-                / (2.0 * (a * a * c * c * (d + e).powi(2) + b * b * (a * a * d * d + c * c * e * e)))
+                / (2.0
+                    * (a * a * c * c * (d + e).powi(2) + b * b * (a * a * d * d + c * c * e * e)))
         } else {
             0.0
         };
 
         let q = if (mask & DERIV_Q) != 0 {
             1.0 / (3.0 * d * e * (d + e) * (a.powi(4) + b.powi(4) + c.powi(4)))
-                * ((d * d * (a.powi(4) + b.powi(4) + b * b * c * c) + c * c * e * e * (a * a - b * b))
+                * ((d * d * (a.powi(4) + b.powi(4) + b * b * c * c)
+                    + c * c * e * e * (a * a - b * b))
                     * (z[0] + z[2])
                     - (d * d * (a.powi(4) + c.powi(4) + b * b * c * c)
                         - e * e * (a.powi(4) + c.powi(4) + a * a * b * b))
@@ -509,14 +562,17 @@ impl ProCurvatureCore {
                     - (e * e * (b.powi(4) + c.powi(4) + a * a * b * b)
                         - a * a * d * d * (b * b - c * c))
                         * (z[6] + z[8])
-                    + d * d * (b.powi(4) * (z[1] - 3.0 * z[4])
-                        + c.powi(4) * (3.0 * z[1] - z[4])
-                        + (a.powi(4) - 2.0 * b * b * c * c) * (z[1] - z[4]))
-                    + e * e * (a.powi(4) * (z[4] - 3.0 * z[7])
-                        + b.powi(4) * (3.0 * z[4] - z[7])
-                        + (c.powi(4) - 2.0 * a * a * b * b) * (z[4] - z[7]))
-                    - 2.0 * (a * a * d * d * (b * b - c * c) * z[7]
-                        + c * c * e * e * (a * a - b * b) * z[1]))
+                    + d * d
+                        * (b.powi(4) * (z[1] - 3.0 * z[4])
+                            + c.powi(4) * (3.0 * z[1] - z[4])
+                            + (a.powi(4) - 2.0 * b * b * c * c) * (z[1] - z[4]))
+                    + e * e
+                        * (a.powi(4) * (z[4] - 3.0 * z[7])
+                            + b.powi(4) * (3.0 * z[4] - z[7])
+                            + (c.powi(4) - 2.0 * a * a * b * b) * (z[4] - z[7]))
+                    - 2.0
+                        * (a * a * d * d * (b * b - c * c) * z[7]
+                            + c * c * e * e * (a * a - b * b) * z[1]))
         } else {
             0.0
         };
@@ -582,17 +638,21 @@ impl ProCurvatureCore {
                 },
                 ToolParamDescriptor {
                     name: "z_factor".to_string(),
-                    description: "Optional z conversion factor (default 1.0). Alias: zfactor.".to_string(),
+                    description: "Optional z conversion factor (default 1.0). Alias: zfactor."
+                        .to_string(),
                     required: false,
                 },
                 ToolParamDescriptor {
                     name: "log_transform".to_string(),
-                    description: "Optional log-transform of output values (default false). Alias: log.".to_string(),
+                    description:
+                        "Optional log-transform of output values (default false). Alias: log."
+                            .to_string(),
                     required: false,
                 },
                 ToolParamDescriptor {
                     name: "output".to_string(),
-                    description: "Optional output path. If omitted, result is stored in memory.".to_string(),
+                    description: "Optional output path. If omitted, result is stored in memory."
+                        .to_string(),
                     required: false,
                 },
             ],
@@ -663,7 +723,7 @@ impl ProCurvatureCore {
         let coalescer = PercentCoalescer::new(1, 99);
         let is_geographic = Self::raster_is_geographic(&input);
         let log_multiplier = Self::log_multiplier((dx + dy) / 2.0);
-        
+
         // Optimization 1: Get the derivative mask for this operation
         let deriv_mask = op.required_derivatives();
 
@@ -685,9 +745,13 @@ impl ProCurvatureCore {
                         let col = c as isize;
 
                         let derivs = if is_geographic {
-                            Self::derivatives_geographic(&input, band, row, col, z_factor, deriv_mask)
+                            Self::derivatives_geographic(
+                                &input, band, row, col, z_factor, deriv_mask,
+                            )
                         } else {
-                            Self::derivatives_projected(&input, band, row, col, z_factor, dx, dy, deriv_mask)
+                            Self::derivatives_projected(
+                                &input, band, row, col, z_factor, dx, dy, deriv_mask,
+                            )
                         };
                         let Some(d) = derivs else {
                             continue;
@@ -700,13 +764,13 @@ impl ProCurvatureCore {
                         let t = d.t;
 
                         let g2 = p * p + q * q;
-                        let w  = 1.0 + g2;
+                        let w = 1.0 + g2;
 
                         let w_sqrt = w.sqrt();
                         let w_pow_1p5 = w * w_sqrt;
 
-                        let mean_curv = -((1.0 + q * q).mul_add(r,
-                            (1.0 + p * p).mul_add(t, -2.0 * p * q * s)))
+                        let mean_curv = -((1.0 + q * q)
+                            .mul_add(r, (1.0 + p * p).mul_add(t, -2.0 * p * q * s)))
                             / (2.0 * w_pow_1p5);
 
                         let r_t_minus_s2 = r * t - s * s;
@@ -720,12 +784,11 @@ impl ProCurvatureCore {
                         let maximal_curv = mean_curv + sqrt_disc;
 
                         let diff_curv = if g2 > f64::EPSILON {
-                            let numerator = q * q.mul_add(r,
-                                p * p.mul_add(t, -2.0 * p * q * s));
+                            let numerator = q * q.mul_add(r, p * p.mul_add(t, -2.0 * p * q * s));
                             let denominator = g2 * w_sqrt;
                             numerator / denominator
-                                - ((1.0 + q * q).mul_add(r,
-                                    (1.0 + p * p).mul_add(t, -2.0 * p * q * s)))
+                                - ((1.0 + q * q)
+                                    .mul_add(r, (1.0 + p * p).mul_add(t, -2.0 * p * q * s)))
                                     / (2.0 * w_pow_1p5)
                         } else {
                             0.0
@@ -767,10 +830,18 @@ impl ProCurvatureCore {
                             }
                             ProCurvatureOp::Difference => diff_curv,
                             ProCurvatureOp::HorizontalExcess => {
-                                if g2 <= f64::EPSILON { 0.0 } else { sqrt_disc - diff_curv }
+                                if g2 <= f64::EPSILON {
+                                    0.0
+                                } else {
+                                    sqrt_disc - diff_curv
+                                }
                             }
                             ProCurvatureOp::VerticalExcess => {
-                                if g2 <= f64::EPSILON { 0.0 } else { sqrt_disc + diff_curv }
+                                if g2 <= f64::EPSILON {
+                                    0.0
+                                } else {
+                                    sqrt_disc + diff_curv
+                                }
                             }
                             ProCurvatureOp::Accumulation => {
                                 if g2 <= f64::EPSILON {
@@ -800,7 +871,9 @@ impl ProCurvatureCore {
                             }
                         };
 
-                        if log_transform && !matches!(op, ProCurvatureOp::PrincipalCurvatureDirection) {
+                        if log_transform
+                            && !matches!(op, ProCurvatureOp::PrincipalCurvatureDirection)
+                        {
                             curv = curv.signum() * (1.0 + log_multiplier * curv.abs()).ln();
                         }
 
@@ -814,7 +887,9 @@ impl ProCurvatureCore {
             for (row_idx, row_data) in row_data_all.into_iter().enumerate() {
                 output
                     .set_row_slice(band, row_idx as isize, &row_data)
-                    .map_err(|e| ToolError::Execution(format!("failed writing row {}: {}", row_idx, e)))?;
+                    .map_err(|e| {
+                        ToolError::Execution(format!("failed writing row {}: {}", row_idx, e))
+                    })?;
             }
 
             coalescer.emit_unit_fraction(ctx.progress, (band_idx + 1) as f64 / bands as f64);
@@ -850,31 +925,33 @@ macro_rules! define_pro_curvature_tool {
                 Ok(())
             }
 
-            fn run(
-                &self,
-                args: &ToolArgs,
-                ctx: &ToolContext,
-            ) -> Result<ToolRunResult, ToolError> {
+            fn run(&self, args: &ToolArgs, ctx: &ToolContext) -> Result<ToolRunResult, ToolError> {
                 ProCurvatureCore::run_with_op($op, args, ctx)
             }
         }
     };
 }
 
-define_pro_curvature_tool!(MinimalCurvatureTool,          ProCurvatureOp::Minimal);
-define_pro_curvature_tool!(MaximalCurvatureTool,          ProCurvatureOp::Maximal);
-define_pro_curvature_tool!(ShapeIndexTool,                ProCurvatureOp::ShapeIndex);
-define_pro_curvature_tool!(CurvednessTool,                ProCurvatureOp::Curvedness);
-define_pro_curvature_tool!(UnsphericityCurvatureTool,     ProCurvatureOp::Unsphericity);
-define_pro_curvature_tool!(RingCurvatureTool,             ProCurvatureOp::Ring);
-define_pro_curvature_tool!(RotorTool,                     ProCurvatureOp::Rotor);
-define_pro_curvature_tool!(DifferenceCurvatureTool,       ProCurvatureOp::Difference);
-define_pro_curvature_tool!(HorizontalExcessCurvatureTool, ProCurvatureOp::HorizontalExcess);
-define_pro_curvature_tool!(VerticalExcessCurvatureTool,   ProCurvatureOp::VerticalExcess);
-define_pro_curvature_tool!(AccumulationCurvatureTool,     ProCurvatureOp::Accumulation);
-define_pro_curvature_tool!(GeneratingFunctionTool,         ProCurvatureOp::GeneratingFunction);
-define_pro_curvature_tool!(PrincipalCurvatureDirectionTool, ProCurvatureOp::PrincipalCurvatureDirection);
-define_pro_curvature_tool!(CasoratiCurvatureTool,         ProCurvatureOp::Casorati);
+define_pro_curvature_tool!(MinimalCurvatureTool, ProCurvatureOp::Minimal);
+define_pro_curvature_tool!(MaximalCurvatureTool, ProCurvatureOp::Maximal);
+define_pro_curvature_tool!(ShapeIndexTool, ProCurvatureOp::ShapeIndex);
+define_pro_curvature_tool!(CurvednessTool, ProCurvatureOp::Curvedness);
+define_pro_curvature_tool!(UnsphericityCurvatureTool, ProCurvatureOp::Unsphericity);
+define_pro_curvature_tool!(RingCurvatureTool, ProCurvatureOp::Ring);
+define_pro_curvature_tool!(RotorTool, ProCurvatureOp::Rotor);
+define_pro_curvature_tool!(DifferenceCurvatureTool, ProCurvatureOp::Difference);
+define_pro_curvature_tool!(
+    HorizontalExcessCurvatureTool,
+    ProCurvatureOp::HorizontalExcess
+);
+define_pro_curvature_tool!(VerticalExcessCurvatureTool, ProCurvatureOp::VerticalExcess);
+define_pro_curvature_tool!(AccumulationCurvatureTool, ProCurvatureOp::Accumulation);
+define_pro_curvature_tool!(GeneratingFunctionTool, ProCurvatureOp::GeneratingFunction);
+define_pro_curvature_tool!(
+    PrincipalCurvatureDirectionTool,
+    ProCurvatureOp::PrincipalCurvatureDirection
+);
+define_pro_curvature_tool!(CasoratiCurvatureTool, ProCurvatureOp::Casorati);
 
 // --- tests --------------------------------------------------------------------
 
@@ -940,7 +1017,13 @@ mod tests {
         let input_path = memory_store::make_raster_memory_path(&id);
         args.insert("input".to_string(), json!(input_path));
         let result = tool.run(args, &make_ctx()).unwrap();
-        let out_path = result.outputs.get("path").unwrap().as_str().unwrap().to_string();
+        let out_path = result
+            .outputs
+            .get("path")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .to_string();
         let out_id = memory_store::raster_path_to_id(&out_path).unwrap();
         memory_store::get_raster_by_id(out_id).unwrap()
     }
@@ -948,20 +1031,23 @@ mod tests {
     #[test]
     fn pro_curvature_tools_constant_raster_returns_zero() {
         let tools: Vec<(&dyn Tool, &str)> = vec![
-            (&MinimalCurvatureTool,          "minimal"),
-            (&MaximalCurvatureTool,          "maximal"),
-            (&ShapeIndexTool,                "shape_index"),
-            (&CurvednessTool,                "curvedness"),
-            (&UnsphericityCurvatureTool,     "unsphericity"),
-            (&RingCurvatureTool,             "ring"),
-            (&RotorTool,                     "rotor"),
-            (&DifferenceCurvatureTool,       "difference"),
+            (&MinimalCurvatureTool, "minimal"),
+            (&MaximalCurvatureTool, "maximal"),
+            (&ShapeIndexTool, "shape_index"),
+            (&CurvednessTool, "curvedness"),
+            (&UnsphericityCurvatureTool, "unsphericity"),
+            (&RingCurvatureTool, "ring"),
+            (&RotorTool, "rotor"),
+            (&DifferenceCurvatureTool, "difference"),
             (&HorizontalExcessCurvatureTool, "horizontal_excess"),
-            (&VerticalExcessCurvatureTool,   "vertical_excess"),
-            (&AccumulationCurvatureTool,     "accumulation"),
-            (&GeneratingFunctionTool,         "generating_function"),
-            (&PrincipalCurvatureDirectionTool, "principal_curvature_direction"),
-            (&CasoratiCurvatureTool,          "casorati"),
+            (&VerticalExcessCurvatureTool, "vertical_excess"),
+            (&AccumulationCurvatureTool, "accumulation"),
+            (&GeneratingFunctionTool, "generating_function"),
+            (
+                &PrincipalCurvatureDirectionTool,
+                "principal_curvature_direction",
+            ),
+            (&CasoratiCurvatureTool, "casorati"),
         ];
 
         for (tool, name) in tools {
@@ -983,7 +1069,11 @@ mod tests {
         let mut args = ToolArgs::new();
         args.insert("z_factor".to_string(), json!(1.0));
         args.insert("log_transform".to_string(), json!(false));
-        let out = run_with_memory(&GeneratingFunctionTool, &mut args, make_constant_raster(25, 25, 42.0));
+        let out = run_with_memory(
+            &GeneratingFunctionTool,
+            &mut args,
+            make_constant_raster(25, 25, 42.0),
+        );
         assert!(
             out.get(0, 12, 12).abs() < 1e-10,
             "generating_function should return ~0 on constant raster, got {}",
@@ -1002,7 +1092,10 @@ mod tests {
             make_quadratic_raster(41, 41),
         );
         let v = out.get(0, 20, 20);
-        assert!(v.is_finite(), "principal_curvature_direction should be finite");
+        assert!(
+            v.is_finite(),
+            "principal_curvature_direction should be finite"
+        );
         assert!(
             (0.0..180.0).contains(&v),
             "principal_curvature_direction should be in [0, 180), got {}",
