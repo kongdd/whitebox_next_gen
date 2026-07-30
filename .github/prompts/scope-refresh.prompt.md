@@ -1,5 +1,5 @@
 ---
-mode: ask
+agent: ask
 description: "Use when: user wants a big-picture refresh, scope reminder, or alignment check before implementation."
 ---
 Read and apply the project big-picture context from PROJECT_SCOPE.md.

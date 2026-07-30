@@ -65,10 +65,12 @@ The following Rust crates are members of the Cargo workspace:
 
 - `crates/wbgeotiff` — GeoTIFF/JPEG2000 I/O engine
 - `crates/wbprojection` — map projection and CRS engine
+- `crates/wbhdf` — HDF4/HDF5 container reader for remote sensing and scientific data
 - `crates/wbraster` — raster abstraction and I/O
 - `crates/wbvector` — vector I/O (Shapefile, GeoPackage, FlatGeobuf, GeoParquet, and more)
 - `crates/wblidar` — LiDAR I/O (LAS, LAZ, COPC, E57, PLY)
 - `crates/wbtopology` — vector topology and spatial indexing
+- `crates/wbspatialstats` — spatial statistics (kriging, variography, spatial autocorrelation)
 - `crates/wbcore` — shared runtime types and utilities
 - `crates/wblicense_core` — license entitlement verification
 - `crates/wbtools_oss` — open-source tool implementations (500+ tools)
@@ -107,6 +109,8 @@ This staged publishing model keeps the foundational backend stack available firs
 graph TD
 	wbgeotiff --> wbraster
 	wbprojection --> wbraster
+	wbhdf --> wbraster
+	wbhdf --> wblidar
 	wbprojection --> wbvector
 	wbvector --> wbtopology
 	wbprojection --> wblidar
@@ -120,6 +124,7 @@ graph TD
 	wbprojection --> wbtools_oss
 	wbtopology --> wbtools_oss
 	wblidar --> wbtools_oss
+	wbspatialstats --> wbtools_oss
 
 	wbcore --> wbw_python
 	wblicense_core --> wbw_python
@@ -128,9 +133,15 @@ graph TD
 	wbprojection --> wbw_python
 	wbvector --> wbw_python
 	wblidar --> wbw_python
+	wbtopology --> wbw_python
 
 	wbcore --> wbw_r
 	wblicense_core --> wbw_r
+	wbraster --> wbw_r
+	wbvector --> wbw_r
+	wbprojection --> wbw_r
+	wbtopology --> wbw_r
+	wblidar --> wbw_r
 	wbtools_oss --> wbw_r
 
 	wbtools_pro -. optional/external .-> wbw_python
