@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 The format is based on Keep a Changelog, and this project follows Semantic Versioning while in pre-1.0 development.
 
 ## [Unreleased]
+
+## [0.1.3] - 2026-07-30
 ### Changed
 - **`parallel` is now on by default.** The `parallel` feature (which enables `copc-parallel` and
   `laz-parallel`) is included in the crate's `default` feature set. Parallel COPC decompression
