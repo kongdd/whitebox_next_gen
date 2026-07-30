@@ -1,11 +1,5 @@
 use wbtopology::{
-    BufferBuilder,
-    BufferOptions,
-    Coord,
-    LinearRing,
-    Polygon,
-    is_valid_polygon,
-    polygon_area,
+    is_valid_polygon, polygon_area, BufferBuilder, BufferOptions, Coord, LinearRing, Polygon,
 };
 
 fn square(size: f64) -> Polygon {

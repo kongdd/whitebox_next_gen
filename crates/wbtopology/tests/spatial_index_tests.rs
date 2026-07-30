@@ -1,12 +1,4 @@
-use wbtopology::{
-    Coord,
-    Envelope,
-    Geometry,
-    LineString,
-    LinearRing,
-    Polygon,
-    SpatialIndex,
-};
+use wbtopology::{Coord, Envelope, Geometry, LineString, LinearRing, Polygon, SpatialIndex};
 
 fn square(min_x: f64, min_y: f64, max_x: f64, max_y: f64) -> Geometry {
     Geometry::Polygon(Polygon::new(
@@ -156,7 +148,7 @@ fn nearest_k_with_k_larger_than_index_returns_all() {
 #[test]
 fn remove_entry_becomes_invisible_to_queries_and_iterators() {
     let geoms = vec![
-        square(0.0, 0.0, 2.0, 2.0),   // id 0
+        square(0.0, 0.0, 2.0, 2.0),     // id 0
         square(10.0, 10.0, 12.0, 12.0), // id 1
         square(20.0, 20.0, 22.0, 22.0), // id 2
     ];

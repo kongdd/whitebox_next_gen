@@ -1,10 +1,6 @@
 use wbtopology::{
-    Coord,
-    LinearRing,
-    Polygon,
-    UnaryDissolveOptions,
+    polygon_unary_dissolve_with_options, Coord, LinearRing, Polygon, UnaryDissolveOptions,
     UnaryDissolveStrategy,
-    polygon_unary_dissolve_with_options,
 };
 
 fn square(x0: f64, y0: f64, size: f64) -> Polygon {

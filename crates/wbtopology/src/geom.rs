@@ -33,7 +33,11 @@ impl Coord {
     /// Return a copy with a new optional Z value.
     #[inline]
     pub const fn with_z(self, z: Option<f64>) -> Self {
-        Self { x: self.x, y: self.y, z }
+        Self {
+            x: self.x,
+            y: self.y,
+            z,
+        }
     }
 
     /// XY-only equality.
@@ -220,16 +224,21 @@ impl Geometry {
             Geometry::MultiPoint(pts) => {
                 let first = pts.first()?;
                 let mut e = Envelope::new(first.x, first.y, first.x, first.y);
-                for p in &pts[1..] { e = env_expand(e, p.x, p.y); }
+                for p in &pts[1..] {
+                    e = env_expand(e, p.x, p.y);
+                }
                 Some(e)
             }
-            Geometry::MultiLineString(lss) => lss.iter()
+            Geometry::MultiLineString(lss) => lss
+                .iter()
                 .filter_map(|ls| ls.envelope())
                 .fold(None, |acc, e| Some(acc.map_or(e, |a| env_merge(a, e)))),
-            Geometry::MultiPolygon(polys) => polys.iter()
+            Geometry::MultiPolygon(polys) => polys
+                .iter()
                 .filter_map(|p| p.envelope())
                 .fold(None, |acc, e| Some(acc.map_or(e, |a| env_merge(a, e)))),
-            Geometry::GeometryCollection(geoms) => geoms.iter()
+            Geometry::GeometryCollection(geoms) => geoms
+                .iter()
                 .filter_map(|g| g.envelope())
                 .fold(None, |acc, e| Some(acc.map_or(e, |a| env_merge(a, e)))),
         }
@@ -252,9 +261,10 @@ impl Geometry {
     pub fn components(&self) -> Vec<Geometry> {
         match self {
             Geometry::MultiPoint(pts) => pts.iter().map(|&p| Geometry::Point(p)).collect(),
-            Geometry::MultiLineString(lss) => {
-                lss.iter().map(|ls| Geometry::LineString(ls.clone())).collect()
-            }
+            Geometry::MultiLineString(lss) => lss
+                .iter()
+                .map(|ls| Geometry::LineString(ls.clone()))
+                .collect(),
             Geometry::MultiPolygon(polys) => {
                 polys.iter().map(|p| Geometry::Polygon(p.clone())).collect()
             }
@@ -268,12 +278,22 @@ impl Geometry {
 
 #[inline]
 fn env_expand(e: Envelope, x: f64, y: f64) -> Envelope {
-    Envelope::new(e.min_x.min(x), e.min_y.min(y), e.max_x.max(x), e.max_y.max(y))
+    Envelope::new(
+        e.min_x.min(x),
+        e.min_y.min(y),
+        e.max_x.max(x),
+        e.max_y.max(y),
+    )
 }
 
 #[inline]
 fn env_merge(a: Envelope, b: Envelope) -> Envelope {
-    Envelope::new(a.min_x.min(b.min_x), a.min_y.min(b.min_y), a.max_x.max(b.max_x), a.max_y.max(b.max_y))
+    Envelope::new(
+        a.min_x.min(b.min_x),
+        a.min_y.min(b.min_y),
+        a.max_x.max(b.max_x),
+        a.max_y.max(b.max_y),
+    )
 }
 
 fn envelope_of_coords(coords: &[Coord]) -> Option<Envelope> {

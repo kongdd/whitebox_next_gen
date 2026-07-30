@@ -1,8 +1,8 @@
 use std::fs;
 
 use wbtopology::{
-    contains, crosses, intersects, overlaps, relate, relate_with_epsilon, relate_with_precision, touches,
-    within, Coord, Geometry, LineString, LinearRing, Polygon, PrecisionModel,
+    contains, crosses, intersects, overlaps, relate, relate_with_epsilon, relate_with_precision,
+    touches, within, Coord, Geometry, LineString, LinearRing, Polygon, PrecisionModel,
 };
 
 #[derive(Debug)]
@@ -74,7 +74,10 @@ fn parse_parity_status(token: &str) -> String {
 }
 
 fn parse_bool(token: &str) -> bool {
-    matches!(token.trim(), "true" | "True" | "TRUE" | "1" | "yes" | "Yes" | "YES")
+    matches!(
+        token.trim(),
+        "true" | "True" | "TRUE" | "1" | "yes" | "Yes" | "YES"
+    )
 }
 
 fn load_specs() -> Vec<CaseSpec> {
@@ -123,7 +126,8 @@ fn load_specs() -> Vec<CaseSpec> {
 
 fn load_precision_specs() -> Vec<PrecisionCaseSpec> {
     let path = "tests/fixtures/de9im_precision_differential_cases.csv";
-    let txt = fs::read_to_string(path).expect("failed to read DE-9IM precision differential fixture file");
+    let txt = fs::read_to_string(path)
+        .expect("failed to read DE-9IM precision differential fixture file");
     let mut out = Vec::<PrecisionCaseSpec>::new();
 
     for raw in txt.lines() {
@@ -150,7 +154,10 @@ fn load_precision_specs() -> Vec<PrecisionCaseSpec> {
         });
     }
 
-    assert!(!out.is_empty(), "DE-9IM precision fixture file contained no cases");
+    assert!(
+        !out.is_empty(),
+        "DE-9IM precision fixture file contained no cases"
+    );
     let known_diff_count = out
         .iter()
         .filter(|spec| spec.parity_status == "known_diff")
@@ -187,19 +194,37 @@ fn build_case(id: &str) -> (Geometry, Geometry) {
         ),
         "point_in_line_interior" => (
             Geometry::Point(Coord::xy(1.0, 0.0)),
-            Geometry::LineString(LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
         ),
         "point_on_line_endpoint" => (
             Geometry::Point(Coord::xy(0.0, 0.0)),
-            Geometry::LineString(LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(2.0, 0.0)])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
         ),
         "line_line_cross" => (
-            Geometry::LineString(LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(2.0, 2.0)])),
-            Geometry::LineString(LineString::new(vec![Coord::xy(0.0, 2.0), Coord::xy(2.0, 0.0)])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(2.0, 2.0),
+            ])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(0.0, 2.0),
+                Coord::xy(2.0, 0.0),
+            ])),
         ),
         "line_line_touch_endpoint" => (
-            Geometry::LineString(LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(2.0, 0.0)])),
-            Geometry::LineString(LineString::new(vec![Coord::xy(2.0, 0.0), Coord::xy(2.0, 2.0)])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(2.0, 0.0),
+            ])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(2.0, 0.0),
+                Coord::xy(2.0, 2.0),
+            ])),
         ),
         "polygon_contains_polygon" => (
             Geometry::Polygon(rect(0.0, 0.0, 10.0, 10.0)),
@@ -222,7 +247,10 @@ fn build_case(id: &str) -> (Geometry, Geometry) {
             Geometry::Polygon(rect_with_hole(0.0, 0.0, 10.0, 10.0, 3.0, 3.0, 7.0, 7.0)),
         ),
         "line_crosses_polygon_with_hole" => (
-            Geometry::LineString(LineString::new(vec![Coord::xy(-1.0, 5.0), Coord::xy(11.0, 5.0)])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(-1.0, 5.0),
+                Coord::xy(11.0, 5.0),
+            ])),
             Geometry::Polygon(rect_with_hole(0.0, 0.0, 10.0, 10.0, 3.0, 3.0, 7.0, 7.0)),
         ),
         "line_crosses_polygon" => (
@@ -234,7 +262,10 @@ fn build_case(id: &str) -> (Geometry, Geometry) {
             Geometry::Polygon(rect(0.0, 0.0, 10.0, 10.0)),
         ),
         "line_within_polygon" => (
-            Geometry::LineString(LineString::new(vec![Coord::xy(1.0, 1.0), Coord::xy(9.0, 9.0)])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(1.0, 1.0),
+                Coord::xy(9.0, 9.0),
+            ])),
             Geometry::Polygon(rect(0.0, 0.0, 10.0, 10.0)),
         ),
         "polygon_polygon_overlap" => (
@@ -247,15 +278,24 @@ fn build_case(id: &str) -> (Geometry, Geometry) {
         ),
         "near_point_line_endpoint_snap" => (
             Geometry::Point(Coord::xy(2.00041, 0.00041)),
-            Geometry::LineString(LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(2.00049, 0.00049)])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(2.00049, 0.00049),
+            ])),
         ),
         "near_polygon_boundary_snap" => (
             Geometry::Point(Coord::xy(10.00041, 5.0)),
             Geometry::Polygon(rect(0.0, 0.0, 10.00049, 10.0)),
         ),
         "near_line_line_touch_snap" => (
-            Geometry::LineString(LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(2.00049, 0.0)])),
-            Geometry::LineString(LineString::new(vec![Coord::xy(2.00041, 0.00041), Coord::xy(2.00041, 2.0)])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(0.0, 0.0),
+                Coord::xy(2.00049, 0.0),
+            ])),
+            Geometry::LineString(LineString::new(vec![
+                Coord::xy(2.00041, 0.00041),
+                Coord::xy(2.00041, 2.0),
+            ])),
         ),
         "near_line_polygon_cross_snap" => (
             Geometry::LineString(LineString::new(vec![
@@ -287,15 +327,55 @@ fn de9im_differential_fixture_harness() {
 
         // Differential check: matrix-derived predicates should agree with direct APIs
         // for these core fixture cases.
-        assert_eq!(intersects(&a, &b), m.is_intersects(), "case {} intersects mismatch", spec.id);
-        assert_eq!(touches(&a, &b), m.is_touches(), "case {} touches mismatch", spec.id);
+        assert_eq!(
+            intersects(&a, &b),
+            m.is_intersects(),
+            "case {} intersects mismatch",
+            spec.id
+        );
+        assert_eq!(
+            touches(&a, &b),
+            m.is_touches(),
+            "case {} touches mismatch",
+            spec.id
+        );
 
-        assert_eq!(intersects(&a, &b), spec.intersects, "case {} intersects fixture mismatch", spec.id);
-        assert_eq!(contains(&a, &b), spec.contains, "case {} contains fixture mismatch", spec.id);
-        assert_eq!(within(&a, &b), spec.within, "case {} within fixture mismatch", spec.id);
-        assert_eq!(touches(&a, &b), spec.touches, "case {} touches fixture mismatch", spec.id);
-        assert_eq!(crosses(&a, &b), spec.crosses, "case {} crosses fixture mismatch", spec.id);
-        assert_eq!(overlaps(&a, &b), spec.overlaps, "case {} overlaps fixture mismatch", spec.id);
+        assert_eq!(
+            intersects(&a, &b),
+            spec.intersects,
+            "case {} intersects fixture mismatch",
+            spec.id
+        );
+        assert_eq!(
+            contains(&a, &b),
+            spec.contains,
+            "case {} contains fixture mismatch",
+            spec.id
+        );
+        assert_eq!(
+            within(&a, &b),
+            spec.within,
+            "case {} within fixture mismatch",
+            spec.id
+        );
+        assert_eq!(
+            touches(&a, &b),
+            spec.touches,
+            "case {} touches fixture mismatch",
+            spec.id
+        );
+        assert_eq!(
+            crosses(&a, &b),
+            spec.crosses,
+            "case {} crosses fixture mismatch",
+            spec.id
+        );
+        assert_eq!(
+            overlaps(&a, &b),
+            spec.overlaps,
+            "case {} overlaps fixture mismatch",
+            spec.id
+        );
 
         assert!(
             spec.parity_status == "converge" || spec.parity_status == "known_diff",

@@ -1,13 +1,6 @@
 use wbtopology::{
-    polygon_difference,
-    polygon_intersection,
-    polygon_overlay,
-    polygon_sym_diff,
-    polygon_union,
-    OverlayOp,
-    Coord,
-    LinearRing,
-    Polygon,
+    polygon_difference, polygon_intersection, polygon_overlay, polygon_sym_diff, polygon_union,
+    Coord, LinearRing, OverlayOp, Polygon,
 };
 
 fn parse_ring(spec: &str) -> LinearRing {
@@ -175,9 +168,15 @@ fn overlay_fixture_corpus_invariants() {
 
         if mode == "strict" {
             assert!((u - (i + x)).abs() <= tol, "{name}: U != I + XOR");
-            assert!((u - (area_a + area_b - i)).abs() <= tol, "{name}: U != A + B - I");
+            assert!(
+                (u - (area_a + area_b - i)).abs() <= tol,
+                "{name}: U != A + B - I"
+            );
             assert!((d_ab - (area_a - i)).abs() <= tol, "{name}: A\\B != A - I");
-            assert!((x - (d_ab + d_ba)).abs() <= tol, "{name}: XOR != (A\\B)+(B\\A)");
+            assert!(
+                (x - (d_ab + d_ba)).abs() <= tol,
+                "{name}: XOR != (A\\B)+(B\\A)"
+            );
         } else {
             let d1 = (u - (i + x)).abs();
             let d2 = (u - (area_a + area_b - i)).abs();
@@ -202,9 +201,18 @@ fn overlay_fixture_corpus_invariants() {
         let xor_rev = polygon_sym_diff(&b, &a, eps);
 
         if mode == "strict" {
-            assert_eq!(uni, uni_rev, "{name}: union not deterministic across operand order");
-            assert_eq!(inter, inter_rev, "{name}: intersection not deterministic across operand order");
-            assert_eq!(xor, xor_rev, "{name}: symdiff not deterministic across operand order");
+            assert_eq!(
+                uni, uni_rev,
+                "{name}: union not deterministic across operand order"
+            );
+            assert_eq!(
+                inter, inter_rev,
+                "{name}: intersection not deterministic across operand order"
+            );
+            assert_eq!(
+                xor, xor_rev,
+                "{name}: symdiff not deterministic across operand order"
+            );
         } else {
             assert!(
                 (area_sum(&uni) - area_sum(&uni_rev)).abs() <= tol,

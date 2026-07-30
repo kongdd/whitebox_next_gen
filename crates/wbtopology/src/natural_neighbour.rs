@@ -232,7 +232,11 @@ impl PreparedSibsonInterpolator {
     }
 
     /// Compute true Sibson weights for `query` using a reusable scratch buffer.
-    pub fn weights_with_scratch(&self, query: Coord, scratch: &mut SibsonScratch) -> Vec<(usize, f64)> {
+    pub fn weights_with_scratch(
+        &self,
+        query: Coord,
+        scratch: &mut SibsonScratch,
+    ) -> Vec<(usize, f64)> {
         if self.points.is_empty() {
             return Vec::new();
         }
@@ -327,11 +331,7 @@ impl PreparedSibsonInterpolator {
         SibsonScratch::new(self.triangles.len(), self.points.len())
     }
 
-    fn cavity_triangles_with_scratch(
-        &self,
-        query: Coord,
-        scratch: &mut SibsonScratch,
-    ) {
+    fn cavity_triangles_with_scratch(&self, query: Coord, scratch: &mut SibsonScratch) {
         if self.triangles.is_empty() {
             scratch.cavity.clear();
             return;
@@ -385,14 +385,9 @@ impl PreparedSibsonInterpolator {
                 }
             }
         }
-
     }
 
-    fn natural_neighbor_indices_with_scratch(
-        &self,
-        query: Coord,
-        scratch: &mut SibsonScratch,
-    ) {
+    fn natural_neighbor_indices_with_scratch(&self, query: Coord, scratch: &mut SibsonScratch) {
         self.cavity_triangles_with_scratch(query, scratch);
         scratch.reset_site_seen(self.points.len());
         scratch.neighbors.clear();
@@ -422,7 +417,12 @@ impl PreparedSibsonInterpolator {
         dist2 <= radius2 + self.epsilon * radius2.max(1.0)
     }
 
-    fn query_cell_coords(&self, query: Coord, neighbors: &[usize], scratch: &mut SibsonScratch) -> bool {
+    fn query_cell_coords(
+        &self,
+        query: Coord,
+        neighbors: &[usize],
+        scratch: &mut SibsonScratch,
+    ) -> bool {
         scratch.cell_a.clear();
         scratch.cell_a.extend(rect_coords(self.clip));
         scratch.cell_b.clear();
@@ -438,9 +438,15 @@ impl PreparedSibsonInterpolator {
                 continue;
             }
             let c = 0.5
-                * ((site.x * site.x + site.y * site.y)
-                    - (query.x * query.x + query.y * query.y));
-            clip_polygon_halfplane_into(&scratch.cell_a, &mut scratch.cell_b, nx, ny, c, self.epsilon);
+                * ((site.x * site.x + site.y * site.y) - (query.x * query.x + query.y * query.y));
+            clip_polygon_halfplane_into(
+                &scratch.cell_a,
+                &mut scratch.cell_b,
+                nx,
+                ny,
+                c,
+                self.epsilon,
+            );
             std::mem::swap(&mut scratch.cell_a, &mut scratch.cell_b);
             scratch.cell_b.clear();
             if scratch.cell_a.len() < 3 {
@@ -451,7 +457,11 @@ impl PreparedSibsonInterpolator {
         true
     }
 
-    fn locate_triangle_with_scratch(&self, query: Coord, scratch: &mut SibsonScratch) -> Option<usize> {
+    fn locate_triangle_with_scratch(
+        &self,
+        query: Coord,
+        scratch: &mut SibsonScratch,
+    ) -> Option<usize> {
         self.triangle_locate_index
             .collect_candidates_for_point(query, &mut scratch.candidates);
         for &tri_idx in &scratch.candidates {
@@ -867,7 +877,14 @@ fn clip_polygon_halfplane_into(
     dedup_consecutive(out, eps);
 }
 
-fn segment_line_intersection(a: Coord, b: Coord, nx: f64, ny: f64, c: f64, eps: f64) -> Option<Coord> {
+fn segment_line_intersection(
+    a: Coord,
+    b: Coord,
+    nx: f64,
+    ny: f64,
+    c: f64,
+    eps: f64,
+) -> Option<Coord> {
     let dx = b.x - a.x;
     let dy = b.y - a.y;
     let denom = nx * dx + ny * dy;
@@ -940,7 +957,11 @@ mod tests {
 
     #[test]
     fn sibson_exactly_reproduces_site_value() {
-        let points = vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0), Coord::xy(0.0, 1.0)];
+        let points = vec![
+            Coord::xy(0.0, 0.0),
+            Coord::xy(1.0, 0.0),
+            Coord::xy(0.0, 1.0),
+        ];
         let interp = PreparedSibsonInterpolator::new(&points, 1.0e-12);
         let values: Vec<f64> = interp
             .points
@@ -961,7 +982,11 @@ mod tests {
 
     #[test]
     fn sibson_reproduces_linear_field_inside_triangle() {
-        let points = vec![Coord::xy(0.0, 0.0), Coord::xy(1.0, 0.0), Coord::xy(0.0, 1.0)];
+        let points = vec![
+            Coord::xy(0.0, 0.0),
+            Coord::xy(1.0, 0.0),
+            Coord::xy(0.0, 1.0),
+        ];
         let interp = PreparedSibsonInterpolator::new(&points, 1.0e-12);
         let values: Vec<f64> = interp.points.iter().map(|p| p.x + p.y).collect();
         let query = Coord::xy(1.0 / 3.0, 1.0 / 3.0);
@@ -1023,7 +1048,9 @@ mod tests {
         ];
 
         for q in queries {
-            let out = interp.interpolate(q, &values).expect("interpolation should succeed");
+            let out = interp
+                .interpolate(q, &values)
+                .expect("interpolation should succeed");
             let expected = plane(q);
             assert!(
                 (out - expected).abs() < 1.0e-6,

@@ -9,10 +9,10 @@ use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterato
 #[cfg(feature = "parallel")]
 use rayon::join;
 
-use crate::algorithms::segment::{point_on_segment_eps, segments_intersect_eps};
-use crate::constructive::polygonize_closed_linestrings;
 use crate::algorithms::distance::geometry_distance;
 use crate::algorithms::point_in_ring::{classify_point_in_ring_eps, PointInRing};
+use crate::algorithms::segment::{point_on_segment_eps, segments_intersect_eps};
+use crate::constructive::polygonize_closed_linestrings;
 use crate::geom::{Coord, Envelope, Geometry, LineString, LinearRing, Polygon};
 use crate::graph::TopologyGraph;
 use crate::noding::{node_linestrings_with_options, NodingOptions, NodingStrategy};
@@ -264,7 +264,13 @@ fn classify_overlay_faces_depth(
     let mut queue = VecDeque::<usize>::new();
     let face_sign: Vec<i32> = face_rings
         .iter()
-        .map(|(ring, _)| if ring_signed_area(&ring.coords) >= 0.0 { 1 } else { -1 })
+        .map(|(ring, _)| {
+            if ring_signed_area(&ring.coords) >= 0.0 {
+                1
+            } else {
+                -1
+            }
+        })
         .collect();
 
     for face_id in 0..face_rings.len() {
@@ -284,7 +290,11 @@ fn classify_overlay_faces_depth(
                 }
             }
         }
-        let chosen = if seed != i32::MIN { seed } else { fallback_seed };
+        let chosen = if seed != i32::MIN {
+            seed
+        } else {
+            fallback_seed
+        };
         if chosen != i32::MIN {
             face_depth[face_id] = chosen;
             queue.push_back(face_id);
@@ -337,7 +347,10 @@ fn classify_overlay_faces_depth(
                 })
             });
             if let Some(p) = rep {
-                if matches!(classify_point_in_polygon_eps(p, source, eps), PointInRing::Inside) {
+                if matches!(
+                    classify_point_in_polygon_eps(p, source, eps),
+                    PointInRing::Inside
+                ) {
                     *depth = 1;
                 }
             }
@@ -370,14 +383,8 @@ fn classify_hole_bearing_face_states(
         }
     }
 
-    let depth = classify_hole_bearing_faces_depth(
-        graph,
-        face_rings,
-        &edge_to_face,
-        source,
-        n_edges,
-        eps,
-    );
+    let depth =
+        classify_hole_bearing_faces_depth(graph, face_rings, &edge_to_face, source, n_edges, eps);
 
     let overlay_debug = std::env::var("WB_OVERLAY_DEBUG").is_ok();
     let mut state = vec![FaceMembershipState::Unknown; face_rings.len()];
@@ -482,7 +489,11 @@ fn classify_hole_bearing_faces_depth(
                 }
             }
         }
-        let chosen = if seed != i32::MIN { seed } else { fallback_seed };
+        let chosen = if seed != i32::MIN {
+            seed
+        } else {
+            fallback_seed
+        };
         if chosen != i32::MIN {
             face_depth[face_id] = chosen;
             queue.push_back(face_id);
@@ -518,7 +529,10 @@ fn classify_hole_bearing_faces_depth(
 
 #[inline]
 fn state_is_inside(state: FaceMembershipState) -> bool {
-    matches!(state, FaceMembershipState::Inside | FaceMembershipState::Boundary)
+    matches!(
+        state,
+        FaceMembershipState::Inside | FaceMembershipState::Boundary
+    )
 }
 
 fn keep_face_for_operation_state(
@@ -623,8 +637,7 @@ fn canonical_ring_key(coords: &[Coord], eps: f64) -> String {
     let rev = min_lex_rotation(&rev_src);
     let best = if fwd <= rev { fwd } else { rev };
 
-    best
-        .into_iter()
+    best.into_iter()
         .map(|(x, y)| format!("{x}:{y}"))
         .collect::<Vec<String>>()
         .join(";")
@@ -648,8 +661,7 @@ fn canonical_oriented_ring_key(coords: &[Coord], eps: f64) -> String {
     }
 
     let best = min_lex_rotation(&pts);
-    best
-        .into_iter()
+    best.into_iter()
         .map(|(x, y)| format!("{x}:{y}"))
         .collect::<Vec<String>>()
         .join(";")
@@ -805,7 +817,12 @@ pub fn polygon_sym_diff_faces(a: &Polygon, b: &Polygon, epsilon: f64) -> Vec<Pol
 /// Dissolved polygon overlay output for an operation.
 ///
 /// This merges adjacent selected faces by canceling shared interior boundaries.
-pub fn polygon_overlay(a: &Polygon, b: &Polygon, operation: OverlayOp, epsilon: f64) -> Vec<Polygon> {
+pub fn polygon_overlay(
+    a: &Polygon,
+    b: &Polygon,
+    operation: OverlayOp,
+    epsilon: f64,
+) -> Vec<Polygon> {
     let eps = normalized_eps(epsilon);
     if let Some(result) = containment_overlay(a, b, operation, eps) {
         return normalize_polygons(result, eps);
@@ -1044,31 +1061,13 @@ fn overlay_hole_bearing_by_edge_labels(
 
         let boundary_as_inside = matches!(operation, OverlayOp::Intersection);
 
-        let Some(a_left) = probe_side_membership(
-            mx,
-            my,
-            nx,
-            ny,
-            1.0,
-            a,
-            probe,
-            graph_eps,
-            boundary_as_inside,
-        )
+        let Some(a_left) =
+            probe_side_membership(mx, my, nx, ny, 1.0, a, probe, graph_eps, boundary_as_inside)
         else {
             continue;
         };
-        let Some(b_left) = probe_side_membership(
-            mx,
-            my,
-            nx,
-            ny,
-            1.0,
-            b,
-            probe,
-            graph_eps,
-            boundary_as_inside,
-        )
+        let Some(b_left) =
+            probe_side_membership(mx, my, nx, ny, 1.0, b, probe, graph_eps, boundary_as_inside)
         else {
             continue;
         };
@@ -1082,8 +1081,7 @@ fn overlay_hole_bearing_by_edge_labels(
             probe,
             graph_eps,
             boundary_as_inside,
-        )
-        else {
+        ) else {
             continue;
         };
         let Some(b_right) = probe_side_membership(
@@ -1096,8 +1094,7 @@ fn overlay_hole_bearing_by_edge_labels(
             probe,
             graph_eps,
             boundary_as_inside,
-        )
-        else {
+        ) else {
             continue;
         };
 
@@ -1312,24 +1309,24 @@ pub fn polygon_intersection(a: &Polygon, b: &Polygon, epsilon: f64) -> Vec<Polyg
 
         // Enforce I subset A and I subset B by clipping candidates against
         // outside-of-A / outside-of-B fragments.
-        let clip_intersection_candidates =
-            |candidates: Vec<Polygon>, label: &str| -> Vec<Polygon> {
-                let mut clipped = Vec::<Polygon>::new();
-                for (poly_idx, poly) in candidates.into_iter().enumerate() {
-                    let cuts_a = polygon_overlay(&poly, a, OverlayOp::DifferenceAB, eps);
-                    let cuts_b = polygon_overlay(&poly, b, OverlayOp::DifferenceAB, eps);
-                    let cuts_a_count = cuts_a.len();
-                    let cuts_b_count = cuts_b.len();
-                    let cuts_a_area: f64 = cuts_a.iter().map(polygon_abs_area).sum();
-                    let cuts_b_area: f64 = cuts_b.iter().map(polygon_abs_area).sum();
-                    let mut cuts = cuts_a;
-                    cuts.extend(cuts_b);
-                    let mut kept =
-                        subtract_many_from_polygons(std::slice::from_ref(&poly), &cuts, eps);
-                    if overlay_debug {
-                        let poly_area = polygon_abs_area(&poly);
-                        let kept_area: f64 = kept.iter().map(polygon_abs_area).sum();
-                        eprintln!(
+        let clip_intersection_candidates = |candidates: Vec<Polygon>,
+                                            label: &str|
+         -> Vec<Polygon> {
+            let mut clipped = Vec::<Polygon>::new();
+            for (poly_idx, poly) in candidates.into_iter().enumerate() {
+                let cuts_a = polygon_overlay(&poly, a, OverlayOp::DifferenceAB, eps);
+                let cuts_b = polygon_overlay(&poly, b, OverlayOp::DifferenceAB, eps);
+                let cuts_a_count = cuts_a.len();
+                let cuts_b_count = cuts_b.len();
+                let cuts_a_area: f64 = cuts_a.iter().map(polygon_abs_area).sum();
+                let cuts_b_area: f64 = cuts_b.iter().map(polygon_abs_area).sum();
+                let mut cuts = cuts_a;
+                cuts.extend(cuts_b);
+                let mut kept = subtract_many_from_polygons(std::slice::from_ref(&poly), &cuts, eps);
+                if overlay_debug {
+                    let poly_area = polygon_abs_area(&poly);
+                    let kept_area: f64 = kept.iter().map(polygon_abs_area).sum();
+                    eprintln!(
                             "overlay_debug: intersection4h clip label={} poly={} area={:.6} cuts_a={} cuts_a_area={:.6} cuts_b={} cuts_b_area={:.6} kept_parts={} kept_area={:.6}",
                             label,
                             poly_idx,
@@ -1341,21 +1338,21 @@ pub fn polygon_intersection(a: &Polygon, b: &Polygon, epsilon: f64) -> Vec<Polyg
                             kept.len(),
                             kept_area
                         );
-                    }
-                    clipped.append(&mut kept);
                 }
-                let clipped = normalize_polygons(clipped, eps);
-                if overlay_debug {
-                    let clipped_area: f64 = clipped.iter().map(polygon_abs_area).sum();
-                    eprintln!(
-                        "overlay_debug: intersection4h clipped label={} polys={} area={:.6}",
-                        label,
-                        clipped.len(),
-                        clipped_area
-                    );
-                }
-                clipped
-            };
+                clipped.append(&mut kept);
+            }
+            let clipped = normalize_polygons(clipped, eps);
+            if overlay_debug {
+                let clipped_area: f64 = clipped.iter().map(polygon_abs_area).sum();
+                eprintln!(
+                    "overlay_debug: intersection4h clipped label={} polys={} area={:.6}",
+                    label,
+                    clipped.len(),
+                    clipped_area
+                );
+            }
+            clipped
+        };
 
         let special_clipped = clip_intersection_candidates(out, "special");
         let direct_raw = polygon_overlay(a, b, OverlayOp::Intersection, eps);
@@ -1446,18 +1443,12 @@ pub fn polygon_unary_union_with_options(
             options.noding,
             options.preferred_union_precision,
         ),
-        UnaryDissolveStrategy::CascadedHeuristic => unary_union_componentized(
-            polys,
-            eps,
-            true,
-            options.preferred_union_precision,
-        ),
-        UnaryDissolveStrategy::PairwiseHeuristic => unary_union_componentized(
-            polys,
-            eps,
-            false,
-            options.preferred_union_precision,
-        ),
+        UnaryDissolveStrategy::CascadedHeuristic => {
+            unary_union_componentized(polys, eps, true, options.preferred_union_precision)
+        }
+        UnaryDissolveStrategy::PairwiseHeuristic => {
+            unary_union_componentized(polys, eps, false, options.preferred_union_precision)
+        }
     }
 }
 
@@ -1500,18 +1491,12 @@ pub fn polygon_unary_dissolve_with_options(
             options.noding,
             options.preferred_union_precision,
         ),
-        UnaryDissolveStrategy::CascadedHeuristic => unary_dissolve_componentized(
-            polys,
-            eps,
-            true,
-            options.preferred_union_precision,
-        ),
-        UnaryDissolveStrategy::PairwiseHeuristic => unary_dissolve_componentized(
-            polys,
-            eps,
-            false,
-            options.preferred_union_precision,
-        ),
+        UnaryDissolveStrategy::CascadedHeuristic => {
+            unary_dissolve_componentized(polys, eps, true, options.preferred_union_precision)
+        }
+        UnaryDissolveStrategy::PairwiseHeuristic => {
+            unary_dissolve_componentized(polys, eps, false, options.preferred_union_precision)
+        }
     }
 }
 
@@ -1543,7 +1528,12 @@ fn unary_dissolve_componentized(
     let mut out = Vec::<UnaryDissolveGroup>::new();
     for comp in components {
         if cascaded {
-            out.extend(dissolve_component_cascaded(polys, &comp, eps, preferred_precision));
+            out.extend(dissolve_component_cascaded(
+                polys,
+                &comp,
+                eps,
+                preferred_precision,
+            ));
         } else {
             out.extend(dissolve_component(polys, &comp, eps, preferred_precision));
         }
@@ -1579,7 +1569,12 @@ fn unary_union_componentized(
     let mut out = Vec::<Polygon>::new();
     for comp in components {
         if cascaded {
-            out.extend(union_component_cascaded(polys, &comp, eps, preferred_precision));
+            out.extend(union_component_cascaded(
+                polys,
+                &comp,
+                eps,
+                preferred_precision,
+            ));
         } else {
             out.extend(union_component(polys, &comp, eps, preferred_precision));
         }
@@ -1598,7 +1593,8 @@ fn unary_dissolve_graph(
         let mut out = Vec::<UnaryDissolveGroup>::new();
         for part in partitions {
             let subset: Vec<Polygon> = part.iter().map(|&idx| polys[idx].clone()).collect();
-            let mut groups = unary_dissolve_graph_component(&subset, eps, noding, preferred_precision);
+            let mut groups =
+                unary_dissolve_graph_component(&subset, eps, noding, preferred_precision);
             for g in &mut groups {
                 for idx in &mut g.source_indices {
                     *idx = part[*idx];
@@ -1697,7 +1693,10 @@ fn unary_dissolve_graph_component(
         }
         source_indices.sort_unstable();
         source_indices.dedup();
-        candidate_groups.push(UnaryDissolveGroup { poly, source_indices });
+        candidate_groups.push(UnaryDissolveGroup {
+            poly,
+            source_indices,
+        });
     }
 
     dissolve_pre_grouped_cascaded(candidate_groups, eps, preferred_precision)
@@ -1889,7 +1888,11 @@ fn classify_faces_by_depth(
         .map(|(ring, _)| {
             // CCW ring traversal means the face lies on the left side of edge ids.
             // CW means the face lies on the right side and depth transitions invert.
-            if ring_signed_area(&ring.coords) >= 0.0 { 1 } else { -1 }
+            if ring_signed_area(&ring.coords) >= 0.0 {
+                1
+            } else {
+                -1
+            }
         })
         .collect();
 
@@ -1912,7 +1915,11 @@ fn classify_faces_by_depth(
                 }
             }
         }
-        let chosen = if seed != i32::MIN { seed } else { fallback_seed };
+        let chosen = if seed != i32::MIN {
+            seed
+        } else {
+            fallback_seed
+        };
         if chosen != i32::MIN {
             face_depth[face_id] = chosen;
             queue.push_back(face_id);
@@ -2017,13 +2024,19 @@ fn polygons_overlap_fast(a: &Polygon, b: &Polygon, eps: f64) -> bool {
     }
 
     if let Some(p) = a.exterior.coords.first().copied() {
-        if matches!(classify_point_in_polygon_eps(p, b, eps), PointInRing::Inside | PointInRing::Boundary) {
+        if matches!(
+            classify_point_in_polygon_eps(p, b, eps),
+            PointInRing::Inside | PointInRing::Boundary
+        ) {
             return true;
         }
     }
 
     if let Some(p) = b.exterior.coords.first().copied() {
-        if matches!(classify_point_in_polygon_eps(p, a, eps), PointInRing::Inside | PointInRing::Boundary) {
+        if matches!(
+            classify_point_in_polygon_eps(p, a, eps),
+            PointInRing::Inside | PointInRing::Boundary
+        ) {
             return true;
         }
     }
@@ -2071,7 +2084,8 @@ fn source_components_by_non_point_connectivity(polys: &[Polygon], eps: f64) -> V
 fn sources_have_non_point_connection(a: &Polygon, b: &Polygon, eps: f64) -> bool {
     if let (Some(ea), Some(eb)) = (a.envelope(), b.envelope()) {
         if !ea.intersects(&eb) {
-            let gap = geometry_distance(&Geometry::Polygon(a.clone()), &Geometry::Polygon(b.clone()));
+            let gap =
+                geometry_distance(&Geometry::Polygon(a.clone()), &Geometry::Polygon(b.clone()));
             if !(gap.is_finite() && gap > 0.0 && gap <= eps) {
                 return false;
             }
@@ -2083,13 +2097,19 @@ fn sources_have_non_point_connection(a: &Polygon, b: &Polygon, eps: f64) -> bool
     }
 
     if let Some(p) = a.exterior.coords.first().copied() {
-        if matches!(classify_point_in_polygon_eps(p, b, eps), PointInRing::Inside) {
+        if matches!(
+            classify_point_in_polygon_eps(p, b, eps),
+            PointInRing::Inside
+        ) {
             return true;
         }
     }
 
     if let Some(p) = b.exterior.coords.first().copied() {
-        if matches!(classify_point_in_polygon_eps(p, a, eps), PointInRing::Inside) {
+        if matches!(
+            classify_point_in_polygon_eps(p, a, eps),
+            PointInRing::Inside
+        ) {
             return true;
         }
     }
@@ -2247,9 +2267,11 @@ fn dissolve_work_cascaded(
 
     let axis_x = depth % 2 == 0;
     let mut ordered = groups;
-    ordered.sort_by(|a, b| dissolve_work_axis_value(a, axis_x)
-        .partial_cmp(&dissolve_work_axis_value(b, axis_x))
-        .unwrap_or(Ordering::Equal));
+    ordered.sort_by(|a, b| {
+        dissolve_work_axis_value(a, axis_x)
+            .partial_cmp(&dissolve_work_axis_value(b, axis_x))
+            .unwrap_or(Ordering::Equal)
+    });
 
     let mid = ordered.len() / 2;
     let right = ordered.split_off(mid);
@@ -2399,9 +2421,11 @@ fn union_work_cascaded(
 
     let axis_x = depth % 2 == 0;
     let mut ordered = groups;
-    ordered.sort_by(|a, b| union_work_axis_value(a, axis_x)
-        .partial_cmp(&union_work_axis_value(b, axis_x))
-        .unwrap_or(Ordering::Equal));
+    ordered.sort_by(|a, b| {
+        union_work_axis_value(a, axis_x)
+            .partial_cmp(&union_work_axis_value(b, axis_x))
+            .unwrap_or(Ordering::Equal)
+    });
 
     let mid = ordered.len() / 2;
     let right = ordered.split_off(mid);
@@ -2574,7 +2598,15 @@ fn safe_dissolve_union(
                 }
                 _ => area_tol,
             };
-            if union_candidate_is_valid_with_precision(&poly, a, b, eps, precision, tol, min_expected) {
+            if union_candidate_is_valid_with_precision(
+                &poly,
+                a,
+                b,
+                eps,
+                precision,
+                tol,
+                min_expected,
+            ) {
                 return Some(poly);
             }
         }
@@ -2654,10 +2686,16 @@ fn polygon_shell_is_covered(container: &Polygon, source: &Polygon, eps: f64) -> 
         let b = coords[i + 1];
         let mid = Coord::xy((a.x + b.x) * 0.5, (a.y + b.y) * 0.5);
 
-        if matches!(classify_point_in_polygon_eps(a, container, eps), PointInRing::Outside) {
+        if matches!(
+            classify_point_in_polygon_eps(a, container, eps),
+            PointInRing::Outside
+        ) {
             return false;
         }
-        if matches!(classify_point_in_polygon_eps(mid, container, eps), PointInRing::Outside) {
+        if matches!(
+            classify_point_in_polygon_eps(mid, container, eps),
+            PointInRing::Outside
+        ) {
             return false;
         }
     }
@@ -2732,7 +2770,12 @@ pub fn polygon_sym_diff_with_precision(
     polygon_overlay_with_precision(a, b, OverlayOp::SymmetricDifference, precision)
 }
 
-fn containment_overlay(a: &Polygon, b: &Polygon, operation: OverlayOp, eps: f64) -> Option<Vec<Polygon>> {
+fn containment_overlay(
+    a: &Polygon,
+    b: &Polygon,
+    operation: OverlayOp,
+    eps: f64,
+) -> Option<Vec<Polygon>> {
     let a_contains_b = shell_strictly_inside(a, b, eps);
     let b_contains_a = shell_strictly_inside(b, a, eps);
 
@@ -2796,13 +2839,19 @@ fn shell_strictly_inside(container: &Polygon, candidate: &Polygon, eps: f64) -> 
 
     for i in 0..(c.len() - 1) {
         let p = c[i];
-        if !matches!(classify_point_in_polygon_eps(p, container, eps), PointInRing::Inside) {
+        if !matches!(
+            classify_point_in_polygon_eps(p, container, eps),
+            PointInRing::Inside
+        ) {
             return false;
         }
 
         let q = c[i + 1];
         let m = Coord::xy((p.x + q.x) * 0.5, (p.y + q.y) * 0.5);
-        if !matches!(classify_point_in_polygon_eps(m, container, eps), PointInRing::Inside) {
+        if !matches!(
+            classify_point_in_polygon_eps(m, container, eps),
+            PointInRing::Inside
+        ) {
             return false;
         }
     }
@@ -3163,7 +3212,11 @@ fn representative_point_for_face_ring(coords: &[Coord], eps: f64) -> Option<Coor
     let mid = Coord::xy((a.x + b.x) * 0.5, (a.y + b.y) * 0.5);
     let left_nx = -dy / len;
     let left_ny = dx / len;
-    let sign = if ring_signed_area(coords) >= 0.0 { 1.0 } else { -1.0 };
+    let sign = if ring_signed_area(coords) >= 0.0 {
+        1.0
+    } else {
+        -1.0
+    };
     let nx = left_nx * sign;
     let ny = left_ny * sign;
 
@@ -3245,7 +3298,6 @@ fn dissolve_faces(faces: &[Polygon], eps: f64) -> Vec<Polygon> {
             let key = ordered_pair(qa, qb);
             seg_counts
                 .entry(key)
-
                 .and_modify(|s| s.count += 1)
                 .or_insert(SegState { count: 1 });
         }
@@ -3289,12 +3341,8 @@ fn dissolve_faces(faces: &[Polygon], eps: f64) -> Vec<Polygon> {
                 break;
             }
 
-            let Some(next) = choose_next_boundary_neighbor(
-                curr,
-                prev,
-                &adjacency,
-                &boundary_edges,
-            ) else {
+            let Some(next) = choose_next_boundary_neighbor(curr, prev, &adjacency, &boundary_edges)
+            else {
                 break;
             };
 
@@ -3486,7 +3534,11 @@ fn quantize_coord(c: Coord, eps: f64) -> QCoord {
     QCoord(qx, qy)
 }
 
-fn update_quantized_coord_map(coord_map: &mut HashMap<QCoord, Coord>, key: QCoord, candidate: Coord) {
+fn update_quantized_coord_map(
+    coord_map: &mut HashMap<QCoord, Coord>,
+    key: QCoord,
+    candidate: Coord,
+) {
     match coord_map.get_mut(&key) {
         Some(existing) => {
             if coord_lex_lt(candidate, *existing) {
@@ -3719,9 +3771,16 @@ mod tests {
         );
 
         let out = polygon_unary_union(&[a, b], 1.0e-9);
-        assert_eq!(out.len(), 1, "touching squares should dissolve into one polygon");
+        assert_eq!(
+            out.len(),
+            1,
+            "touching squares should dissolve into one polygon"
+        );
         let area = polygon_area(&out[0]);
-        assert!((area - 2.0).abs() <= 1.0e-9, "unexpected dissolved area: {area}");
+        assert!(
+            (area - 2.0).abs() <= 1.0e-9,
+            "unexpected dissolved area: {area}"
+        );
     }
 
     #[derive(Debug)]

@@ -86,17 +86,18 @@ pub fn node_linestrings(lines: &[LineString], epsilon: f64) -> Vec<LineString> {
 }
 
 /// Split linestrings into noded fragments using explicit strategy options.
-pub fn node_linestrings_with_options(lines: &[LineString], options: NodingOptions) -> Vec<LineString> {
+pub fn node_linestrings_with_options(
+    lines: &[LineString],
+    options: NodingOptions,
+) -> Vec<LineString> {
     let eps = options.epsilon.abs();
     let prepared_lines = match options.strategy {
         // SnapRounding and Auto both quantise input vertices by default to match their
         // snap-rounding intersection points. This prevents mixed-precision sliver artifacts.
         NodingStrategy::SnapRounding | NodingStrategy::Auto => {
-            let precision = options
-                .precision
-                .unwrap_or(PrecisionModel::Fixed {
-                    scale: 1.0 / eps.max(1.0e-9),
-                });
+            let precision = options.precision.unwrap_or(PrecisionModel::Fixed {
+                scale: 1.0 / eps.max(1.0e-9),
+            });
             apply_precision_lines(lines, precision)
         }
         // For other strategies, only apply precision if explicitly provided.
@@ -228,10 +229,7 @@ fn node_segment(
             // topology graph.  Snapping to the same grid that was applied to input
             // vertices ensures every noded coordinate is on-grid.
             let scale = 1.0 / eps.max(1.0e-15);
-            let snapped = Coord::xy(
-                (p.x * scale).round() / scale,
-                (p.y * scale).round() / scale,
-            );
+            let snapped = Coord::xy((p.x * scale).round() / scale, (p.y * scale).round() / scale);
             push_unique_eps(&mut split_points, snapped, eps);
         }
     }
@@ -482,7 +480,13 @@ fn segment_param(a: Coord, b: Coord, p: Coord, eps: f64) -> f64 {
     }
 }
 
-fn segment_intersection_point(a1: Coord, a2: Coord, b1: Coord, b2: Coord, eps: f64) -> Option<Coord> {
+fn segment_intersection_point(
+    a1: Coord,
+    a2: Coord,
+    b1: Coord,
+    b2: Coord,
+    eps: f64,
+) -> Option<Coord> {
     let r_x = a2.x - a1.x;
     let r_y = a2.y - a1.y;
     let s_x = b2.x - b1.x;

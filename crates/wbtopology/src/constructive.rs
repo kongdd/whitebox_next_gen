@@ -5,8 +5,8 @@
 //! - polygonization from closed linestrings (`polygonize_closed_linestrings`)
 //! - point buffering (`buffer_point`)
 
-use crate::algorithms::point_in_ring::{classify_point_in_ring_eps, PointInRing};
 use crate::algorithms::distance::geometry_distance;
+use crate::algorithms::point_in_ring::{classify_point_in_ring_eps, PointInRing};
 use crate::algorithms::segment::segments_intersect_eps;
 use crate::geom::{Coord, Geometry, LineString, LinearRing, Polygon};
 use crate::graph::TopologyGraph;
@@ -160,7 +160,9 @@ impl BufferBuilder {
     /// Build a polygon buffer using the selected pipeline.
     pub fn build_polygon(self, poly: &Polygon, distance: f64) -> Polygon {
         match self.pipeline {
-            BufferPipelineStrategy::Legacy => buffer_polygon_legacy_impl(poly, distance, self.options),
+            BufferPipelineStrategy::Legacy => {
+                buffer_polygon_legacy_impl(poly, distance, self.options)
+            }
             BufferPipelineStrategy::GraphBuilder => self.build_polygon_graph(poly, distance),
         }
     }
@@ -219,28 +221,26 @@ impl BufferBuilder {
         // prioritizes the correct outer buffer by inside_count and area. Merging
         // via polygon_union can corrupt results in boundary/collapsed-hole cases.
         // Instead, just take the first depth-sorted candidate with reasonable area.
-        let best_candidate = selected
-            .into_iter()
-            .find(|p| {
-                let p_area = polygon_abs_area(p);
-                if p_area < 1.0e-3 {
+        let best_candidate = selected.into_iter().find(|p| {
+            let p_area = polygon_abs_area(p);
+            if p_area < 1.0e-3 {
+                return false;
+            }
+            // For positive buffers, the result should be substantially larger than source.
+            // Intermediate stage faces will be only slightly larger.
+            // Approximation: buffer distance d expands perimeter, so rough estimate is
+            // that area grows by ~perimeter * d. For a square 10x10 with d=2.5,
+            // growth is ~40*2.5 = 100, so buffered area ~200 vs source area 100.
+            // Accept if at least 1.5x source exterior area (loose threshold).
+            if distance > 0.0 {
+                let src_ext_area = ring_abs_area(&poly.exterior.coords);
+                if p_area < src_ext_area * 1.2 {
                     return false;
                 }
-                // For positive buffers, the result should be substantially larger than source.
-                // Intermediate stage faces will be only slightly larger.
-                // Approximation: buffer distance d expands perimeter, so rough estimate is
-                // that area grows by ~perimeter * d. For a square 10x10 with d=2.5,
-                // growth is ~40*2.5 = 100, so buffered area ~200 vs source area 100.
-                // Accept if at least 1.5x source exterior area (loose threshold).
-                if distance > 0.0 {
-                    let src_ext_area = ring_abs_area(&poly.exterior.coords);
-                    if p_area < src_ext_area * 1.2 {
-                        return false;
-                    }
-                }
-                true
-            });
-        
+            }
+            true
+        });
+
         if let Some(out) = best_candidate {
             // Sanity check: for positive buffers the output polygon must be at
             // least as large as the source's exterior ring.  If the graph
@@ -458,8 +458,7 @@ pub fn buffer_linestring(ls: &LineString, distance: f64, options: BufferOptions)
                     },
                 );
                 if let Some(poly) = fallback.polygons.into_iter().max_by(|a, b| {
-                    ring_abs_area(&a.exterior.coords)
-                        .total_cmp(&ring_abs_area(&b.exterior.coords))
+                    ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
                 }) {
                     return repair_buffer_polygon(poly, eps);
                 }
@@ -859,7 +858,9 @@ fn buffer_linestring_graph_repair(poly: Polygon, eps: f64) -> Polygon {
     let dissolved = polygon_unary_union(&polys, eps);
     dissolved
         .into_iter()
-        .max_by(|a, b| ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords)))
+        .max_by(|a, b| {
+            ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
+        })
         .unwrap_or_else(|| repair_buffer_polygon(poly, eps))
 }
 
@@ -964,8 +965,7 @@ fn buffer_polygon_positive(poly: &Polygon, distance: f64, options: BufferOptions
             // collapse check used by the non-round (Mitre/Flat) path.
             result.holes.retain(|h| {
                 if let Some(env) = h.envelope() {
-                    env.max_x - env.min_x > 2.0 * distance
-                        && env.max_y - env.min_y > 2.0 * distance
+                    env.max_x - env.min_x > 2.0 * distance && env.max_y - env.min_y > 2.0 * distance
                 } else {
                     false
                 }
@@ -1074,7 +1074,8 @@ fn add_union_piece(parts: &mut Vec<Polygon>, piece: Polygon, eps: f64) {
     };
 
     for mut current in queue.drain(..) {
-        if current.exterior.coords.len() < 4 || ring_abs_area(&current.exterior.coords) <= eps * eps {
+        if current.exterior.coords.len() < 4 || ring_abs_area(&current.exterior.coords) <= eps * eps
+        {
             continue;
         }
 
@@ -1181,14 +1182,14 @@ fn select_round_positive_component(
         .collect::<Vec<_>>();
 
     if !containing.is_empty() {
-        return containing
-            .drain(..)
-            .max_by(|a, b| ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords)));
+        return containing.drain(..).max_by(|a, b| {
+            ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
+        });
     }
 
-    parts
-        .into_iter()
-        .max_by(|a, b| ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords)))
+    parts.into_iter().max_by(|a, b| {
+        ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
+    })
 }
 
 fn sanitize_round_positive_component(poly: Polygon, source: &Polygon, eps: f64) -> Polygon {
@@ -1212,18 +1213,16 @@ fn sanitize_round_positive_component(poly: Polygon, source: &Polygon, eps: f64) 
             .collect::<Vec<_>>();
 
         if !containing.is_empty() {
-            if let Some(best) = containing
-                .drain(..)
-                .max_by(|a, b| ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords)))
-            {
+            if let Some(best) = containing.drain(..).max_by(|a, b| {
+                ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
+            }) {
                 return best;
             }
         }
 
-        if let Some(best_any) = candidates
-            .into_iter()
-            .max_by(|a, b| ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords)))
-        {
+        if let Some(best_any) = candidates.into_iter().max_by(|a, b| {
+            ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
+        }) {
             return best_any;
         }
     }
@@ -1243,17 +1242,15 @@ fn sanitize_round_positive_component(poly: Polygon, source: &Polygon, eps: f64) 
             .cloned()
             .collect::<Vec<_>>();
 
-        if let Some(best) = containing
-            .drain(..)
-            .max_by(|a, b| ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords)))
-        {
+        if let Some(best) = containing.drain(..).max_by(|a, b| {
+            ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
+        }) {
             return best;
         }
 
-        if let Some(best_any) = candidates
-            .into_iter()
-            .max_by(|a, b| ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords)))
-        {
+        if let Some(best_any) = candidates.into_iter().max_by(|a, b| {
+            ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
+        }) {
             return best_any;
         }
     }
@@ -1277,14 +1274,14 @@ fn choose_best_candidate_for_source(
         .collect::<Vec<_>>();
 
     if !containing.is_empty() {
-        return containing
-            .drain(..)
-            .max_by(|a, b| ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords)));
+        return containing.drain(..).max_by(|a, b| {
+            ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
+        });
     }
 
-    candidates
-        .into_iter()
-        .max_by(|a, b| ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords)))
+    candidates.into_iter().max_by(|a, b| {
+        ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
+    })
 }
 
 fn enforce_valid_round_positive_output(poly: Polygon, source: &Polygon, eps: f64) -> Polygon {
@@ -1322,7 +1319,11 @@ fn enforce_valid_round_positive_output(poly: Polygon, source: &Polygon, eps: f64
     poly
 }
 
-fn buffer_polygon_positive_round(poly: &Polygon, distance: f64, options: BufferOptions) -> Vec<Polygon> {
+fn buffer_polygon_positive_round(
+    poly: &Polygon,
+    distance: f64,
+    options: BufferOptions,
+) -> Vec<Polygon> {
     let eps = 1.0e-9;
     let seg_options = BufferOptions {
         quadrant_segments: options.quadrant_segments.max(2),
@@ -1509,7 +1510,10 @@ pub fn buffer_polygon_multi(poly: &Polygon, distance: f64, options: BufferOption
         &out[..]
     };
     if eroded_open.iter().any(|&p| {
-        !matches!(classify_point_in_ring_eps(p, orig_shell_ref, eps), PointInRing::Inside)
+        !matches!(
+            classify_point_in_ring_eps(p, orig_shell_ref, eps),
+            PointInRing::Inside
+        )
     }) {
         return vec![];
     }
@@ -1919,7 +1923,11 @@ fn polygon_boundaries_as_lines(poly: &Polygon) -> Vec<LineString> {
 ///
 /// The exterior ring is expanded outward (`outward = true`); hole rings are shrunk
 /// inward (`outward = false`), consistent with positive-buffer semantics.
-fn build_polygon_buffer_curve_set(poly: &Polygon, distance: f64, options: BufferOptions) -> Vec<LineString> {
+fn build_polygon_buffer_curve_set(
+    poly: &Polygon,
+    distance: f64,
+    options: BufferOptions,
+) -> Vec<LineString> {
     let segs = (options.quadrant_segments.max(2) * 4).max(8);
     let d = distance.abs();
     let mut curves = Vec::<LineString>::new();
@@ -2057,8 +2065,7 @@ fn select_buffer_polygons_by_depth(
     }
 
     selected.sort_by(|a, b| {
-        a.0
-            .cmp(&b.0)
+        a.0.cmp(&b.0)
             .then_with(|| {
                 ring_abs_area(&b.1.exterior.coords).total_cmp(&ring_abs_area(&a.1.exterior.coords))
             })
@@ -2382,7 +2389,10 @@ fn build_offset_side(
 
     let mut out = Vec::<Coord>::new();
     let (n0x, n0y) = norms[0];
-    out.push(Coord::xy(path[0].x + n0x * distance, path[0].y + n0y * distance));
+    out.push(Coord::xy(
+        path[0].x + n0x * distance,
+        path[0].y + n0y * distance,
+    ));
 
     for i in 1..(path.len() - 1) {
         let v = path[i];
@@ -2421,15 +2431,7 @@ fn build_offset_side(
                         )
                     };
                     let ccw = ccw_arc_contains(v, p_prev, p_next, test);
-                    append_arc(
-                        &mut out,
-                        v,
-                        p_prev,
-                        p_next,
-                        segs / 2,
-                        ccw,
-                        true,
-                    );
+                    append_arc(&mut out, v, p_prev, p_next, segs / 2, ccw, true);
                 }
                 BufferJoinStyle::Bevel => {
                     out.push(p_prev);
@@ -2577,15 +2579,7 @@ fn build_offset_ring(
                         )
                     };
                     let ccw = ccw_arc_contains(v, p_prev, p_next, test);
-                    append_arc(
-                        &mut out,
-                        v,
-                        p_prev,
-                        p_next,
-                        segs / 2,
-                        ccw,
-                        include_start,
-                    );
+                    append_arc(&mut out, v, p_prev, p_next, segs / 2, ccw, include_start);
                 }
                 BufferJoinStyle::Bevel => {
                     out.push(p_prev);
@@ -2691,7 +2685,9 @@ fn repair_buffer_polygon(poly: Polygon, eps: f64) -> Polygon {
 
     repaired
         .into_iter()
-        .max_by(|a, b| ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords)))
+        .max_by(|a, b| {
+            ring_abs_area(&a.exterior.coords).total_cmp(&ring_abs_area(&b.exterior.coords))
+        })
         .unwrap_or(original)
 }
 
@@ -2831,7 +2827,13 @@ fn unit_dir(a: Coord, b: Coord) -> (f64, f64) {
     }
 }
 
-fn segment_intersection_point(a1: Coord, a2: Coord, b1: Coord, b2: Coord, eps: f64) -> Option<Coord> {
+fn segment_intersection_point(
+    a1: Coord,
+    a2: Coord,
+    b1: Coord,
+    b2: Coord,
+    eps: f64,
+) -> Option<Coord> {
     let r_x = a2.x - a1.x;
     let r_y = a2.y - a1.y;
     let s_x = b2.x - b1.x;

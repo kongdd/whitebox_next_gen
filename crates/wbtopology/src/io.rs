@@ -26,7 +26,9 @@ pub fn from_wkt(text: &str) -> Result<Geometry> {
     let g = p.parse_geometry()?;
     p.skip_ws();
     if !p.is_eof() {
-        return Err(TopologyError::Conversion("trailing tokens after WKT geometry".to_string()));
+        return Err(TopologyError::Conversion(
+            "trailing tokens after WKT geometry".to_string(),
+        ));
     }
     Ok(g)
 }
@@ -72,8 +74,13 @@ fn to_wbvector_geometry(g: &Geometry) -> wbvector::Geometry {
 fn from_wbvector_geometry(g: &wbvector::Geometry) -> Result<Geometry> {
     Ok(match g {
         wbvector::Geometry::Point(c) => Geometry::Point(from_wb_coord(c)),
-        wbvector::Geometry::LineString(cs) => Geometry::LineString(LineString::new(from_wb_coords(cs))),
-        wbvector::Geometry::Polygon { exterior, interiors } => Geometry::Polygon(Polygon::new(
+        wbvector::Geometry::LineString(cs) => {
+            Geometry::LineString(LineString::new(from_wb_coords(cs)))
+        }
+        wbvector::Geometry::Polygon {
+            exterior,
+            interiors,
+        } => Geometry::Polygon(Polygon::new(
             LinearRing::new(from_wb_coords(exterior.coords())),
             interiors
                 .iter()
@@ -84,7 +91,10 @@ fn from_wbvector_geometry(g: &wbvector::Geometry) -> Result<Geometry> {
             Geometry::MultiPoint(cs.iter().map(from_wb_coord).collect())
         }
         wbvector::Geometry::MultiLineString(lines) => Geometry::MultiLineString(
-            lines.iter().map(|l| LineString::new(from_wb_coords(l))).collect(),
+            lines
+                .iter()
+                .map(|l| LineString::new(from_wb_coords(l)))
+                .collect(),
         ),
         wbvector::Geometry::MultiPolygon(polys) => Geometry::MultiPolygon(
             polys
@@ -178,7 +188,10 @@ impl<'a> WktParser<'a> {
         if self.consume_char(c) {
             Ok(())
         } else {
-            Err(TopologyError::Conversion(format!("expected '{}'", c as char)))
+            Err(TopologyError::Conversion(format!(
+                "expected '{}'",
+                c as char
+            )))
         }
     }
 
@@ -193,9 +206,13 @@ impl<'a> WktParser<'a> {
             }
         }
         if self.i == start {
-            return Err(TopologyError::Conversion("expected geometry type".to_string()));
+            return Err(TopologyError::Conversion(
+                "expected geometry type".to_string(),
+            ));
         }
-        Ok(String::from_utf8(self.s[start..self.i].to_vec()).unwrap().to_ascii_uppercase())
+        Ok(String::from_utf8(self.s[start..self.i].to_vec())
+            .unwrap()
+            .to_ascii_uppercase())
     }
 
     fn parse_number(&mut self) -> Result<f64> {
@@ -271,7 +288,9 @@ impl<'a> WktParser<'a> {
 
     fn parse_point_body(&mut self) -> Result<Geometry> {
         if self.parse_empty()? {
-            return Err(TopologyError::Conversion("POINT EMPTY is unsupported in wbtopology".to_string()));
+            return Err(TopologyError::Conversion(
+                "POINT EMPTY is unsupported in wbtopology".to_string(),
+            ));
         }
         self.expect_char(b'(')?;
         let c = self.parse_coord()?;
@@ -283,12 +302,17 @@ impl<'a> WktParser<'a> {
         if self.parse_empty()? {
             return Ok(Geometry::LineString(LineString::new(vec![])));
         }
-        Ok(Geometry::LineString(LineString::new(self.parse_coord_list()?)))
+        Ok(Geometry::LineString(LineString::new(
+            self.parse_coord_list()?,
+        )))
     }
 
     fn parse_polygon_body(&mut self) -> Result<Geometry> {
         if self.parse_empty()? {
-            return Ok(Geometry::Polygon(Polygon::new(LinearRing::new(vec![]), vec![])));
+            return Ok(Geometry::Polygon(Polygon::new(
+                LinearRing::new(vec![]),
+                vec![],
+            )));
         }
         self.expect_char(b'(')?;
         let mut rings = Vec::new();
@@ -302,7 +326,9 @@ impl<'a> WktParser<'a> {
         self.expect_char(b')')?;
 
         if rings.is_empty() {
-            return Err(TopologyError::Conversion("POLYGON requires at least one ring".to_string()));
+            return Err(TopologyError::Conversion(
+                "POLYGON requires at least one ring".to_string(),
+            ));
         }
 
         let exterior = rings.remove(0);
@@ -380,7 +406,9 @@ impl<'a> WktParser<'a> {
             self.expect_char(b')')?;
 
             if rings.is_empty() {
-                return Err(TopologyError::Conversion("MULTIPOLYGON member missing exterior ring".to_string()));
+                return Err(TopologyError::Conversion(
+                    "MULTIPOLYGON member missing exterior ring".to_string(),
+                ));
             }
             let exterior = rings.remove(0);
             polys.push(Polygon::new(exterior, rings));
@@ -436,7 +464,9 @@ impl<'a> WktParser<'a> {
             "MULTILINESTRING" => self.parse_multilinestring_body(),
             "MULTIPOLYGON" => self.parse_multipolygon_body(),
             "GEOMETRYCOLLECTION" => self.parse_geometrycollection_body(),
-            other => Err(TopologyError::Conversion(format!("unsupported WKT geometry type '{other}'"))),
+            other => Err(TopologyError::Conversion(format!(
+                "unsupported WKT geometry type '{other}'"
+            ))),
         };
         self.has_z = prev_has_z;
         result
@@ -456,6 +486,9 @@ impl<'a> WktParser<'a> {
 
     fn peek_coord_has_extra_ordinate(&mut self) -> bool {
         self.skip_ws();
-        matches!(self.peek(), Some(b'+') | Some(b'-') | Some(b'.') | Some(b'0'..=b'9'))
+        matches!(
+            self.peek(),
+            Some(b'+') | Some(b'-') | Some(b'.') | Some(b'0'..=b'9')
+        )
     }
 }

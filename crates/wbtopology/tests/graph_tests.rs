@@ -1,11 +1,6 @@
 use wbtopology::{
-    node_linestrings_with_options,
-    Coord,
-    LineString,
-    NodingOptions,
-    NodingStrategy,
-    PrecisionModel,
-    TopologyGraph,
+    node_linestrings_with_options, Coord, LineString, NodingOptions, NodingStrategy,
+    PrecisionModel, TopologyGraph,
 };
 
 fn assert_coord_close(a: Coord, b: Coord, eps: f64) {
@@ -34,7 +29,9 @@ fn graph_center_node_outgoing_is_ccw_sorted() {
     ];
 
     let g = TopologyGraph::from_linestrings(&lines, 1.0e-9);
-    let center_id = g.find_node(Coord::xy(5.0, 5.0), 1.0e-9).expect("center node missing");
+    let center_id = g
+        .find_node(Coord::xy(5.0, 5.0), 1.0e-9)
+        .expect("center node missing");
     let center = &g.nodes[center_id];
     assert_eq!(center.outgoing.len(), 4);
 
@@ -176,10 +173,10 @@ fn graph_face_rings_precision_snap_differential_diagnostics() {
         },
     );
 
-    let floating_faces = TopologyGraph::from_noded_linestrings(&floating_noded, eps)
-        .extract_bounded_face_rings(eps);
-    let snapped_faces = TopologyGraph::from_noded_linestrings(&snapped_noded, eps)
-        .extract_bounded_face_rings(eps);
+    let floating_faces =
+        TopologyGraph::from_noded_linestrings(&floating_noded, eps).extract_bounded_face_rings(eps);
+    let snapped_faces =
+        TopologyGraph::from_noded_linestrings(&snapped_noded, eps).extract_bounded_face_rings(eps);
 
     let floating_area: f64 = floating_faces.iter().map(|r| ring_area(&r.coords)).sum();
     let snapped_area: f64 = snapped_faces.iter().map(|r| ring_area(&r.coords)).sum();

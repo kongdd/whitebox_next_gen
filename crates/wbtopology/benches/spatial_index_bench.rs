@@ -60,16 +60,20 @@ fn bench_compact(c: &mut Criterion) {
     let mut group = c.benchmark_group("spatial_index/compact");
     for &n in &[20_000usize, 100_000usize] {
         let geoms = synthetic_points(n);
-        group.bench_with_input(BenchmarkId::new("compact_after_tombstones", n), &n, |b, _| {
-            b.iter(|| {
-                let mut idx = SpatialIndex::build_str(&geoms, 8);
-                for id in (0..n).step_by(4) {
-                    idx.remove(id);
-                }
-                idx.compact();
-                black_box(idx.len())
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("compact_after_tombstones", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    let mut idx = SpatialIndex::build_str(&geoms, 8);
+                    for id in (0..n).step_by(4) {
+                        idx.remove(id);
+                    }
+                    idx.compact();
+                    black_box(idx.len())
+                })
+            },
+        );
     }
     group.finish();
 }

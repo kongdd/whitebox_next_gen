@@ -1,17 +1,6 @@
 use wbtopology::{
-    contains,
-    contains_with_epsilon,
-    covered_by,
-    covers,
-    disjoint,
-    geometry_area,
-    geometry_centroid,
-    geometry_length,
-    intersects,
-    Coord,
-    Geometry,
-    LineString,
-    LinearRing,
+    contains, contains_with_epsilon, covered_by, covers, disjoint, geometry_area,
+    geometry_centroid, geometry_length, intersects, Coord, Geometry, LineString, LinearRing,
     Polygon,
 };
 

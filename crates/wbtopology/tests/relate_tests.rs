@@ -1,6 +1,6 @@
 use wbtopology::{
-    relate, relate_with_epsilon, relate_with_precision, Coord, Geometry, LineString, LinearRing, Location,
-    Polygon, PrecisionModel,
+    relate, relate_with_epsilon, relate_with_precision, Coord, Geometry, LineString, LinearRing,
+    Location, Polygon, PrecisionModel,
 };
 
 #[test]

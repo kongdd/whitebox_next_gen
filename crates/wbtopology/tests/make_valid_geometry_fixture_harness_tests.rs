@@ -1,10 +1,5 @@
 use wbtopology::{
-    Geometry,
-    GeometryFixMode,
-    GeometryFixOptions,
-    from_wkt,
-    is_valid_polygon,
-    make_valid_geometry,
+    from_wkt, is_valid_polygon, make_valid_geometry, Geometry, GeometryFixMode, GeometryFixOptions,
 };
 
 fn count_polygon_parts(g: &Geometry) -> usize {
@@ -53,14 +48,9 @@ fn make_valid_geometry_fixture_harness() {
         let name = cols[0].trim();
         let input = from_wkt(cols[1].trim()).expect("invalid input WKT");
         let epsilon: f64 = cols[2].trim().parse().expect("invalid epsilon");
-        let structure_min_parts: usize = cols[3]
-            .trim()
-            .parse()
-            .expect("invalid structure_min_parts");
-        let linework_min_parts: usize = cols[4]
-            .trim()
-            .parse()
-            .expect("invalid linework_min_parts");
+        let structure_min_parts: usize =
+            cols[3].trim().parse().expect("invalid structure_min_parts");
+        let linework_min_parts: usize = cols[4].trim().parse().expect("invalid linework_min_parts");
         let expect_polygon_output: bool = cols[5]
             .trim()
             .parse()

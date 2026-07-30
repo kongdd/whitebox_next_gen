@@ -1,10 +1,5 @@
 use wbtopology::{
-    polygon_difference,
-    polygon_intersection,
-    polygon_sym_diff,
-    polygon_union,
-    Coord,
-    LinearRing,
+    polygon_difference, polygon_intersection, polygon_sym_diff, polygon_union, Coord, LinearRing,
     Polygon,
 };
 

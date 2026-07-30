@@ -139,7 +139,11 @@ impl PrecisionModel {
     }
 
     /// Apply precision to a linestring with optional topology cleanup.
-    pub fn apply_linestring_topology(self, ls: &LineString, options: TopologyPrecisionOptions) -> Option<LineString> {
+    pub fn apply_linestring_topology(
+        self,
+        ls: &LineString,
+        options: TopologyPrecisionOptions,
+    ) -> Option<LineString> {
         let mut coords = ls.coords.clone();
         self.apply_coords_in_place(&mut coords);
         if options.remove_adjacent_duplicates {
@@ -152,7 +156,11 @@ impl PrecisionModel {
     }
 
     /// Apply precision to polygon rings with optional topology cleanup.
-    pub fn apply_polygon_topology(self, poly: &Polygon, options: TopologyPrecisionOptions) -> Option<Polygon> {
+    pub fn apply_polygon_topology(
+        self,
+        poly: &Polygon,
+        options: TopologyPrecisionOptions,
+    ) -> Option<Polygon> {
         let exterior = reduce_ring_topology(self, &poly.exterior, options)?;
         let mut holes = Vec::<LinearRing>::with_capacity(poly.holes.len());
         for hole in &poly.holes {
@@ -196,7 +204,9 @@ fn reduce_ring_topology(
 
     let first = coords[0];
     let last = *coords.last().unwrap_or(&first);
-    if (first.x - last.x).abs() > precision.epsilon() || (first.y - last.y).abs() > precision.epsilon() {
+    if (first.x - last.x).abs() > precision.epsilon()
+        || (first.y - last.y).abs() > precision.epsilon()
+    {
         coords.push(first);
     }
 

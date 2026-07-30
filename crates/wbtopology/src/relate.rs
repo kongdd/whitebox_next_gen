@@ -469,13 +469,17 @@ fn poly_poly_boundary_dim(pa: &Polygon, pb: &Polygon, eps: f64) -> char {
             }
         }
     }
-    if any_intersect { '0' } else { 'F' }
+    if any_intersect {
+        '0'
+    } else {
+        'F'
+    }
 }
 
 /// True if any segment midpoint of `poly_src`'s boundary rings is strictly inside `poly_dst`.
 fn poly_boundary_midpoints_inside(poly_src: &Polygon, poly_dst: &Polygon, eps: f64) -> bool {
-    for ring in std::iter::once(&poly_src.exterior.coords)
-        .chain(poly_src.holes.iter().map(|h| &h.coords))
+    for ring in
+        std::iter::once(&poly_src.exterior.coords).chain(poly_src.holes.iter().map(|h| &h.coords))
     {
         for i in 0..ring.len().saturating_sub(1) {
             let mid = Coord::xy(
@@ -492,9 +496,7 @@ fn poly_boundary_midpoints_inside(poly_src: &Polygon, poly_dst: &Polygon, eps: f
 
 /// True if any vertex or segment midpoint of `poly`'s boundary rings lies outside `container`.
 fn poly_boundary_has_outside(poly: &Polygon, container: &Polygon, eps: f64) -> bool {
-    for ring in std::iter::once(&poly.exterior.coords)
-        .chain(poly.holes.iter().map(|h| &h.coords))
-    {
+    for ring in std::iter::once(&poly.exterior.coords).chain(poly.holes.iter().map(|h| &h.coords)) {
         for c in ring.iter() {
             if !inside_poly_strict(*c, container, eps) && !on_poly_boundary(*c, container, eps) {
                 return true;
@@ -505,8 +507,7 @@ fn poly_boundary_has_outside(poly: &Polygon, container: &Polygon, eps: f64) -> b
                 0.5 * (ring[i].x + ring[i + 1].x),
                 0.5 * (ring[i].y + ring[i + 1].y),
             );
-            if !inside_poly_strict(mid, container, eps) && !on_poly_boundary(mid, container, eps)
-            {
+            if !inside_poly_strict(mid, container, eps) && !on_poly_boundary(mid, container, eps) {
                 return true;
             }
         }
@@ -718,8 +719,8 @@ fn relate_ls_poly(la: &LineString, pb: &Polygon, eps: f64) -> RelateMatrix {
         // (b) any boundary ring of B properly crosses the interior of any segment of A
         'outer_ib: for i in 0..n_a.saturating_sub(1) {
             let (a1, a2) = (la.coords[i], la.coords[i + 1]);
-            for ring in std::iter::once(&pb.exterior.coords)
-                .chain(pb.holes.iter().map(|h| &h.coords))
+            for ring in
+                std::iter::once(&pb.exterior.coords).chain(pb.holes.iter().map(|h| &h.coords))
             {
                 for j in 0..ring.len().saturating_sub(1) {
                     let (r1, r2) = (ring[j], ring[j + 1]);
@@ -911,7 +912,15 @@ fn relate_conservative(a: &Geometry, b: &Geometry, eps: f64) -> RelateMatrix {
     }
 
     apply_pair_contact_cells(
-        &mut m, a, b, touches_v, crosses_v, overlaps_v, within_ab, within_ba, contains_ab,
+        &mut m,
+        a,
+        b,
+        touches_v,
+        crosses_v,
+        overlaps_v,
+        within_ab,
+        within_ba,
+        contains_ab,
         contains_ba,
     );
     m

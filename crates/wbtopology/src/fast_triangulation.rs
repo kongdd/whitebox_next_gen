@@ -140,7 +140,15 @@ impl FastTriangulation {
         }
     }
 
-    fn add_triangle(&mut self, i0: usize, i1: usize, i2: usize, a: usize, b: usize, c: usize) -> usize {
+    fn add_triangle(
+        &mut self,
+        i0: usize,
+        i1: usize,
+        i2: usize,
+        a: usize,
+        b: usize,
+        c: usize,
+    ) -> usize {
         let t = self.triangles.len();
 
         self.triangles.push(i0);
@@ -519,10 +527,7 @@ pub fn delaunay_triangulation_fast(points: &[Coord], epsilon: f64) -> DelaunayTr
         };
     }
 
-    let points2d: Vec<Point2> = filtered
-        .iter()
-        .map(|p| Point2 { x: p.x, y: p.y })
-        .collect();
+    let points2d: Vec<Point2> = filtered.iter().map(|p| Point2 { x: p.x, y: p.y }).collect();
     let work = triangulate_fast_indices(&points2d, epsilon);
 
     let mut triangles = Vec::with_capacity(work.triangles.len() / 3);

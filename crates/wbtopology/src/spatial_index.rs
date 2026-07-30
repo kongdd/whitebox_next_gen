@@ -486,9 +486,9 @@ fn build_packed_tree_with_pos(
     for group in leaf_groups {
         // Map sort-local indices to actual positions in `self.entries`.
         let positions: Vec<usize> = group.iter().map(|&i| live[i].0).collect();
-        let envelope = group
-            .iter()
-            .fold(live[group[0]].1.envelope, |acc, &i| merge_envelopes(acc, live[i].1.envelope));
+        let envelope = group.iter().fold(live[group[0]].1.envelope, |acc, &i| {
+            merge_envelopes(acc, live[i].1.envelope)
+        });
         nodes.push(TreeNode {
             envelope,
             children: NodeChildren::Leaf(positions),

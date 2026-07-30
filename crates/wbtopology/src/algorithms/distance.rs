@@ -102,12 +102,20 @@ fn nearest_prim(a: &Geometry, b: &Geometry) -> (Coord, Coord, f64) {
         // ── Point / Polygon ──────────────────────────────────────────────────
         (Geometry::Point(p), Geometry::Polygon(poly)) => {
             let d = point_to_polygon_dist(*p, poly);
-            let q = if d == 0.0 { *p } else { nearest_on_polygon_boundary(*p, poly).0 };
+            let q = if d == 0.0 {
+                *p
+            } else {
+                nearest_on_polygon_boundary(*p, poly).0
+            };
             (*p, q, d)
         }
         (Geometry::Polygon(poly), Geometry::Point(p)) => {
             let d = point_to_polygon_dist(*p, poly);
-            let q = if d == 0.0 { *p } else { nearest_on_polygon_boundary(*p, poly).0 };
+            let q = if d == 0.0 {
+                *p
+            } else {
+                nearest_on_polygon_boundary(*p, poly).0
+            };
             (q, *p, d)
         }
         // ── LineString / LineString ──────────────────────────────────────────

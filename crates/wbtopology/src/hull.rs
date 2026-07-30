@@ -130,9 +130,7 @@ pub fn convex_hull(coords: &[Coord], epsilon: f64) -> Geometry {
 
     let mut lower = Vec::<Coord>::new();
     for &p in &pts {
-        while lower.len() >= 2
-            && cross(lower[lower.len() - 2], lower[lower.len() - 1], p) <= eps
-        {
+        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], p) <= eps {
             lower.pop();
         }
         lower.push(p);
@@ -140,9 +138,7 @@ pub fn convex_hull(coords: &[Coord], epsilon: f64) -> Geometry {
 
     let mut upper = Vec::<Coord>::new();
     for &p in pts.iter().rev() {
-        while upper.len() >= 2
-            && cross(upper[upper.len() - 2], upper[upper.len() - 1], p) <= eps
-        {
+        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], p) <= eps {
             upper.pop();
         }
         upper.push(p);
@@ -248,7 +244,6 @@ fn concave_hull_delaunay_from_points(
     eps: f64,
     options: ConcaveHullOptions,
 ) -> Geometry {
-
     let tri = delaunay_triangulation(&pts, eps);
 
     let effective_max_edge_length = effective_max_edge_length(&tri.points, options);
@@ -261,18 +256,19 @@ fn concave_hull_delaunay_from_points(
     }
 
     let max_len2 = (effective_max_edge_length + eps).powi(2);
-    
+
     // Iterative boundary-inward filtering with connectivity preservation.
     // Start with all triangles, then iteratively remove boundary triangles
     // that violate the max_edge_length criterion, without orphaning nodes.
     let mut remaining = vec![true; tri.triangles.len()];
     let mut changed = true;
-    
+
     while changed {
         changed = false;
-        
+
         // Build edge occurrence map for current remaining triangles.
-        let mut edge_count: std::collections::HashMap<u128, usize> = std::collections::HashMap::new();
+        let mut edge_count: std::collections::HashMap<u128, usize> =
+            std::collections::HashMap::new();
         for (tri_idx, t) in tri.triangles.iter().enumerate() {
             if !remaining[tri_idx] {
                 continue;
@@ -282,7 +278,7 @@ fn concave_hull_delaunay_from_points(
                 *edge_count.entry(pack_edge(a, b)).or_insert(0) += 1;
             }
         }
-        
+
         // Find boundary triangles (those with at least one boundary edge).
         let mut boundary_triangles = Vec::<usize>::new();
         for (tri_idx, t) in tri.triangles.iter().enumerate() {
@@ -290,30 +286,31 @@ fn concave_hull_delaunay_from_points(
                 continue;
             }
             let edges = [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])];
-            let has_boundary_edge = edges.iter().any(|&(a, b)| {
-                edge_count.get(&pack_edge(a, b)).copied().unwrap_or(0) == 1
-            });
+            let has_boundary_edge = edges
+                .iter()
+                .any(|&(a, b)| edge_count.get(&pack_edge(a, b)).copied().unwrap_or(0) == 1);
             if has_boundary_edge {
                 boundary_triangles.push(tri_idx);
             }
         }
-        
+
         // For each boundary triangle, check if it violates max_edge_length
         // and can be removed without orphaning nodes.
         for tri_idx in boundary_triangles {
             let t = &tri.triangles[tri_idx];
             let edges = [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])];
-            let violates = edges.iter().any(|&(a, b)| {
-                dist2(tri.points[a], tri.points[b]) > max_len2
-            });
-            
+            let violates = edges
+                .iter()
+                .any(|&(a, b)| dist2(tri.points[a], tri.points[b]) > max_len2);
+
             if !violates {
                 continue;
             }
-            
+
             // Check if removing this triangle would orphan any node.
             let would_orphan = t.iter().any(|&node_id| {
-                let node_count = tri.triangles
+                let node_count = tri
+                    .triangles
                     .iter()
                     .enumerate()
                     .filter(|(idx, tri_t)| {
@@ -322,14 +319,14 @@ fn concave_hull_delaunay_from_points(
                     .count();
                 node_count == 0
             });
-            
+
             if !would_orphan {
                 remaining[tri_idx] = false;
                 changed = true;
             }
         }
     }
-    
+
     // Extract edges from remaining triangles.
     let mut packed_edges = Vec::<u128>::new();
     for (tri_idx, t) in tri.triangles.iter().enumerate() {
@@ -341,11 +338,11 @@ fn concave_hull_delaunay_from_points(
             packed_edges.push(pack_edge(a, b));
         }
     }
-    
+
     if packed_edges.is_empty() {
         return convex_hull(&tri.points, eps);
     }
-    
+
     // Identify boundary edges (appearing exactly once in remaining triangles).
     packed_edges.sort_unstable();
     let mut boundary_edges = Vec::<(usize, usize)>::new();
@@ -372,7 +369,10 @@ fn concave_hull_delaunay_from_points(
         adjacency[b].push(a);
     }
 
-    let mut unused: HashSet<u128> = boundary_edges.iter().map(|&(a, b)| pack_edge(a, b)).collect();
+    let mut unused: HashSet<u128> = boundary_edges
+        .iter()
+        .map(|&(a, b)| pack_edge(a, b))
+        .collect();
     let mut rings = Vec::<LineString>::new();
 
     for &(a, b) in &boundary_edges {
@@ -691,7 +691,7 @@ fn concave_hull_concaveman_from_points(
             n_inserts += 1;
 
             // Enqueue both new edges for further potential refinement.
-            queue.push_back(a_pos);   // edge a → c
+            queue.push_back(a_pos); // edge a → c
             queue.push_back(new_pos); // edge c → b
         }
     }

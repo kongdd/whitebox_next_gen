@@ -65,8 +65,8 @@ pub mod algorithms;
 pub mod buffer_op;
 pub mod constructive;
 pub mod error;
-pub mod fixed_radius_search;
 mod fast_triangulation;
+pub mod fixed_radius_search;
 pub mod geom;
 pub mod graph;
 pub mod hull;
@@ -82,151 +82,69 @@ pub mod triangulation;
 pub mod vector_io;
 pub mod voronoi;
 
-pub use error::{Result, TopologyError};
-pub use fixed_radius_search::{DistanceMetric, FixedRadiusSearch2D};
-pub use buffer_op::{BufferOp, BufferOpOptions, BufferOpResult, BufferOpStats};
-pub use constructive::{
-	buffer_linestring,
-	buffer_linestring_curve_set,
-	buffer_linestring_with_precision,
-	buffer_polygon_curve_set,
-	buffer_polygon,
-	buffer_polygon_multi,
-	buffer_polygon_with_precision,
-	buffer_point,
-	buffer_point_with_precision,
-	offset_linestring,
-	make_valid_geometry,
-	make_valid_polygon,
-	polygonize_linework,
-	polygonize_closed_linestrings,
-	BufferBuilder,
-	BufferCapStyle,
-	BufferPipelineStrategy,
-	BufferJoinStyle,
-	BufferOptions,
-	GeometryFixMode,
-	GeometryFixOptions,
-	OffsetCurveOptions,
-	OffsetSide,
-	PolygonizeOptions,
-	PolygonizeResult,
-};
 pub use algorithms::distance::{coord_dist, geometry_distance, is_within_distance, nearest_points};
 pub use algorithms::measurements::{
-	geometry_area, geometry_centroid, geometry_length, linestring_length, polygon_area,
-	polygon_centroid, ring_signed_area,
+    geometry_area, geometry_centroid, geometry_length, linestring_length, polygon_area,
+    polygon_centroid, ring_signed_area,
 };
 pub use algorithms::simplify::{
-	simplify_geometry,
-	simplify_polygon_coverage_topology_preserving,
-	simplify_geometry_topology_preserving,
-	simplify_linestring,
-	simplify_linestring_topology_preserving,
-	simplify_polygon,
-	simplify_polygon_topology_preserving,
-	simplify_ring,
-	simplify_ring_topology_preserving,
+    simplify_geometry, simplify_geometry_topology_preserving, simplify_linestring,
+    simplify_linestring_topology_preserving, simplify_polygon,
+    simplify_polygon_coverage_topology_preserving, simplify_polygon_topology_preserving,
+    simplify_ring, simplify_ring_topology_preserving,
 };
 pub use algorithms::transform::{rotate, scale, translate};
+pub use buffer_op::{BufferOp, BufferOpOptions, BufferOpResult, BufferOpStats};
+pub use constructive::{
+    buffer_linestring, buffer_linestring_curve_set, buffer_linestring_with_precision, buffer_point,
+    buffer_point_with_precision, buffer_polygon, buffer_polygon_curve_set, buffer_polygon_multi,
+    buffer_polygon_with_precision, make_valid_geometry, make_valid_polygon, offset_linestring,
+    polygonize_closed_linestrings, polygonize_linework, BufferBuilder, BufferCapStyle,
+    BufferJoinStyle, BufferOptions, BufferPipelineStrategy, GeometryFixMode, GeometryFixOptions,
+    OffsetCurveOptions, OffsetSide, PolygonizeOptions, PolygonizeResult,
+};
+pub use error::{Result, TopologyError};
+pub use fast_triangulation::delaunay_triangulation_fast;
+pub use fixed_radius_search::{DistanceMetric, FixedRadiusSearch2D};
 pub use geom::{Coord, Envelope, Geometry, LineString, LinearRing, Polygon};
 pub use graph::{DirectedEdge, GraphNode, TopologyGraph};
 pub use hull::{
-	concave_hull,
-	concave_hull_geometry,
-	concave_hull_geometry_with_options,
-	concave_hull_geometry_with_precision,
-	concave_hull_with_options,
-	concave_hull_with_precision,
-	convex_hull,
-	convex_hull_geometry,
-	convex_hull_geometry_with_precision,
-	convex_hull_with_precision,
-	ConcaveHullEngine,
-	ConcaveHullOptions,
+    concave_hull, concave_hull_geometry, concave_hull_geometry_with_options,
+    concave_hull_geometry_with_precision, concave_hull_with_options, concave_hull_with_precision,
+    convex_hull, convex_hull_geometry, convex_hull_geometry_with_precision,
+    convex_hull_with_precision, ConcaveHullEngine, ConcaveHullOptions,
 };
 pub use io::{from_wkb, from_wkt, to_wkb, to_wkt};
 pub use natural_neighbour::PreparedSibsonInterpolator;
 pub use noding::{node_linestrings, node_linestrings_with_options, NodingOptions, NodingStrategy};
 pub use overlay::{
-	polygon_difference,
-	polygon_difference_with_precision,
-	polygon_difference_faces,
-	polygon_intersection,
-	polygon_intersection_with_precision,
-	polygon_intersection_faces,
-	polygon_overlay,
-	polygon_overlay_all,
-	polygon_overlay_all_with_precision,
-	polygon_overlay_with_precision,
-	polygon_overlay_faces,
-	polygon_sym_diff,
-	polygon_sym_diff_with_precision,
-	polygon_sym_diff_faces,
-	polygon_union,
-	polygon_union_with_precision,
-	polygon_union_faces,
-	polygon_unary_union,
-	polygon_unary_union_with_options,
-	polygon_unary_dissolve,
-	polygon_unary_dissolve_with_options,
-	OverlayOutputs,
-	OverlayOp,
-	UnaryDissolveOptions,
-	UnaryDissolveStrategy,
-	UnaryDissolveGroup,
+    polygon_difference, polygon_difference_faces, polygon_difference_with_precision,
+    polygon_intersection, polygon_intersection_faces, polygon_intersection_with_precision,
+    polygon_overlay, polygon_overlay_all, polygon_overlay_all_with_precision,
+    polygon_overlay_faces, polygon_overlay_with_precision, polygon_sym_diff,
+    polygon_sym_diff_faces, polygon_sym_diff_with_precision, polygon_unary_dissolve,
+    polygon_unary_dissolve_with_options, polygon_unary_union, polygon_unary_union_with_options,
+    polygon_union, polygon_union_faces, polygon_union_with_precision, OverlayOp, OverlayOutputs,
+    UnaryDissolveGroup, UnaryDissolveOptions, UnaryDissolveStrategy,
 };
 pub use precision::{PrecisionModel, TopologyPrecisionOptions};
 pub use relate::{relate, relate_with_epsilon, relate_with_precision, Location, RelateMatrix};
 pub use spatial_index::{IndexedGeometry, SpatialIndex};
 pub use topology::{
-	contains,
-	contains_with_epsilon,
-	contains_with_precision,
-	covered_by,
-	covered_by_with_epsilon,
-	covered_by_with_precision,
-	covers,
-	covers_with_epsilon,
-	covers_with_precision,
-	crosses,
-	crosses_with_epsilon,
-	crosses_with_precision,
-	disjoint,
-	disjoint_with_epsilon,
-	disjoint_with_precision,
-	intersects,
-	intersects_with_epsilon,
-	intersects_with_precision,
-	is_simple_linestring,
-	is_valid_polygon,
-	overlaps,
-	overlaps_with_epsilon,
-	overlaps_with_precision,
-	touches,
-	touches_with_epsilon,
-	touches_with_precision,
-	within,
-	within_with_epsilon,
-	within_with_precision,
-	PreparedPolygon,
+    contains, contains_with_epsilon, contains_with_precision, covered_by, covered_by_with_epsilon,
+    covered_by_with_precision, covers, covers_with_epsilon, covers_with_precision, crosses,
+    crosses_with_epsilon, crosses_with_precision, disjoint, disjoint_with_epsilon,
+    disjoint_with_precision, intersects, intersects_with_epsilon, intersects_with_precision,
+    is_simple_linestring, is_valid_polygon, overlaps, overlaps_with_epsilon,
+    overlaps_with_precision, touches, touches_with_epsilon, touches_with_precision, within,
+    within_with_epsilon, within_with_precision, PreparedPolygon,
 };
 pub use triangulation::{
-	delaunay_triangulation,
-	delaunay_triangulation_with_constraints,
-	delaunay_triangulation_with_options,
-	delaunay_triangulation_with_options_checked,
-	delaunay_triangulation_with_precision,
-	DelaunayTriangulation,
-	TriangulationOptions,
+    delaunay_triangulation, delaunay_triangulation_with_constraints,
+    delaunay_triangulation_with_options, delaunay_triangulation_with_options_checked,
+    delaunay_triangulation_with_precision, DelaunayTriangulation, TriangulationOptions,
 };
-pub use fast_triangulation::delaunay_triangulation_fast;
 pub use voronoi::{
-	voronoi_diagram,
-	voronoi_diagram_with_clip,
-	voronoi_diagram_with_clip_with_precision,
-	voronoi_diagram_with_options,
-	voronoi_diagram_with_precision,
-	VoronoiOptions,
-	VoronoiDiagram,
+    voronoi_diagram, voronoi_diagram_with_clip, voronoi_diagram_with_clip_with_precision,
+    voronoi_diagram_with_options, voronoi_diagram_with_precision, VoronoiDiagram, VoronoiOptions,
 };

@@ -1,13 +1,5 @@
 use wbtopology::{
-    from_wkb,
-    from_wkt,
-    to_wkb,
-    to_wkt,
-    Coord,
-    Geometry,
-    LineString,
-    LinearRing,
-    Polygon,
+    from_wkb, from_wkt, to_wkb, to_wkt, Coord, Geometry, LineString, LinearRing, Polygon,
 };
 
 #[test]

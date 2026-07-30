@@ -1,11 +1,5 @@
 use wbtopology::{
-    geometry_distance,
-    is_within_distance,
-    nearest_points,
-    Coord,
-    Geometry,
-    LineString,
-    LinearRing,
+    geometry_distance, is_within_distance, nearest_points, Coord, Geometry, LineString, LinearRing,
     Polygon,
 };
 

@@ -1,13 +1,6 @@
 use wbtopology::{
-    buffer_polygon,
-    from_wkt,
-    geometry_distance,
-    is_valid_polygon,
-    polygon_area,
-    BufferOptions,
-    Coord,
-    Geometry,
-    Polygon,
+    buffer_polygon, from_wkt, geometry_distance, is_valid_polygon, polygon_area, BufferOptions,
+    Coord, Geometry, Polygon,
 };
 
 fn parse_polygon_wkt(text: &str) -> Polygon {

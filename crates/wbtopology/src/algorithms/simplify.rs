@@ -86,7 +86,13 @@ pub fn simplify_ring(ring: &LinearRing, tolerance: f64) -> LinearRing {
     }
 
     let mut open = ring.coords.clone();
-    if open.len() >= 2 && open.first().zip(open.last()).map(|(a, b)| a.xy_eq(b)).unwrap_or(false) {
+    if open.len() >= 2
+        && open
+            .first()
+            .zip(open.last())
+            .map(|(a, b)| a.xy_eq(b))
+            .unwrap_or(false)
+    {
         open.pop();
     }
     if open.len() < 3 {
@@ -581,13 +587,8 @@ impl CoverageTopology {
             if visited.contains(&edge) {
                 continue;
             }
-            let (edge_keys, coords) = trace_cycle_chain(
-                edge.0,
-                edge.1,
-                &adjacency,
-                &mut visited,
-                &coord_lookup,
-            )?;
+            let (edge_keys, coords) =
+                trace_cycle_chain(edge.0, edge.1, &adjacency, &mut visited, &coord_lookup)?;
             let chain_id = chains.len();
             for edge_key in &edge_keys {
                 edge_to_chain.insert(*edge_key, chain_id);
@@ -630,7 +631,9 @@ impl CoverageTopology {
             .map(|poly_idx| {
                 holes[poly_idx].sort_by_key(|(hole_idx, _)| *hole_idx);
                 Polygon::new(
-                    exteriors[poly_idx].clone().unwrap_or_else(|| LinearRing::new(vec![])),
+                    exteriors[poly_idx]
+                        .clone()
+                        .unwrap_or_else(|| LinearRing::new(vec![])),
                     holes[poly_idx]
                         .iter()
                         .map(|(_, ring)| ring.clone())
@@ -673,9 +676,10 @@ fn trace_open_chain(
             break;
         }
         let neighbors = adjacency.get(&current)?;
-        let candidate = neighbors.iter().copied().find(|&neighbor| {
-            neighbor != prev && !visited.contains(&edge_key(current, neighbor))
-        });
+        let candidate = neighbors
+            .iter()
+            .copied()
+            .find(|&neighbor| neighbor != prev && !visited.contains(&edge_key(current, neighbor)));
         let Some(next_key) = candidate else {
             break;
         };
@@ -711,9 +715,10 @@ fn trace_cycle_chain(
 
     loop {
         let neighbors = adjacency.get(&current)?;
-        let candidate = neighbors.iter().copied().find(|&neighbor| {
-            neighbor != prev && !visited.contains(&edge_key(current, neighbor))
-        });
+        let candidate = neighbors
+            .iter()
+            .copied()
+            .find(|&neighbor| neighbor != prev && !visited.contains(&edge_key(current, neighbor)));
         let Some(next_key) = candidate else {
             break;
         };
@@ -748,7 +753,9 @@ fn decompose_ring_occurrences(
     }
 
     let chain_ids: Vec<usize> = (0..edge_count)
-        .map(|i| edge_to_chain[&edge_key(coord_key(ring[i]), coord_key(ring[(i + 1) % edge_count]))])
+        .map(|i| {
+            edge_to_chain[&edge_key(coord_key(ring[i]), coord_key(ring[(i + 1) % edge_count]))]
+        })
         .collect();
 
     let all_same = chain_ids.iter().all(|chain_id| *chain_id == chain_ids[0]);
@@ -770,7 +777,11 @@ fn decompose_ring_occurrences(
         let chain_id = chain_ids[idx];
         occurrences.push(ChainOccurrence {
             chain_id,
-            forward: chain_forward_for_edge(&chains[chain_id], ring[idx], ring[(idx + 1) % edge_count]),
+            forward: chain_forward_for_edge(
+                &chains[chain_id],
+                ring[idx],
+                ring[(idx + 1) % edge_count],
+            ),
         });
         consumed += 1;
         while consumed < edge_count && chain_ids[(start + consumed) % edge_count] == chain_id {

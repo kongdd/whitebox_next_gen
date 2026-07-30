@@ -1,9 +1,9 @@
 use wbtopology::{
-    contains, crosses, intersects, is_simple_linestring, is_valid_polygon, overlaps,
-    touches, within, contains_with_precision, intersects_with_precision, touches_with_precision,
-    contains_with_epsilon, intersects_with_epsilon,
-    crosses_with_epsilon, overlaps_with_epsilon, touches_with_epsilon, within_with_epsilon,
-    PrecisionModel, Coord, Geometry, LineString, LinearRing, Polygon, PreparedPolygon,
+    contains, contains_with_epsilon, contains_with_precision, crosses, crosses_with_epsilon,
+    intersects, intersects_with_epsilon, intersects_with_precision, is_simple_linestring,
+    is_valid_polygon, overlaps, overlaps_with_epsilon, touches, touches_with_epsilon,
+    touches_with_precision, within, within_with_epsilon, Coord, Geometry, LineString, LinearRing,
+    Polygon, PrecisionModel, PreparedPolygon,
 };
 
 #[test]
@@ -200,8 +200,16 @@ fn precision_aware_predicates_snap_nearby_coordinates() {
     ));
     let near_boundary = Geometry::Point(Coord::xy(1.00001, 0.5));
 
-    assert!(contains_with_precision(&poly, &near_boundary, PrecisionModel::Fixed { scale: 1000.0 }));
-    assert!(touches_with_precision(&poly, &near_boundary, PrecisionModel::Fixed { scale: 1000.0 }));
+    assert!(contains_with_precision(
+        &poly,
+        &near_boundary,
+        PrecisionModel::Fixed { scale: 1000.0 }
+    ));
+    assert!(touches_with_precision(
+        &poly,
+        &near_boundary,
+        PrecisionModel::Fixed { scale: 1000.0 }
+    ));
 }
 
 #[test]
@@ -375,7 +383,11 @@ fn prepared_polygon_stress_batch_matches_unprepared() {
             }
         }
     }
-    assert_eq!(mismatches, 0, "prepared and unprepared disagree on {} points", mismatches);
+    assert_eq!(
+        mismatches, 0,
+        "prepared and unprepared disagree on {} points",
+        mismatches
+    );
 }
 
 #[test]

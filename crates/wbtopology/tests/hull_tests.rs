@@ -1,20 +1,8 @@
 use wbtopology::{
-    concave_hull,
-    concave_hull_geometry,
-    concave_hull_with_options,
-    concave_hull_with_precision,
-    convex_hull,
-    convex_hull_geometry,
-    convex_hull_with_precision,
-    geometry_area,
-    ConcaveHullEngine,
-    ConcaveHullOptions,
-    Coord,
-    Geometry,
-    LineString,
-    LinearRing,
+    concave_hull, concave_hull_geometry, concave_hull_with_options, concave_hull_with_precision,
+    convex_hull, convex_hull_geometry, convex_hull_with_precision, geometry_area,
+    ConcaveHullEngine, ConcaveHullOptions, Coord, Geometry, LineString, LinearRing, Polygon,
     PrecisionModel,
-    Polygon,
 };
 
 fn as_polygon(g: &Geometry) -> &Polygon {
@@ -67,7 +55,10 @@ fn convex_hull_discards_interior_points() {
 fn convex_hull_geometry_collects_across_components() {
     let g = Geometry::GeometryCollection(vec![
         Geometry::Point(Coord::xy(0.0, 0.0)),
-        Geometry::LineString(LineString::new(vec![Coord::xy(5.0, 1.0), Coord::xy(6.0, 3.0)])),
+        Geometry::LineString(LineString::new(vec![
+            Coord::xy(5.0, 1.0),
+            Coord::xy(6.0, 3.0),
+        ])),
         Geometry::Polygon(Polygon::new(
             LinearRing::new(vec![
                 Coord::xy(1.0, 4.0),
@@ -131,7 +122,10 @@ fn concave_hull_can_be_smaller_than_convex_hull_for_u_shape() {
 
     let convex_area = geometry_area(&convex);
     let concave_area = geometry_area(&concave);
-    assert!(concave_area < convex_area, "concave area {concave_area} should be < convex area {convex_area}");
+    assert!(
+        concave_area < convex_area,
+        "concave area {concave_area} should be < convex area {convex_area}"
+    );
 }
 
 #[test]
@@ -191,7 +185,10 @@ fn concave_hull_with_precision_matches_manual_presnap() {
     let pm = PrecisionModel::Fixed { scale: 1.0 };
 
     let by_wrapper = concave_hull_with_precision(&pts, 3.0, pm);
-    assert!(matches!(by_wrapper, Geometry::Polygon(_) | Geometry::MultiPolygon(_)));
+    assert!(matches!(
+        by_wrapper,
+        Geometry::Polygon(_) | Geometry::MultiPolygon(_)
+    ));
 
     let snapped_convex = convex_hull_with_precision(&pts, pm);
     assert!(geometry_area(&by_wrapper) <= geometry_area(&snapped_convex) + 1.0e-9);

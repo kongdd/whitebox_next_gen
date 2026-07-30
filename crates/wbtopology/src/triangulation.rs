@@ -222,8 +222,13 @@ pub fn delaunay_triangulation(points: &[Coord], epsilon: f64) -> DelaunayTriangu
 
     let mut triangles = Vec::<Triangle>::with_capacity(unique.len() * 2 + 8);
     let mut alive = Vec::<bool>::with_capacity(unique.len() * 2 + 8);
-    if let Some(t) = make_triangle(super_start, super_start + 1, super_start + 2, &all_points, eps)
-    {
+    if let Some(t) = make_triangle(
+        super_start,
+        super_start + 1,
+        super_start + 2,
+        &all_points,
+        eps,
+    ) {
         triangles.push(t);
         alive.push(true);
     }

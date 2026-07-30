@@ -1,11 +1,5 @@
 use wbtopology::{
-    buffer_polygon_multi,
-    contains,
-    BufferOptions,
-    Coord,
-    Geometry,
-    LinearRing,
-    Polygon,
+    buffer_polygon_multi, contains, BufferOptions, Coord, Geometry, LinearRing, Polygon,
 };
 
 fn parse_ring(spec: &str) -> LinearRing {
@@ -48,7 +42,10 @@ fn parse_holes(spec: &str) -> Vec<LinearRing> {
 }
 
 fn parse_bool(token: &str) -> bool {
-    matches!(token.trim(), "true" | "True" | "TRUE" | "1" | "yes" | "Yes" | "YES")
+    matches!(
+        token.trim(),
+        "true" | "True" | "TRUE" | "1" | "yes" | "Yes" | "YES"
+    )
 }
 
 fn ring_area(coords: &[Coord]) -> f64 {
@@ -104,7 +101,8 @@ fn bbox_of_polygons(polys: &[Polygon]) -> (f64, f64, f64, f64) {
 }
 
 fn point_in_any_polygon(point: Coord, polys: &[Polygon]) -> bool {
-    polys.iter()
+    polys
+        .iter()
         .any(|poly| contains(&Geometry::Polygon(poly.clone()), &Geometry::Point(point)))
 }
 
@@ -119,11 +117,7 @@ fn positive_buffer_fixture_invariants() {
         }
 
         let parts: Vec<&str> = line.split('|').collect();
-        assert_eq!(
-            parts.len(),
-            12,
-            "fixture line must have 12 fields: {line}"
-        );
+        assert_eq!(parts.len(), 12, "fixture line must have 12 fields: {line}");
 
         let name = parts[0].trim();
         let distance = parts[1].trim().parse::<f64>().expect("invalid distance");
@@ -137,8 +131,14 @@ fn positive_buffer_fixture_invariants() {
             .trim()
             .parse::<usize>()
             .expect("invalid max_components");
-        let min_area = parts[6].trim().parse::<f64>().expect("invalid min_total_area");
-        let max_area = parts[7].trim().parse::<f64>().expect("invalid max_total_area");
+        let min_area = parts[6]
+            .trim()
+            .parse::<f64>()
+            .expect("invalid min_total_area");
+        let max_area = parts[7]
+            .trim()
+            .parse::<f64>()
+            .expect("invalid max_total_area");
         let min_expand = parts[8].trim().parse::<f64>().expect("invalid min_expand");
         let min_total_holes = parts[9]
             .trim()

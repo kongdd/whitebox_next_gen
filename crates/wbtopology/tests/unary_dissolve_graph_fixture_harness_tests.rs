@@ -1,9 +1,6 @@
 use wbtopology::{
-    Geometry,
-    UnaryDissolveOptions,
+    from_wkt, polygon_unary_dissolve_with_options, Geometry, UnaryDissolveOptions,
     UnaryDissolveStrategy,
-    from_wkt,
-    polygon_unary_dissolve_with_options,
 };
 
 fn parse_polygon_wkt(text: &str) -> wbtopology::Polygon {
@@ -22,7 +19,11 @@ fn parse_expected_memberships(text: &str) -> Vec<Vec<usize>> {
         }
         let mut members = Vec::<usize>::new();
         for idx in grp.split('+') {
-            members.push(idx.trim().parse::<usize>().expect("invalid membership index"));
+            members.push(
+                idx.trim()
+                    .parse::<usize>()
+                    .expect("invalid membership index"),
+            );
         }
         members.sort_unstable();
         members.dedup();
@@ -69,7 +70,8 @@ fn unary_dissolve_graph_fixture_harness() {
         );
 
         assert_eq!(
-            out.len(), expected_groups,
+            out.len(),
+            expected_groups,
             "{name}: group count mismatch (expected {expected_groups}, got {})",
             out.len()
         );
@@ -93,11 +95,9 @@ fn unary_dissolve_graph_fixture_harness() {
         memberships.sort();
 
         assert_eq!(
-            memberships,
-            expected_memberships,
+            memberships, expected_memberships,
             "{name}: expected memberships {:?}, got {:?}",
-            expected_memberships,
-            memberships
+            expected_memberships, memberships
         );
     }
 }

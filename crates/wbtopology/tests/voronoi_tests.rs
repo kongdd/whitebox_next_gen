@@ -1,13 +1,7 @@
 use wbtopology::algorithms::point_in_ring::{classify_point_in_ring_eps, PointInRing};
 use wbtopology::{
-    voronoi_diagram,
-    voronoi_diagram_with_clip,
-    voronoi_diagram_with_clip_with_precision,
-    voronoi_diagram_with_options,
-    voronoi_diagram_with_precision,
-    Coord,
-    Envelope,
-    PrecisionModel,
+    voronoi_diagram, voronoi_diagram_with_clip, voronoi_diagram_with_clip_with_precision,
+    voronoi_diagram_with_options, voronoi_diagram_with_precision, Coord, Envelope, PrecisionModel,
     VoronoiOptions,
 };
 

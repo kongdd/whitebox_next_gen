@@ -77,7 +77,6 @@ impl TopologyGraph {
     }
 
     fn build_from_noded(noded: Vec<LineString>, eps: f64) -> Self {
-
         let mut nodes = Vec::<GraphNode>::new();
         let mut edges = Vec::<DirectedEdge>::new();
         let mut node_index = HashMap::<NodeKey, usize>::new();
@@ -335,7 +334,10 @@ impl TopologyGraph {
     ///
     /// Bounded rings are identified by positive signed area under the
     /// left-face traversal convention.
-    pub fn extract_bounded_face_rings_with_edges(&self, epsilon: f64) -> Vec<(LineString, Vec<usize>)> {
+    pub fn extract_bounded_face_rings_with_edges(
+        &self,
+        epsilon: f64,
+    ) -> Vec<(LineString, Vec<usize>)> {
         let eps = normalized_eps(epsilon);
         self.extract_face_rings_with_edges(eps)
             .into_iter()
@@ -423,15 +425,16 @@ mod tests {
 
         let graph = TopologyGraph::from_linestrings(&lines, 1.0e-9);
         let rings = graph.extract_bounded_face_rings(1.0e-9);
-        assert_eq!(rings.len(), 1, "expected one bounded face for a simple square cycle");
+        assert_eq!(
+            rings.len(),
+            1,
+            "expected one bounded face for a simple square cycle"
+        );
     }
 
     #[test]
     fn geos_parity_preserve_coincident_segment_multiplicity() {
-        let lines = vec![
-            seg(0.0, 0.0, 10.0, 0.0),
-            seg(0.0, 0.0, 10.0, 0.0),
-        ];
+        let lines = vec![seg(0.0, 0.0, 10.0, 0.0), seg(0.0, 0.0, 10.0, 0.0)];
 
         let graph = TopologyGraph::from_linestrings(&lines, 1.0e-9);
         assert_eq!(

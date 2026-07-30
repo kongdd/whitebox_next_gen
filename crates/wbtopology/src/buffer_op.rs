@@ -80,11 +80,7 @@ impl BufferOp {
     ///
     /// This makes the execution flow explicit and testable without changing public
     /// tool semantics in one large rewrite.
-    pub fn run_linestrings_dissolved(
-        &self,
-        lines: &[LineString],
-        distance: f64,
-    ) -> BufferOpResult {
+    pub fn run_linestrings_dissolved(&self, lines: &[LineString], distance: f64) -> BufferOpResult {
         let mut stats = BufferOpStats {
             input_lines: lines.len(),
             ..BufferOpStats::default()
@@ -125,7 +121,11 @@ impl BufferOp {
 
         let mut curves = Vec::<LineString>::new();
         for poly in polygons {
-            curves.extend(buffer_polygon_curve_set(poly, distance, self.options.buffer));
+            curves.extend(buffer_polygon_curve_set(
+                poly,
+                distance,
+                self.options.buffer,
+            ));
         }
         stats.raw_curves = curves.len();
 
@@ -135,12 +135,20 @@ impl BufferOp {
     fn collect_raw_curves(&self, lines: &[LineString], distance: f64) -> Vec<LineString> {
         let mut curves = Vec::<LineString>::new();
         for line in lines {
-            curves.extend(buffer_linestring_curve_set(line, distance, self.options.buffer));
+            curves.extend(buffer_linestring_curve_set(
+                line,
+                distance,
+                self.options.buffer,
+            ));
         }
         curves
     }
 
-    fn dissolve_curve_set(&self, curves: Vec<LineString>, mut stats: BufferOpStats) -> BufferOpResult {
+    fn dissolve_curve_set(
+        &self,
+        curves: Vec<LineString>,
+        mut stats: BufferOpStats,
+    ) -> BufferOpResult {
         if curves.is_empty() {
             return BufferOpResult {
                 polygons: Vec::new(),

@@ -6,6 +6,12 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
+### Changed
+- **`parallel` is now on by default.** The `parallel` feature is included in the crate's `default`
+  feature set, so rayon-backed parallel operations are active without any explicit
+  `features = ["parallel"]` declaration by dependents. Consumers that need a serial build can
+  opt out with `default-features = false`.
+
 ### Added
 - Added `ConcaveHullEngine::Concaveman` variant implementing the Mapbox/Park & Oh (2012) concaveman algorithm as the new default concave hull engine.  The concaveman engine iteratively refines a convex-hull seed by inserting the closest non-hull point to each sufficiently-long hull edge, using an R-tree for fast candidate lookup and a linked-list hull representation for O(1) insertion.
 - Added `ConcaveHullOptions::concavity` field (`f64`, default `2.0`).  Controls how aggressively edges are refined: a candidate point is accepted only when its squared distance to the edge is less than `sq_edge_length / concavity²`.  Higher values → less concave (closer to convex hull).

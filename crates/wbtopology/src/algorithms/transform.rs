@@ -1,6 +1,6 @@
 //! Affine transforms for geometry types.
 
-use crate::geom::{Coord, Geometry, LinearRing, LineString, Polygon};
+use crate::geom::{Coord, Geometry, LineString, LinearRing, Polygon};
 
 // ── Coordinate transforms ─────────────────────────────────────────────────────
 

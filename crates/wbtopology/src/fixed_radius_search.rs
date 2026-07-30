@@ -43,7 +43,10 @@ impl<T: Copy> FixedRadiusSearch2D<T> {
     ///
     /// `radius` must be a finite value > 0.
     pub fn new(radius: f64, metric: DistanceMetric) -> Self {
-        assert!(radius.is_finite() && radius > 0.0, "radius must be finite and > 0");
+        assert!(
+            radius.is_finite() && radius > 0.0,
+            "radius must be finite and > 0"
+        );
         let sqr_dist = matches!(metric, DistanceMetric::SquaredEuclidean);
         Self {
             inv_r: 1.0 / (radius * 0.5),
@@ -52,12 +55,10 @@ impl<T: Copy> FixedRadiusSearch2D<T> {
             size: 0,
             is_distance_squared: sqr_dist,
             dx: [
-                -2, -1, 0, 1, 2, -2, -1, 0, 1, 2, -2, -1, 0, 1, 2, -2, -1, 0, 1, 2, -2, -1, 0,
-                1, 2,
+                -2, -1, 0, 1, 2, -2, -1, 0, 1, 2, -2, -1, 0, 1, 2, -2, -1, 0, 1, 2, -2, -1, 0, 1, 2,
             ],
             dy: [
-                -2, -2, -2, -2, -2, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2,
-                2, 2,
+                -2, -2, -2, -2, -2, -1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2,
             ],
         }
     }
@@ -65,7 +66,10 @@ impl<T: Copy> FixedRadiusSearch2D<T> {
     /// Insert a point/value record.
     #[inline]
     pub fn insert(&mut self, x: f64, y: f64, value: T) {
-        let key = [(x * self.inv_r).floor() as i32, (y * self.inv_r).floor() as i32];
+        let key = [
+            (x * self.inv_r).floor() as i32,
+            (y * self.inv_r).floor() as i32,
+        ];
         let val = match self.hm.entry(key) {
             Vacant(entry) => entry.insert(vec![]),
             Occupied(entry) => entry.into_mut(),

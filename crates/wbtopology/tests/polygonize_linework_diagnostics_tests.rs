@@ -1,10 +1,5 @@
 use wbtopology::{
-    Coord,
-    LineString,
-    NodingOptions,
-    NodingStrategy,
-    PolygonizeOptions,
-    polygonize_linework,
+    polygonize_linework, Coord, LineString, NodingOptions, NodingStrategy, PolygonizeOptions,
 };
 
 #[test]

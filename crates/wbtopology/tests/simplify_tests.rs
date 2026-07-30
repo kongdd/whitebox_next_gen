@@ -1,18 +1,9 @@
 use wbtopology::{
-    is_simple_linestring,
-    is_valid_polygon,
-    simplify_geometry,
-    simplify_geometry_topology_preserving,
-    simplify_linestring,
-    simplify_linestring_topology_preserving,
-    simplify_polygon_coverage_topology_preserving,
-    simplify_polygon,
-    simplify_polygon_topology_preserving,
-    Coord,
-    Geometry,
-    LineString,
-    LinearRing,
-    Polygon,
+    is_simple_linestring, is_valid_polygon, simplify_geometry,
+    simplify_geometry_topology_preserving, simplify_linestring,
+    simplify_linestring_topology_preserving, simplify_polygon,
+    simplify_polygon_coverage_topology_preserving, simplify_polygon_topology_preserving, Coord,
+    Geometry, LineString, LinearRing, Polygon,
 };
 
 #[test]
@@ -182,7 +173,11 @@ fn topology_preserving_coverage_simplify_preserves_shared_boundary() {
     let right = Polygon::new(
         LinearRing::new(
             [
-                vec![Coord::xy(5.0, 0.0), Coord::xy(10.0, 0.0), Coord::xy(10.0, 10.0)],
+                vec![
+                    Coord::xy(5.0, 0.0),
+                    Coord::xy(10.0, 0.0),
+                    Coord::xy(10.0, 10.0),
+                ],
                 shared_rev.clone(),
             ]
             .concat(),

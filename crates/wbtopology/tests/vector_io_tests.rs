@@ -4,7 +4,10 @@ use wbtopology::{vector_io, Coord, Geometry, LineString, LinearRing, Polygon};
 fn layer_conversion_roundtrip() {
     let geoms = vec![
         Geometry::Point(Coord::xyz(1.0, 2.0, 3.0)),
-        Geometry::LineString(LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(3.0, 1.0)])),
+        Geometry::LineString(LineString::new(vec![
+            Coord::xy(0.0, 0.0),
+            Coord::xy(3.0, 1.0),
+        ])),
         Geometry::Polygon(Polygon::new(
             LinearRing::new(vec![
                 Coord::xy(0.0, 0.0),

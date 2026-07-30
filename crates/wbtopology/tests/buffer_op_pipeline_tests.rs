@@ -1,12 +1,6 @@
 use wbtopology::{
-    BufferOp,
-    BufferOpOptions,
-    BufferOptions,
-    Coord,
-    LineString,
-    LinearRing,
+    is_valid_polygon, BufferOp, BufferOpOptions, BufferOptions, Coord, LineString, LinearRing,
     Polygon,
-    is_valid_polygon,
 };
 
 fn line(points: &[(f64, f64)]) -> LineString {

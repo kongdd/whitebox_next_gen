@@ -133,7 +133,11 @@ pub fn geometry_centroid(g: &Geometry) -> Option<Coord> {
                 let seg = (dx * dx + dy * dy).sqrt();
                 if accum + seg >= half {
                     let t = (half - accum) / seg;
-                    return Some(Coord::interpolate_segment(ls.coords[i], ls.coords[i + 1], t));
+                    return Some(Coord::interpolate_segment(
+                        ls.coords[i],
+                        ls.coords[i + 1],
+                        t,
+                    ));
                 }
                 accum += seg;
             }
@@ -197,7 +201,11 @@ pub fn geometry_centroid(g: &Geometry) -> Option<Coord> {
                         a
                     } else {
                         let l = geometry_length(p);
-                        if l > 0.0 { l } else { 1.0 }
+                        if l > 0.0 {
+                            l
+                        } else {
+                            1.0
+                        }
                     }
                 };
                 if let Some(c) = geometry_centroid(p) {

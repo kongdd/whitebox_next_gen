@@ -1,10 +1,4 @@
-use wbtopology::{
-    buffer_polygon_multi,
-    BufferOptions,
-    Coord,
-    LinearRing,
-    Polygon,
-};
+use wbtopology::{buffer_polygon_multi, BufferOptions, Coord, LinearRing, Polygon};
 
 fn parse_ring(spec: &str) -> LinearRing {
     let s = spec.trim();
@@ -82,10 +76,22 @@ fn negative_buffer_multi_fixture_invariants() {
         let distance = parts[1].trim().parse::<f64>().expect("invalid distance");
         let outer = parse_ring(parts[2].trim());
         let holes = parse_holes(parts[3].trim());
-        let min_components = parts[4].trim().parse::<usize>().expect("invalid min_components");
-        let max_components = parts[5].trim().parse::<usize>().expect("invalid max_components");
-        let min_area = parts[6].trim().parse::<f64>().expect("invalid min_total_area");
-        let max_area = parts[7].trim().parse::<f64>().expect("invalid max_total_area");
+        let min_components = parts[4]
+            .trim()
+            .parse::<usize>()
+            .expect("invalid min_components");
+        let max_components = parts[5]
+            .trim()
+            .parse::<usize>()
+            .expect("invalid max_components");
+        let min_area = parts[6]
+            .trim()
+            .parse::<f64>()
+            .expect("invalid min_total_area");
+        let max_area = parts[7]
+            .trim()
+            .parse::<f64>()
+            .expect("invalid max_total_area");
 
         let src = Polygon::new(outer, holes);
         let out = buffer_polygon_multi(&src, distance, BufferOptions::default());

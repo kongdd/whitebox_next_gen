@@ -1,15 +1,10 @@
 //! Topological predicates and validation helpers.
 
 use crate::algorithms::point_in_ring::{
-    classify_point_in_ring,
-    classify_point_in_ring_eps,
-    PointInRing,
+    classify_point_in_ring, classify_point_in_ring_eps, PointInRing,
 };
 use crate::algorithms::segment::{
-    point_on_segment,
-    point_on_segment_eps,
-    segments_intersect,
-    segments_intersect_eps,
+    point_on_segment, point_on_segment_eps, segments_intersect, segments_intersect_eps,
 };
 use crate::geom::{Coord, Envelope, Geometry, LineString, Polygon};
 use crate::precision::PrecisionModel;
@@ -100,7 +95,8 @@ impl PreparedRing {
         let use_bins = !self.bins.is_empty() && p.y >= self.min_y && p.y <= self.max_y;
         if use_bins {
             let fy = ((p.y - self.min_y) * self.inv_span_y).clamp(0.0, 1.0);
-            let b = ((fy * (self.bins.len() as f64 - 1.0)).floor() as usize).min(self.bins.len() - 1);
+            let b =
+                ((fy * (self.bins.len() as f64 - 1.0)).floor() as usize).min(self.bins.len() - 1);
             for &edge_idx in &self.bins[b] {
                 let e = &self.edges[edge_idx];
                 if point_on_segment(p, e.a, e.b) {
@@ -242,17 +238,20 @@ fn geometry_envelope(g: &Geometry) -> Option<Envelope> {
 pub fn intersects(a: &Geometry, b: &Geometry) -> bool {
     match (a, b) {
         (Geometry::Point(pa), Geometry::Point(pb)) => pa.xy_eq(pb),
-        (Geometry::Point(p), Geometry::LineString(ls)) | (Geometry::LineString(ls), Geometry::Point(p)) => {
-            point_on_linestring(*p, ls)
+        (Geometry::Point(p), Geometry::LineString(ls))
+        | (Geometry::LineString(ls), Geometry::Point(p)) => point_on_linestring(*p, ls),
+        (Geometry::Point(p), Geometry::Polygon(poly))
+        | (Geometry::Polygon(poly), Geometry::Point(p)) => point_intersects_polygon(*p, poly),
+        (Geometry::LineString(a_ls), Geometry::LineString(b_ls)) => {
+            linestrings_intersect(a_ls, b_ls)
         }
-        (Geometry::Point(p), Geometry::Polygon(poly)) | (Geometry::Polygon(poly), Geometry::Point(p)) => {
-            point_intersects_polygon(*p, poly)
-        }
-        (Geometry::LineString(a_ls), Geometry::LineString(b_ls)) => linestrings_intersect(a_ls, b_ls),
-        (Geometry::LineString(ls), Geometry::Polygon(poly)) | (Geometry::Polygon(poly), Geometry::LineString(ls)) => {
+        (Geometry::LineString(ls), Geometry::Polygon(poly))
+        | (Geometry::Polygon(poly), Geometry::LineString(ls)) => {
             linestring_intersects_polygon(ls, poly)
         }
-        (Geometry::Polygon(a_poly), Geometry::Polygon(b_poly)) => polygons_intersect(a_poly, b_poly),
+        (Geometry::Polygon(a_poly), Geometry::Polygon(b_poly)) => {
+            polygons_intersect(a_poly, b_poly)
+        }
         _ => {
             let a_parts = a.components();
             let b_parts = b.components();
@@ -274,10 +273,10 @@ pub fn intersects_with_precision(a: &Geometry, b: &Geometry, precision: Precisio
 pub fn intersects_with_epsilon(a: &Geometry, b: &Geometry, eps: f64) -> bool {
     match (a, b) {
         (Geometry::Point(pa), Geometry::Point(pb)) => eq_coord_eps(*pa, *pb, eps),
-        (Geometry::Point(p), Geometry::LineString(ls)) | (Geometry::LineString(ls), Geometry::Point(p)) => {
-            point_on_linestring_eps(*p, ls, eps)
-        }
-        (Geometry::Point(p), Geometry::Polygon(poly)) | (Geometry::Polygon(poly), Geometry::Point(p)) => {
+        (Geometry::Point(p), Geometry::LineString(ls))
+        | (Geometry::LineString(ls), Geometry::Point(p)) => point_on_linestring_eps(*p, ls, eps),
+        (Geometry::Point(p), Geometry::Polygon(poly))
+        | (Geometry::Polygon(poly), Geometry::Point(p)) => {
             point_intersects_polygon_eps(*p, poly, eps)
         }
         (Geometry::LineString(a_ls), Geometry::LineString(b_ls)) => {
@@ -287,13 +286,17 @@ pub fn intersects_with_epsilon(a: &Geometry, b: &Geometry, eps: f64) -> bool {
         | (Geometry::Polygon(poly), Geometry::LineString(ls)) => {
             linestring_intersects_polygon_eps(ls, poly, eps)
         }
-        (Geometry::Polygon(a_poly), Geometry::Polygon(b_poly)) => polygons_intersect_eps(a_poly, b_poly, eps),
+        (Geometry::Polygon(a_poly), Geometry::Polygon(b_poly)) => {
+            polygons_intersect_eps(a_poly, b_poly, eps)
+        }
         _ => {
             let a_parts = a.components();
             let b_parts = b.components();
-            a_parts
-                .iter()
-                .any(|ap| b_parts.iter().any(|bp| intersects_with_epsilon(ap, bp, eps)))
+            a_parts.iter().any(|ap| {
+                b_parts
+                    .iter()
+                    .any(|bp| intersects_with_epsilon(ap, bp, eps))
+            })
         }
     }
 }
@@ -305,7 +308,9 @@ pub fn contains(container: &Geometry, item: &Geometry) -> bool {
         (Geometry::LineString(ls), Geometry::Point(p)) => point_on_linestring(*p, ls),
         (Geometry::Polygon(poly), Geometry::Point(p)) => point_in_polygon_inclusive(*p, poly),
         (Geometry::Polygon(poly), Geometry::LineString(ls)) => {
-            ls.coords.iter().all(|p| point_in_polygon_inclusive(*p, poly))
+            ls.coords
+                .iter()
+                .all(|p| point_in_polygon_inclusive(*p, poly))
                 && !linestring_crosses_polygon_boundary(ls, poly)
         }
         (Geometry::Polygon(a), Geometry::Polygon(b)) => polygon_contains_polygon(a, b),
@@ -344,7 +349,9 @@ pub fn contains_with_epsilon(container: &Geometry, item: &Geometry, eps: f64) ->
     match (container, item) {
         (Geometry::Point(a), Geometry::Point(b)) => eq_coord_eps(*a, *b, eps),
         (Geometry::LineString(ls), Geometry::Point(p)) => point_on_linestring_eps(*p, ls, eps),
-        (Geometry::Polygon(poly), Geometry::Point(p)) => point_in_polygon_inclusive_eps(*p, poly, eps),
+        (Geometry::Polygon(poly), Geometry::Point(p)) => {
+            point_in_polygon_inclusive_eps(*p, poly, eps)
+        }
         (Geometry::Polygon(poly), Geometry::LineString(ls)) => {
             ls.coords
                 .iter()
@@ -355,18 +362,19 @@ pub fn contains_with_epsilon(container: &Geometry, item: &Geometry, eps: f64) ->
         (Geometry::MultiPoint(_), _)
         | (Geometry::MultiLineString(_), _)
         | (Geometry::MultiPolygon(_), _)
-        | (Geometry::GeometryCollection(_), _) => {
-            container
-                .components()
-                .iter()
-                .any(|cp| contains_with_epsilon(cp, item, eps))
-        }
+        | (Geometry::GeometryCollection(_), _) => container
+            .components()
+            .iter()
+            .any(|cp| contains_with_epsilon(cp, item, eps)),
         (_, Geometry::MultiPoint(_))
         | (_, Geometry::MultiLineString(_))
         | (_, Geometry::MultiPolygon(_))
         | (_, Geometry::GeometryCollection(_)) => {
             let parts = item.components();
-            !parts.is_empty() && parts.iter().all(|ip| contains_with_epsilon(container, ip, eps))
+            !parts.is_empty()
+                && parts
+                    .iter()
+                    .all(|ip| contains_with_epsilon(container, ip, eps))
         }
         _ => false,
     }
@@ -399,15 +407,15 @@ pub fn touches(a: &Geometry, b: &Geometry) -> bool {
 
     match (a, b) {
         (Geometry::Point(_), Geometry::Point(_)) => false,
-        (Geometry::Point(p), Geometry::LineString(ls)) | (Geometry::LineString(ls), Geometry::Point(p)) => {
+        (Geometry::Point(p), Geometry::LineString(ls))
+        | (Geometry::LineString(ls), Geometry::Point(p)) => {
             if ls.coords.len() < 2 {
                 return false;
             }
             p.xy_eq(&ls.coords[0]) || p.xy_eq(&ls.coords[ls.coords.len() - 1])
         }
-        (Geometry::Point(p), Geometry::Polygon(poly)) | (Geometry::Polygon(poly), Geometry::Point(p)) => {
-            point_on_polygon_boundary(*p, poly)
-        }
+        (Geometry::Point(p), Geometry::Polygon(poly))
+        | (Geometry::Polygon(poly), Geometry::Point(p)) => point_on_polygon_boundary(*p, poly),
         (Geometry::LineString(a_ls), Geometry::LineString(b_ls)) => {
             linestrings_intersect(a_ls, b_ls)
                 && !linestrings_cross_proper(a_ls, b_ls)
@@ -420,7 +428,8 @@ pub fn touches(a: &Geometry, b: &Geometry) -> bool {
                     &Geometry::LineString(a_ls.clone()),
                 )
         }
-        (Geometry::LineString(ls), Geometry::Polygon(poly)) | (Geometry::Polygon(poly), Geometry::LineString(ls)) => {
+        (Geometry::LineString(ls), Geometry::Polygon(poly))
+        | (Geometry::Polygon(poly), Geometry::LineString(ls)) => {
             linestring_intersects_polygon(ls, poly)
                 && !ls.coords.iter().any(|p| point_in_polygon_strict(*p, poly))
         }
@@ -457,7 +466,9 @@ pub fn touches_with_epsilon(a: &Geometry, b: &Geometry, eps: f64) -> bool {
                 || eq_coord_eps(*p, ls.coords[ls.coords.len() - 1], eps)
         }
         (Geometry::Point(p), Geometry::Polygon(poly))
-        | (Geometry::Polygon(poly), Geometry::Point(p)) => point_on_polygon_boundary_eps(*p, poly, eps),
+        | (Geometry::Polygon(poly), Geometry::Point(p)) => {
+            point_on_polygon_boundary_eps(*p, poly, eps)
+        }
         (Geometry::LineString(a_ls), Geometry::LineString(b_ls)) => {
             linestrings_intersect_eps(a_ls, b_ls, eps)
                 && !linestrings_cross_proper_eps(a_ls, b_ls, eps)
@@ -492,10 +503,16 @@ pub fn touches_with_epsilon(a: &Geometry, b: &Geometry, eps: f64) -> bool {
 /// True if geometries cross (dimension-specific crossing relation).
 pub fn crosses(a: &Geometry, b: &Geometry) -> bool {
     match (a, b) {
-        (Geometry::LineString(a_ls), Geometry::LineString(b_ls)) => linestrings_cross_proper(a_ls, b_ls),
-        (Geometry::LineString(ls), Geometry::Polygon(poly)) | (Geometry::Polygon(poly), Geometry::LineString(ls)) => {
+        (Geometry::LineString(a_ls), Geometry::LineString(b_ls)) => {
+            linestrings_cross_proper(a_ls, b_ls)
+        }
+        (Geometry::LineString(ls), Geometry::Polygon(poly))
+        | (Geometry::Polygon(poly), Geometry::LineString(ls)) => {
             let has_inside = ls.coords.iter().any(|p| point_in_polygon_strict(*p, poly));
-            let has_outside = ls.coords.iter().any(|p| !point_in_polygon_inclusive(*p, poly));
+            let has_outside = ls
+                .coords
+                .iter()
+                .any(|p| !point_in_polygon_inclusive(*p, poly));
             has_inside && has_outside && linestring_crosses_polygon_boundary(ls, poly)
         }
         _ => false,
@@ -594,10 +611,7 @@ pub fn overlaps(a: &Geometry, b: &Geometry) -> bool {
         (Geometry::LineString(a_ls), Geometry::LineString(b_ls)) => {
             let ga = Geometry::LineString(a_ls.clone());
             let gb = Geometry::LineString(b_ls.clone());
-            !contains(&ga, &gb)
-                && !contains(&gb, &ga)
-                && !touches(&ga, &gb)
-                && !crosses(&ga, &gb)
+            !contains(&ga, &gb) && !contains(&gb, &ga) && !touches(&ga, &gb) && !crosses(&ga, &gb)
         }
         (Geometry::Polygon(a_poly), Geometry::Polygon(b_poly)) => {
             let ga = Geometry::Polygon(a_poly.clone());
@@ -664,7 +678,8 @@ pub fn is_simple_linestring(ls: &LineString) -> bool {
             // Allow first and last segment touching only for explicitly closed rings.
             if i == 0
                 && j == seg_count - 1
-                && ls.coords
+                && ls
+                    .coords
                     .first()
                     .zip(ls.coords.last())
                     .map(|(a, b)| a.xy_eq(b))
@@ -963,7 +978,11 @@ fn linestrings_cross_proper_eps(a: &LineString, b: &LineString, eps: f64) -> boo
 }
 
 fn linestring_intersects_polygon(ls: &LineString, poly: &Polygon) -> bool {
-    if ls.coords.iter().any(|p| point_in_polygon_inclusive(*p, poly)) {
+    if ls
+        .coords
+        .iter()
+        .any(|p| point_in_polygon_inclusive(*p, poly))
+    {
         return true;
     }
     ring_linestring_intersects(&poly.exterior.coords, ls)

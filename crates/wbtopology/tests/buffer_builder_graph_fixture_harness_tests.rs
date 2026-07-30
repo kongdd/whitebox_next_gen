@@ -1,10 +1,5 @@
 use wbtopology::{
-    BufferBuilder,
-    BufferOptions,
-    Geometry,
-    from_wkt,
-    is_valid_polygon,
-    polygon_area,
+    from_wkt, is_valid_polygon, polygon_area, BufferBuilder, BufferOptions, Geometry,
 };
 
 fn parse_polygon_wkt(text: &str) -> wbtopology::Polygon {
@@ -33,10 +28,7 @@ fn buffer_builder_graph_fixture_harness() {
         let name = cols[0].trim();
         let input = parse_polygon_wkt(cols[1].trim());
         let distance: f64 = cols[2].trim().parse().expect("invalid distance");
-        let quadrant_segments: usize = cols[3]
-            .trim()
-            .parse()
-            .expect("invalid quadrant_segments");
+        let quadrant_segments: usize = cols[3].trim().parse().expect("invalid quadrant_segments");
         let min_area_ratio: f64 = cols[4].trim().parse().expect("invalid min_area_ratio");
         let max_area_ratio: f64 = cols[5].trim().parse().expect("invalid max_area_ratio");
         let expect_valid: bool = cols[6].trim().parse().expect("invalid expect_valid");

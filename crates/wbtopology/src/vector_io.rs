@@ -11,7 +11,8 @@ pub fn read_geometries(path: &str) -> Result<Vec<Geometry>> {
 
 /// Write geometries to a path using wbvector format detection.
 pub fn write_geometries(path: &str, geometries: &[Geometry]) -> Result<()> {
-    let format = wbvector::VectorFormat::detect(path).map_err(|e| TopologyError::Io(e.to_string()))?;
+    let format =
+        wbvector::VectorFormat::detect(path).map_err(|e| TopologyError::Io(e.to_string()))?;
     let layer = layer_from_geometries("wbtopology", geometries, None)?;
     wbvector::write(&layer, path, format).map_err(|e| TopologyError::Io(e.to_string()))
 }
@@ -28,7 +29,11 @@ pub fn geometries_from_layer(layer: &wbvector::Layer) -> Result<Vec<Geometry>> {
 }
 
 /// Build a wbvector Layer from wbtopology geometries.
-pub fn layer_from_geometries(name: &str, geometries: &[Geometry], epsg: Option<u32>) -> Result<wbvector::Layer> {
+pub fn layer_from_geometries(
+    name: &str,
+    geometries: &[Geometry],
+    epsg: Option<u32>,
+) -> Result<wbvector::Layer> {
     let mut layer = wbvector::Layer::new(name);
     if let Some(code) = epsg {
         layer = layer.with_epsg(code);
@@ -49,8 +54,13 @@ pub fn layer_from_geometries(name: &str, geometries: &[Geometry], epsg: Option<u
 fn flatten_wbvector_geometry(geom: &wbvector::Geometry, out: &mut Vec<Geometry>) -> Result<()> {
     match geom {
         wbvector::Geometry::Point(c) => out.push(Geometry::Point(from_wb_coord(c))),
-        wbvector::Geometry::LineString(cs) => out.push(Geometry::LineString(LineString::new(from_wb_coords(cs)))),
-        wbvector::Geometry::Polygon { exterior, interiors } => {
+        wbvector::Geometry::LineString(cs) => {
+            out.push(Geometry::LineString(LineString::new(from_wb_coords(cs))))
+        }
+        wbvector::Geometry::Polygon {
+            exterior,
+            interiors,
+        } => {
             out.push(Geometry::Polygon(Polygon::new(
                 LinearRing::new(from_wb_coords(exterior.coords())),
                 interiors

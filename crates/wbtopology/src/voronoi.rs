@@ -60,7 +60,10 @@ pub fn voronoi_diagram(points: &[Coord], epsilon: f64) -> VoronoiDiagram {
 }
 
 /// Compute a clipped Voronoi diagram from points snapped under `precision`.
-pub fn voronoi_diagram_with_precision(points: &[Coord], precision: PrecisionModel) -> VoronoiDiagram {
+pub fn voronoi_diagram_with_precision(
+    points: &[Coord],
+    precision: PrecisionModel,
+) -> VoronoiDiagram {
     let mut snapped = points.to_vec();
     precision.apply_coords_in_place(&mut snapped);
     voronoi_diagram(&snapped, precision.epsilon())
@@ -317,7 +320,14 @@ fn clip_polygon_halfplane_into(
     dedup_consecutive(out, eps);
 }
 
-fn segment_line_intersection(a: Coord, b: Coord, nx: f64, ny: f64, c: f64, eps: f64) -> Option<Coord> {
+fn segment_line_intersection(
+    a: Coord,
+    b: Coord,
+    nx: f64,
+    ny: f64,
+    c: f64,
+    eps: f64,
+) -> Option<Coord> {
     let dx = b.x - a.x;
     let dy = b.y - a.y;
     let denom = nx * dx + ny * dy;

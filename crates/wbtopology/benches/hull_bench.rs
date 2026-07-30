@@ -1,10 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use wbtopology::{
-    concave_hull,
-    concave_hull_with_options,
-    convex_hull,
-    ConcaveHullEngine,
-    ConcaveHullOptions,
+    concave_hull, concave_hull_with_options, convex_hull, ConcaveHullEngine, ConcaveHullOptions,
     Coord,
 };
 
@@ -34,7 +30,13 @@ fn bench_concave_hull_absolute(c: &mut Criterion) {
     for &n in &[1_000usize, 5_000usize, 10_000usize] {
         let pts = synthetic_ring_points(n, 100.0, 20.0);
         group.bench_with_input(BenchmarkId::new("max_edge=10", n), &n, |b, _| {
-            b.iter(|| black_box(concave_hull(black_box(&pts), black_box(10.0), black_box(1.0e-12))))
+            b.iter(|| {
+                black_box(concave_hull(
+                    black_box(&pts),
+                    black_box(10.0),
+                    black_box(1.0e-12),
+                ))
+            })
         });
     }
     group.finish();
@@ -78,19 +80,23 @@ fn bench_concave_hull_engines(c: &mut Criterion) {
             })
         });
 
-        group.bench_with_input(BenchmarkId::new("fast_refine/max_edge=10", n), &n, |b, _| {
-            b.iter(|| {
-                black_box(concave_hull_with_options(
-                    black_box(&pts),
-                    black_box(ConcaveHullOptions {
-                        engine: ConcaveHullEngine::FastRefine,
-                        max_edge_length: 10.0,
-                        epsilon: 1.0e-12,
-                        ..Default::default()
-                    }),
-                ))
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("fast_refine/max_edge=10", n),
+            &n,
+            |b, _| {
+                b.iter(|| {
+                    black_box(concave_hull_with_options(
+                        black_box(&pts),
+                        black_box(ConcaveHullOptions {
+                            engine: ConcaveHullEngine::FastRefine,
+                            max_edge_length: 10.0,
+                            epsilon: 1.0e-12,
+                            ..Default::default()
+                        }),
+                    ))
+                })
+            },
+        );
     }
     group.finish();
 }

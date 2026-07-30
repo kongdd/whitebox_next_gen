@@ -1,10 +1,5 @@
 use wbtopology::{
-    polygon_difference,
-    polygon_intersection,
-    polygon_sym_diff,
-    polygon_union,
-    Coord,
-    LinearRing,
+    polygon_difference, polygon_intersection, polygon_sym_diff, polygon_union, Coord, LinearRing,
     Polygon,
 };
 
@@ -166,23 +161,35 @@ fn overlay_extreme_fixture_diagnostics() {
         let xor_rev = polygon_sym_diff(&b, &a, eps);
         if mode == "strict" {
             if uni != uni_rev {
-                failures.push(format!("{name}: union not deterministic across operand order"));
+                failures.push(format!(
+                    "{name}: union not deterministic across operand order"
+                ));
             }
             if inter != inter_rev {
-                failures.push(format!("{name}: intersection not deterministic across operand order"));
+                failures.push(format!(
+                    "{name}: intersection not deterministic across operand order"
+                ));
             }
             if xor != xor_rev {
-                failures.push(format!("{name}: symdiff not deterministic across operand order"));
+                failures.push(format!(
+                    "{name}: symdiff not deterministic across operand order"
+                ));
             }
         } else {
             if (area_sum(&uni) - area_sum(&uni_rev)).abs() > tol {
-                failures.push(format!("{name}: relaxed union area mismatch across operand order"));
+                failures.push(format!(
+                    "{name}: relaxed union area mismatch across operand order"
+                ));
             }
             if (area_sum(&inter) - area_sum(&inter_rev)).abs() > tol {
-                failures.push(format!("{name}: relaxed intersection area mismatch across operand order"));
+                failures.push(format!(
+                    "{name}: relaxed intersection area mismatch across operand order"
+                ));
             }
             if (area_sum(&xor) - area_sum(&xor_rev)).abs() > tol {
-                failures.push(format!("{name}: relaxed symdiff area mismatch across operand order"));
+                failures.push(format!(
+                    "{name}: relaxed symdiff area mismatch across operand order"
+                ));
             }
         }
     }

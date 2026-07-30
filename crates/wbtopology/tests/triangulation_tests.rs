@@ -1,13 +1,7 @@
 use wbtopology::{
-    delaunay_triangulation_fast,
-    delaunay_triangulation,
-    delaunay_triangulation_with_constraints,
-    delaunay_triangulation_with_options,
-    delaunay_triangulation_with_options_checked,
-    delaunay_triangulation_with_precision,
-    Coord,
-    PrecisionModel,
-    TriangulationOptions,
+    delaunay_triangulation, delaunay_triangulation_fast, delaunay_triangulation_with_constraints,
+    delaunay_triangulation_with_options, delaunay_triangulation_with_options_checked,
+    delaunay_triangulation_with_precision, Coord, PrecisionModel, TriangulationOptions,
 };
 
 fn tri_area2(a: Coord, b: Coord, c: Coord) -> f64 {
@@ -23,8 +17,7 @@ fn point_in_circumcircle(p: Coord, a: Coord, b: Coord, c: Coord) -> bool {
     let cx = c.x - p.x;
     let cy = c.y - p.y;
 
-    let det = (ax * ax + ay * ay) * (bx * cy - by * cx)
-        - (bx * bx + by * by) * (ax * cy - ay * cx)
+    let det = (ax * ax + ay * ay) * (bx * cy - by * cx) - (bx * bx + by * by) * (ax * cy - ay * cx)
         + (cx * cx + cy * cy) * (ax * by - ay * bx);
 
     det > 1.0e-9

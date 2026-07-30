@@ -51,7 +51,10 @@ fn noding_splits_two_crossing_segments() {
 
 #[test]
 fn noding_preserves_non_intersecting_line() {
-    let lines = vec![LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(5.0, 0.0)])];
+    let lines = vec![LineString::new(vec![
+        Coord::xy(0.0, 0.0),
+        Coord::xy(5.0, 0.0),
+    ])];
     let out = node_linestrings(&lines, 1.0e-9);
     assert_eq!(out.len(), 1);
     assert_coord_close(out[0].coords[0], Coord::xy(0.0, 0.0), 1.0e-9);
@@ -127,8 +130,14 @@ fn noding_splits_large_coordinate_crossing_segments() {
     let base = 1.0e12;
     let span = 1.0e6;
     let lines = vec![
-        LineString::new(vec![Coord::xy(base, base), Coord::xy(base + span, base + span)]),
-        LineString::new(vec![Coord::xy(base, base + span), Coord::xy(base + span, base)]),
+        LineString::new(vec![
+            Coord::xy(base, base),
+            Coord::xy(base + span, base + span),
+        ]),
+        LineString::new(vec![
+            Coord::xy(base, base + span),
+            Coord::xy(base + span, base),
+        ]),
     ];
 
     let out = node_linestrings(&lines, 1.0e-9);
@@ -145,10 +154,7 @@ fn noding_splits_large_coordinate_crossing_segments() {
 #[test]
 fn noding_intersection_points_interpolate_z_per_segment() {
     let lines = vec![
-        LineString::new(vec![
-            Coord::xyz(0.0, 5.0, 0.0),
-            Coord::xyz(10.0, 5.0, 10.0),
-        ]),
+        LineString::new(vec![Coord::xyz(0.0, 5.0, 0.0), Coord::xyz(10.0, 5.0, 10.0)]),
         LineString::new(vec![
             Coord::xyz(5.0, 0.0, 100.0),
             Coord::xyz(5.0, 10.0, 200.0),

@@ -1,27 +1,9 @@
 use wbtopology::{
-    buffer_linestring,
-    buffer_linestring_with_precision,
-    buffer_point,
-    buffer_point_with_precision,
-    buffer_polygon,
-    buffer_polygon_multi,
-    buffer_polygon_with_precision,
-    contains,
-    is_valid_polygon,
-    make_valid_polygon,
-    offset_linestring,
-    polygonize_closed_linestrings,
-    BufferCapStyle,
-    BufferJoinStyle,
-    BufferOptions,
-    Coord,
-    Geometry,
-    LineString,
-    LinearRing,
-    OffsetCurveOptions,
-    OffsetSide,
-    PrecisionModel,
-    Polygon,
+    buffer_linestring, buffer_linestring_with_precision, buffer_point, buffer_point_with_precision,
+    buffer_polygon, buffer_polygon_multi, buffer_polygon_with_precision, contains,
+    is_valid_polygon, make_valid_polygon, offset_linestring, polygonize_closed_linestrings,
+    BufferCapStyle, BufferJoinStyle, BufferOptions, Coord, Geometry, LineString, LinearRing,
+    OffsetCurveOptions, OffsetSide, Polygon, PrecisionModel,
 };
 
 fn ring_area_abs(coords: &[Coord]) -> f64 {
@@ -190,7 +172,9 @@ fn polygon_buffer_zero_distance_preserves_simple_polygon() {
     let gpoly = Geometry::Polygon(buf.clone());
 
     assert!(contains(&gpoly, &Geometry::Point(Coord::xy(2.0, 2.0))));
-    assert!((ring_area_abs(&buf.exterior.coords) - ring_area_abs(&src.exterior.coords)).abs() < 1.0e-9);
+    assert!(
+        (ring_area_abs(&buf.exterior.coords) - ring_area_abs(&src.exterior.coords)).abs() < 1.0e-9
+    );
 }
 
 #[test]
@@ -232,7 +216,10 @@ fn make_valid_polygon_splits_triple_crossing_ring() {
     );
 
     let out = make_valid_polygon(&star, 1.0e-9);
-    assert!(!out.is_empty(), "expected at least one valid polygon from split");
+    assert!(
+        !out.is_empty(),
+        "expected at least one valid polygon from split"
+    );
 }
 
 #[test]
@@ -313,7 +300,11 @@ fn closed_linestring_buffer_preserves_interior_hole() {
     let gpoly = Geometry::Polygon(buf.clone());
 
     assert!(is_valid_polygon(&buf));
-    assert_eq!(buf.holes.len(), 1, "closed loop line buffer should retain one interior hole");
+    assert_eq!(
+        buf.holes.len(),
+        1,
+        "closed loop line buffer should retain one interior hole"
+    );
     assert!(
         !contains(&gpoly, &Geometry::Point(Coord::xy(5.0, 3.0))),
         "centre of buffered loop should remain outside due to interior hole"
@@ -346,7 +337,11 @@ fn near_closed_linestring_buffer_preserves_interior_hole() {
     let gpoly = Geometry::Polygon(buf.clone());
 
     assert!(is_valid_polygon(&buf));
-    assert_eq!(buf.holes.len(), 1, "near-closed loop line buffer should retain one interior hole");
+    assert_eq!(
+        buf.holes.len(),
+        1,
+        "near-closed loop line buffer should retain one interior hole"
+    );
     assert!(
         !contains(&gpoly, &Geometry::Point(Coord::xy(5.0, 3.0))),
         "centre of near-closed buffered loop should remain outside due to interior hole"
@@ -678,12 +673,8 @@ fn linestring_buffer_mitre_limit_clamps_spike_extent() {
 fn precision_aware_buffer_snaps_output_grid() {
     let pm = PrecisionModel::Fixed { scale: 10.0 }; // 0.1 grid
 
-    let point_buf = buffer_point_with_precision(
-        Coord::xy(0.03, 0.07),
-        1.0,
-        BufferOptions::default(),
-        pm,
-    );
+    let point_buf =
+        buffer_point_with_precision(Coord::xy(0.03, 0.07), 1.0, BufferOptions::default(), pm);
 
     for c in &point_buf.exterior.coords {
         let sx = c.x * 10.0;
@@ -812,17 +803,17 @@ fn buffer_polygon_multi_returns_components_for_deeply_eroded_h_shape() {
     //
     // Outer box 30x20.
     let outer = LinearRing::new(vec![
-        Coord::xy(0.0,  0.0),
+        Coord::xy(0.0, 0.0),
         Coord::xy(30.0, 0.0),
         Coord::xy(30.0, 20.0),
-        Coord::xy(0.0,  20.0),
+        Coord::xy(0.0, 20.0),
     ]);
     // Left notch hole removes columns 0-13, rows 6-14 (8-unit-wide slot).
     let left_notch = LinearRing::new(vec![
-        Coord::xy(0.0,  6.0),
+        Coord::xy(0.0, 6.0),
         Coord::xy(13.0, 6.0),
         Coord::xy(13.0, 14.0),
-        Coord::xy(0.0,  14.0),
+        Coord::xy(0.0, 14.0),
     ]);
     // Right notch hole removes columns 17-30, rows 6-14.
     let right_notch = LinearRing::new(vec![
@@ -859,11 +850,11 @@ fn buffer_problem_building_cw_ring() {
         Coord::xy(562654.188202102, 4818648.86993476),
         Coord::xy(562653.642237858, 4818639.80165489),
         Coord::xy(562650.180841506, 4818640.01375644),
-        Coord::xy(562649.83002479,  4818634.29045826),
+        Coord::xy(562649.83002479, 4818634.29045826),
         Coord::xy(562638.621044375, 4818634.96351884),
         Coord::xy(562638.991254563, 4818641.20901904),
         Coord::xy(562637.131244156, 4818641.31386885),
-        Coord::xy(562637.537417164, 4818648.0372987),  // closing vertex
+        Coord::xy(562637.537417164, 4818648.0372987), // closing vertex
     ];
     let poly = Polygon::new(LinearRing::new(coords), vec![]);
     let distance = 5.0;
@@ -876,7 +867,12 @@ fn buffer_problem_building_cw_ring() {
 
     // The result must be a single polygon (one component).
     let result = buffer_polygon_multi(&poly, distance, options);
-    assert_eq!(result.len(), 1, "Expected 1 buffer component, got {}", result.len());
+    assert_eq!(
+        result.len(),
+        1,
+        "Expected 1 buffer component, got {}",
+        result.len()
+    );
 
     let buf = &result[0];
     // The buffer must be valid.
@@ -884,18 +880,58 @@ fn buffer_problem_building_cw_ring() {
 
     // The buffer must extend to roughly distance=5 on all sides of the input bbox.
     // Input bbox: x=[562637.131, 562654.188], y=[4818634.290, 4818649.428]
-    let min_x = buf.exterior.coords.iter().map(|c| c.x).fold(f64::INFINITY, f64::min);
-    let max_x = buf.exterior.coords.iter().map(|c| c.x).fold(f64::NEG_INFINITY, f64::max);
-    let min_y = buf.exterior.coords.iter().map(|c| c.y).fold(f64::INFINITY, f64::min);
-    let max_y = buf.exterior.coords.iter().map(|c| c.y).fold(f64::NEG_INFINITY, f64::max);
+    let min_x = buf
+        .exterior
+        .coords
+        .iter()
+        .map(|c| c.x)
+        .fold(f64::INFINITY, f64::min);
+    let max_x = buf
+        .exterior
+        .coords
+        .iter()
+        .map(|c| c.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = buf
+        .exterior
+        .coords
+        .iter()
+        .map(|c| c.y)
+        .fold(f64::INFINITY, f64::min);
+    let max_y = buf
+        .exterior
+        .coords
+        .iter()
+        .map(|c| c.y)
+        .fold(f64::NEG_INFINITY, f64::max);
 
     // Should extend at least 4m outward on every side (allow minor rounding).
-    assert!(min_x < 562637.131 - 4.0, "Buffer too narrow on left: min_x={}", min_x);
-    assert!(max_x > 562654.188 + 4.0, "Buffer too narrow on right: max_x={}", max_x);
-    assert!(min_y < 4818634.290 - 4.0, "Buffer too narrow on bottom: min_y={}", min_y);
-    assert!(max_y > 4818649.428 + 4.0, "Buffer too narrow on top: max_y={}", max_y);
+    assert!(
+        min_x < 562637.131 - 4.0,
+        "Buffer too narrow on left: min_x={}",
+        min_x
+    );
+    assert!(
+        max_x > 562654.188 + 4.0,
+        "Buffer too narrow on right: max_x={}",
+        max_x
+    );
+    assert!(
+        min_y < 4818634.290 - 4.0,
+        "Buffer too narrow on bottom: min_y={}",
+        min_y
+    );
+    assert!(
+        max_y > 4818649.428 + 4.0,
+        "Buffer too narrow on top: max_y={}",
+        max_y
+    );
     let buf_area = ring_area_abs(&buf.exterior.coords);
-    assert!(buf_area > 400.0, "Buffer area {} too small (source ~201 m²)", buf_area);
+    assert!(
+        buf_area > 400.0,
+        "Buffer area {} too small (source ~201 m²)",
+        buf_area
+    );
 }
 
 // ── offset_linestring tests ─────────────────────────────────────────────────
@@ -906,9 +942,17 @@ fn offset_linestring_left_horizontal() {
     let ls = LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)]);
     let opts = OffsetCurveOptions::default();
     let result = offset_linestring(&ls, 3.0, OffsetSide::Left, opts);
-    assert_eq!(result.coords.len(), 2, "Expected 2 coords for simple horizontal line");
+    assert_eq!(
+        result.coords.len(),
+        2,
+        "Expected 2 coords for simple horizontal line"
+    );
     for c in &result.coords {
-        assert!((c.y - 3.0).abs() < 1.0e-9, "Left offset of horizontal line should have y≈3, got {}", c.y);
+        assert!(
+            (c.y - 3.0).abs() < 1.0e-9,
+            "Left offset of horizontal line should have y≈3, got {}",
+            c.y
+        );
     }
     assert!((result.coords[0].x - 0.0).abs() < 1.0e-9);
     assert!((result.coords[1].x - 10.0).abs() < 1.0e-9);
@@ -922,7 +966,11 @@ fn offset_linestring_right_horizontal() {
     let result = offset_linestring(&ls, 3.0, OffsetSide::Right, opts);
     assert_eq!(result.coords.len(), 2);
     for c in &result.coords {
-        assert!((c.y - (-3.0)).abs() < 1.0e-9, "Right offset should have y≈-3, got {}", c.y);
+        assert!(
+            (c.y - (-3.0)).abs() < 1.0e-9,
+            "Right offset should have y≈-3, got {}",
+            c.y
+        );
     }
 }
 
@@ -935,11 +983,17 @@ fn offset_linestring_returns_open_not_closed() {
         Coord::xy(10.0, 10.0),
     ]);
     let result = offset_linestring(&ls, 2.0, OffsetSide::Left, OffsetCurveOptions::default());
-    assert!(result.coords.len() >= 2, "Result should have at least 2 coords");
+    assert!(
+        result.coords.len() >= 2,
+        "Result should have at least 2 coords"
+    );
     let first = result.coords.first().unwrap();
-    let last  = result.coords.last().unwrap();
+    let last = result.coords.last().unwrap();
     let dist2 = (first.x - last.x).powi(2) + (first.y - last.y).powi(2);
-    assert!(dist2 > 1.0e-6, "Offset linestring should be open (first ≠ last)");
+    assert!(
+        dist2 > 1.0e-6,
+        "Offset linestring should be open (first ≠ last)"
+    );
 }
 
 #[test]
@@ -949,7 +1003,11 @@ fn offset_linestring_preserves_direction() {
     let result = offset_linestring(&ls, 2.0, OffsetSide::Left, OffsetCurveOptions::default());
     assert_eq!(result.coords.len(), 2);
     for c in &result.coords {
-        assert!(c.x < -1.9, "Left of north-going line should be west (x < 0), got {}", c.x);
+        assert!(
+            c.x < -1.9,
+            "Left of north-going line should be west (x < 0), got {}",
+            c.x
+        );
     }
 }
 
@@ -960,7 +1018,11 @@ fn offset_linestring_right_preserves_direction() {
     let result = offset_linestring(&ls, 2.0, OffsetSide::Right, OffsetCurveOptions::default());
     assert_eq!(result.coords.len(), 2);
     for c in &result.coords {
-        assert!(c.x > 1.9, "Right of north-going line should be east (x > 0), got {}", c.x);
+        assert!(
+            c.x > 1.9,
+            "Right of north-going line should be east (x > 0), got {}",
+            c.x
+        );
     }
 }
 
@@ -978,7 +1040,12 @@ fn offset_linestring_mitre_join_style() {
     };
     let result = offset_linestring(&ls, 2.0, OffsetSide::Left, opts);
     // 3 input points → 3 output points with Mitre (no arc insertion).
-    assert_eq!(result.coords.len(), 3, "Mitre join should produce 3 coords, got {}", result.coords.len());
+    assert_eq!(
+        result.coords.len(),
+        3,
+        "Mitre join should produce 3 coords, got {}",
+        result.coords.len()
+    );
 }
 
 #[test]
@@ -995,28 +1062,41 @@ fn offset_linestring_round_join_adds_arc_vertices() {
         ..Default::default()
     };
     let result = offset_linestring(&ls, 2.0, OffsetSide::Left, opts);
-    assert!(result.coords.len() > 3, "Round join should insert arc vertices (got {})", result.coords.len());
+    assert!(
+        result.coords.len() > 3,
+        "Round join should insert arc vertices (got {})",
+        result.coords.len()
+    );
 }
 
 #[test]
 fn offset_linestring_zero_distance_returns_empty() {
     let ls = LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)]);
     let result = offset_linestring(&ls, 0.0, OffsetSide::Left, OffsetCurveOptions::default());
-    assert!(result.coords.is_empty(), "Zero distance should return empty linestring");
+    assert!(
+        result.coords.is_empty(),
+        "Zero distance should return empty linestring"
+    );
 }
 
 #[test]
 fn offset_linestring_negative_distance_returns_empty() {
     let ls = LineString::new(vec![Coord::xy(0.0, 0.0), Coord::xy(10.0, 0.0)]);
     let result = offset_linestring(&ls, -1.0, OffsetSide::Left, OffsetCurveOptions::default());
-    assert!(result.coords.is_empty(), "Negative distance should return empty linestring");
+    assert!(
+        result.coords.is_empty(),
+        "Negative distance should return empty linestring"
+    );
 }
 
 #[test]
 fn offset_linestring_single_point_returns_empty() {
     let ls = LineString::new(vec![Coord::xy(5.0, 5.0)]);
     let result = offset_linestring(&ls, 1.0, OffsetSide::Left, OffsetCurveOptions::default());
-    assert!(result.coords.is_empty(), "Single-point input should return empty linestring");
+    assert!(
+        result.coords.is_empty(),
+        "Single-point input should return empty linestring"
+    );
 }
 
 #[test]
@@ -1034,7 +1114,12 @@ fn offset_linestring_multipoint_preserves_vertex_count_mitre() {
         ..Default::default()
     };
     let result = offset_linestring(&ls, 2.0, OffsetSide::Left, opts);
-    assert_eq!(result.coords.len(), 5, "5-point path with Mitre should have 5 output coords, got {}", result.coords.len());
+    assert_eq!(
+        result.coords.len(),
+        5,
+        "5-point path with Mitre should have 5 output coords, got {}",
+        result.coords.len()
+    );
 }
 
 #[test]
@@ -1046,12 +1131,29 @@ fn offset_linestring_left_right_symmetric_about_centreline() {
         Coord::xy(10.0, 0.0),
         Coord::xy(20.0, 0.0),
     ]);
-    let opts = OffsetCurveOptions { join_style: BufferJoinStyle::Mitre, ..Default::default() };
-    let left  = offset_linestring(&ls, 3.0, OffsetSide::Left,  opts);
+    let opts = OffsetCurveOptions {
+        join_style: BufferJoinStyle::Mitre,
+        ..Default::default()
+    };
+    let left = offset_linestring(&ls, 3.0, OffsetSide::Left, opts);
     let right = offset_linestring(&ls, 3.0, OffsetSide::Right, opts);
-    assert_eq!(left.coords.len(), right.coords.len(), "Left and right should have same vertex count");
+    assert_eq!(
+        left.coords.len(),
+        right.coords.len(),
+        "Left and right should have same vertex count"
+    );
     for (l, r) in left.coords.iter().zip(right.coords.iter()) {
-        assert!((l.x - r.x).abs() < 1.0e-9, "x-coords should match: {} vs {}", l.x, r.x);
-        assert!((l.y + r.y).abs() < 1.0e-9, "left.y + right.y should be 0: {} + {}", l.y, r.y);
+        assert!(
+            (l.x - r.x).abs() < 1.0e-9,
+            "x-coords should match: {} vs {}",
+            l.x,
+            r.x
+        );
+        assert!(
+            (l.y + r.y).abs() < 1.0e-9,
+            "left.y + right.y should be 0: {} + {}",
+            l.y,
+            r.y
+        );
     }
 }

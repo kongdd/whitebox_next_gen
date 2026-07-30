@@ -1,21 +1,8 @@
 use wbtopology::{
-    buffer_polygon_multi,
-    polygon_difference,
-    polygon_difference_faces,
-    polygon_intersection,
-    polygon_intersection_with_precision,
-    polygon_intersection_faces,
-    polygon_overlay_all,
-    polygon_sym_diff,
-    polygon_sym_diff_faces,
-    polygon_unary_dissolve,
-    polygon_union,
-    polygon_union_faces,
-    BufferOptions,
-    Coord,
-    LinearRing,
-    Polygon,
-    PrecisionModel,
+    buffer_polygon_multi, polygon_difference, polygon_difference_faces, polygon_intersection,
+    polygon_intersection_faces, polygon_intersection_with_precision, polygon_overlay_all,
+    polygon_sym_diff, polygon_sym_diff_faces, polygon_unary_dissolve, polygon_union,
+    polygon_union_faces, BufferOptions, Coord, LinearRing, Polygon, PrecisionModel,
 };
 
 fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Polygon {
@@ -51,10 +38,30 @@ fn area_sum(polys: &[Polygon]) -> f64 {
 }
 
 fn bbox(poly: &Polygon) -> (f64, f64, f64, f64) {
-    let min_x = poly.exterior.coords.iter().map(|c| c.x).fold(f64::INFINITY, f64::min);
-    let max_x = poly.exterior.coords.iter().map(|c| c.x).fold(f64::NEG_INFINITY, f64::max);
-    let min_y = poly.exterior.coords.iter().map(|c| c.y).fold(f64::INFINITY, f64::min);
-    let max_y = poly.exterior.coords.iter().map(|c| c.y).fold(f64::NEG_INFINITY, f64::max);
+    let min_x = poly
+        .exterior
+        .coords
+        .iter()
+        .map(|c| c.x)
+        .fold(f64::INFINITY, f64::min);
+    let max_x = poly
+        .exterior
+        .coords
+        .iter()
+        .map(|c| c.x)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let min_y = poly
+        .exterior
+        .coords
+        .iter()
+        .map(|c| c.y)
+        .fold(f64::INFINITY, f64::min);
+    let max_y = poly
+        .exterior
+        .coords
+        .iter()
+        .map(|c| c.y)
+        .fold(f64::NEG_INFINITY, f64::max);
     (min_x, min_y, max_x, max_y)
 }
 
@@ -681,7 +688,6 @@ fn overlay_hole_boundary_touch_invariants() {
     let area_a = poly_area(&a);
     let area_b = poly_area(&b);
 
-
     assert!(i >= -1.0e-12);
     assert!(u >= -1.0e-12);
     assert!(d >= -1.0e-12);
@@ -840,7 +846,6 @@ fn overlay_all_matches_individual_ops() {
     let area_a = poly_area(&a);
     let area_b = poly_area(&b);
     let d_ba = area_sum(&polygon_difference(&b, &a, eps));
-
 
     assert!((u - (i + x)).abs() <= tol);
     assert!((u - (area_a + area_b - i)).abs() <= tol);
