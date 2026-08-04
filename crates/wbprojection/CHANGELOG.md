@@ -6,7 +6,36 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 
 ## [Unreleased]
 
-## [0.3.2] - 2026-07-30
+## [0.3.3] - 2026-08-04
+
+### Fixed
+- **Polar Stereographic accuracy: 14 EPSG codes were routed through the generic
+  `Stereographic` implementation instead of the dedicated ellipsoidal
+  `PolarStereographic` implementation.** The generic implementation lacks the
+  ellipsoid-flattening correction required for accurate polar projections,
+  producing coordinate errors up to ~11 km at high latitudes. All 14 affected
+  codes now use `ProjectionKind::PolarStereographic { north, lat_ts }` with
+  correct hemisphere and standard-parallel parameters:
+  EPSG:3031, 3032, 3413, 3976, 3995, 3996, 5482, 5936, 5937, 5938, 5939, 5940,
+  32661, 32761.
+- **EPSG:3995 datum was incorrectly set to `SOUTH_EAST_ISLAND_1943`** (a
+  copy-paste error); corrected to `WGS84`.
+- **Variant B codes (3032, 3976, 3996) were computing scale factor via a local
+  `polar_stereographic_variant_b_scale()` helper and passing it as an explicit
+  parameter.** The `PolarStereographic` implementation derives scale from
+  `lat_ts` internally; passing a pre-computed scale alongside `lat_ts` would
+  have double-applied it. The helper is removed; scale is now set to `1.0` for
+  all Variant B codes.
+- **WKT strings for Variant A codes (5482, 5936–5940) used `PROJECTION["Stereographic"]`**
+  (ESRI WKT1 lossy output) instead of the correct
+  `PROJECTION["Polar_Stereographic_Variant_A"]`. Corrected in
+  `epsg_generated_wkt.rs`.
+- Added regression tests: `polar_stereographic_epsg_definitions_preserve_variants`
+  (asserts correct `PolarStereographic` kind, hemisphere, and `lat_ts` for all
+  14 codes), `generated_polar_variant_a_wkt_preserves_method` (asserts WKT
+  method string), and `polar_stereographic_epsg_forward_matches_proj` (compares
+  forward projections against PROJ 9.8.1 reference coordinates at 1 cm
+  tolerance for all 14 codes). Fix contributed by mentaljam.
 
 ### Changed
 - **`parallel` is now on by default.** The `parallel` feature is included in the crate's `default`

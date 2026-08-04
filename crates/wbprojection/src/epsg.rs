@@ -10761,7 +10761,10 @@ fn build_crs(code: u32) -> Result<Crs> {
             name: "WGS 84 / UPS North (N,E) (EPSG:32661)".into(),
             datum: Datum::WGS84,
             projection: crate::projections::Projection::new(
-                ProjectionParams::new(ProjectionKind::Stereographic)
+                ProjectionParams::new(ProjectionKind::PolarStereographic {
+                    north: true,
+                    lat_ts: None,
+                })
                     .with_lat0(90.0)
                     .with_lon0(0.0)
                     .with_scale(0.994)
@@ -10775,7 +10778,10 @@ fn build_crs(code: u32) -> Result<Crs> {
             name: "WGS 84 / UPS South (N,E) (EPSG:32761)".into(),
             datum: Datum::WGS84,
             projection: crate::projections::Projection::new(
-                ProjectionParams::new(ProjectionKind::Stereographic)
+                ProjectionParams::new(ProjectionKind::PolarStereographic {
+                    north: false,
+                    lat_ts: None,
+                })
                     .with_lat0(-90.0)
                     .with_lon0(0.0)
                     .with_scale(0.994)
@@ -10861,7 +10867,10 @@ fn build_crs(code: u32) -> Result<Crs> {
             name: "WGS 84 / Antarctic Polar Stereographic (EPSG:3031)".into(),
             datum: Datum::WGS84,
             projection: crate::projections::Projection::new(
-                ProjectionParams::new(ProjectionKind::Stereographic)
+                ProjectionParams::new(ProjectionKind::PolarStereographic {
+                    north: false,
+                    lat_ts: Some(-71.0),
+                })
                     .with_lat0(-90.0)
                     .with_lon0(0.0)
                     .with_scale(1.0)
@@ -10875,13 +10884,13 @@ fn build_crs(code: u32) -> Result<Crs> {
             name: "WGS 84 / Australian Antarctic Polar Stereographic (EPSG:3032)".into(),
             datum: Datum::WGS84,
             projection: crate::projections::Projection::new(
-                ProjectionParams::new(ProjectionKind::Stereographic)
+                ProjectionParams::new(ProjectionKind::PolarStereographic {
+                    north: false,
+                    lat_ts: Some(-71.0),
+                })
                     .with_lat0(-90.0)
                     .with_lon0(70.0)
-                    .with_scale(polar_stereographic_variant_b_scale(
-                        -71.0,
-                        &Ellipsoid::WGS84,
-                    ))
+                    .with_scale(1.0)
                     .with_false_easting(6_000_000.0)
                     .with_false_northing(6_000_000.0)
                     .with_ellipsoid(Ellipsoid::WGS84),
@@ -10892,7 +10901,10 @@ fn build_crs(code: u32) -> Result<Crs> {
             name: "WGS 84 / NSIDC Sea Ice Polar Stereographic North (EPSG:3413)".into(),
             datum: Datum::WGS84,
             projection: crate::projections::Projection::new(
-                ProjectionParams::new(ProjectionKind::Stereographic)
+                ProjectionParams::new(ProjectionKind::PolarStereographic {
+                    north: true,
+                    lat_ts: Some(70.0),
+                })
                     .with_lat0(90.0)
                     .with_lon0(-45.0)
                     .with_scale(1.0)
@@ -10906,13 +10918,13 @@ fn build_crs(code: u32) -> Result<Crs> {
             name: "WGS 84 / NSIDC Sea Ice Polar Stereographic South (EPSG:3976)".into(),
             datum: Datum::WGS84,
             projection: crate::projections::Projection::new(
-                ProjectionParams::new(ProjectionKind::Stereographic)
+                ProjectionParams::new(ProjectionKind::PolarStereographic {
+                    north: false,
+                    lat_ts: Some(-70.0),
+                })
                     .with_lat0(-90.0)
                     .with_lon0(0.0)
-                    .with_scale(polar_stereographic_variant_b_scale(
-                        -70.0,
-                        &Ellipsoid::WGS84,
-                    ))
+                    .with_scale(1.0)
                     .with_false_easting(0.0)
                     .with_false_northing(0.0)
                     .with_ellipsoid(Ellipsoid::WGS84),
@@ -10921,9 +10933,12 @@ fn build_crs(code: u32) -> Result<Crs> {
 
         3995 => Ok(Crs {
             name: "WGS 84 / Arctic Polar Stereographic (EPSG:3995)".into(),
-            datum: Datum::SOUTH_EAST_ISLAND_1943,
+            datum: Datum::WGS84,
             projection: crate::projections::Projection::new(
-                ProjectionParams::new(ProjectionKind::Stereographic)
+                ProjectionParams::new(ProjectionKind::PolarStereographic {
+                    north: true,
+                    lat_ts: Some(71.0),
+                })
                     .with_lat0(90.0)
                     .with_lon0(0.0)
                     .with_scale(1.0)
@@ -10937,10 +10952,13 @@ fn build_crs(code: u32) -> Result<Crs> {
             name: "WGS 84 / IBCAO Polar Stereographic (EPSG:3996)".into(),
             datum: Datum::WGS84,
             projection: crate::projections::Projection::new(
-                ProjectionParams::new(ProjectionKind::Stereographic)
+                ProjectionParams::new(ProjectionKind::PolarStereographic {
+                    north: true,
+                    lat_ts: Some(75.0),
+                })
                     .with_lat0(90.0)
                     .with_lon0(0.0)
-                    .with_scale(polar_stereographic_variant_b_scale(75.0, &Ellipsoid::WGS84))
+                    .with_scale(1.0)
                     .with_false_easting(0.0)
                     .with_false_northing(0.0)
                     .with_ellipsoid(Ellipsoid::WGS84),
@@ -22417,17 +22435,6 @@ fn psad56_utm_crs(code: u32, zone: u8, south: bool) -> Result<Crs> {
             ProjectionParams::utm(zone, south).with_ellipsoid(datum.ellipsoid.clone()),
         )?,
     })
-}
-
-fn polar_stereographic_variant_b_scale(lat_ts_deg: f64, ellipsoid: &Ellipsoid) -> f64 {
-    let phi = lat_ts_deg.abs().to_radians();
-    let sin_phi = phi.sin();
-    let e = ellipsoid.e;
-    let m = phi.cos() / (1.0 - ellipsoid.e2 * sin_phi * sin_phi).sqrt();
-    let t = (std::f64::consts::FRAC_PI_4 - 0.5 * phi).tan()
-        / ((1.0 - e * sin_phi) / (1.0 + e * sin_phi)).powf(e / 2.0);
-    let c = ((1.0 + e).powf(1.0 + e) * (1.0 - e).powf(1.0 - e)).sqrt();
-    m * c / (2.0 * t)
 }
 
 fn mercator_variant_b_scale(lat_ts_deg: f64, ellipsoid: &Ellipsoid) -> f64 {

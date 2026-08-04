@@ -4841,3 +4841,73 @@ fn known_epsg_codes_have_wkt() {
         assert!(to_ogc_wkt(code).is_ok(), "OGC WKT failed for EPSG:{code}");
     }
 }
+
+#[test]
+fn polar_stereographic_epsg_definitions_preserve_variants() {
+    let cases = [
+        (3031_u32, false, Some(-71.0_f64)),
+        (3032,     false, Some(-71.0)),
+        (3413,     true,  Some(70.0)),
+        (3976,     false, Some(-70.0)),
+        (3995,     true,  Some(71.0)),
+        (3996,     true,  Some(75.0)),
+        (5482,     false, None),
+        (5936,     true,  None),
+        (5937,     true,  None),
+        (5938,     true,  None),
+        (5939,     true,  None),
+        (5940,     true,  None),
+        (32661,    true,  None),
+        (32761,    false, None),
+    ];
+
+    for (code, expected_north, expected_lat_ts) in cases {
+        let crs = Crs::from_epsg(code).unwrap();
+        let crate::ProjectionKind::PolarStereographic { north, lat_ts } =
+            &crs.projection.params().kind
+        else {
+            panic!("EPSG:{code} should use PolarStereographic");
+        };
+        assert_eq!(*north, expected_north, "EPSG:{code} hemisphere");
+        assert_eq!(*lat_ts, expected_lat_ts, "EPSG:{code} variant");
+    }
+}
+
+#[test]
+fn generated_polar_variant_a_wkt_preserves_method() {
+    for code in [5482_u32, 5936, 5937, 5938, 5939, 5940] {
+        let wkt = crate::canonical_wkt_for_epsg(code).unwrap();
+        assert!(
+            wkt.contains("PROJECTION[\"Polar_Stereographic_Variant_A\"]"),
+            "EPSG:{code} lost its polar stereographic method: {wkt}"
+        );
+    }
+}
+
+#[test]
+fn polar_stereographic_epsg_forward_matches_proj() {
+    // Reference coordinates generated with PROJ 9.8.1 and normalized to the
+    // conventional easting/northing order used by `Crs::forward`.
+    let cases = [
+        (3031_u32,  10.0_f64, -75.0_f64,  284_571.723,  1_613_886.439),
+        (3032,      80.0,     -75.0,     6_284_571.723,  7_613_886.439),
+        (3413,     -30.0,      75.0,       422_879.131, -1_578_206.404),
+        (3976,      10.0,     -75.0,       283_720.197,  1_609_057.197),
+        (3995,      10.0,      75.0,       284_571.723, -1_613_886.439),
+        (3996,      10.0,      75.0,       287_554.949, -1_630_805.154),
+        (5482,     170.0,     -80.0,     4_806_738.063,  2_096_042.908),
+        (5936,    -140.0,      75.0,     2_290_782.590,    350_889.986),
+        (5937,     -90.0,      75.0,     2_290_782.590,    350_889.986),
+        (5938,     -20.0,      75.0,     2_376_691.832,    368_368.419),
+        (5939,      30.0,      75.0,     2_348_158.562,    362_042.746),
+        (5940,     110.0,      75.0,     2_145_946.666,    331_821.975),
+        (32661,     10.0,      75.0,     2_290_782.590,    350_889.986),
+        (32761,     10.0,     -75.0,     2_290_782.590,  3_649_110.014),
+    ];
+
+    for (code, lon, lat, expected_x, expected_y) in cases {
+        let (x, y) = Crs::from_epsg(code).unwrap().forward(lon, lat).unwrap();
+        assert!((x - expected_x).abs() < 0.01, "EPSG:{code} x: got {x}, expected {expected_x}");
+        assert!((y - expected_y).abs() < 0.01, "EPSG:{code} y: got {y}, expected {expected_y}");
+    }
+}
