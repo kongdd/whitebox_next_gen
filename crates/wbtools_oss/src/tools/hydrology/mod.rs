@@ -80,9 +80,9 @@ pub fn hydrology_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, To
     match tool_id {
         "breach_depressions_least_cost" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
-            ("max_cost", ToolParamSchema::scalar_float()),
-            ("max_dist", ToolParamSchema::scalar_integer()),
-            ("flat_increment", ToolParamSchema::scalar_float()),
+            ("max_cost", ToolParamSchema::scalar_float_min(0.0)),
+            ("max_dist", ToolParamSchema::scalar_integer_min(1)),
+            ("flat_increment", ToolParamSchema::scalar_float_min(0.0)),
             ("fill_deps", ToolParamSchema::bool()),
             ("minimize_dist", ToolParamSchema::bool()),
             ("output", ToolParamSchema::output_raster()),
@@ -90,10 +90,13 @@ pub fn hydrology_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, To
         "fill_depressions" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
             ("fix_flats", ToolParamSchema::bool()),
-            ("flat_increment", ToolParamSchema::scalar_float()),
+            ("flat_increment", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "flat_resolution",
-                ToolParamSchema::enum_values(&["garbrecht_martz", "natural"]),
+                ToolParamSchema::enum_labeled(&[
+                    ("garbrecht_martz", "Garbrecht & Martz"),
+                    ("natural",         "Natural (minimal elevation increment)"),
+                ]),
             ),
             ("max_depth", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
@@ -152,7 +155,7 @@ pub fn hydrology_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, To
             Some(param_schema_map(&[
                 ("dem", ToolParamSchema::input_raster()),
                 ("fix_flats", ToolParamSchema::bool()),
-                ("flat_increment", ToolParamSchema::scalar_float()),
+                ("flat_increment", ToolParamSchema::scalar_float_min(0.0)),
                 ("output", ToolParamSchema::output_raster()),
             ]))
         }
@@ -199,7 +202,7 @@ pub fn hydrology_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, To
                 "flow_type",
                 ToolParamSchema::enum_values(&["d8", "mfd", "fd8", "dinf"]),
             ),
-            ("z_factor", ToolParamSchema::scalar_float()),
+            ("z_factor", ToolParamSchema::scalar_float_gt(0.0)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "flow_length_diff" => Some(param_schema_map(&[
@@ -298,7 +301,7 @@ pub fn hydrology_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, To
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
             ("dem", ToolParamSchema::input_raster()),
-            ("snap_distance", ToolParamSchema::scalar_float()),
+            ("snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("out_streams", ToolParamSchema::output_raster()),
             ("out_dem", ToolParamSchema::output_raster()),
             ("out_dir", ToolParamSchema::output_raster()),
@@ -308,7 +311,7 @@ pub fn hydrology_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, To
             ("dem", ToolParamSchema::input_raster()),
             ("rmse", ToolParamSchema::scalar_float()),
             ("range", ToolParamSchema::scalar_float()),
-            ("iterations", ToolParamSchema::scalar_integer()),
+            ("iterations", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "unnest_basins" => Some(param_schema_map(&[
@@ -330,9 +333,9 @@ pub fn hydrology_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, To
         ])),
         "hydrologic_connectivity" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
-            ("exponent", ToolParamSchema::scalar_float()),
-            ("convergence_threshold", ToolParamSchema::scalar_float()),
-            ("z_factor", ToolParamSchema::scalar_float()),
+            ("exponent", ToolParamSchema::scalar_float_min(0.0)),
+            ("convergence_threshold", ToolParamSchema::scalar_float_min(0.0)),
+            ("z_factor", ToolParamSchema::scalar_float_gt(0.0)),
             ("output1", ToolParamSchema::output_raster()),
             ("output2", ToolParamSchema::output_raster()),
         ])),

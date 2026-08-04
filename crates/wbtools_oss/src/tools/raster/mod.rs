@@ -95,7 +95,7 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         ])),
         "ks_normality_test" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("num_samples", ToolParamSchema::scalar_integer()),
+            ("num_samples", ToolParamSchema::scalar_integer_min(1)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
@@ -116,7 +116,7 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         ])),
         "random_sample" => Some(param_schema_map(&[
             ("base", ToolParamSchema::input_raster()),
-            ("num_samples", ToolParamSchema::scalar_integer()),
+            ("num_samples", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "attribute_histogram" => Some(param_schema_map(&[
@@ -220,7 +220,7 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         "image_correlation" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             (
                 "output_html_file",
@@ -230,7 +230,7 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         "image_autocorrelation" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("contiguity", ToolParamSchema::string()),
             (
@@ -251,7 +251,7 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         "image_correlation_neighbourhood_analysis" => Some(param_schema_map(&[
             ("input1", ToolParamSchema::input_raster()),
             ("input2", ToolParamSchema::input_raster()),
-            ("filter_size", ToolParamSchema::scalar_integer()),
+            ("filter_size", ToolParamSchema::scalar_odd_integer_min(3)),
             ("correlation_stat", ToolParamSchema::string()),
             ("output1", ToolParamSchema::output_raster()),
             ("output2", ToolParamSchema::output_raster()),
@@ -265,11 +265,11 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         "dbscan" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("scaling_method", ToolParamSchema::string()),
             ("search_distance", ToolParamSchema::scalar_float()),
-            ("min_points", ToolParamSchema::scalar_integer()),
+            ("min_points", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "kappa_index" => Some(param_schema_map(&[
@@ -283,7 +283,7 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         "paired_sample_t_test" => Some(param_schema_map(&[
             ("input1", ToolParamSchema::input_raster()),
             ("input2", ToolParamSchema::input_raster()),
-            ("num_samples", ToolParamSchema::scalar_integer()),
+            ("num_samples", ToolParamSchema::scalar_integer_min(1)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
@@ -292,7 +292,7 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         "two_sample_ks_test" | "wilcoxon_signed_rank_test" => Some(param_schema_map(&[
             ("input1", ToolParamSchema::input_raster()),
             ("input2", ToolParamSchema::input_raster()),
-            ("num_samples", ToolParamSchema::scalar_integer()),
+            ("num_samples", ToolParamSchema::scalar_integer_min(1)),
             (
                 "output_html_file",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
@@ -301,26 +301,26 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         "turning_bands_simulation" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
             ("range", ToolParamSchema::scalar_float()),
-            ("iterations", ToolParamSchema::scalar_integer()),
+            ("iterations", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "trend_surface" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("polynomial_order", ToolParamSchema::scalar_integer()),
+            ("polynomial_order", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "trend_surface_vector_points" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_vector_any()),
-            ("cell_size", ToolParamSchema::scalar_float()),
+            ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
             ("field_name", ToolParamSchema::field("input", None)),
-            ("polynomial_order", ToolParamSchema::scalar_integer()),
+            ("polynomial_order", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "raster_calculator" => Some(param_schema_map(&[
             ("expression", ToolParamSchema::string()),
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             ("auto_reproject_method", ToolParamSchema::string()),
@@ -329,18 +329,18 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         "principal_component_analysis" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             ("auto_reproject_method", ToolParamSchema::string()),
-            ("num_components", ToolParamSchema::scalar_integer()),
+            ("num_components", ToolParamSchema::scalar_integer_min(1)),
             ("standardized", ToolParamSchema::bool()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "inverse_pca" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             ("auto_reproject_method", ToolParamSchema::string()),
@@ -357,11 +357,14 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
                 ("output", ToolParamSchema::output_raster()),
                 ("output_variance", ToolParamSchema::bool()),
                 ("output_intervals", ToolParamSchema::bool()),
-                ("confidence_level", ToolParamSchema::scalar_float()),
-                ("interval_method", ToolParamSchema::enum_values(&["gaussian", "posterior"])),
+                ("confidence_level", ToolParamSchema::scalar_float_open(0.5, 1.0)),
+                ("interval_method", ToolParamSchema::enum_labeled(&[
+                    ("gaussian",  "Gaussian (parametric)"),
+                    ("posterior", "Posterior (simulation-based)"),
+                ])),
                 ("anisotropy", ToolParamSchema::bool()),
-                ("major_azimuth", ToolParamSchema::scalar_float()),
-                ("anisotropy_ratio", ToolParamSchema::scalar_float()),
+                ("major_azimuth", ToolParamSchema::scalar_degrees_180()),
+                ("anisotropy_ratio", ToolParamSchema::scalar_float_half_open_left(0.0, 1.0)),
             ]))
         }
         "spacetime_kriging" => Some(param_schema_map(&[
@@ -386,26 +389,26 @@ pub fn raster_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
                 ("input", ToolParamSchema::input_vector_any()),
                 ("field", ToolParamSchema::field("input", None)),
                 ("weights_mode", ToolParamSchema::enum_values(&["queen", "rook", "k_nearest", "distance_band"])),
-                ("k", ToolParamSchema::scalar_integer()),
+                ("k", ToolParamSchema::scalar_integer_min(1)),
                 ("distance", ToolParamSchema::scalar_float()),
                 ("row_standardize", ToolParamSchema::bool()),
-                ("cell_size", ToolParamSchema::scalar_float()),
+                ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
                 ("output", ToolParamSchema::output_raster()),
             ]))
         }
         "geographically_weighted_regression_raster" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_vector_any()),
             ("response_field", ToolParamSchema::field("input", None)),
-            ("explanatory_rasters", ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster)),
-            ("bandwidth", ToolParamSchema::scalar_float()),
+            ("explanatory_rasters", ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2)),
+            ("bandwidth", ToolParamSchema::scalar_float_min(0.0)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "spatial_lag_regression_raster" | "spatial_error_regression_raster" => {
             Some(param_schema_map(&[
                 ("input", ToolParamSchema::input_vector_any()),
                 ("response_field", ToolParamSchema::field("input", None)),
-                ("explanatory_rasters", ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster)),
-                ("cell_size", ToolParamSchema::scalar_float()),
+                ("explanatory_rasters", ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2)),
+                ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
                 ("output", ToolParamSchema::output_raster()),
             ]))
         }

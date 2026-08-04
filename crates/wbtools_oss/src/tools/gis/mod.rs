@@ -289,7 +289,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 ToolParamSchema::input_vector(ToolVectorGeometry::Polygon),
             ),
             ("dissolve_field", ToolParamSchema::field("input", None)),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -309,7 +309,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "weights_mode",
                 ToolParamSchema::enum_values(&["queen", "rook", "k_nearest", "distance_band"]),
             ),
-            ("k", ToolParamSchema::scalar_integer()),
+            ("k", ToolParamSchema::scalar_integer_min(1)),
             ("distance", ToolParamSchema::scalar_float()),
             ("row_standardize", ToolParamSchema::bool()),
             (
@@ -331,7 +331,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "weights_mode",
                 ToolParamSchema::enum_values(&["queen", "rook", "k_nearest", "distance_band"]),
             ),
-            ("k", ToolParamSchema::scalar_integer()),
+            ("k", ToolParamSchema::scalar_integer_min(1)),
             ("distance", ToolParamSchema::scalar_float()),
             ("row_standardize", ToolParamSchema::bool()),
             (
@@ -342,7 +342,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "island_policy",
                 ToolParamSchema::enum_values(&["drop_with_warning", "keep_zero_weight", "error"]),
             ),
-            ("alpha", ToolParamSchema::scalar_float()),
+            ("alpha", ToolParamSchema::scalar_float_range(0.0, 1.0)),
             (
                 "multiple_testing",
                 ToolParamSchema::enum_values(&["none", "fdr_bh", "bonferroni"]),
@@ -357,7 +357,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "weights_mode",
                 ToolParamSchema::enum_values(&["queen", "rook", "k_nearest", "distance_band"]),
             ),
-            ("k", ToolParamSchema::scalar_integer()),
+            ("k", ToolParamSchema::scalar_integer_min(1)),
             ("distance", ToolParamSchema::scalar_float()),
             ("row_standardize", ToolParamSchema::bool()),
             ("variant", ToolParamSchema::enum_values(&["gi", "gi_star"])),
@@ -369,7 +369,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "island_policy",
                 ToolParamSchema::enum_values(&["drop_with_warning", "keep_zero_weight", "error"]),
             ),
-            ("alpha", ToolParamSchema::scalar_float()),
+            ("alpha", ToolParamSchema::scalar_float_range(0.0, 1.0)),
             (
                 "multiple_testing",
                 ToolParamSchema::enum_values(&["none", "fdr_bh", "bonferroni"]),
@@ -402,7 +402,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ),
             ("rows", ToolParamSchema::scalar_integer()),
             ("cols", ToolParamSchema::scalar_integer()),
-            ("cell_size", ToolParamSchema::scalar_float()),
+            ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "study_area_mode",
                 ToolParamSchema::enum_values(&["hull", "envelope", "polygon_layer"]),
@@ -609,7 +609,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "overlay",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Polygon),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -623,7 +623,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "overlay",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Polygon),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             ("output", ToolParamSchema::output_vector_any()),
         ])),
         "line_intersections" => Some(param_schema_map(&[
@@ -635,7 +635,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "overlay",
                 ToolParamSchema::input_vector(ToolVectorGeometry::LineOrPolygon),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -648,7 +648,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "input",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -665,7 +665,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "split",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -678,7 +678,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "input",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -788,7 +788,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
         ])),
         "concave_hull" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_vector_any()),
-            ("concavity", ToolParamSchema::scalar_float()),
+            ("concavity", ToolParamSchema::scalar_float_gt(0.0)),
             ("max_edge_length", ToolParamSchema::scalar_float()),
             ("epsilon", ToolParamSchema::scalar_float()),
             (
@@ -805,7 +805,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ),
             ("field_name", ToolParamSchema::field("input_points", None)),
             ("use_z", ToolParamSchema::bool()),
-            ("max_triangle_edge_length", ToolParamSchema::scalar_float()),
+            ("max_triangle_edge_length", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -889,7 +889,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "input",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -908,7 +908,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "input",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -925,9 +925,9 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ("start_y", ToolParamSchema::scalar_float()),
             ("end_x", ToolParamSchema::scalar_float()),
             ("end_y", ToolParamSchema::scalar_float()),
-            ("k", ToolParamSchema::scalar_integer()),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
-            ("max_snap_distance", ToolParamSchema::scalar_float()),
+            ("k", ToolParamSchema::scalar_integer_min(1)),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
+            ("max_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("edge_cost_field", ToolParamSchema::field("input", None)),
             ("one_way_field", ToolParamSchema::field("input", None)),
             ("blocked_field", ToolParamSchema::field("input", None)),
@@ -935,13 +935,13 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "barriers",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
-            ("barrier_snap_distance", ToolParamSchema::scalar_float()),
+            ("barrier_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "node_cost_points",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
             ("node_cost_field", ToolParamSchema::field("node_cost_points", None)),
-            ("node_cost_snap_distance", ToolParamSchema::scalar_float()),
+            ("node_cost_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("turn_penalty", ToolParamSchema::scalar_float()),
             ("u_turn_penalty", ToolParamSchema::scalar_float()),
             ("forbid_u_turns", ToolParamSchema::bool()),
@@ -1005,8 +1005,8 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ("facility_capacity_field", ToolParamSchema::field("facilities", None)),
             ("required_facility_field", ToolParamSchema::field("facilities", None)),
             ("forbidden_facility_field", ToolParamSchema::field("facilities", None)),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
-            ("max_snap_distance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
+            ("max_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("edge_cost_field", ToolParamSchema::field("input", None)),
             ("one_way_field", ToolParamSchema::field("input", None)),
             ("blocked_field", ToolParamSchema::field("input", None)),
@@ -1014,13 +1014,13 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "barriers",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
-            ("barrier_snap_distance", ToolParamSchema::scalar_float()),
+            ("barrier_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "node_cost_points",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
             ("node_cost_field", ToolParamSchema::field("node_cost_points", None)),
-            ("node_cost_snap_distance", ToolParamSchema::scalar_float()),
+            ("node_cost_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("turn_penalty", ToolParamSchema::scalar_float()),
             ("u_turn_penalty", ToolParamSchema::scalar_float()),
             ("forbid_u_turns", ToolParamSchema::bool()),
@@ -1073,28 +1073,28 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                     ToolParamSchema::input_vector(ToolVectorGeometry::Point),
                 ),
                 ("mode_field", ToolParamSchema::field("input", None)),
-                ("default_mode_speed", ToolParamSchema::scalar_float()),
+                ("default_mode_speed", ToolParamSchema::scalar_float_gt(0.0)),
                 ("mode_speed_overrides", ToolParamSchema::string()),
                 ("allowed_modes", ToolParamSchema::string()),
                 ("transfer_penalty", ToolParamSchema::scalar_float()),
                 ("edge_cost_field", ToolParamSchema::field("input", None)),
                 ("impedance_disturbance_range", ToolParamSchema::string()),
                 ("monte_carlo_samples", ToolParamSchema::scalar_integer()),
-                ("snap_tolerance", ToolParamSchema::scalar_float()),
-                ("max_snap_distance", ToolParamSchema::scalar_float()),
+                ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
+                ("max_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
                 ("one_way_field", ToolParamSchema::field("input", None)),
                 ("blocked_field", ToolParamSchema::field("input", None)),
                 (
                     "barriers",
                     ToolParamSchema::input_vector(ToolVectorGeometry::Point),
                 ),
-                ("barrier_snap_distance", ToolParamSchema::scalar_float()),
+                ("barrier_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
                 (
                     "node_cost_points",
                     ToolParamSchema::input_vector(ToolVectorGeometry::Point),
                 ),
                 ("node_cost_field", ToolParamSchema::field("node_cost_points", None)),
-                ("node_cost_snap_distance", ToolParamSchema::scalar_float()),
+                ("node_cost_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
                 ("turn_penalty", ToolParamSchema::scalar_float()),
                 ("u_turn_penalty", ToolParamSchema::scalar_float()),
                 ("forbid_u_turns", ToolParamSchema::bool()),
@@ -1150,12 +1150,12 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
             ("mode_field", ToolParamSchema::field("input", None)),
-            ("default_mode_speed", ToolParamSchema::scalar_float()),
+            ("default_mode_speed", ToolParamSchema::scalar_float_gt(0.0)),
             ("mode_speed_overrides", ToolParamSchema::string()),
             ("allowed_modes", ToolParamSchema::string()),
             ("transfer_penalty", ToolParamSchema::scalar_float()),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
-            ("max_snap_distance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
+            ("max_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("edge_cost_field", ToolParamSchema::field("input", None)),
             ("one_way_field", ToolParamSchema::field("input", None)),
             ("blocked_field", ToolParamSchema::field("input", None)),
@@ -1163,7 +1163,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "barriers",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
-            ("barrier_snap_distance", ToolParamSchema::scalar_float()),
+            ("barrier_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "node_cost_points",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
@@ -1172,7 +1172,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "node_cost_field",
                 ToolParamSchema::field("node_cost_points", None),
             ),
-            ("node_cost_snap_distance", ToolParamSchema::scalar_float()),
+            ("node_cost_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("turn_penalty", ToolParamSchema::scalar_float()),
             ("u_turn_penalty", ToolParamSchema::scalar_float()),
             ("forbid_u_turns", ToolParamSchema::bool()),
@@ -1225,15 +1225,15 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ),
             ("max_cost", ToolParamSchema::scalar_float()),
             ("ring_costs", ToolParamSchema::string()),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
-            ("max_snap_distance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
+            ("max_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output_mode",
                 ToolParamSchema::enum_values(&["nodes", "edges", "polygons"]),
             ),
             ("polygon_merge_origins", ToolParamSchema::bool()),
             ("mode_field", ToolParamSchema::field("input", None)),
-            ("default_mode_speed", ToolParamSchema::scalar_float()),
+            ("default_mode_speed", ToolParamSchema::scalar_float_gt(0.0)),
             ("mode_speed_overrides", ToolParamSchema::string()),
             ("allowed_modes", ToolParamSchema::string()),
             ("edge_cost_field", ToolParamSchema::field("input", None)),
@@ -1243,7 +1243,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "barriers",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
-            ("barrier_snap_distance", ToolParamSchema::scalar_float()),
+            ("barrier_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "node_cost_points",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
@@ -1252,7 +1252,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "node_cost_field",
                 ToolParamSchema::field("node_cost_points", None),
             ),
-            ("node_cost_snap_distance", ToolParamSchema::scalar_float()),
+            ("node_cost_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("turn_penalty", ToolParamSchema::scalar_float()),
             ("u_turn_penalty", ToolParamSchema::scalar_float()),
             ("forbid_u_turns", ToolParamSchema::bool()),
@@ -1297,7 +1297,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                     "input",
                     ToolParamSchema::input_vector(ToolVectorGeometry::Line),
                 ),
-                ("snap_tolerance", ToolParamSchema::scalar_float()),
+                ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
                 ("edge_cost_field", ToolParamSchema::field("input", None)),
                 ("one_way_field", ToolParamSchema::field("input", None)),
                 ("blocked_field", ToolParamSchema::field("input", None)),
@@ -1326,8 +1326,8 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "destinations",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
-            ("max_snap_distance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
+            ("max_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("impedance_cutoff", ToolParamSchema::scalar_float()),
             (
                 "decay_function",
@@ -1345,7 +1345,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "node_cost_field",
                 ToolParamSchema::field("node_cost_points", None),
             ),
-            ("node_cost_snap_distance", ToolParamSchema::scalar_float()),
+            ("node_cost_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("parallel_execution", ToolParamSchema::bool()),
             (
                 "output",
@@ -1359,7 +1359,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "input",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -1377,9 +1377,9 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ("end_x", ToolParamSchema::scalar_float()),
             ("end_y", ToolParamSchema::scalar_float()),
             ("mode_field", ToolParamSchema::field("input", None)),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
-            ("max_snap_distance", ToolParamSchema::scalar_float()),
-            ("default_mode_speed", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
+            ("max_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
+            ("default_mode_speed", ToolParamSchema::scalar_float_gt(0.0)),
             ("mode_speed_overrides", ToolParamSchema::string()),
             ("allowed_modes", ToolParamSchema::string()),
             ("transfer_penalty", ToolParamSchema::scalar_float()),
@@ -1407,7 +1407,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "routes",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
-            ("max_snap_distance", ToolParamSchema::scalar_float()),
+            ("max_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("max_offset_distance", ToolParamSchema::scalar_float()),
             ("keep_unsnapped", ToolParamSchema::bool()),
             (
@@ -1437,7 +1437,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
         "map_features" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
             ("min_feature_height", ToolParamSchema::scalar_float()),
-            ("min_feature_size", ToolParamSchema::scalar_integer()),
+            ("min_feature_size", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "raster_cell_assignment" => Some(param_schema_map(&[
@@ -1525,15 +1525,15 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
             ("field_name", ToolParamSchema::field("points", None)),
-            ("bandwidth", ToolParamSchema::scalar_float()),
-            ("cell_size", ToolParamSchema::scalar_float()),
+            ("bandwidth", ToolParamSchema::scalar_float_min(0.0)),
+            ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
             ("base_raster", ToolParamSchema::input_raster()),
             ("kernel_function", ToolParamSchema::string()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "hexagonal_grid_from_raster_base" => Some(param_schema_map(&[
             ("base", ToolParamSchema::input_raster()),
-            ("width", ToolParamSchema::scalar_float()),
+            ("width", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "orientation",
                 ToolParamSchema::enum_values(&["horizontal", "vertical"]),
@@ -1547,7 +1547,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
         ])),
         "hexagonal_grid_from_vector_base" => Some(param_schema_map(&[
             ("base", ToolParamSchema::input_vector_any()),
-            ("width", ToolParamSchema::scalar_float()),
+            ("width", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "orientation",
                 ToolParamSchema::enum_values(&["horizontal", "vertical"]),
@@ -1573,10 +1573,10 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ("use_z", ToolParamSchema::bool()),
             ("weight", ToolParamSchema::scalar_float()),
             ("radius", ToolParamSchema::scalar_float()),
-            ("min_points", ToolParamSchema::scalar_integer()),
-            ("cell_size", ToolParamSchema::scalar_float()),
+            ("min_points", ToolParamSchema::scalar_integer_min(1)),
+            ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
             ("base_raster", ToolParamSchema::input_raster()),
-            ("max_dist", ToolParamSchema::scalar_float()),
+            ("max_dist", ToolParamSchema::scalar_float_min(0.0)),
             ("clip_to_hull", ToolParamSchema::bool()),
             ("use_quadratic_basis", ToolParamSchema::bool()),
             ("use_data_hull", ToolParamSchema::bool()),
@@ -1595,7 +1595,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "poly_order",
                 ToolParamSchema::enum_values(&["none", "constant", "quadratic"]),
             ),
-            ("max_triangle_edge_length", ToolParamSchema::scalar_float()),
+            ("max_triangle_edge_length", ToolParamSchema::scalar_float_min(0.0)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "layer_footprint_raster" => Some(param_schema_map(&[
@@ -1650,7 +1650,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "input",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -1660,8 +1660,8 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
         ])),
         "rectangular_grid_from_raster_base" => Some(param_schema_map(&[
             ("base", ToolParamSchema::input_raster()),
-            ("width", ToolParamSchema::scalar_float()),
-            ("height", ToolParamSchema::scalar_float()),
+            ("width", ToolParamSchema::scalar_float_min(0.0)),
+            ("height", ToolParamSchema::scalar_float_min(0.0)),
             ("x_origin", ToolParamSchema::scalar_float()),
             ("y_origin", ToolParamSchema::scalar_float()),
             (
@@ -1673,8 +1673,8 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
         ])),
         "rectangular_grid_from_vector_base" => Some(param_schema_map(&[
             ("base", ToolParamSchema::input_vector_any()),
-            ("width", ToolParamSchema::scalar_float()),
-            ("height", ToolParamSchema::scalar_float()),
+            ("width", ToolParamSchema::scalar_float_min(0.0)),
+            ("height", ToolParamSchema::scalar_float_min(0.0)),
             ("x_origin", ToolParamSchema::scalar_float()),
             ("y_origin", ToolParamSchema::scalar_float()),
             (
@@ -1701,7 +1701,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "input",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Polygon),
             ),
-            ("num_points", ToolParamSchema::scalar_integer()),
+            ("num_points", ToolParamSchema::scalar_integer_min(1)),
             ("seed", ToolParamSchema::scalar_integer()),
             (
                 "output",
@@ -1740,10 +1740,10 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "timestamp_field",
                 ToolParamSchema::field("trajectory_points", None),
             ),
-            ("search_radius", ToolParamSchema::scalar_float()),
+            ("search_radius", ToolParamSchema::scalar_float_min(0.0)),
             ("candidate_k", ToolParamSchema::scalar_integer()),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
-            ("max_snap_distance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
+            ("max_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("edge_cost_field", ToolParamSchema::field("input", None)),
             ("one_way_field", ToolParamSchema::field("input", None)),
             ("blocked_field", ToolParamSchema::field("input", None)),
@@ -1751,7 +1751,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "barriers",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
-            ("barrier_snap_distance", ToolParamSchema::scalar_float()),
+            ("barrier_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "node_cost_points",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
@@ -1760,7 +1760,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "node_cost_field",
                 ToolParamSchema::field("node_cost_points", None),
             ),
-            ("node_cost_snap_distance", ToolParamSchema::scalar_float()),
+            ("node_cost_snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("turn_penalty", ToolParamSchema::scalar_float()),
             ("u_turn_penalty", ToolParamSchema::scalar_float()),
             ("forbid_u_turns", ToolParamSchema::bool()),
@@ -1813,7 +1813,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ),
             ("from_measure_field", ToolParamSchema::field_definition()),
             ("to_measure_field", ToolParamSchema::field_definition()),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -1996,7 +1996,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
         ])),
         "simplify_features" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_vector_any()),
-            ("tolerance", ToolParamSchema::scalar_float()),
+            ("tolerance", ToolParamSchema::scalar_float_min(0.0)),
             ("output", ToolParamSchema::output_vector_any()),
         ])),
         "smooth_vectors" => Some(param_schema_map(&[
@@ -2004,7 +2004,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "input",
                 ToolParamSchema::input_vector(ToolVectorGeometry::LineOrPolygon),
             ),
-            ("filter_size", ToolParamSchema::scalar_integer()),
+            ("filter_size", ToolParamSchema::scalar_odd_integer_min(3)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -2017,7 +2017,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "input",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             ("segment_length", ToolParamSchema::scalar_float()),
             (
                 "output",
@@ -2069,7 +2069,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
                 "vector_points",
                 ToolParamSchema::input_vector(ToolVectorGeometry::Point),
             ),
-            ("width", ToolParamSchema::scalar_float()),
+            ("width", ToolParamSchema::scalar_float_min(0.0)),
             ("orientation", ToolParamSchema::enum_values(&["h", "v"])),
             (
                 "output",
@@ -2184,7 +2184,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ("use_priority_scoring", ToolParamSchema::bool()),
             ("apply_local_optimization", ToolParamSchema::bool()),
             ("apply_simulated_annealing", ToolParamSchema::bool()),
-            ("sa_iterations", ToolParamSchema::scalar_integer()),
+            ("sa_iterations", ToolParamSchema::scalar_integer_min(1)),
             ("sa_initial_temperature", ToolParamSchema::scalar_float()),
             ("sa_cooling_rate", ToolParamSchema::scalar_float()),
             ("sa_seed", ToolParamSchema::scalar_integer()),
@@ -2299,7 +2299,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ("use_priority_scoring", ToolParamSchema::bool()),
             ("apply_local_optimization", ToolParamSchema::bool()),
             ("apply_simulated_annealing", ToolParamSchema::bool()),
-            ("sa_iterations", ToolParamSchema::scalar_integer()),
+            ("sa_iterations", ToolParamSchema::scalar_integer_min(1)),
             ("sa_initial_temperature", ToolParamSchema::scalar_float()),
             ("sa_cooling_rate", ToolParamSchema::scalar_float()),
             ("sa_seed", ToolParamSchema::scalar_integer()),
@@ -2387,9 +2387,9 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
         "estimate_variogram" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_vector_any()),
             ("field", ToolParamSchema::field("input", None)),
-            ("lag_distance", ToolParamSchema::scalar_float()),
-            ("lag_tolerance", ToolParamSchema::scalar_float()),
-            ("max_lag_count", ToolParamSchema::scalar_integer()),
+            ("lag_distance", ToolParamSchema::scalar_float_gt(0.0)),
+            ("lag_tolerance", ToolParamSchema::scalar_float_gt(0.0)),
+            ("max_lag_count", ToolParamSchema::scalar_integer_min(1)),
         ])),
         "kriging_cross_validation" => Some(param_schema_map(&[
             ("training_points", ToolParamSchema::input_vector_any()),
@@ -2400,7 +2400,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
         "geographically_weighted_regression" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_vector_any()),
             ("response_field", ToolParamSchema::field("input", None)),
-            ("bandwidth", ToolParamSchema::scalar_float()),
+            ("bandwidth", ToolParamSchema::scalar_float_min(0.0)),
             ("output", ToolParamSchema::output_vector_any()),
         ])),
         "spatial_lag_regression" | "spatial_error_regression" => Some(param_schema_map(&[
@@ -2427,7 +2427,7 @@ pub fn gis_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPara
             ),
             ("field_name", ToolParamSchema::field("points", None)),
             ("use_z", ToolParamSchema::bool()),
-            ("cell_size", ToolParamSchema::scalar_float()),
+            ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
             ("base_raster", ToolParamSchema::input_raster()),
             ("output", ToolParamSchema::output_raster()),
         ])),

@@ -7,7 +7,39 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
 ## [Unreleased]
 
 ### Added
-- **Completed `ToolParamSchema` coverage to 100% of open-source tool parameters.**
+- **Five additional schema enrichments applied across the tool catalogue:**
+  - *Units*: `azimuth`, `altitude`, `major_azimuth` now carry `units: "degrees"` via
+    semantic constructors (`scalar_azimuth()`, `scalar_altitude()`, `scalar_degrees_180()`).
+  - *Step / odd-integer constraint*: `filter_size_x`, `filter_size_y`, `filter_size`,
+    `window_size` use `scalar_odd_integer_min(3)` (step=2), encoding the odd-kernel
+    constraint common to convolution filters.
+  - *Multi-input minimum count*: all multi-raster inputs in `raster/` and `remote_sensing/`
+    upgraded to `input_multiple_min(..., 2)`.
+  - *Conditional visibility*: `tool_param_visibility(tool_id)` dispatch added to
+    `tools/mod.rs`. Kriging tools declare interval and anisotropy sub-parameter
+    dependencies; the Python binding injects `visible_when` into param dicts;
+    QGIS marks these as Advanced.
+  - *Enum labels*: D8/FD8/DInf flow-accumulation `out_type`, flat-resolution mode,
+    and kriging `interval_method` now carry human-readable labels. QGIS dropdowns
+    show labels; backends receive values.
+- **Numeric range bounds applied to tool parameters.** Using the new `wbcore`
+  bounded scalar constructors, explicit `min`/`max` constraints are now included
+  in the serialized manifest for parameters with clear domain restrictions:
+  - `hillshade`: `azimuth` → [0°, 360°], `altitude` → [0°, 90°], `z_factor` → ≥ 0
+  - `multidirectional_hillshade`: `altitude` → [0°, 90°], `z_factor` → ≥ 0
+  - `ordinary_kriging` / `simple_kriging` / `local_kriging` / `universal_kriging`:
+    `confidence_level` → [0.5, 1.0], `major_azimuth` → [0°, 180°],
+    `anisotropy_ratio` → [0.0, 1.0]
+  - `estimate_variogram`: `lag_distance` → ≥ 0, `lag_tolerance` → ≥ 0,
+    `max_lag_count` → ≥ 1
+  - `breach_depressions_least_cost`: `max_dist` → ≥ 1, `max_cost` → ≥ 0,
+    `flat_increment` → ≥ 0
+  - `extract_streams` and related stream tools: `threshold` → ≥ 0
+  - Spatial statistics tools: `alpha` (significance level) → [0.0, 1.0],
+    `k` (nearest neighbours) → ≥ 1, `concavity` → > 0,
+    `polynomial_order` → ≥ 1, `filter_size` → ≥ 1
+  The QGIS Processing provider now reads these bounds and applies them as
+  `minValue`/`maxValue` on `QgsProcessingParameterNumber` spin boxes. to 100% of open-source tool parameters.**
   Previously 16 tools (32 parameters, 0.7% of 4,448 total) relied on heuristic
   inference for widget-type detection rather than explicit typed schemas. All gaps
   are now resolved:

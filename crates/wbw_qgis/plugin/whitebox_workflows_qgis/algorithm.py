@@ -343,6 +343,7 @@ def _extract_enum_options(name: str, description: str, default_value: Any) -> li
 
 
 def _extract_schema_enum_options(param: dict[str, Any]) -> list[str]:
+    """Return enum option values (machine strings sent to the backend)."""
     schema = param.get("schema")
     if not isinstance(schema, dict):
         return []
@@ -377,6 +378,45 @@ def _extract_schema_enum_options(param: dict[str, Any]) -> list[str]:
             continue
         seen.add(key)
         out.append(value_text)
+
+    return out
+
+
+def _extract_schema_enum_display_options(param: dict[str, Any]) -> list[str]:
+    """Return enum display labels for QGIS dropdowns, falling back to values when no label."""
+    schema = param.get("schema")
+    if not isinstance(schema, dict):
+        return []
+    if str(schema.get("kind", "") or "").strip().lower() != "enum":
+        return []
+
+    raw_options = schema.get("options")
+    if not isinstance(raw_options, list):
+        return []
+
+    out: list[str] = []
+    seen = set()
+    for opt in raw_options:
+        display_text = ""
+        if isinstance(opt, dict):
+            label = opt.get("label")
+            value = opt.get("value")
+            # Prefer label for display; fall back to value.
+            if isinstance(label, str) and label.strip():
+                display_text = label.strip()
+            elif isinstance(value, str) and value.strip():
+                display_text = value.strip()
+        elif isinstance(opt, str) and opt.strip():
+            display_text = opt.strip()
+
+        if not display_text:
+            continue
+
+        key = display_text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(display_text)
 
     return out
 
@@ -2136,8 +2176,10 @@ class WhiteboxCatalogAlgorithm(QgsProcessingAlgorithm):
                 if schema_kind == "file_out" and inferred_kind in {"raster_out", "vector_out", "lidar_out"}:
                     kind = inferred_kind
             enum_options = _extract_schema_enum_options(p)
+            enum_display_options = _extract_schema_enum_display_options(p)
             if len(enum_options) < 2:
                 enum_options = _extract_enum_options(name, description, default_value)
+                enum_display_options = enum_options  # no labels available from heuristics
 
             # If an output destination is ambiguous, bias to the tool family so
             # QGIS can treat it as a loadable layer destination.
@@ -2287,12 +2329,22 @@ class WhiteboxCatalogAlgorithm(QgsProcessingAlgorithm):
                     if default_value is not None
                     else None
                 )
+                schema_obj = param.get("schema") or {}
+                min_val = schema_obj.get("min")
+                max_val = schema_obj.get("max")
+                excl_min = schema_obj.get("exclusive_min", False)
+                excl_max = schema_obj.get("exclusive_max", False)
+                # For integers, exclusive bounds shift by 1.
+                eff_min = (float(min_val) + 1.0) if (min_val is not None and excl_min) else (float(min_val) if min_val is not None else float("-inf"))
+                eff_max = (float(max_val) - 1.0) if (max_val is not None and excl_max) else (float(max_val) if max_val is not None else float("inf"))
                 qgs_param = QgsProcessingParameterNumber(
                     name,
                     description,
                     QgsProcessingParameterNumber.Integer,
                     defaultValue=numeric_default,
                     optional=not required,
+                    minValue=eff_min,
+                    maxValue=eff_max,
                 )
             elif kind == "double":
                 numeric_default = (
@@ -2300,12 +2352,23 @@ class WhiteboxCatalogAlgorithm(QgsProcessingAlgorithm):
                     if default_value is not None
                     else None
                 )
+                schema_obj = param.get("schema") or {}
+                min_val = schema_obj.get("min")
+                max_val = schema_obj.get("max")
+                excl_min = schema_obj.get("exclusive_min", False)
+                excl_max = schema_obj.get("exclusive_max", False)
+                # For floats, exclusive bounds use a small epsilon offset for the spin box.
+                _FLOAT_EXCL_EPS = 1e-9
+                eff_min = (float(min_val) + _FLOAT_EXCL_EPS) if (min_val is not None and excl_min) else (float(min_val) if min_val is not None else float("-inf"))
+                eff_max = (float(max_val) - _FLOAT_EXCL_EPS) if (max_val is not None and excl_max) else (float(max_val) if max_val is not None else float("inf"))
                 qgs_param = QgsProcessingParameterNumber(
                     name,
                     description,
                     QgsProcessingParameterNumber.Double,
                     defaultValue=numeric_default,
                     optional=not required,
+                    minValue=eff_min,
+                    maxValue=eff_max,
                 )
             elif kind == "file_out":
                 qgs_param = QgsProcessingParameterFileDestination(
@@ -2370,10 +2433,13 @@ class WhiteboxCatalogAlgorithm(QgsProcessingAlgorithm):
                         if opt.lower() == default_text:
                             default_index = idx
                             break
+                # Use display labels if available (schema labels shown to users;
+                # enum_options values used in processAlgorithm for backend mapping).
+                display_opts = enum_display_options if enum_display_options else enum_options
                 qgs_param = QgsProcessingParameterEnum(
                     name,
                     description,
-                    options=enum_options,
+                    options=display_opts,
                     defaultValue=default_index,
                     optional=not required,
                 )
@@ -2557,10 +2623,11 @@ class WhiteboxCatalogAlgorithm(QgsProcessingAlgorithm):
                             if opt.lower() == default_text:
                                 default_index = idx
                                 break
+                    display_opts = enum_display_options if enum_display_options else enum_options
                     qgs_param = QgsProcessingParameterEnum(
                         name,
                         description,
-                        options=enum_options,
+                        options=display_opts,
                         defaultValue=default_index,
                         optional=not required,
                     )
@@ -2580,6 +2647,43 @@ class WhiteboxCatalogAlgorithm(QgsProcessingAlgorithm):
                 param_help = help_provider.get_parameter_help(tool_id, name)
                 if param_help:
                     qgs_param.setHelp(param_help)
+
+            # --- Schema enrichments ---
+
+            # 1. Units: append to description label when present.
+            schema_obj = param.get("schema") or {}
+            units_str = schema_obj.get("units")
+            if units_str and isinstance(units_str, str):
+                try:
+                    qgs_param.setDescription(
+                        f"{qgs_param.description()} ({units_str})"
+                    )
+                except Exception:
+                    pass
+
+            # 2. Step: set spin-box step via metadata when present (integer and double only).
+            step_val = schema_obj.get("step")
+            if step_val is not None and kind in ("int", "double"):
+                try:
+                    meta = qgs_param.metadata() or {}
+                    meta["widget_wrapper"] = dict(meta.get("widget_wrapper") or {})
+                    meta["widget_wrapper"]["step"] = float(step_val)
+                    qgs_param.setMetadata(meta)
+                except Exception:
+                    pass
+
+            # 3. visible_when: mark parameter as advanced when it has a condition.
+            # QGIS Processing does not support dynamic show/hide; we collapse
+            # conditional parameters behind the "Advanced" section instead.
+            # visible_when is injected from the Rust tool_param_visibility dispatch.
+            visible_when = param.get("visible_when")
+            if visible_when:
+                try:
+                    flags = qgs_param.flags()
+                    flags |= qgs_param.FlagAdvanced
+                    qgs_param.setFlags(flags)
+                except Exception:
+                    pass
 
             self.addParameter(qgs_param)
             self._param_specs.append(

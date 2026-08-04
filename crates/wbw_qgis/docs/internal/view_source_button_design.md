@@ -1,17 +1,17 @@
 # View Source Button — Design and Implementation Plan
 
-**Created**: 2026-07-06  
-**Status**: Design Proposal  
-**Author**: John Lindsay  
-**Scope**: `wbcore`, `wbtools_oss`, `wbtools_pro` (and any crate exposing tool manifests), `wbw_python`, `wbw_qgis`
+**Created:** 2026-07-06  
+**Status:** Design Proposal  
+**Author:** John Lindsay  
+**Scope:** `wbcore`, `wbtools_oss`, `wbtools_pro` (and any crate exposing tool manifests), `wbw_python`, `wbw_qgis`
 
 ---
 
 ## Background and Motivation
 
-Whitebox GAT, the original desktop GUI predecessor to Whitebox Workflows, included a "View Code" button in every tool dialog. This was a defining feature of GAT's *open-access* philosophy: rather than merely being open-source (source code available somewhere in a repository), the software made its own implementation directly inspectable at the point of use. A user running the Slope tool could click one button and immediately see the algorithm code, with syntax highlighting, without navigating a repository, installing a separate viewer, or understanding the project's directory structure.
+Whitebox GAT, the original desktop GUI predecessor to Whitebox Workflows, included a "View Code" button in every tool dialog. This was a defining feature of GAT's *open-access* philosophy: rather than merely being open-source (source code available somewhere in a repository), the software made its own implementation directly inspectable at the point of use. A user running the Slope tool could click a button and immediately see the Rust code in their browser.
 
-This feature was lost when the project transitioned from GAT (a monolithic desktop application with a one-tool-one-file codebase architecture) to WhiteboxTools and then to Whitebox Next Gen. The Next Gen codebase intentionally groups related tools into shared modules (e.g., `basic_terrain_tools.rs` contains slope, aspect, hillshade, and related functions), which means there is no longer a one-to-one mapping between tool and source file. This makes a naive "open the source file for this tool" button ambiguous.
+This feature was lost when the project transitioned from GAT (a monolithic desktop application with a one-tool-one-file codebase architecture) to WhiteboxTools and then to Whitebox Next Gen. The Next Gen codebase intentionally groups related tools into shared modules (e.g., `basic_terrain_tools.rs` contains slope, aspect, hillshade, and related functions), which means there is no longer a one-to-one correspondence between tools and source files.
 
 This document describes a design that solves the ambiguity problem by embedding per-tool source location metadata directly into the tool manifest, and surfacing a "View Source" link in the QGIS plugin's tool help panel.
 
@@ -48,9 +48,135 @@ Because the manifest is already serialised over this pipeline and the QGIS algor
 
 ---
 
+## Implementation Options
+
+### Option A: Per-Tool Line Number Links (Original Plan)
+
+Every tool gets a link pointing to a specific line range:
+
+```rust
+source: Some(ToolSourceInfo {
+    repository: "https://github.com/jblindsay/whitebox_next_gen",
+    path: "crates/wbtools_oss/src/tools/geomorphometry/basic_terrain_tools.rs",
+    line_start: 575,
+    line_end: 660,
+    commit: option_env!("WBW_GIT_COMMIT"),
+    documentation_url: Some("https://www.whiteboxgeo.com/manual/..."),
+}),
+```
+
+**Trade-offs:**
+
+| Pros | Cons |
+|------|------|
+| Direct jump to the exact function implementation | **Extremely brittle:** Line numbers drift with every code change |
+| User doesn't have to scroll through other functions in the file | **High maintenance cost:** Every edit in a large file breaks multiple tools' links |
+| Feels "magical" and restores the GAT experience completely | **Not worth it for monorepo:** The maintenance burden would be prohibitive long-term |
+
+**Verdict:** **Not recommended.** The line number drift problem is too severe for a real-world, actively-developed codebase with hundreds of tools sharing files.
+
+---
+
+### Option B: File-Level Links Only (Recommended for Initial Rollout)
+
+Each tool links to its parent file only, without line numbers:
+
+```rust
+source: Some(ToolSourceInfo {
+    repository: "https://github.com/jblindsay/whitebox_next_gen",
+    path: "crates/wbtools_oss/src/tools/geomorphometry/basic_terrain_tools.rs",
+    line_start: 0,  // or omit entirely
+    line_end: 0,    // or omit entirely
+    commit: option_env!("WBW_GIT_COMMIT"),
+    documentation_url: Some("https://www.whiteboxgeo.com/manual/..."),
+}),
+```
+
+Or simplified to just required fields:
+
+```rust
+source: Some(ToolSourceInfo {
+    repository: "https://github.com/jblindsay/whitebox_next_gen",
+    path: "crates/wbtools_oss/src/tools/geomorphometry/basic_terrain_tools.rs",
+    // No line numbers — GitHub will open the entire file
+    commit: option_env!("WBW_GIT_COMMIT"),
+    documentation_url: Some("https://www.whiteboxgeo.com/manual/..."),
+}),
+```
+
+**Trade-offs:**
+
+| Pros | Cons |
+|------|------|
+| **Zero maintenance** — never need to update line numbers | User opens entire file, must Ctrl+F for their tool |
+| **Trivial to add** — just `repository` and `path` required | Not as "magical" as direct function jump |
+| Works with the monorepo architecture | File may contain multiple tools, slight UX compromise |
+
+**Verdict:** **Recommended.** Accepts a small UX trade-off (one extra click / Ctrl+F) for dramatically reduced maintenance cost. For files with 5-10 tools, this is trivial for power users.
+
+---
+
+### Option C: Skip Source Links in QGIS, Use Documentation Only
+
+For now, don't add direct source links in QGIS at all. Just link to the online documentation:
+
+```rust
+source: Some(ToolSourceInfo {
+    repository: None,  // or omit
+    path: None,        // or omit
+    // No source links at all for QGIS
+    commit: option_env!("WBW_GIT_COMMIT"),
+    documentation_url: Some("https://www.whiteboxgeo.com/manual/..."),
+}),
+```
+
+**Trade-offs:**
+
+| Pros | Cons |
+|------|------|
+| **Zero maintenance** — completely stable | Breaks the GAT "View Code" magic entirely |
+| **No confusing UX** — no broken links | Non-technical users have no path to the source |
+| Works with any monorepo structure | Devs may feel disconnected from the code |
+
+**Verdict:** **Viable fallback** if Options A or B fail to gain user traction.
+
+---
+
+### Option D: Auto-Generate Source Metadata via AST Scanner
+
+Write a build-time tool that scans Rust source files and extracts `fn run_<tool>` locations automatically:
+
+```rust
+// Build-time scanner (separate crate or build.rs step)
+// 1. Parse all Rust files in tool crates
+// 2. Find all `pub fn run_<tool>` functions (where <tool> matches tool manifest names)
+// 3. Generate a `tools_sources.json` file
+// 4. Consume that JSON in build.rs to populate ToolSourceInfo
+```
+
+**Trade-offs:**
+
+| Pros | Cons |
+|------|------|
+| **Zero manual maintenance** — always up to date | High initial development effort |
+| **Most robust solution** | Requires Rust compiler access / proper crate layout |
+| Handles refactors automatically | May have false positives for non-`run_*` functions |
+
+**Verdict:** **Best long-term solution** if feasible. Should be considered after Options A/B are piloted.
+
+---
+
+## **Selected Approach: Option B (File-Level Links Only)**
+
+**Rationale:** The per-line maintenance cost of Option A is too high for a project with 10,000+ files in active development. Every change in shared utility functions, test code additions, imports, or refactorings would break dozens of tools' line numbers. The UX difference between opening a file and Ctrl+F versus opening a specific line is negligible for developers, and the stability of Option B makes it the pragmatic choice.
+
+**Implementation Plan:** Update the `ToolSourceInfo` struct to make line numbers optional and deprecate the "direct function link" goal in favor of "direct file link".
+
+---
+
 ## Step 1 — Extend `ToolManifest` in `wbcore`
 
-**File**: `crates/wbcore/src/lib.rs`
+**File:** `crates/wbcore/src/lib.rs`
 
 Add a new optional struct `ToolSourceInfo` and an optional `source` field to `ToolManifest`.
 
@@ -74,10 +200,12 @@ pub struct ToolSourceInfo {
     pub path: &'static str,
 
     /// First line (1-indexed, inclusive) of the primary algorithm function.
-    pub line_start: u32,
+    /// Optional — if omitted, the link will point to the file only (no anchor).
+    pub line_start: Option<u32>,
 
     /// Last line (1-indexed, inclusive) of the primary algorithm function.
-    pub line_end: u32,
+    /// Optional — if omitted along with line_start, the link will point to the file only.
+    pub line_end: Option<u32>,
 
     /// Git commit hash at the time the binary was built.
     /// Set via `option_env!("WBW_GIT_COMMIT")` in a build script.
@@ -92,22 +220,29 @@ pub struct ToolSourceInfo {
 }
 
 impl ToolSourceInfo {
-    /// Constructs the full GitHub permalink URL for this tool's implementation.
+    /// Constructs the full GitHub permalink URL for this tool's source location.
+    ///
+    /// If line_start or line_end is None, links to the file only (no anchor).
+    /// Otherwise, links to the specific line range.
     ///
     /// The URL format is:
-    /// `{repository}/blob/{commit}/{path}#L{line_start}-L{line_end}`
+    /// `{repository}/blob/{commit}/{path}` (file-only)
+    /// or
+    /// `{repository}/blob/{commit}/{path}#L{line_start}-L{line_end}` (with anchor)
     ///
     /// Falls back to `"main"` if `commit` is `None`.
     pub fn github_permalink(&self) -> String {
         let commit = self.commit.unwrap_or("main");
-        if self.line_start > 0 && self.line_end >= self.line_start {
-            format!(
-                "{}/blob/{}/{}#L{}-L{}",
-                self.repository, commit, self.path, self.line_start, self.line_end
-            )
+        let has_anchor = self.line_start.is_some() && self.line_end.is_some()
+            && self.line_start >= self.line_start && self.line_end >= self.line_start;
+
+        let anchor = if has_anchor {
+            format!("#L{}-L{}", self.line_start, self.line_end)
         } else {
-            format!("{}/blob/{}/{}", self.repository, commit, self.path)
-        }
+            String::new()
+        };
+
+        format!("{}/blob/{}/{}{}", self.repository, commit, self.path, anchor)
     }
 }
 ```
@@ -132,7 +267,8 @@ pub struct ToolManifest {
 
     // ── New fields ──────────────────────────────────────────────────────────
     /// Source code location for the "View Source" link. `None` for tools
-    /// that have not yet been annotated.
+    /// that have not yet been annotated. If `path` is present but `repository`
+    /// is not, the `source` field will be omitted entirely.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<ToolSourceInfo>,
 
@@ -148,7 +284,6 @@ pub struct ToolManifest {
     /// primarily for toolsets that track independent versioning.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_version: Option<&'static str>,
-}
 ```
 
 Both new fields use `#[serde(skip_serializing_if = "Option::is_none")]` so they are absent from the JSON for un-annotated tools, keeping the catalog payload compact.
@@ -173,7 +308,7 @@ impl From<ToolMetadata> for ToolManifest {
 
 ## Step 2 — Add a Build Script to Stamp the Git Commit Hash
 
-**File**: `crates/wbtools_oss/build.rs` (new file; also add to `wbtools_pro` and any other crate that exposes tools)
+**File:** `crates/wbtools_oss/build.rs` (new file; also add to `wbtools_pro` and any other crate that exposes tools)
 
 The `ToolSourceInfo.commit` field is intended to link directly to the exact revision of the source that was compiled. This is only meaningful if the commit hash is available at compile time.
 
@@ -210,9 +345,9 @@ commit: option_env!("WBW_GIT_COMMIT"),
 
 ## Step 3 — Annotate Tool Manifests
 
-**Files**: all `*_manifest()` functions across `wbtools_oss`, `wbtools_pro`, and any other crate that registers tools.
+**Files:** all `*_manifest()` functions across `wbtools_oss`, `wbtools_pro`, and any other crate that registers tools.
 
-This is the bulk of the per-tool authoring work. Each `fn <name>_manifest() -> ToolManifest` function gains a `source` block. The minimum required fields are `repository`, `path`, `line_start`, and `line_end`.
+This is the bulk of the per-tool authoring work. Each `fn <name>_manifest() -> ToolManifest` function gains a `source` block. The minimum required fields are `repository` and `path`. Line numbers are optional.
 
 ### Example: `slope` in `basic_terrain_tools.rs`
 
@@ -226,8 +361,9 @@ fn slope_manifest() -> ToolManifest {
         source: Some(ToolSourceInfo {
             repository: "https://github.com/jblindsay/whitebox_next_gen",
             path: "crates/wbtools_oss/src/tools/geomorphometry/basic_terrain_tools.rs",
-            line_start: 575,
-            line_end: 660,
+            // Line numbers are optional for the file-level link approach
+            line_start: None,
+            line_end: None,
             commit: option_env!("WBW_GIT_COMMIT"),
             documentation_url: Some(
                 "https://www.whiteboxgeo.com/manual/wbw-user-manual/book/tool_help.html#slope"
@@ -250,15 +386,16 @@ pub(crate) const REPO: &str = "https://github.com/jblindsay/whitebox_next_gen";
 
 Then each manifest function uses `repository: REPO`.
 
-### Line range staleness
+### Line number staleness
 
-Line numbers will drift as code is edited. This is intentional and acceptable: the link will point to approximately the right location and GitHub's in-page search is sufficient for the small drift that accumulates between releases. For a tighter guarantee, a CI check (see Step 6) can flag when the declared line range no longer contains the function signature.
+Line numbers will drift as code is edited. This is **intentional and acceptable** with the file-level approach: the link will point to the correct file, and GitHub's in-page search is sufficient for locating the specific function. For a tighter guarantee, a CI check (see Step 6) can flag when the declared line range no longer contains the function signature.
 
 The practical authoring workflow is:
 1. Open the source file.
 2. Find the `run_<tool>` function (the actual algorithm implementation, not the manifest function itself).
-3. Record the first and last lines of that function body.
-4. Populate `line_start` and `line_end`.
+3. If you want a direct link, record the first and last lines of that function body.
+4. Populate `line_start` and `line_end` (both optional).
+5. For files with multiple tools, consider omitting line numbers entirely to reduce maintenance burden.
 
 Note that the manifest function and the run function are typically in the same file but at different lines. The `source` block should point to the **run function**, not the manifest function.
 
@@ -266,7 +403,7 @@ Note that the manifest function and the run function are typically in the same f
 
 ## Step 4 — Pass `source` Through the Catalog JSON Pipeline
 
-**File**: `crates/wbw_python/src/lib.rs`
+**File:** `crates/wbw_python/src/lib.rs`
 
 The `ToolManifest` is already serialised to JSON in the `catalog_entry_json` function via `manifest_with_param_schema_json`. Because `ToolSourceInfo` derives `Serialize`, the new `source` field will be included automatically when it is `Some`. No code changes are required in `wbw_python` for the field to appear in the catalog JSON.
 
@@ -295,7 +432,7 @@ Un-annotated tools simply omit the `source` key entirely.
 
 ## Step 5 — Render the Link in the QGIS Plugin
 
-**File**: `crates/wbw_qgis/plugin/whitebox_workflows_qgis/algorithm.py`
+**File:** `crates/wbw_qgis/plugin/whitebox_workflows_qgis/algorithm.py`
 
 ### Option A — Append to `shortHelpString` (Recommended)
 
@@ -327,13 +464,16 @@ def shortHelpString(self):
         l2 = source.get("line_end")
         doc_url = source.get("documentation_url")
 
-        if repo and path:
-            anchor = f"#L{l1}-L{l2}" if l1 and l2 else ""
-            src_url = f"{repo}/blob/{commit}/{path}{anchor}"
-            source_links = [f'<a href="{src_url}">View algorithm source</a>']
-            if doc_url:
-                source_links.append(f'<a href="{doc_url}">Online documentation</a>')
-            parts.append("  ·  ".join(source_links))
+        # Only add anchor if both line numbers are present
+        anchor = ""
+        if l1 is not None and l2 is not None:
+            anchor = f"#L{l1}-L{l2}"
+
+        src_url = f"{repo}/blob/{commit}/{path}{anchor}"
+        source_links = [f'<a href="{src_url}">View algorithm source</a>']
+        if doc_url:
+            source_links.append(f'<a href="{doc_url}">Online documentation</a>')
+        parts.append("  ·  ".join(source_links))
 
     return "\n\n".join(p for p in parts if p)
 ```
@@ -355,12 +495,13 @@ If a more prominent UI treatment is desired in a future release, `createCustomPa
 
 To prevent the declared line ranges from silently drifting too far from the actual implementation, a lightweight validation script can be added to the repository.
 
-**File**: `crates/wbtools_oss/scripts/validate_source_line_ranges.py` (or similar)
+**File:** `crates/wbtools_oss/scripts/validate_source_line_ranges.py` (or similar)
 
 Logic:
 1. Parse all `source` blocks from tool manifest source files (via regex or `cargo metadata`).
 2. For each declared `(file, line_start, line_end)`, verify that `line_start` falls within a `fn run_<tool>` function in the specified file.
 3. Warn (not error) if the declared range is more than N lines away from the actual function boundary.
+4. For tools with `line_start` or `line_end` omitted (file-level links), skip validation.
 
 This script can be run as a pre-release check rather than a hard CI gate, since minor drift is expected and acceptable.
 
@@ -371,25 +512,17 @@ This script can be run as a pre-release check rather than a hard CI gate, since 
 The following order minimises risk and allows incremental testing at each stage.
 
 | Step | Location | Description | Effort |
-|------|----------|-------------|--------|
+|------|----------|-------------|-------|
 | 1 | `wbcore/src/lib.rs` | Add `ToolSourceInfo` struct and `source`, `manifest_version`, `tool_version` fields to `ToolManifest` | Small |
 | 2 | `wbtools_oss/build.rs` | Add build script to stamp `WBW_GIT_COMMIT` env var | Small |
-| 3a | `wbtools_oss` (pilot) | Annotate 5–10 high-profile tools (slope, aspect, hillshade, d8_pointer, mean_filter) as a pilot | Small |
+| 3a | `wbtools_oss` (pilot) | Annotate 5–10 high-profile tools (slope, aspect, hillshade, d8_pointer, mean_filter) as a pilot with file-level links | Small |
 | 4 | `wbw_python/src/lib.rs` | Verify `source` field passes through catalog JSON automatically | Trivial (verify only) |
 | 5 | `algorithm.py` | Add source link rendering in `shortHelpString` | Small |
-| 3b | `wbtools_oss` (full) | Annotate all remaining tool manifests | Medium (mechanical) |
+| 3b | `wbtools_oss` (full) | Annotate all remaining tool manifests with file-level links | Medium (mechanical) |
 | 3c | `wbtools_pro` | Annotate Pro tool manifests | Medium (mechanical) |
-| 6 | CI / scripts | Optional line-range validation script | Small |
+| 6 | CI / scripts | Optional line-range validation script (skip tools without line numbers) | Small |
 
 Steps 1 through 5 (the pilot) can be completed and tested end-to-end before committing to the full annotation effort in step 3b.
-
----
-
-## Scope of the Annotation Effort
-
-As of the time of writing, there are approximately 84 `_manifest()` functions in `wbtools_oss` across 14 source files, plus additional manifests in `wbtools_pro` and other crates. The annotation is mechanical: for each function, record the file path relative to the repository root, find the corresponding `run_<tool>` function, and record its line range. With the `REPO` constant and the `option_env!("WBW_GIT_COMMIT")` macro, each annotation block is approximately 8 lines.
-
-A rough estimate: annotating all OSS tools is approximately 2–3 hours of focused work. Pro tools add another 1–2 hours. The pilot (10 tools) is approximately 30 minutes.
 
 ---
 
@@ -398,14 +531,15 @@ A rough estimate: annotating all OSS tools is approximately 2–3 hours of focus
 When a user opens the **Slope** tool dialog in QGIS:
 
 1. The right-hand help panel shows the tool summary and help excerpt as today.
-2. At the bottom of the panel, two hyperlinks appear:
-   - **View algorithm source** — opens the browser at `https://github.com/jblindsay/whitebox_next_gen/blob/a3f2c91/crates/wbtools_oss/src/tools/geomorphometry/basic_terrain_tools.rs#L575-L660`
-   - **Online documentation** — opens the WbW user manual page for Slope.
-3. The browser highlights lines 575–660, showing the `run_slope` function directly.
+2. At the bottom of the panel, one or two hyperlinks appear:
+   - **View algorithm source** — opens the browser at `https://github.com/jblindsay/whitebox_next_gen/blob/a3f2c91/crates/wbtools_oss/src/tools/geomorphometry/basic_terrain_tools.rs`
+     - Or, if line numbers were provided: `.../basic_terrain_tools.rs#L575-L660`
+   - **Online documentation** — opens the WbW user manual page for Slope (if provided).
+3. The browser opens to the GitHub file page. For file-level links (no anchor), the user sees the entire file and can Ctrl+F for `run_slope`. For line-anchored links, GitHub highlights the specified range.
 
 For tools not yet annotated, the help panel shows no source link — identical to the current behaviour.
 
-This restores the spirit of the original Whitebox GAT "View Code" button while working within the architectural constraints of the Next Gen monorepo and the QGIS Processing framework.
+This restores the spirit of the original Whitebox GAT "View Code" button while working within the architectural constraints of the Next Gen monorepo and the QGIS Processing framework, with a **dramatically reduced maintenance burden**.
 
 ---
 
@@ -413,5 +547,7 @@ This restores the spirit of the original Whitebox GAT "View Code" button while w
 
 - **Repository visibility**: The `source_url` points to a GitHub repository. If the repository is private at the time of a release (e.g. during a pre-release window), the link will return a 404 for non-collaborators. Consider defaulting to `"main"` rather than a commit hash for public releases where the commit may not yet be pushed.
 - **Pro tool links**: Pro tool source lives in a private repository. The `source` block for Pro tools should either be omitted (`None`) or point to a different URL scheme (e.g. a documentation page rather than a raw source link). A `documentation_url` alone is appropriate for Pro tools.
-- **Line number maintenance**: Decide on a policy for how frequently line ranges are updated. Suggestion: update line ranges as part of the release preparation checklist, or whenever a tool's implementation is substantially refactored.
+- **Line number maintenance**: With the file-level approach, line numbers are optional. If chosen, a policy for how frequently line ranges are updated should be established (e.g. as part of the release preparation checklist).
 - **`tool_version` semantics**: The current design leaves `tool_version` as a free-form string. If independent tool versioning is adopted in the future, the format should be defined (semver recommended) and a policy established for when it increments.
+- **Documentation URL consistency**: Should all tools have a `documentation_url`, or only certain categories? Consider defining a mapping from tool IDs to documentation anchors.
+<EOF>

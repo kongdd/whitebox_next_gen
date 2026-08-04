@@ -41,6 +41,61 @@ pub fn tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolParamSch
         .or_else(|| doc_tool_param_schemas(tool_id))
 }
 
+/// Returns conditional visibility conditions for tool parameters.
+///
+/// The returned map keys are parameter names. Each value is a JSON object where
+/// each key is another parameter name and the value is the required setting for
+/// the keyed parameter to be relevant.
+///
+/// Example: `{"output_intervals": true}` on `confidence_level` means that
+/// `confidence_level` is only active when `output_intervals` is `true`.
+///
+/// Consumers that cannot implement dynamic show/hide (e.g. QGIS Processing)
+/// should treat any parameter with a `visible_when` entry as advanced/collapsed.
+pub fn tool_param_visibility(
+    tool_id: &str,
+) -> Option<BTreeMap<String, serde_json::Value>> {
+    match tool_id {
+        // Kriging tools: anisotropy sub-parameters and interval sub-parameters
+        // are only meaningful when their controlling boolean is enabled.
+        "ordinary_kriging"
+        | "simple_kriging"
+        | "local_kriging"
+        | "universal_kriging"
+        | "ordinary_cokriging" => Some(BTreeMap::from([
+            (
+                "confidence_level".to_string(),
+                serde_json::json!({"output_intervals": true}),
+            ),
+            (
+                "interval_method".to_string(),
+                serde_json::json!({"output_intervals": true}),
+            ),
+            (
+                "major_azimuth".to_string(),
+                serde_json::json!({"anisotropy": true}),
+            ),
+            (
+                "anisotropy_ratio".to_string(),
+                serde_json::json!({"anisotropy": true}),
+            ),
+        ])),
+        "spacetime_kriging" => Some(BTreeMap::from([
+            (
+                "major_azimuth".to_string(),
+                serde_json::json!({"anisotropy": true}),
+            ),
+            (
+                "anisotropy_ratio".to_string(),
+                serde_json::json!({"anisotropy": true}),
+            ),
+        ])),
+        // Hillshade: z_factor is only meaningful when processing 3D terrain.
+        // (Always shown — no conditional visibility needed here.)
+        _ => None,
+    }
+}
+
 pub fn tool_param_descriptions(tool_id: &str) -> Option<BTreeMap<String, String>> {
     let known_keys: BTreeSet<String> = tool_param_schemas(tool_id)
         .unwrap_or_default()

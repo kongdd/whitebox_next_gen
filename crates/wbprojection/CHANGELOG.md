@@ -37,6 +37,8 @@ The format is based on Keep a Changelog, and this project follows Semantic Versi
   forward projections against PROJ 9.8.1 reference coordinates at 1 cm
   tolerance for all 14 codes). Fix contributed by mentaljam.
 
+## [0.3.2] - 2026-07-30
+
 ### Changed
 - **`parallel` is now on by default.** The `parallel` feature is included in the crate's `default`
   feature set, so rayon-backed batch projection methods (`forward_many_par`, `inverse_many_par`,

@@ -115,6 +115,10 @@ pub struct ToolInputSchema {
     pub mode: ToolInputMode,
     pub dataset: ToolDatasetSchema,
     pub cardinality: ToolValueCardinality,
+    /// Minimum number of inputs required when cardinality is Multiple.
+    /// Absent (None) means no minimum beyond 1.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_count: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -140,12 +144,31 @@ pub struct ToolFieldSchema {
     pub geometry: Option<ToolVectorGeometry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ToolParamSchema {
     Input(ToolInputSchema),
     Output(ToolOutputSchema),
-    Scalar { scalar: ToolScalarKind },
+    Scalar {
+        scalar: ToolScalarKind,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        min: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max: Option<f64>,
+        /// When true, `min` is an exclusive lower bound (open interval).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        exclusive_min: bool,
+        /// When true, `max` is an exclusive upper bound (open interval).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        exclusive_max: bool,
+        /// Physical units of the value, e.g. "degrees", "metres", "cells", "m²/m".
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        units: Option<String>,
+        /// Recommended spin-box step size. For integer parameters, step=2 with
+        /// min=3 encodes the odd-integer constraint common in convolution kernels.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        step: Option<f64>,
+    },
     Enum(ToolEnumSchema),
     Bool,
     String,
@@ -159,6 +182,7 @@ impl ToolParamSchema {
             mode: ToolInputMode::Existing,
             dataset,
             cardinality: ToolValueCardinality::Single,
+            min_count: None,
         })
     }
 
@@ -167,6 +191,17 @@ impl ToolParamSchema {
             mode: ToolInputMode::Existing,
             dataset,
             cardinality: ToolValueCardinality::Multiple,
+            min_count: None,
+        })
+    }
+
+    /// Multiple inputs with a minimum count requirement (e.g. at least 2 rasters).
+    pub fn input_multiple_min(dataset: ToolDatasetSchema, min_count: usize) -> Self {
+        Self::Input(ToolInputSchema {
+            mode: ToolInputMode::Existing,
+            dataset,
+            cardinality: ToolValueCardinality::Multiple,
+            min_count: Some(min_count),
         })
     }
 
@@ -193,6 +228,7 @@ impl ToolParamSchema {
             mode: ToolInputMode::ExistingOrNumber,
             dataset,
             cardinality: ToolValueCardinality::Single,
+            min_count: None,
         })
     }
 
@@ -224,12 +260,232 @@ impl ToolParamSchema {
     pub fn scalar_integer() -> Self {
         Self::Scalar {
             scalar: ToolScalarKind::Integer,
+            min: None,
+            max: None,
+            exclusive_min: false,
+            exclusive_max: false,
+            units: None,
+            step: None,
         }
     }
 
     pub fn scalar_float() -> Self {
         Self::Scalar {
             scalar: ToolScalarKind::Float,
+            min: None,
+            max: None,
+            exclusive_min: false,
+            exclusive_max: false,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Integer with a minimum value (inclusive).
+    pub fn scalar_integer_min(min: i64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Integer,
+            min: Some(min as f64),
+            max: None,
+            exclusive_min: false,
+            exclusive_max: false,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Integer constrained to [min, max] inclusive.
+    pub fn scalar_integer_range(min: i64, max: i64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Integer,
+            min: Some(min as f64),
+            max: Some(max as f64),
+            exclusive_min: false,
+            exclusive_max: false,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Odd integer >= min, stepping by 2 (e.g. filter kernel sizes: 3,5,7,...).
+    pub fn scalar_odd_integer_min(min: i64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Integer,
+            min: Some(min as f64),
+            max: None,
+            exclusive_min: false,
+            exclusive_max: false,
+            units: None,
+            step: Some(2.0),
+        }
+    }
+
+    /// Float with a minimum value (inclusive).
+    pub fn scalar_float_min(min: f64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(min),
+            max: None,
+            exclusive_min: false,
+            exclusive_max: false,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Float with a maximum value (inclusive).
+    pub fn scalar_float_max(max: f64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: None,
+            max: Some(max),
+            exclusive_min: false,
+            exclusive_max: false,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Float constrained to [min, max] inclusive.
+    pub fn scalar_float_range(min: f64, max: f64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(min),
+            max: Some(max),
+            exclusive_min: false,
+            exclusive_max: false,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Float with an exclusive lower bound: (min, ∞).
+    pub fn scalar_float_gt(min: f64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(min),
+            max: None,
+            exclusive_min: true,
+            exclusive_max: false,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Float with an exclusive upper bound: (-∞, max).
+    pub fn scalar_float_lt(max: f64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: None,
+            max: Some(max),
+            exclusive_min: false,
+            exclusive_max: true,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Float in an open interval: (min, max) — both bounds exclusive.
+    pub fn scalar_float_open(min: f64, max: f64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(min),
+            max: Some(max),
+            exclusive_min: true,
+            exclusive_max: true,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Float in a half-open interval [min, max) — min inclusive, max exclusive.
+    pub fn scalar_float_half_open_right(min: f64, max: f64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(min),
+            max: Some(max),
+            exclusive_min: false,
+            exclusive_max: true,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Float in a half-open interval (min, max] — min exclusive, max inclusive.
+    pub fn scalar_float_half_open_left(min: f64, max: f64) -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(min),
+            max: Some(max),
+            exclusive_min: true,
+            exclusive_max: false,
+            units: None,
+            step: None,
+        }
+    }
+
+    /// Float angle in degrees [0, 360].
+    pub fn scalar_azimuth() -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(0.0),
+            max: Some(360.0),
+            exclusive_min: false,
+            exclusive_max: false,
+            units: Some("degrees".to_string()),
+            step: None,
+        }
+    }
+
+    /// Float angle above horizon [0, 90] degrees.
+    pub fn scalar_altitude() -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(0.0),
+            max: Some(90.0),
+            exclusive_min: false,
+            exclusive_max: false,
+            units: Some("degrees".to_string()),
+            step: None,
+        }
+    }
+
+    /// Float constrained to [0, 360] degrees.
+    pub fn scalar_degrees_360() -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(0.0),
+            max: Some(360.0),
+            exclusive_min: false,
+            exclusive_max: false,
+            units: Some("degrees".to_string()),
+            step: None,
+        }
+    }
+
+    /// Float constrained to [0, 180] degrees.
+    pub fn scalar_degrees_180() -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(0.0),
+            max: Some(180.0),
+            exclusive_min: false,
+            exclusive_max: false,
+            units: Some("degrees".to_string()),
+            step: None,
+        }
+    }
+
+    /// Float in map units, must be >= 0.
+    pub fn scalar_map_units() -> Self {
+        Self::Scalar {
+            scalar: ToolScalarKind::Float,
+            min: Some(0.0),
+            max: None,
+            exclusive_min: false,
+            exclusive_max: false,
+            units: Some("map units".to_string()),
+            step: None,
         }
     }
 
@@ -244,6 +500,7 @@ impl ToolParamSchema {
         Self::FieldDefinition
     }
 
+    /// Enum with raw value strings and no display labels.
     pub fn enum_values(options: &[&str]) -> Self {
         Self::Enum(ToolEnumSchema {
             options: options
@@ -251,6 +508,20 @@ impl ToolParamSchema {
                 .map(|value| ToolEnumOption {
                     value: (*value).to_string(),
                     label: None,
+                })
+                .collect(),
+        })
+    }
+
+    /// Enum with `(value, label)` pairs — label is shown to users; value is what
+    /// the tool receives.
+    pub fn enum_labeled(options: &[(&str, &str)]) -> Self {
+        Self::Enum(ToolEnumSchema {
+            options: options
+                .iter()
+                .map(|(value, label)| ToolEnumOption {
+                    value: (*value).to_string(),
+                    label: Some((*label).to_string()),
                 })
                 .collect(),
         })

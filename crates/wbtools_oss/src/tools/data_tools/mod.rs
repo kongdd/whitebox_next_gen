@@ -97,7 +97,7 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ("field", ToolParamSchema::field("input", None)),
             ("assign", ToolParamSchema::string()),
             ("zero_background", ToolParamSchema::bool()),
-            ("cell_size", ToolParamSchema::scalar_float()),
+            ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
             ("base", ToolParamSchema::input_raster()),
             ("output", ToolParamSchema::output_raster()),
         ])),
@@ -108,7 +108,7 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
             ("field", ToolParamSchema::field("input", None)),
             ("zero_background", ToolParamSchema::bool()),
-            ("cell_size", ToolParamSchema::scalar_float()),
+            ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
             ("base", ToolParamSchema::input_raster()),
             ("output", ToolParamSchema::output_raster()),
         ])),
@@ -119,7 +119,7 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
             ),
             ("field", ToolParamSchema::field("input", None)),
             ("zero_background", ToolParamSchema::bool()),
-            ("cell_size", ToolParamSchema::scalar_float()),
+            ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
             ("base", ToolParamSchema::input_raster()),
             ("output", ToolParamSchema::output_raster()),
         ])),
@@ -247,7 +247,7 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
         ])),
         "new_raster_from_base_vector" => Some(param_schema_map(&[
             ("base", ToolParamSchema::input_vector_any()),
-            ("cell_size", ToolParamSchema::scalar_float()),
+            ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
             ("out_val", ToolParamSchema::scalar_float()),
             ("data_type", ToolParamSchema::string()),
             ("output", ToolParamSchema::output_raster()),
@@ -255,7 +255,7 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
         "topology_rule_validate" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_vector_any()),
             ("rule_set", ToolParamSchema::string()),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -270,7 +270,7 @@ pub fn data_tools_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolPa
         "topology_rule_autofix" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_vector_any()),
             ("rule_set", ToolParamSchema::string()),
-            ("snap_tolerance", ToolParamSchema::scalar_float()),
+            ("snap_tolerance", ToolParamSchema::scalar_float_min(0.0)),
             ("dry_run", ToolParamSchema::bool()),
             ("output", ToolParamSchema::output_vector_any()),
             (

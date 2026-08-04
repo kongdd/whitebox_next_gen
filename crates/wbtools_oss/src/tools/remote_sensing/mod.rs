@@ -52,15 +52,15 @@ pub fn remote_sensing_tool_param_schemas(
         | "range_filter"
         | "refined_lee_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("filter_size_x", ToolParamSchema::scalar_integer()),
-            ("filter_size_y", ToolParamSchema::scalar_integer()),
+            ("filter_size_x", ToolParamSchema::scalar_odd_integer_min(3)),
+            ("filter_size_y", ToolParamSchema::scalar_odd_integer_min(3)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "high_pass_median_filter" | "median_filter" | "percentile_filter" => {
             Some(param_schema_map(&[
                 ("input", ToolParamSchema::input_raster()),
-                ("filter_size_x", ToolParamSchema::scalar_integer()),
-                ("filter_size_y", ToolParamSchema::scalar_integer()),
+                ("filter_size_x", ToolParamSchema::scalar_odd_integer_min(3)),
+                ("filter_size_y", ToolParamSchema::scalar_odd_integer_min(3)),
                 ("sig_digits", ToolParamSchema::scalar_integer()),
                 ("output", ToolParamSchema::output_raster()),
             ]))
@@ -68,13 +68,13 @@ pub fn remote_sensing_tool_param_schemas(
         "fast_almost_gaussian_filter" | "laplacian_of_gaussians_filter" => {
             Some(param_schema_map(&[
                 ("input", ToolParamSchema::input_raster()),
-                ("sigma", ToolParamSchema::scalar_float()),
+                ("sigma", ToolParamSchema::scalar_float_min(0.0)),
                 ("output", ToolParamSchema::output_raster()),
             ]))
         }
         "gaussian_contrast_stretch" | "histogram_equalization" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("num_tones", ToolParamSchema::scalar_integer()),
+            ("num_tones", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "prewitt_filter" => Some(param_schema_map(&[
@@ -84,12 +84,12 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "roberts_cross_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("clip_amount", ToolParamSchema::scalar_float()),
+            ("clip_amount", ToolParamSchema::scalar_float_min(0.0)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "remove_spurs" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("max_iterations", ToolParamSchema::scalar_integer()),
+            ("max_iterations", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "flip_image" => Some(param_schema_map(&[
@@ -99,25 +99,25 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "gamma_correction" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("gamma", ToolParamSchema::scalar_float()),
+            ("gamma", ToolParamSchema::scalar_float_min(0.0)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "edge_preserving_mean_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("filter_size", ToolParamSchema::scalar_integer()),
+            ("filter_size", ToolParamSchema::scalar_odd_integer_min(3)),
             ("threshold", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "emboss_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
             ("direction", ToolParamSchema::string()),
-            ("clip_amount", ToolParamSchema::scalar_float()),
+            ("clip_amount", ToolParamSchema::scalar_float_min(0.0)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "laplacian_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
             ("variant", ToolParamSchema::string()),
-            ("clip_amount", ToolParamSchema::scalar_float()),
+            ("clip_amount", ToolParamSchema::scalar_float_min(0.0)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "line_detection_filter" => Some(param_schema_map(&[
@@ -129,30 +129,30 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "gamma_map_filter" | "kuan_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("radius", ToolParamSchema::scalar_integer()),
+            ("radius", ToolParamSchema::scalar_integer_min(1)),
             ("enl", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "kuwahara_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("radius", ToolParamSchema::scalar_integer()),
+            ("radius", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "guided_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("radius", ToolParamSchema::scalar_integer()),
+            ("radius", ToolParamSchema::scalar_integer_min(1)),
             ("epsilon", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "frost_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("radius", ToolParamSchema::scalar_integer()),
+            ("radius", ToolParamSchema::scalar_integer_min(1)),
             ("damping_factor", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "anisotropic_diffusion_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("iterations", ToolParamSchema::scalar_integer()),
+            ("iterations", ToolParamSchema::scalar_integer_min(1)),
             ("kappa", ToolParamSchema::scalar_float()),
             ("lambda", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
@@ -164,7 +164,7 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "diff_of_gaussians_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("filter_size_x", ToolParamSchema::scalar_integer()),
+            ("filter_size_x", ToolParamSchema::scalar_odd_integer_min(3)),
             ("sigma2", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
         ])),
@@ -183,7 +183,7 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "gabor_filter_bank" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("sigma", ToolParamSchema::scalar_float()),
+            ("sigma", ToolParamSchema::scalar_float_min(0.0)),
             ("frequency", ToolParamSchema::scalar_float()),
             ("orientations", ToolParamSchema::string()),
             ("output", ToolParamSchema::output_raster()),
@@ -197,23 +197,23 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "k_nearest_mean_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("filter_size_x", ToolParamSchema::scalar_integer()),
-            ("filter_size_y", ToolParamSchema::scalar_integer()),
-            ("k", ToolParamSchema::scalar_integer()),
+            ("filter_size_x", ToolParamSchema::scalar_odd_integer_min(3)),
+            ("filter_size_y", ToolParamSchema::scalar_odd_integer_min(3)),
+            ("k", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "lee_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("filter_size_x", ToolParamSchema::scalar_integer()),
-            ("filter_size_y", ToolParamSchema::scalar_integer()),
-            ("sigma", ToolParamSchema::scalar_float()),
+            ("filter_size_x", ToolParamSchema::scalar_odd_integer_min(3)),
+            ("filter_size_y", ToolParamSchema::scalar_odd_integer_min(3)),
+            ("sigma", ToolParamSchema::scalar_float_min(0.0)),
             ("m_value", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "enhanced_lee_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("filter_size_x", ToolParamSchema::scalar_integer()),
-            ("filter_size_y", ToolParamSchema::scalar_integer()),
+            ("filter_size_x", ToolParamSchema::scalar_odd_integer_min(3)),
+            ("filter_size_y", ToolParamSchema::scalar_odd_integer_min(3)),
             ("enl", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
         ])),
@@ -232,7 +232,7 @@ pub fn remote_sensing_tool_param_schemas(
             ("input", ToolParamSchema::input_raster()),
             ("min_val", ToolParamSchema::scalar_float()),
             ("max_val", ToolParamSchema::scalar_float()),
-            ("num_tones", ToolParamSchema::scalar_integer()),
+            ("num_tones", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "normalized_difference_index" => Some(param_schema_map(&[
@@ -245,7 +245,7 @@ pub fn remote_sensing_tool_param_schemas(
             ("input", ToolParamSchema::input_raster()),
             ("clip", ToolParamSchema::scalar_float()),
             ("tail", ToolParamSchema::string()),
-            ("num_tones", ToolParamSchema::scalar_integer()),
+            ("num_tones", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "piecewise_contrast_stretch" => Some(param_schema_map(&[
@@ -256,7 +256,7 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "savitzky_golay_2d_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("window_size", ToolParamSchema::scalar_integer()),
+            ("window_size", ToolParamSchema::scalar_odd_integer_min(3)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "scharr_filter" => Some(param_schema_map(&[
@@ -267,7 +267,7 @@ pub fn remote_sensing_tool_param_schemas(
         "mosaic" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -290,16 +290,16 @@ pub fn remote_sensing_tool_param_schemas(
         "resample" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("base", ToolParamSchema::input_raster()),
-            ("cell_size", ToolParamSchema::scalar_float()),
+            ("cell_size", ToolParamSchema::scalar_float_min(0.0)),
             ("method", ToolParamSchema::string()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "canny_edge_detection" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("sigma", ToolParamSchema::scalar_float()),
+            ("sigma", ToolParamSchema::scalar_float_min(0.0)),
             ("low_threshold", ToolParamSchema::scalar_float()),
             ("high_threshold", ToolParamSchema::scalar_float()),
             ("add_back", ToolParamSchema::bool()),
@@ -326,7 +326,7 @@ pub fn remote_sensing_tool_param_schemas(
             ("segments", ToolParamSchema::input_raster()),
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             (
                 "output",
@@ -355,15 +355,15 @@ pub fn remote_sensing_tool_param_schemas(
         "objects_enforce_min_mapping_unit" | "segments_merge_small_regions" => {
             Some(param_schema_map(&[
                 ("segments", ToolParamSchema::input_raster()),
-                ("min_size", ToolParamSchema::scalar_integer()),
+                ("min_size", ToolParamSchema::scalar_integer_min(1)),
                 ("method", ToolParamSchema::string()),
                 ("output", ToolParamSchema::output_raster()),
             ]))
         }
         "objects_boundary_refinement_pro" => Some(param_schema_map(&[
             ("segments", ToolParamSchema::input_raster()),
-            ("iterations", ToolParamSchema::scalar_integer()),
-            ("min_size", ToolParamSchema::scalar_integer()),
+            ("iterations", ToolParamSchema::scalar_integer_min(1)),
+            ("min_size", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "evaluate_segmentation_quality_pro" => Some(param_schema_map(&[
@@ -377,7 +377,7 @@ pub fn remote_sensing_tool_param_schemas(
         "segment_graph_felzenszwalb" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -388,14 +388,14 @@ pub fn remote_sensing_tool_param_schemas(
                 ]),
             ),
             ("k", ToolParamSchema::scalar_float()),
-            ("sigma", ToolParamSchema::scalar_float()),
-            ("min_area", ToolParamSchema::scalar_integer()),
+            ("sigma", ToolParamSchema::scalar_float_min(0.0)),
+            ("min_area", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "segment_slic_superpixels" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -407,22 +407,22 @@ pub fn remote_sensing_tool_param_schemas(
             ),
             ("region_size", ToolParamSchema::scalar_integer()),
             ("compactness", ToolParamSchema::scalar_float()),
-            ("min_area", ToolParamSchema::scalar_integer()),
+            ("min_area", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "segment_watershed_markers" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("gradient_weight", ToolParamSchema::scalar_float()),
-            ("min_area", ToolParamSchema::scalar_integer()),
+            ("min_area", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "segment_multiresolution_hierarchical" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("coarse_k", ToolParamSchema::scalar_float()),
             ("fine_k", ToolParamSchema::scalar_float()),
@@ -434,7 +434,7 @@ pub fn remote_sensing_tool_param_schemas(
         "segment_scale_parameter_optimizer" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("candidate_scales", ToolParamSchema::string()),
             ("target_objects", ToolParamSchema::scalar_integer()),
@@ -456,7 +456,7 @@ pub fn remote_sensing_tool_param_schemas(
         "obia_pipeline_basic" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             (
                 "training",
@@ -467,7 +467,7 @@ pub fn remote_sensing_tool_param_schemas(
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
             ),
             ("segment_method", ToolParamSchema::string()),
-            ("min_size", ToolParamSchema::scalar_integer()),
+            ("min_size", ToolParamSchema::scalar_integer_min(1)),
             ("class_field", ToolParamSchema::string()),
         ])),
         "propagate_labels_across_hierarchy" => Some(param_schema_map(&[
@@ -514,7 +514,7 @@ pub fn remote_sensing_tool_param_schemas(
         "knn_classification" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -527,14 +527,14 @@ pub fn remote_sensing_tool_param_schemas(
             ("training_data", ToolParamSchema::input_vector_any()),
             ("class_field", ToolParamSchema::field("training_data", None)),
             ("scaling", ToolParamSchema::string()),
-            ("k", ToolParamSchema::scalar_integer()),
+            ("k", ToolParamSchema::scalar_integer_min(1)),
             ("clip", ToolParamSchema::bool()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "knn_regression" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -547,14 +547,14 @@ pub fn remote_sensing_tool_param_schemas(
             ("training_data", ToolParamSchema::input_vector_any()),
             ("field", ToolParamSchema::field("training_data", None)),
             ("scaling", ToolParamSchema::string()),
-            ("k", ToolParamSchema::scalar_integer()),
+            ("k", ToolParamSchema::scalar_integer_min(1)),
             ("distance_weighted", ToolParamSchema::bool()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "logistic_regression" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -573,7 +573,7 @@ pub fn remote_sensing_tool_param_schemas(
         "random_forest_classification" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -586,15 +586,15 @@ pub fn remote_sensing_tool_param_schemas(
             ("training_data", ToolParamSchema::input_vector_any()),
             ("class_field", ToolParamSchema::field("training_data", None)),
             ("scaling", ToolParamSchema::string()),
-            ("n_trees", ToolParamSchema::scalar_integer()),
-            ("min_samples_leaf", ToolParamSchema::scalar_integer()),
-            ("min_samples_split", ToolParamSchema::scalar_integer()),
+            ("n_trees", ToolParamSchema::scalar_integer_min(1)),
+            ("min_samples_leaf", ToolParamSchema::scalar_integer_min(1)),
+            ("min_samples_split", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "random_forest_regression" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -607,15 +607,15 @@ pub fn remote_sensing_tool_param_schemas(
             ("training_data", ToolParamSchema::input_vector_any()),
             ("field", ToolParamSchema::field("training_data", None)),
             ("scaling", ToolParamSchema::string()),
-            ("n_trees", ToolParamSchema::scalar_integer()),
-            ("min_samples_leaf", ToolParamSchema::scalar_integer()),
-            ("min_samples_split", ToolParamSchema::scalar_integer()),
+            ("n_trees", ToolParamSchema::scalar_integer_min(1)),
+            ("min_samples_leaf", ToolParamSchema::scalar_integer_min(1)),
+            ("min_samples_split", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "fuzzy_knn_classification" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -628,7 +628,7 @@ pub fn remote_sensing_tool_param_schemas(
             ("training_data", ToolParamSchema::input_vector_any()),
             ("class_field", ToolParamSchema::field("training_data", None)),
             ("scaling", ToolParamSchema::string()),
-            ("k", ToolParamSchema::scalar_integer()),
+            ("k", ToolParamSchema::scalar_integer_min(1)),
             ("m", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
             ("probability_output", ToolParamSchema::output_raster()),
@@ -636,7 +636,7 @@ pub fn remote_sensing_tool_param_schemas(
         "nnd_classification" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -651,13 +651,13 @@ pub fn remote_sensing_tool_param_schemas(
             ("scaling", ToolParamSchema::string()),
             ("z_threshold", ToolParamSchema::scalar_float()),
             ("outlier_is_zero", ToolParamSchema::bool()),
-            ("k", ToolParamSchema::scalar_integer()),
+            ("k", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "min_dist_classification" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -675,7 +675,7 @@ pub fn remote_sensing_tool_param_schemas(
         "parallelepiped_classification" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             (
@@ -692,10 +692,10 @@ pub fn remote_sensing_tool_param_schemas(
         "k_means_clustering" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("classes", ToolParamSchema::scalar_integer()),
-            ("max_iterations", ToolParamSchema::scalar_integer()),
+            ("max_iterations", ToolParamSchema::scalar_integer_min(1)),
             ("class_change", ToolParamSchema::scalar_float()),
             ("initialize", ToolParamSchema::string()),
             ("min_class_size", ToolParamSchema::scalar_integer()),
@@ -708,11 +708,11 @@ pub fn remote_sensing_tool_param_schemas(
         "modified_k_means_clustering" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("start_clusters", ToolParamSchema::scalar_integer()),
             ("merge_dist", ToolParamSchema::scalar_float()),
-            ("max_iterations", ToolParamSchema::scalar_integer()),
+            ("max_iterations", ToolParamSchema::scalar_integer_min(1)),
             ("class_change", ToolParamSchema::scalar_float()),
             (
                 "out_html",
@@ -730,11 +730,11 @@ pub fn remote_sensing_tool_param_schemas(
         "image_difference_change_detection" => Some(param_schema_map(&[
             (
                 "t1_inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             (
                 "t2_inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("mode", ToolParamSchema::string()),
             ("threshold_sigma", ToolParamSchema::scalar_float()),
@@ -754,11 +754,11 @@ pub fn remote_sensing_tool_param_schemas(
         "pca_based_change_detection" => Some(param_schema_map(&[
             (
                 "t1_inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             (
                 "t2_inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("component", ToolParamSchema::scalar_integer()),
             ("standardized", ToolParamSchema::bool()),
@@ -813,7 +813,7 @@ pub fn remote_sensing_tool_param_schemas(
             ),
             ("segment_id_field", ToolParamSchema::field("features", None)),
             ("class_field", ToolParamSchema::field("features", None)),
-            ("n_trees", ToolParamSchema::scalar_integer()),
+            ("n_trees", ToolParamSchema::scalar_integer_min(1)),
             (
                 "output",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Table),
@@ -862,7 +862,7 @@ pub fn remote_sensing_tool_param_schemas(
             ("segments", ToolParamSchema::input_raster()),
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("split_scale", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
@@ -924,13 +924,13 @@ pub fn remote_sensing_tool_param_schemas(
             ("input", ToolParamSchema::input_raster()),
             ("cutoff", ToolParamSchema::scalar_float()),
             ("gain", ToolParamSchema::scalar_float()),
-            ("num_tones", ToolParamSchema::scalar_integer()),
+            ("num_tones", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "standard_deviation_contrast_stretch" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
             ("clip", ToolParamSchema::scalar_float()),
-            ("num_tones", ToolParamSchema::scalar_integer()),
+            ("num_tones", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "sobel_filter" => Some(param_schema_map(&[
@@ -941,8 +941,8 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "standard_deviation_filter" | "total_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("filter_size_x", ToolParamSchema::scalar_integer()),
-            ("filter_size_y", ToolParamSchema::scalar_integer()),
+            ("filter_size_x", ToolParamSchema::scalar_odd_integer_min(3)),
+            ("filter_size_y", ToolParamSchema::scalar_odd_integer_min(3)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "thicken_raster_line" => Some(param_schema_map(&[
@@ -951,14 +951,14 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "tophat_transform" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("filter_size_x", ToolParamSchema::scalar_integer()),
-            ("filter_size_y", ToolParamSchema::scalar_integer()),
+            ("filter_size_x", ToolParamSchema::scalar_odd_integer_min(3)),
+            ("filter_size_y", ToolParamSchema::scalar_odd_integer_min(3)),
             ("variant", ToolParamSchema::string()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "unsharp_masking" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("sigma", ToolParamSchema::scalar_float()),
+            ("sigma", ToolParamSchema::scalar_float_min(0.0)),
             ("amount", ToolParamSchema::scalar_float()),
             ("threshold", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
@@ -972,7 +972,7 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "wiener_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("radius", ToolParamSchema::scalar_integer()),
+            ("radius", ToolParamSchema::scalar_integer_min(1)),
             ("noise_variance", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),
         ])),
@@ -989,7 +989,7 @@ pub fn remote_sensing_tool_param_schemas(
             ("solar_azimuth_deg", ToolParamSchema::scalar_float()),
             ("method", ToolParamSchema::string()),
             ("minnaert_k", ToolParamSchema::scalar_float()),
-            ("z_factor", ToolParamSchema::scalar_float()),
+            ("z_factor", ToolParamSchema::scalar_float_gt(0.0)),
             (
                 "output_prefix",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
@@ -1015,7 +1015,7 @@ pub fn remote_sensing_tool_param_schemas(
             ("qa_mask", ToolParamSchema::input_raster()),
             ("qa_mask_format", ToolParamSchema::string()),
             ("mask_strategy", ToolParamSchema::string()),
-            ("z_factor", ToolParamSchema::scalar_float()),
+            ("z_factor", ToolParamSchema::scalar_float_gt(0.0)),
             (
                 "output_prefix",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::File),
@@ -1097,12 +1097,12 @@ pub fn remote_sensing_tool_param_schemas(
         "linear_spectral_unmixing" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("endmembers", ToolParamSchema::string()),
             ("sum_to_one", ToolParamSchema::bool()),
-            ("iterations", ToolParamSchema::scalar_integer()),
-            ("step_size", ToolParamSchema::scalar_float()),
+            ("iterations", ToolParamSchema::scalar_integer_min(1)),
+            ("step_size", ToolParamSchema::scalar_float_gt(0.0)),
             ("auto_reproject", ToolParamSchema::bool()),
             ("auto_reproject_method", ToolParamSchema::string()),
             ("output", ToolParamSchema::output_raster()),
@@ -1111,7 +1111,7 @@ pub fn remote_sensing_tool_param_schemas(
         "continuum_removal" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("wavelengths", ToolParamSchema::string()),
             ("auto_reproject", ToolParamSchema::bool()),
@@ -1121,7 +1121,7 @@ pub fn remote_sensing_tool_param_schemas(
         "dn_to_toa_reflectance" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("reflectance_mult", ToolParamSchema::string()),
             ("reflectance_add", ToolParamSchema::string()),
@@ -1136,7 +1136,7 @@ pub fn remote_sensing_tool_param_schemas(
         "dark_object_subtraction" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("percentile", ToolParamSchema::scalar_float()),
             ("clamp_non_negative", ToolParamSchema::bool()),
@@ -1165,7 +1165,7 @@ pub fn remote_sensing_tool_param_schemas(
         "cloude_pottier_decomposition" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("matrix_format", ToolParamSchema::string()),
             ("auto_reproject", ToolParamSchema::bool()),
@@ -1175,7 +1175,7 @@ pub fn remote_sensing_tool_param_schemas(
         "freeman_durden_decomposition" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("matrix_format", ToolParamSchema::string()),
             ("auto_reproject", ToolParamSchema::bool()),
@@ -1205,7 +1205,7 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "glcm_texture" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("window_size", ToolParamSchema::scalar_integer()),
+            ("window_size", ToolParamSchema::scalar_odd_integer_min(3)),
             ("distance", ToolParamSchema::scalar_integer()),
             ("angles", ToolParamSchema::string()),
             ("features", ToolParamSchema::string()),
@@ -1232,7 +1232,7 @@ pub fn remote_sensing_tool_param_schemas(
         "image_stack_profile" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             (
                 "points",
@@ -1246,7 +1246,7 @@ pub fn remote_sensing_tool_param_schemas(
         "evaluate_training_sites" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             (
                 "training_data",
@@ -1260,7 +1260,7 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "generalize_classified_raster" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("min_size", ToolParamSchema::scalar_integer()),
+            ("min_size", ToolParamSchema::scalar_integer_min(1)),
             ("method", ToolParamSchema::string()),
             ("output", ToolParamSchema::output_raster()),
         ])),
@@ -1268,21 +1268,21 @@ pub fn remote_sensing_tool_param_schemas(
             ("input", ToolParamSchema::input_raster()),
             (
                 "similarity",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
-            ("min_size", ToolParamSchema::scalar_integer()),
+            ("min_size", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "image_segmentation" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             ("auto_reproject_method", ToolParamSchema::string()),
             ("threshold", ToolParamSchema::scalar_float()),
             ("steps", ToolParamSchema::scalar_integer()),
-            ("min_area", ToolParamSchema::scalar_integer()),
+            ("min_area", ToolParamSchema::scalar_integer_min(1)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "bilateral_filter" | "high_pass_bilateral_filter" => Some(param_schema_map(&[
@@ -1298,7 +1298,7 @@ pub fn remote_sensing_tool_param_schemas(
         ])),
         "gaussian_filter" => Some(param_schema_map(&[
             ("input", ToolParamSchema::input_raster()),
-            ("sigma", ToolParamSchema::scalar_float()),
+            ("sigma", ToolParamSchema::scalar_float_min(0.0)),
             ("treat_as_rgb", ToolParamSchema::bool()),
             ("assume_three_band_rgb", ToolParamSchema::bool()),
             (
@@ -1322,9 +1322,9 @@ pub fn remote_sensing_tool_param_schemas(
         "minimum_noise_fraction" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
-            ("num_components", ToolParamSchema::scalar_integer()),
+            ("num_components", ToolParamSchema::scalar_integer_min(1)),
             ("noise_mode", ToolParamSchema::string()),
             ("auto_reproject", ToolParamSchema::bool()),
             ("auto_reproject_method", ToolParamSchema::string()),
@@ -1345,7 +1345,7 @@ pub fn remote_sensing_tool_param_schemas(
         "spectral_angle_mapper" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("endmembers", ToolParamSchema::string()),
             ("threshold_angle_deg", ToolParamSchema::scalar_float()),
@@ -1357,7 +1357,7 @@ pub fn remote_sensing_tool_param_schemas(
         "spectral_library_matching" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("library", ToolParamSchema::string()),
             (
@@ -1373,7 +1373,7 @@ pub fn remote_sensing_tool_param_schemas(
         "yamaguchi_4component_decomposition" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("matrix_format", ToolParamSchema::string()),
             ("auto_reproject", ToolParamSchema::bool()),
@@ -1383,8 +1383,8 @@ pub fn remote_sensing_tool_param_schemas(
         "wisart_iterative_clustering" => Some(param_schema_map(&[
             ("h_raster", ToolParamSchema::input_raster()),
             ("alpha_raster", ToolParamSchema::input_raster()),
-            ("max_iterations", ToolParamSchema::scalar_integer()),
-            ("convergence_threshold", ToolParamSchema::scalar_float()),
+            ("max_iterations", ToolParamSchema::scalar_integer_min(1)),
+            ("convergence_threshold", ToolParamSchema::scalar_float_min(0.0)),
             ("auto_reproject", ToolParamSchema::bool()),
             ("auto_reproject_method", ToolParamSchema::string()),
             ("output", ToolParamSchema::output_raster()),
@@ -1392,7 +1392,7 @@ pub fn remote_sensing_tool_param_schemas(
         "random_forest_classification_fit" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             (
                 "training_data",
@@ -1401,15 +1401,15 @@ pub fn remote_sensing_tool_param_schemas(
             ("class_field", ToolParamSchema::field("training_data", None)),
             ("scaling", ToolParamSchema::string()),
             ("split_criterion", ToolParamSchema::string()),
-            ("n_trees", ToolParamSchema::scalar_integer()),
-            ("min_samples_leaf", ToolParamSchema::scalar_integer()),
-            ("min_samples_split", ToolParamSchema::scalar_integer()),
+            ("n_trees", ToolParamSchema::scalar_integer_min(1)),
+            ("min_samples_leaf", ToolParamSchema::scalar_integer_min(1)),
+            ("min_samples_split", ToolParamSchema::scalar_integer_min(1)),
             ("test_proportion", ToolParamSchema::scalar_float()),
         ])),
         "random_forest_classification_predict" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("model_bytes", ToolParamSchema::string()),
             ("output", ToolParamSchema::output_raster()),
@@ -1417,7 +1417,7 @@ pub fn remote_sensing_tool_param_schemas(
         "random_forest_regression_fit" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             (
                 "training_data",
@@ -1425,15 +1425,15 @@ pub fn remote_sensing_tool_param_schemas(
             ),
             ("field", ToolParamSchema::field("training_data", None)),
             ("scaling", ToolParamSchema::string()),
-            ("n_trees", ToolParamSchema::scalar_integer()),
-            ("min_samples_leaf", ToolParamSchema::scalar_integer()),
-            ("min_samples_split", ToolParamSchema::scalar_integer()),
+            ("n_trees", ToolParamSchema::scalar_integer_min(1)),
+            ("min_samples_leaf", ToolParamSchema::scalar_integer_min(1)),
+            ("min_samples_split", ToolParamSchema::scalar_integer_min(1)),
             ("test_proportion", ToolParamSchema::scalar_float()),
         ])),
         "random_forest_regression_predict" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("model_bytes", ToolParamSchema::string()),
             ("output", ToolParamSchema::output_raster()),
@@ -1441,7 +1441,7 @@ pub fn remote_sensing_tool_param_schemas(
         "svm_classification" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             ("auto_reproject_method", ToolParamSchema::string()),
@@ -1453,14 +1453,14 @@ pub fn remote_sensing_tool_param_schemas(
             ("scaling", ToolParamSchema::string()),
             ("kernel", ToolParamSchema::string()),
             ("c", ToolParamSchema::scalar_float()),
-            ("gamma", ToolParamSchema::scalar_float()),
+            ("gamma", ToolParamSchema::scalar_float_min(0.0)),
             ("epoch", ToolParamSchema::scalar_integer()),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "svm_regression" => Some(param_schema_map(&[
             (
                 "inputs",
-                ToolParamSchema::input_multiple(wbcore::ToolDatasetSchema::Raster),
+                ToolParamSchema::input_multiple_min(wbcore::ToolDatasetSchema::Raster, 2),
             ),
             ("auto_reproject", ToolParamSchema::bool()),
             ("auto_reproject_method", ToolParamSchema::string()),
@@ -1472,7 +1472,7 @@ pub fn remote_sensing_tool_param_schemas(
             ("scaling", ToolParamSchema::string()),
             ("kernel", ToolParamSchema::string()),
             ("c", ToolParamSchema::scalar_float()),
-            ("gamma", ToolParamSchema::scalar_float()),
+            ("gamma", ToolParamSchema::scalar_float_min(0.0)),
             ("eps", ToolParamSchema::scalar_float()),
             ("tol", ToolParamSchema::scalar_float()),
             ("output", ToolParamSchema::output_raster()),

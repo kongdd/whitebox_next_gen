@@ -4686,6 +4686,13 @@ fn build_tool_info_dict(
             if let Some(dv) = default_value {
                 pd.set_item("default_value", dv)?;
             }
+            // Inject visible_when from the schema-map dispatch.
+            if let Some(vis_map) = wbtools_oss::tools::tool_param_visibility(&m.id) {
+                if let Some(condition) = vis_map.get(&p.name) {
+                    let cond_str = condition.to_string();
+                    pd.set_item("visible_when", cond_str)?;
+                }
+            }
             Ok(pd.into_any().unbind())
         })
         .collect();

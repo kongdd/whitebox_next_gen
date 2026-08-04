@@ -99,8 +99,8 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
                 ToolParamSchema::input_vector(ToolVectorGeometry::Line),
             ),
             ("dem", ToolParamSchema::input_raster()),
-            ("threshold", ToolParamSchema::scalar_float()),
-            ("snap_distance", ToolParamSchema::scalar_float()),
+            ("threshold", ToolParamSchema::scalar_float_min(0.0)),
+            ("snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("max_ridge_cutting_height", ToolParamSchema::scalar_float()),
             (
                 "output",
@@ -111,7 +111,7 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         ])),
         "river_centerlines" => Some(param_schema_map(&[
             ("raster", ToolParamSchema::input_raster()),
-            ("min_length", ToolParamSchema::scalar_integer()),
+            ("min_length", ToolParamSchema::scalar_integer_min(1)),
             ("search_radius", ToolParamSchema::scalar_integer()),
             (
                 "output",
@@ -122,10 +122,10 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         ])),
         "ridge_and_valley_vectors" => Some(param_schema_map(&[
             ("dem", ToolParamSchema::input_raster()),
-            ("filter_size", ToolParamSchema::scalar_integer()),
+            ("filter_size", ToolParamSchema::scalar_odd_integer_min(3)),
             ("ep_threshold", ToolParamSchema::scalar_float()),
-            ("slope_threshold", ToolParamSchema::scalar_float()),
-            ("min_length", ToolParamSchema::scalar_integer()),
+            ("slope_threshold", ToolParamSchema::scalar_float_min(0.0)),
+            ("min_length", ToolParamSchema::scalar_integer_min(1)),
             (
                 "output_ridges",
                 ToolParamSchema::output(wbcore::ToolDatasetSchema::Vector {
@@ -141,7 +141,7 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
         ])),
         "extract_streams" => Some(param_schema_map(&[
             ("flow_accumulation", ToolParamSchema::input_raster()),
-            ("threshold", ToolParamSchema::scalar_float()),
+            ("threshold", ToolParamSchema::scalar_float_min(0.0)),
             ("zero_background", ToolParamSchema::bool()),
             ("output", ToolParamSchema::output_raster()),
         ])),
@@ -197,7 +197,7 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
                 "variant",
                 ToolParamSchema::enum_values(&["lq", "jandr", "pandd"]),
             ),
-            ("filter_size", ToolParamSchema::scalar_integer()),
+            ("filter_size", ToolParamSchema::scalar_odd_integer_min(3)),
             ("output", ToolParamSchema::output_raster()),
         ])),
         "raster_streams_to_vector" => Some(param_schema_map(&[
@@ -265,7 +265,7 @@ pub fn stream_tool_param_schemas(tool_id: &str) -> Option<BTreeMap<String, ToolP
             ),
             ("dem", ToolParamSchema::input_raster()),
             ("max_ridge_cutting_height", ToolParamSchema::scalar_float()),
-            ("snap_distance", ToolParamSchema::scalar_float()),
+            ("snap_distance", ToolParamSchema::scalar_float_min(0.0)),
             ("output", ToolParamSchema::output_vector_any()),
         ])),
         _ => None,
