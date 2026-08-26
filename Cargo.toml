@@ -34,6 +34,8 @@ opt-level = 3
 lto = true
 codegen-units = 1
 panic = "abort"
+# 发布给 C FFI 调用方的二进制不需要 DWARF 调试信息；保留 .symtab 方便 nm/objdump 排查。
+strip = "debuginfo"
 
 [profile.dev]
 opt-level = 1

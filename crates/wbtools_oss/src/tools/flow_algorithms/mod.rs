@@ -12,7 +12,7 @@ use wbcore::{
     param_schema_map,
 };
 use rand::RngExt;
-use wbraster::{DataType, Raster, RasterFormat};
+use wbraster::{raster::RasterData, DataType, Raster, RasterFormat};
 
 use crate::memory_store;
 
@@ -2701,6 +2701,17 @@ impl Tool for D8FlowAccumTool {
         let mut out = input.as_ref().clone();
         out.data_type = DataType::F32;
         out.nodata = -32768.0;
+        // IMPORTANT: cloning `out` from `input` keeps the original backing storage
+        // (e.g. U8 for Byte inputs like Hubei_flowdir.tif). `set_f64` dispatches on
+        // the actual storage variant, so 61.7M cells would wrap to 0–255 via `as u8`
+        // even though `data_type` now says F32. Convert the storage buffer too.
+        let n = (input.rows * input.cols) as usize;
+        let mut out_f32: Vec<f32> = Vec::with_capacity(n);
+        for i in 0..n {
+            let v = if flow_dir[i] == -2 { -32768.0 } else { accum[i] };
+            out_f32.push(v as f32);
+        }
+        out.data = RasterData::F32(out_f32);
 
         if !raster_is_geographic(&input) {
             let mut cell_area = input.cell_size_x * input.cell_size_y;
