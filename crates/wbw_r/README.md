@@ -1,32 +1,33 @@
 # Whitebox Workflows for R
 
-Whitebox Workflows for R is the R interface for the Whitebox backend runtime.
+Whitebox Workflows for R (`whiteboxworkflows`) is the R interface to the Whitebox backend runtime. It is publicly released and available on r-universe.
 
-The API is in active modernization, with emphasis on:
+**Install:**
+
+```r
+install.packages("whiteboxworkflows", repos = "https://jblindsay.r-universe.dev")
+```
+
+**User manual:** <https://www.whiteboxgeo.com/manuals/api/r/index.html>
+
+The API provides:
 - clearer session ergonomics,
-- better discoverability in editors,
+- discoverability in editors,
 - robust package-native loading through extendr,
 - practical interoperability with R spatial tooling.
 
-**THIS CRATE IS CURRENTLY EXPERIMENTAL AND IS IN AN EARLY DEVELOPMENTAL STAGE. IT IS NOT INTENDED FOR PUBLIC USAGE AT PRESENT.**
-
-## Parity status
-
-Current parity against `wbw_python` is uneven across layers.
+## API status
 
 | Layer | Status | Notes |
 |---|---|---|
-| Tool call coverage | High | Generated wrappers and facade expose most visible tools. |
-| Runtime and licensing | High | Open, entitlement, and floating startup paths are implemented. |
-| Typed data-object workflows | Partial | Raster, vector, lidar, and sensor-bundle wrappers now exist, including bundle key-list/read helpers plus preview and true/false-colour composite helper methods; broader family ergonomics remain. |
-| Docs and examples | Partial | Structure is closer to Python and object quickstarts now exist for raster/vector/lidar/sensor bundles, including preview/composite helper examples, but advanced family-specific flows are still thinner than Python. |
-
-Execution plan:
-- [R_API_PARITY_PLAN.md](R_API_PARITY_PLAN.md)
+| Tool call coverage | Complete | Generated wrappers and facade expose all visible tools. |
+| Runtime and licensing | Complete | Open, entitlement, and floating startup paths are implemented. |
+| Typed data-object workflows | Complete | Raster, vector, lidar, and sensor-bundle wrappers with preview and composite helper methods. |
+| Docs and examples | Complete | Object quickstarts for raster, vector, lidar, and sensor bundles; full manual at <https://www.whiteboxgeo.com/manuals/api/r/index.html>. |
 
 ## Table of contents
 
-- [Parity status](#parity-status)
+- [API status](#api-status)
 - [Current API highlights](#current-api-highlights)
 - [Migration quick map](#migration-quick-map)
 - [Python to R API map](#python-to-r-api-map)

@@ -1,8 +1,11 @@
 # wbw_qgis
 
-QGIS 4 plugin frontend for Whitebox Workflows, intended to provide a QGIS-first user experience over the Whitebox backend runtime and the `whitebox_workflows` Python package.
+QGIS plugin frontend for Whitebox Workflows, providing a QGIS-native user experience over the Whitebox backend runtime and the `whitebox_workflows` Python package.
 
-The plugin is currently in active development and is installed locally from source. It is not yet published to the QGIS plugin portal, and `whitebox_workflows` is not yet published to PyPI, so the current workflow is source-based development and local installation only.
+The plugin is approved and published on the QGIS plugin portal (version 2.1.0, released June 9, 2026). It uses a dynamic runtime-based tool discovery architecture to expose the full Whitebox tool catalog as a QGIS Processing provider.
+
+**Install from the QGIS Plugin Manager** — search for **Whitebox Workflows** — or visit the portal listing directly:
+<https://plugins.qgis.org/plugins/whitebox_workflows_for_qgis/#plugin-versions>
 
 ## Table of Contents
 
@@ -13,7 +16,7 @@ The plugin is currently in active development and is installed locally from sour
 - [What wbw_qgis Is Not](#what-wbw_qgis-is-not)
 - [Current Capabilities](#current-capabilities)
 - [Licensing Model in the QGIS Plugin](#licensing-model-in-the-qgis-plugin)
-- [Installation and Local Setup](#installation-and-local-setup)
+- [Installation and Setup](#installation-and-setup)
 - [QGIS Version Support](#qgis-version-support)
 - [Local Installation Workflow](#local-installation-workflow)
 - [Development Notes](#development-notes)
@@ -151,33 +154,29 @@ As the licensing surfaces mature, the plugin is expected to remain thin and defe
 
 That keeps licensing behavior consistent across Python scripts, notebook workflows, and the QGIS plugin.
 
-## Installation and Local Setup
+## Installation and Setup
 
-This plugin currently supports **local installation from source only**.
+### Standard installation (recommended)
 
-There are two pieces to install:
+Install directly from the QGIS Plugin Manager:
 
-1. `whitebox_workflows` must be installed into the same Python environment used by QGIS.
-2. The plugin package directory `whitebox_workflows_qgis` must be present in the active QGIS profile's `python/plugins` directory.
+1. Open QGIS and go to **Plugins → Manage and Install Plugins**.
+2. Search for **Whitebox Workflows**.
+3. Click **Install Plugin**.
+4. Enable the plugin if prompted.
+5. Confirm the Processing provider and plugin actions appear.
 
-The plugin metadata currently targets QGIS 4 (`qgisMinimumVersion=4.0`).
+The plugin will prompt you to install or update `whitebox_workflows` into the QGIS Python environment if it is not already present. Alternatively, install it manually:
+
+```bash
+pip install whitebox_workflows
+```
 
 ## QGIS Version Support
 
-This plugin targets **QGIS 4.x**.
+This plugin supports **QGIS 4.x**. QGIS 3.x is not supported.
 
-QGIS 3.x support is not planned.
-
-The reasoning is practical rather than ideological:
-
-- The plugin is being built for the current forward-looking Whitebox Next Gen frontend surface.
-- By the expected release window, QGIS 3.x will be close to or past the point where it remains the long-term-maintenance target that matters for a new plugin launch.
-- Supporting both QGIS 3.x and 4.x would increase testing, maintenance, and compatibility burden for a frontend that is still evolving quickly.
-- For a small team, the correct tradeoff is to concentrate effort on one host-generation target and keep the plugin architecture clean.
-
-Until public release, local development and testing should assume QGIS 4.x only.
-
-## Local Installation Workflow
+## Local Source Installation (Development)
 
 ### 1. Install `whitebox_workflows` into the QGIS Python environment
 
@@ -201,7 +200,9 @@ For most external builders, the `--pro` path should be considered non-default an
 
 If QGIS is using a dedicated Python environment, activate that environment first and then run the install script.
 
-### 2. Install or symlink the QGIS plugin package into the QGIS profile
+### Source installation
+
+Symlink or copy the plugin package into the QGIS profile plugin directory:
 
 The plugin package to install is:
 
@@ -237,17 +238,13 @@ ln -snf "$PWD/crates/wbw_qgis/plugin/whitebox_workflows_qgis" \
 	"$QGIS_PLUGIN_DIR/whitebox_workflows_qgis"
 ```
 
-### 3. Start QGIS and enable the plugin
-
-After the Python package and plugin directory are in place:
-
 1. Start QGIS.
 2. Open the Plugin Manager.
 3. Enable **Whitebox Workflows**.
 4. Confirm the Processing provider and plugin actions appear.
 5. Trigger a catalog refresh if needed.
 
-### 4. Verify the runtime import path
+### Verify the runtime import path
 
 If the plugin loads but cannot discover tools, the first thing to verify is that QGIS can import `whitebox_workflows` from its active Python environment.
 
@@ -260,7 +257,6 @@ python3 -c "import whitebox_workflows as wb; print(wb.__file__)"
 ## Development Notes
 
 - The plugin is intentionally a thin orchestration and presentation layer over `wbw_python`.
-- Local source installation is the expected development mode until portal and PyPI publication are in place.
 - When `whitebox_workflows` changes, rerun `./scripts/dev_python_install.sh` in the Python environment QGIS actually uses.
 - When plugin Python files change, a QGIS restart or plugin reload may be needed depending on the host state.
 - The plugin package name on disk is `whitebox_workflows_qgis`, while the user-facing plugin name is **Whitebox Workflows**.
@@ -285,13 +281,10 @@ This flow is intended to run:
 
 ## Known Limitations
 
-- The plugin is not yet distributed through the QGIS plugin portal.
-- `whitebox_workflows` is not yet distributed through PyPI, so local source installation is required.
-- Public/source builds should be expected to operate in open-tier mode unless paired with a licensed Pro-capable backend runtime.
 - The plugin targets QGIS 4.x only; QGIS 3.x compatibility is not a project goal.
-- The plugin surface is still evolving and some workflows remain scaffold-level or partially implemented.
-- Setup currently depends on aligning the QGIS Python environment with the environment used for `maturin develop`.
-- The documented local-install steps are development-oriented rather than end-user one-click installation.
+- Public/source builds should be expected to operate in open-tier mode unless paired with a licensed Pro-capable backend runtime.
+- The plugin surface is still evolving and some advanced workflows remain partially implemented.
+- Setup via local source installation depends on aligning the QGIS Python environment with the environment used for `maturin develop`.
 
 ## License
 

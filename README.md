@@ -13,7 +13,7 @@ Whitebox Next Gen is a ground-up redesign that improves on its predecessor in ne
 - **[Vector I/O](./crates/wbvector/README.md)** — Expanded from Esri Shapefile-only to 11 formats, including GeoPackage, FlatGeobuf, GeoParquet, and other modern interchange formats.
 - **[Vector topology](./crates/wbtopology/README.md)** — A new, dedicated topology engine (`wbtopology`) enabling robust overlay, buffering, and related operations.
 - **[LiDAR I/O](./crates/wblidar/README.md)** — Full support for LAS 1.0–1.5, LAZ, COPC, E57, and PLY via `wblidar`, a high-performance, modern LiDAR I/O engine.
-- **Frontends** — Whitebox Workflows for Python ([WbW-Python](./crates/wbw_python/README.md)), Whitebox Workflows for R ([WbW-R](./crates/wbw_r/README.md)), and a QGIS 4-compliant plugin ([`wbw_qgis`](./crates/wbw_qgis/README.md)) are in active development.
+- **Frontends** — Whitebox Workflows for Python ([WbW-Python](./crates/wbw_python/README.md)), Whitebox Workflows for R ([WbW-R](./crates/wbw_r/README.md)), and a QGIS 4-compliant plugin ([`wbw_qgis`](./crates/wbw_qgis/README.md)) are publicly released.
 
 ## Design Goals
 
@@ -49,12 +49,45 @@ Whitebox Next Gen embraces human–AI collaboration as a first-class part of the
 
 ---
 
+## User Manuals
+
+Full user manuals for each publicly released frontend are available online:
+
+- **Python:** <https://www.whiteboxgeo.com/manuals/api/python/index.html>
+- **R:** <https://www.whiteboxgeo.com/manuals/api/r/index.html>
+- **QGIS:** <https://www.whiteboxgeo.com/manuals/qgis/index.html>
+
+## Installation
+
+### Whitebox Workflows for Python
+
+Install from PyPI:
+
+```bash
+pip install whitebox_workflows
+```
+
+### Whitebox Workflows for R
+
+Install from r-universe:
+
+```r
+install.packages("whiteboxworkflows", repos = "https://jblindsay.r-universe.dev")
+```
+
+### QGIS Plugin
+
+Install **Whitebox Workflows** directly from the QGIS Plugin Manager (search for "Whitebox Workflows"), or visit the plugin portal listing:
+<https://plugins.qgis.org/plugins/whitebox_workflows_for_qgis/#plugin-versions>
+
+---
+
 ## Project Model
 
 Whitebox Next Gen follows an open-core model:
 
 - All backend engine crates in this workspace are open source.
-- The majority of the 500+ tools are open source in `crates/wbtools_oss`.
+- The majority of the 700+ tools are open source in `crates/wbtools_oss`.
 - A proprietary paid extension product exists outside this OSS workspace for additional commercial capabilities.
 
 This structure is intentional. Revenue from the paid extension helps fund ongoing OSS development, maintenance, support, and long-term sustainability of the open project.
@@ -73,7 +106,7 @@ The following Rust crates are members of the Cargo workspace:
 - `crates/wbspatialstats` — spatial statistics (kriging, variography, spatial autocorrelation)
 - `crates/wbcore` — shared runtime types and utilities
 - `crates/wblicense_core` — license entitlement verification
-- `crates/wbtools_oss` — open-source tool implementations (500+ tools)
+- `crates/wbtools_oss` — open-source tool implementations (700+ tools)
 - `crates/wbw_python` — Whitebox Workflows for Python frontend runtime
 - `crates/wbw_r` — Whitebox Workflows for R frontend runtime
 
@@ -92,7 +125,7 @@ The following six backend crates are published on crates.io and are useful as ge
 - `wbtopology`
 - `wblidar`
 
-The following six crates, also contained within this monorepo, are the core of Whitebox's frontend, that is the collection of 650+ spatial analysis tools:
+The following six crates, also contained within this monorepo, are the core of Whitebox's frontend, that is the collection of 700+ spatial analysis tools:
 
 - `wbcore`
 - `wblicense_core`
