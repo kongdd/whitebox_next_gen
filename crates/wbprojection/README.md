@@ -117,7 +117,7 @@ wbprojection = { path = "../wbprojection" }
 
 ## Using EPSG Codes
 
-The easiest way to create a projection is by EPSG code. The built-in registry currently covers **5604 EPSG codes** (**5607 total CRS/projection codes**, including ESRI 54008, 54009, 54030) and requires no external database or network access.
+The easiest way to create a projection is by EPSG code. The built-in registry currently covers **5618 EPSG codes** (**5621 total CRS/projection codes**, including ESRI 54008, 54009, 54030) and requires no external database or network access.
 
 ```rust
 use wbprojection::Crs;
@@ -687,7 +687,7 @@ Quick API reference:
 
 ### EPSG codes covered
 
-Currently supports **5591 EPSG codes** and **5594 total CRS/projection codes** (including ESRI 54008, 54009, 54030).
+Currently supports **5618 EPSG codes** and **5621 total CRS/projection codes** (including ESRI 54008, 54009, 54030).
 
 | Range / Code | Description |
 |---|---|

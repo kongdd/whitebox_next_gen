@@ -12355,15 +12355,10 @@ impl Tool for LidarColourizeTool {
         let mut points = cloud.points.clone();
         for p in &mut points {
             let rgb = if let Some((col, row)) = image.world_to_pixel(p.x, p.y) {
-                if let Some(v) = image.get_opt(0, row, col) {
-                    let value = v as u32;
-                    let r = (value & 0xFF) as u8;
-                    let g = ((value >> 8) & 0xFF) as u8;
-                    let b = ((value >> 16) & 0xFF) as u8;
-                    color8_to_rgb16(r, g, b)
-                } else {
-                    color8_to_rgb16(0, 0, 0)
-                }
+                let r = image.get_opt(0, row, col).map(|v| v as u8).unwrap_or(0);
+                let g = image.get_opt(1, row, col).map(|v| v as u8).unwrap_or(0);
+                let b = image.get_opt(2, row, col).map(|v| v as u8).unwrap_or(0);
+                color8_to_rgb16(r, g, b)
             } else {
                 color8_to_rgb16(0, 0, 0)
             };
